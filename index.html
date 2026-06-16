@@ -594,13 +594,31 @@
     ctx.fillText(foodEmoji, fx, fy + cell * 0.02);
     ctx.restore();
 
-    // snake — ivory body with gold ring, echoing the player tokens
+    // snake — interpolate each segment toward where it's heading so motion
+    // glides at the display's refresh rate instead of snapping cell-to-cell.
+    // The game logic stays grid-based; only rendering is smoothed.
+    const N = snake.length;
+    const prog = state === 'playing' ? Math.min(1, acc / tickMs) : 0;
+    const nd = dirQueue.length ? dirQueue[0] : dir;   // direction the next step will use
+    const pix = (i) => {
+      const cur = snake[i];
+      let nxt;
+      if (i === 0) nxt = {x: cur.x + nd.x, y: cur.y + nd.y};        // head leads
+      else if (i === N - 1 && pendingGrowth > 0) nxt = cur;         // growing: tail holds
+      else nxt = snake[i - 1];                                      // body trails the one ahead
+      let gx = cur.x, gy = cur.y;
+      const outNext = nxt.x < 0 || nxt.x >= GRID || nxt.y < 0 || nxt.y >= GRID;
+      if (!outNext) { // skip interpolation across a wrap edge to avoid streaking
+        if (Math.abs(nxt.x - cur.x) <= 1) gx = cur.x + (nxt.x - cur.x) * prog;
+        if (Math.abs(nxt.y - cur.y) <= 1) gy = cur.y + (nxt.y - cur.y) * prog;
+      }
+      return {x: gx * cell + cell / 2, y: gy * cell + cell / 2};
+    };
+
     const r = cell * 0.42;
-    for (let i = snake.length - 1; i >= 0; i--) {
-      const s = snake[i];
-      const t = i / Math.max(1, snake.length - 1);
-      const x = s.x * cell + cell / 2;
-      const y = s.y * cell + cell / 2;
+    for (let i = N - 1; i >= 0; i--) {
+      const t = i / Math.max(1, N - 1);
+      const {x, y} = pix(i);
       ctx.save();
       if (i === 0) { ctx.shadowColor = getCss('--snake-glow'); ctx.shadowBlur = 16; }
       const cr = 244 - t * 30, cg = 236 - t * 40, cb = 216 - t * 58;
@@ -613,14 +631,12 @@
       ctx.restore();
     }
 
-    // eyes on head
-    if (snake.length) {
-      const h = snake[0];
-      const hx = h.x * cell + cell / 2;
-      const hy = h.y * cell + cell / 2;
+    // eyes on head (follow the interpolated head position and travel direction)
+    if (N) {
+      const {x: hx, y: hy} = pix(0);
       const off = cell * 0.16;
       ctx.fillStyle = '#211e1a';
-      const ex = dir.x, ey = dir.y;
+      const ex = nd.x, ey = nd.y;
       const px = ey, py = ex;
       ctx.beginPath();
       ctx.arc(hx + ex*off + px*off, hy + ey*off + py*off, cell*0.08, 0, Math.PI*2);
