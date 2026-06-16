@@ -372,6 +372,9 @@
   const WARN_MS = 1800, SOLID_MS = 10000;
   const rand = (a, b) => a + Math.random() * (b - a);
 
+  // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
+  // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
+  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
   const FOOD_EMOJIS = ['⚽','🥅','🍎','🍓','🍕','🍔','🍩','🌮','🍇','🍑','🥝','🍒','🧀','🍉','🍌','🥑','🏅','🎯'];
   const BONUS_EMOJIS = ['⭐','🏆','👑','💰','💎'];
   let foodEmoji = '⚽';
@@ -579,7 +582,7 @@
       ctx.shadowColor = getCss('--food-glow');
       ctx.shadowBlur = 16;
     }
-    ctx.font = `${(cell * 0.78 * pulse) | 0}px serif`;
+    ctx.font = `${(cell * 0.78 * pulse) | 0}px ${EMOJI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(foodEmoji, fx, fy + cell * 0.02);
