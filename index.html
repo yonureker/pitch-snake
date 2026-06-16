@@ -254,10 +254,10 @@
   }
   .dpad button {
     position: absolute;
-    width: 38%;          /* fixed square so the circle never distorts */
+    width: 44%;
     aspect-ratio: 1 / 1;
     border: none;
-    border-radius: 50%;
+    border-radius: 16px;
     background: var(--panel);
     color: var(--text);
     font-size: clamp(28px, 9vw, 40px);
@@ -278,10 +278,10 @@
     box-shadow: 0 1px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
   }
   /* anchored to each edge, centered on the cross axis via a -22% (half width) margin */
-  .dpad .up    { top: 0;    left: 50%; margin-left: -19%; }
-  .dpad .down  { bottom: 0; left: 50%; margin-left: -19%; }
-  .dpad .left  { left: 0;   top: 50%;  margin-top: -19%; }
-  .dpad .right { right: 0;  top: 50%;  margin-top: -19%; }
+  .dpad .up    { top: 0;     left: 50%; margin-left: -22%; }
+  .dpad .down  { bottom: 0;  left: 50%; margin-left: -22%; }
+  .dpad .left  { left: -6%;  top: 50%;  margin-top: -22%; }
+  .dpad .right { right: -6%; top: 50%;  margin-top: -22%; }
 </style>
 </head>
 <body>
