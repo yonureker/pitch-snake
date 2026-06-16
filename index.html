@@ -245,17 +245,17 @@
 
   /* ---- on-screen directional pad (mobile) ---- */
   .dpad {
-    display: grid;
-    grid-template-columns: 1fr 0.5fr 1fr;
-    grid-template-rows: 1fr 0.5fr 1fr;
-    gap: 2px;
-    width: min(300px, 82vw);
+    position: relative;
+    width: min(280px, 78vw);
     aspect-ratio: 1 / 1;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
   .dpad button {
+    position: absolute;
+    width: 44%;          /* fixed square so the circle never distorts */
+    aspect-ratio: 1 / 1;
     border: none;
     border-radius: 50%;
     background: var(--panel);
@@ -277,10 +277,11 @@
     background: var(--gold);
     box-shadow: 0 1px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
   }
-  .dpad .up    { grid-column: 2; grid-row: 1; }
-  .dpad .left  { grid-column: 1; grid-row: 2; }
-  .dpad .right { grid-column: 3; grid-row: 2; }
-  .dpad .down  { grid-column: 2; grid-row: 3; }
+  /* anchored to each edge, centered on the cross axis via a -22% (half width) margin */
+  .dpad .up    { top: 0;    left: 50%; margin-left: -22%; }
+  .dpad .down  { bottom: 0; left: 50%; margin-left: -22%; }
+  .dpad .left  { left: 0;   top: 50%;  margin-top: -22%; }
+  .dpad .right { right: 0;  top: 50%;  margin-top: -22%; }
 </style>
 </head>
 <body>
