@@ -248,8 +248,8 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
-    gap: 8px;
-    width: min(220px, 64vw);
+    gap: 6px;
+    width: min(320px, 86vw);
     aspect-ratio: 1 / 1;
     touch-action: none;
     user-select: none;
@@ -257,10 +257,10 @@
   }
   .dpad button {
     border: none;
-    border-radius: 14px;
+    border-radius: 50%;
     background: var(--panel);
     color: var(--text);
-    font-size: clamp(22px, 7vw, 30px);
+    font-size: clamp(28px, 9vw, 40px);
     font-weight: 700;
     line-height: 1;
     display: flex;
@@ -281,14 +281,6 @@
   .dpad .left  { grid-column: 1; grid-row: 2; }
   .dpad .right { grid-column: 3; grid-row: 2; }
   .dpad .down  { grid-column: 2; grid-row: 3; }
-  .dpad .pause {
-    grid-column: 2; grid-row: 2;
-    background: transparent;
-    box-shadow: none;
-    color: var(--muted);
-    font-size: clamp(16px, 5vw, 20px);
-  }
-  .dpad .pause.pressed { background: rgba(33,30,26,0.08); }
 </style>
 </head>
 <body>
@@ -319,7 +311,6 @@
     <div class="dpad" id="dpad" role="group" aria-label="Directional controls">
       <button class="up"    data-dir="0,-1" aria-label="Up">&uarr;</button>
       <button class="left"  data-dir="-1,0" aria-label="Left">&larr;</button>
-      <button class="pause" id="pauseBtn" aria-label="Pause">&#10073;&#10073;</button>
       <button class="right" data-dir="1,0"  aria-label="Right">&rarr;</button>
       <button class="down"  data-dir="0,1"  aria-label="Down">&darr;</button>
     </div>
@@ -825,11 +816,6 @@
   document.querySelectorAll('.dpad [data-dir]').forEach(b => {
     const [x, y] = b.dataset.dir.split(',').map(Number);
     bindHold(b, () => { if (state === 'playing') setDir(x, y); });
-  });
-
-  const pauseBtn = document.getElementById('pauseBtn');
-  bindHold(pauseBtn, () => {
-    if (state === 'playing' || state === 'paused') togglePause();
   });
 
   document.querySelectorAll('.speed-row button').forEach(b => {
