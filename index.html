@@ -244,18 +244,23 @@
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
   /* ---- on-screen directional pad (mobile) ---- */
+  /* 3x3 grid with equal square cells: each button fills its own cell, so the
+     buttons stay square, evenly spaced, and never touch (the gap separates them).
+     Left and right sit in the far columns, well apart. */
   .dpad {
-    position: relative;
-    width: min(280px, 78vw);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 14px;
+    width: min(320px, 88vw);
     aspect-ratio: 1 / 1;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
   .dpad button {
-    position: absolute;
-    width: 44%;
-    aspect-ratio: 1 / 1;
+    width: 100%;
+    height: 100%;
     border: none;
     border-radius: 16px;
     background: var(--panel);
@@ -277,11 +282,10 @@
     background: var(--gold);
     box-shadow: 0 1px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
   }
-  /* anchored to each edge, centered on the cross axis via a -22% (half width) margin */
-  .dpad .up    { top: 0;     left: 50%; margin-left: -22%; }
-  .dpad .down  { bottom: 0;  left: 50%; margin-left: -22%; }
-  .dpad .left  { left: -6%;  top: 50%;  margin-top: -22%; }
-  .dpad .right { right: -6%; top: 50%;  margin-top: -22%; }
+  .dpad .up    { grid-area: 1 / 2; }
+  .dpad .left  { grid-area: 2 / 1; }
+  .dpad .right { grid-area: 2 / 3; }
+  .dpad .down  { grid-area: 3 / 2; }
 </style>
 </head>
 <body>
