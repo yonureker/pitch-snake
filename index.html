@@ -254,7 +254,7 @@
   }
   .dpad button {
     position: absolute;
-    width: 44%;          /* fixed square so the circle never distorts */
+    width: 38%;          /* fixed square so the circle never distorts */
     aspect-ratio: 1 / 1;
     border: none;
     border-radius: 50%;
@@ -278,10 +278,10 @@
     box-shadow: 0 1px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
   }
   /* anchored to each edge, centered on the cross axis via a -22% (half width) margin */
-  .dpad .up    { top: 0;    left: 50%; margin-left: -22%; }
-  .dpad .down  { bottom: 0; left: 50%; margin-left: -22%; }
-  .dpad .left  { left: 0;   top: 50%;  margin-top: -22%; }
-  .dpad .right { right: 0;  top: 50%;  margin-top: -22%; }
+  .dpad .up    { top: 0;    left: 50%; margin-left: -19%; }
+  .dpad .down  { bottom: 0; left: 50%; margin-left: -19%; }
+  .dpad .left  { left: 0;   top: 50%;  margin-top: -19%; }
+  .dpad .right { right: 0;  top: 50%;  margin-top: -19%; }
 </style>
 </head>
 <body>
@@ -355,7 +355,7 @@
   let cell = 20;
   let DPR = window.devicePixelRatio || 1;
 
-  let snake, dir, nextDir, food, score, best = 0;
+  let snake, dir, dirQueue, food, score, best = 0;
   let tickMs = 110;
   let lastTick = 0;
   let acc = 0;
@@ -392,7 +392,7 @@
   function reset() {
     snake = [{x: 8, y: 10}, {x: 7, y: 10}, {x: 6, y: 10}];
     dir = {x: 1, y: 0};
-    nextDir = {x: 1, y: 0};
+    dirQueue = [];
     score = 0;
     particles = [];
     pendingGrowth = 0;
@@ -425,13 +425,18 @@
     bestEl.textContent = best;
   }
 
+  // Queue turns instead of overwriting a single "next" slot, so two quick taps
+  // (e.g. up then right) both land on successive ticks instead of the first
+  // being lost. Validate each tap against the last queued/active direction.
   function setDir(x, y) {
-    if (x === -dir.x && y === -dir.y) return;
-    nextDir = {x, y};
+    const ref = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
+    if (x === -ref.x && y === -ref.y) return; // no 180° reversal
+    if (x === ref.x && y === ref.y) return;   // ignore repeats
+    if (dirQueue.length < 3) dirQueue.push({x, y});
   }
 
   function step() {
-    dir = nextDir;
+    if (dirQueue.length) dir = dirQueue.shift();
     let nx = snake[0].x + dir.x;
     let ny = snake[0].y + dir.y;
 
