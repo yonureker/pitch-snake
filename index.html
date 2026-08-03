@@ -460,8 +460,8 @@
   let ghost = null;         // {x, y, dir:{x,y}} or null
   let ghostClock = 0;       // advances only while playing (ms)
   let ghostMoveAt = 0;      // when the ghost next steps one cell
-  const GHOST_SCORE = 50;   // ghost shows up once the score passes this
-  const GHOST_MS = 620;     // ms per ghost step (deliberately very slow)
+  const GHOST_SCORE = 10;   // ghost shows up once the score passes this (temp: 10 for testing, was 50)
+  const GHOST_MS = 500;     // ms per ghost step (deliberately slow)
   const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
   const GHOST_BODY = '#ec1f27', GHOST_EDGE = '#a5121a', GHOST_EYE = '#12379e';
 
@@ -553,8 +553,8 @@
     // eating the bomb ends the run
     if (bomb && head.x === bomb.x && head.y === bomb.y) return die('bomb');
 
-    // running into the ghost ends the run
-    if (ghost && head.x === ghost.x && head.y === ghost.y) return die('ghost');
+    // running into the ghost ends the run (use the cell it visually occupies)
+    if (ghost) { const g = ghostAt(); if (head.x === g.x && head.y === g.y) return die('ghost'); }
 
     snake.unshift(head);
 
@@ -682,7 +682,7 @@
       if (++tries > 400) return;             // board too full; try again later
       p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
     } while (ghostBlocked(p.x, p.y) || wrapDist(p.x, p.y, snake[0].x, snake[0].y) < 7);
-    ghost = {x: p.x, y: p.y, dir: {x: 0, y: 0}};
+    ghost = {x: p.x, y: p.y, px: p.x, py: p.y, dir: {x: 0, y: 0}};
     ghostMoveAt = ghostClock + GHOST_MS;
   }
 
@@ -692,12 +692,13 @@
       for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
         const nx = (ghost.x + dx + GRID) % GRID, ny = (ghost.y + dy + GRID) % GRID;
-        if (!ghostBlocked(nx, ny)) { ghost.x = nx; ghost.y = ny; return; }
+        if (!ghostBlocked(nx, ny)) { ghost.x = ghost.px = nx; ghost.y = ghost.py = ny; return; }
       }
     }
   }
 
   function moveGhost() {
+    ghost.px = ghost.x; ghost.py = ghost.y;   // remember where we came from (smooth render)
     const opts = [];
     for (const d of GHOST_DIRS) {
       if (ghost.dir.x === -d.x && ghost.dir.y === -d.y) continue; // no reversing
@@ -725,6 +726,28 @@
   function updateGhost() {
     if (!ghost) { if (score >= GHOST_SCORE) spawnGhost(); return; }
     if (ghostClock >= ghostMoveAt) { moveGhost(); ghostMoveAt = ghostClock + GHOST_MS; }
+  }
+
+  // 0..1 progress through the current glide between cells
+  function ghostProgress() {
+    return Math.max(0, Math.min(1, 1 - (ghostMoveAt - ghostClock) / GHOST_MS));
+  }
+
+  // continuous cell coords, following the shortest (wrapped) path so a tunnel
+  // crossing slides across the edge instead of teleporting the long way round
+  function ghostRender() {
+    let dx = ghost.x - ghost.px, dy = ghost.y - ghost.py;
+    if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;
+    if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
+    const p = ghostProgress();
+    return { cx: ghost.px + dx * p, cy: ghost.py + dy * p };
+  }
+
+  // the cell the ghost visually occupies right now, used for collision so you
+  // only die when you actually touch the ghost you can see
+  function ghostAt() {
+    const { cx, cy } = ghostRender();
+    return { x: ((Math.round(cx) % GRID) + GRID) % GRID, y: ((Math.round(cy) % GRID) + GRID) % GRID };
   }
 
   // interior wall blocks (drawn as a background layer, under the snake)
@@ -799,12 +822,21 @@
     ctx.restore();
   }
 
-  // pac-man style ghost, drawn to match the classic red Blinky sprite
+  // pac-man style ghost, drawn to match the classic red Blinky sprite. It glides
+  // smoothly between cells; while sliding across a tunnel we draw a second copy
+  // so it leaves one edge and enters the opposite edge at the same time.
   function drawGhost() {
     if (!ghost) return;
+    const { cx, cy } = ghostRender();
+    const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
+    const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
+    for (const gxc of xs) for (const gyc of ys) drawGhostBody(gxc, gyc);
+  }
+
+  function drawGhostBody(cxCell, cyCell) {
     const r = cell * 0.4;
-    const gx = ghost.x * cell + cell / 2;
-    const gy = ghost.y * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
+    const gx = cxCell * cell + cell / 2;
+    const gy = cyCell * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
     const domeY = gy - r * 0.16;
     ctx.save();
     ctx.shadowColor = 'rgba(236,31,39,0.85)';
