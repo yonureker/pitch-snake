@@ -992,16 +992,19 @@
     const fx = food.x * cell + cell / 2;
     const fy = food.y * cell + cell / 2;
     ctx.save();
+    // The glow is a radial gradient, NOT a canvas shadow: iOS and some Android
+    // browsers render a color emoji that has a shadow as a solid silhouette in
+    // the shadow colour (a red "cloud"), so the emoji must be drawn shadowless.
+    const glow = ctx.createRadialGradient(fx, fy, cell * 0.08, fx, fy, cell * 0.62);
+    glow.addColorStop(0, getCss(food.bonus ? '--gold-glow' : '--food-glow'));
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(fx, fy, cell * 0.62, 0, Math.PI * 2); ctx.fill();
     if (food.bonus) {
       const ringR = cell * 0.5 * pulse;
       ctx.strokeStyle = getCss('--gold-bright');
       ctx.lineWidth = Math.max(2, cell * 0.08);
-      ctx.shadowColor = getCss('--gold-glow');
-      ctx.shadowBlur = 24;
       ctx.beginPath(); ctx.arc(fx, fy, ringR, 0, Math.PI * 2); ctx.stroke();
-    } else {
-      ctx.shadowColor = getCss('--food-glow');
-      ctx.shadowBlur = 16;
     }
     ctx.font = `${(cell * 0.78 * pulse) | 0}px ${EMOJI_FONT}`;
     ctx.textAlign = 'center';
