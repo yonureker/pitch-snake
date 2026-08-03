@@ -393,8 +393,20 @@
     return s;
   }
 
+  // A border seed builds the arena frame for one quadrant, leaving a centered
+  // gate. `solidTo` is the last wall index out from each corner (cells 0..solidTo
+  // stay wall), so the middle of each side is open. Because sym4 mirrors the
+  // gaps, the gates line up on opposite sides: the snake can shoot straight
+  // through a gate and wrap to the far edge, but touching a live frame is fatal.
+  function borderSeeds(solidTo) {
+    const c = [];
+    for (let i = 0; i <= solidTo; i++) { c.push([i, 0]); c.push([0, i]); }
+    return c;
+  }
+
   // Each builder returns a Set of "x,y" cells. Seeds cover one quadrant; sym4
-  // fills the rest, guaranteeing a clean, deliberate symmetric shape.
+  // fills the rest, guaranteeing a clean, deliberate symmetric shape. The mix
+  // spans interior shapes and gated border frames so layouts keep varying.
   const WALL_PATTERNS = [
     () => {                                   // thick plus / cross through center
       const c = [];
@@ -402,7 +414,7 @@
       for (let x = 5; x <= 9; x++) c.push([x, 9]);
       return sym4(c);
     },
-    () => {                                   // four quadrant blocks (pen tiles)
+    () => {                                   // four quadrant blocks
       const c = [];
       for (let x = 3; x <= 6; x++) for (let y = 4; y <= 6; y++) c.push([x, y]);
       return sym4(c);
@@ -413,10 +425,11 @@
       for (let y = 6; y <= 8; y++) c.push([6, y]);
       return sym4(c);
     },
-    () => {                                   // L brackets hugging the four corners
-      const c = [];
-      for (let x = 3; x <= 7; x++) c.push([x, 4]);
-      for (let y = 4; y <= 7; y++) c.push([3, y]);
+    () => sym4(borderSeeds(6)),               // full frame, a gate mid each side
+    () => sym4(borderSeeds(3)),               // corner brackets on the edge, wide gates
+    () => {                                   // frame plus four inner pillars
+      const c = borderSeeds(6);
+      for (let x = 5; x <= 6; x++) for (let y = 5; y <= 6; y++) c.push([x, y]);
       return sym4(c);
     },
   ];
@@ -671,7 +684,7 @@
     ctx.textBaseline = 'top';
     ctx.shadowColor = 'rgba(230,64,42,0.95)';
     ctx.shadowBlur = 12;
-    ctx.fillText(wallState === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE', canvas.width / 2, cell * 0.5);
+    ctx.fillText(wallState === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE', canvas.width / 2, cell * 1.2);
     ctx.restore();
   }
 
