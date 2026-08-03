@@ -454,6 +454,17 @@
   const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;
   const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
+  // pac-man ghost: a slow, roaming surprise that appears once you pass a score
+  // threshold. It creeps through open cells only (never onto the snake, walls,
+  // food or the bomb). Run your head into it and the game is over.
+  let ghost = null;         // {x, y, dir:{x,y}} or null
+  let ghostClock = 0;       // advances only while playing (ms)
+  let ghostMoveAt = 0;      // when the ghost next steps one cell
+  const GHOST_SCORE = 50;   // ghost shows up once the score passes this
+  const GHOST_MS = 620;     // ms per ghost step (deliberately very slow)
+  const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+  const GHOST_BODY = '#ec1f27', GHOST_EDGE = '#a5121a', GHOST_EYE = '#12379e';
+
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
   // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
   const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
@@ -484,6 +495,8 @@
     bomb = null;
     bombClock = 0;
     bombNextAt = rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+    ghost = null;
+    ghostClock = 0;
     placeFood();
     updateScore();
   }
@@ -496,6 +509,7 @@
       snake.some(s => s.x === p.x && s.y === p.y) ||
       (food && p.x === food.x && p.y === food.y) ||
       (bomb && p.x === bomb.x && p.y === bomb.y) ||
+      (ghost && p.x === ghost.x && p.y === ghost.y) ||
       wallLookup.has(p.x + ',' + p.y)
     );
     p.bonus = Math.random() < 0.2;
@@ -539,6 +553,9 @@
     // eating the bomb ends the run
     if (bomb && head.x === bomb.x && head.y === bomb.y) return die('bomb');
 
+    // running into the ghost ends the run
+    if (ghost && head.x === ghost.x && head.y === ghost.y) return die('ghost');
+
     snake.unshift(head);
 
     if (head.x === food.x && head.y === food.y) {
@@ -560,6 +577,7 @@
     overlayTitle.className = 'dead';
     const how = reason === 'wall' ? 'The walls got you. '
               : reason === 'bomb' ? 'The bomb got you. '
+              : reason === 'ghost' ? 'The ghost got you. '
               : '';
     overlayText.textContent = `${how}You scored ${score}.`;
     startBtn.textContent = 'REMATCH';
@@ -601,9 +619,10 @@
       buildWalls();                 // shape appears and flashes before it bites
       wallState = 'warning';
       wallPhaseEnd = wallClock + WARN_MS;
-      // never leave food or a bomb buried under a freshly formed wall
+      // never leave food, a bomb, or the ghost buried under a fresh wall
       if (food && wallLookup.has(food.x + ',' + food.y)) placeFood();
       if (bomb && wallLookup.has(bomb.x + ',' + bomb.y)) placeBomb();
+      if (ghost && wallLookup.has(ghost.x + ',' + ghost.y)) nudgeGhost();
     } else if (wallState === 'warning') {
       wallState = 'solid';
       wallPhaseEnd = wallClock + SOLID_MS;
@@ -623,6 +642,7 @@
     } while (
       snake.some(s => s.x === p.x && s.y === p.y) ||
       (food && p.x === food.x && p.y === food.y) ||
+      (ghost && p.x === ghost.x && p.y === ghost.y) ||
       wallLookup.has(p.x + ',' + p.y)
     );
     bomb = p;
@@ -641,13 +661,79 @@
     }
   }
 
+  // ---- ghost ----
+  // a cell the ghost may not enter: the snake, a wall, food, or the bomb
+  function ghostBlocked(x, y) {
+    return snake.some(s => s.x === x && s.y === y) ||
+           wallLookup.has(x + ',' + y) ||
+           (food && food.x === x && food.y === y) ||
+           (bomb && bomb.x === x && bomb.y === y);
+  }
+
+  // toroidal Manhattan distance, since the edges wrap
+  function wrapDist(ax, ay, bx, by) {
+    const dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
+    return Math.min(dx, GRID - dx) + Math.min(dy, GRID - dy);
+  }
+
+  function spawnGhost() {
+    let p, tries = 0;
+    do {
+      if (++tries > 400) return;             // board too full; try again later
+      p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
+    } while (ghostBlocked(p.x, p.y) || wrapDist(p.x, p.y, snake[0].x, snake[0].y) < 7);
+    ghost = {x: p.x, y: p.y, dir: {x: 0, y: 0}};
+    ghostMoveAt = ghostClock + GHOST_MS;
+  }
+
+  // if a wall forms on the ghost, slide it to the nearest open cell
+  function nudgeGhost() {
+    for (let r = 1; r < GRID; r++) {
+      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
+        const nx = (ghost.x + dx + GRID) % GRID, ny = (ghost.y + dy + GRID) % GRID;
+        if (!ghostBlocked(nx, ny)) { ghost.x = nx; ghost.y = ny; return; }
+      }
+    }
+  }
+
+  function moveGhost() {
+    const opts = [];
+    for (const d of GHOST_DIRS) {
+      if (ghost.dir.x === -d.x && ghost.dir.y === -d.y) continue; // no reversing
+      const nx = (ghost.x + d.x + GRID) % GRID, ny = (ghost.y + d.y + GRID) % GRID;
+      if (!ghostBlocked(nx, ny)) opts.push({d, nx, ny});
+    }
+    let pick;
+    if (opts.length) {
+      const head = snake[0];
+      if (Math.random() < 0.55) {            // gentle chase: drift toward the head
+        opts.sort((a, b) => wrapDist(a.nx, a.ny, head.x, head.y) - wrapDist(b.nx, b.ny, head.x, head.y));
+        pick = opts[0];
+      } else {
+        pick = opts[(Math.random() * opts.length) | 0];
+      }
+    } else {                                 // boxed in: reverse if we can, else wait
+      const rx = (ghost.x - ghost.dir.x + GRID) % GRID, ry = (ghost.y - ghost.dir.y + GRID) % GRID;
+      if ((ghost.dir.x || ghost.dir.y) && !ghostBlocked(rx, ry)) {
+        pick = {d: {x: -ghost.dir.x, y: -ghost.dir.y}, nx: rx, ny: ry};
+      } else return;
+    }
+    ghost.x = pick.nx; ghost.y = pick.ny; ghost.dir = pick.d;
+  }
+
+  function updateGhost() {
+    if (!ghost) { if (score >= GHOST_SCORE) spawnGhost(); return; }
+    if (ghostClock >= ghostMoveAt) { moveGhost(); ghostMoveAt = ghostClock + GHOST_MS; }
+  }
+
   // interior wall blocks (drawn as a background layer, under the snake)
   function drawWalls() {
     if (wallState === 'off' || !wallCells.length) return;
     const warning = wallState === 'warning';
     const blinkOn = Math.floor(wallClock / 150) % 2 === 0;
-    const alpha = warning ? (blinkOn ? 0.9 : 0.16)
-                          : 0.88 + Math.sin(wallClock / 120) * 0.1;
+    const alpha = warning ? (blinkOn ? 0.5 : 0.12)   // ghostly while forming
+                          : 0.94 + Math.sin(wallClock / 120) * 0.06; // solid when live
     const pad = cell * 0.05, rad = cell * 0.3;
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -710,6 +796,51 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('💣', bx, by + cell * 0.02);
+    ctx.restore();
+  }
+
+  // pac-man style ghost, drawn to match the classic red Blinky sprite
+  function drawGhost() {
+    if (!ghost) return;
+    const r = cell * 0.4;
+    const gx = ghost.x * cell + cell / 2;
+    const gy = ghost.y * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
+    const domeY = gy - r * 0.16;
+    ctx.save();
+    ctx.shadowColor = 'rgba(236,31,39,0.85)';
+    ctx.shadowBlur = 14;
+    // body: domed top, straight sides, zig-zag skirt along the bottom
+    ctx.beginPath();
+    ctx.arc(gx, domeY, r, Math.PI, 2 * Math.PI);   // top dome, left to right
+    ctx.lineTo(gx + r, gy + r);                     // right side down
+    const n = 4, step = (2 * r) / n;
+    let x = gx + r;
+    for (let i = 0; i < n; i++) {                   // skirt, right to left
+      ctx.lineTo(x - step / 2, gy + r - r * 0.42);
+      ctx.lineTo(x - step, gy + r);
+      x -= step;
+    }
+    ctx.lineTo(gx - r, domeY);                      // left side up
+    ctx.closePath();
+    ctx.fillStyle = GHOST_BODY;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, cell * 0.045);
+    ctx.strokeStyle = GHOST_EDGE;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // eyes, pupils tracking the travel direction
+    const eyeDX = r * 0.42, eyeY = domeY - r * 0.03;
+    const ewx = r * 0.28, ewy = r * 0.36;
+    const look = ghost.dir;
+    for (const sx of [-1, 1]) {
+      const ex = gx + sx * eyeDX;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(ex, eyeY, ewx, ewy, 0, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = GHOST_EYE;
+      ctx.beginPath();
+      ctx.arc(ex + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, 0, 2 * Math.PI);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -798,6 +929,8 @@
       ctx.fill();
     }
 
+    drawGhost();
+
     // particles
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
@@ -837,6 +970,8 @@
       updateWalls();
       bombClock += dt;
       updateBomb();
+      ghostClock += dt;
+      updateGhost();
       foodAge += dt;
       if (foodAge >= FOOD_TTL) placeFood();
       while (acc >= tickMs) { step(); acc -= tickMs; }
