@@ -303,7 +303,7 @@
       <canvas id="game"></canvas>
       <div class="overlay" id="overlay">
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
-        <p id="overlayText">Eat the emoji to grow. Don't bite your tail. Edges wrap around. Watch the pitch: walls flash then turn solid, and a 💣 shows up now and then. Touch a live wall or eat the bomb and it's full time.</p>
+        <p id="overlayText">Eat the emoji to grow. Don't bite your tail. Edges wrap around. Watch the pitch: walls flash then turn solid, and touching a live one is full time. A 💣 shows up now and then; it won't end your run, but eating it costs 5 points and 5 segments.</p>
         <div class="entry" id="entry" style="display:none">
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
           <button class="btn small" id="saveBtn">SAVE</button>
@@ -357,6 +357,7 @@
   const standingsEl = document.getElementById('standings');
 
   const GRID = 20;
+  const START_LEN = 3;   // initial snake length; the bomb can't shrink you below this
   let cell = 20;
   let DPR = window.devicePixelRatio || 1;
 
@@ -482,7 +483,8 @@
   }
 
   function reset() {
-    snake = [{x: 8, y: 10}, {x: 7, y: 10}, {x: 6, y: 10}];
+    snake = [];
+    for (let i = 0; i < START_LEN; i++) snake.push({x: 8 - i, y: 10});
     dir = {x: 1, y: 0};
     dirQueue = [];
     score = 0;
@@ -550,9 +552,6 @@
     // self collision
     if (snake.some(s => s.x === head.x && s.y === head.y)) return die();
 
-    // eating the bomb ends the run
-    if (bomb && head.x === bomb.x && head.y === bomb.y) return die('bomb');
-
     // running into the ghost ends the run (use the cell it visually occupies)
     if (ghost) { const g = ghostAt(); if (head.x === g.x && head.y === g.y) return die('ghost'); }
 
@@ -569,6 +568,19 @@
 
     if (pendingGrowth > 0) pendingGrowth--;
     else snake.pop();
+
+    // the bomb no longer kills: it lops off up to 5 segments (never below the
+    // starting length) and docks 5 points, which is allowed to go negative
+    if (bomb && head.x === bomb.x && head.y === bomb.y) {
+      score -= 5;
+      updateScore();
+      pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
+      const target = Math.max(START_LEN, snake.length - 5);
+      while (snake.length > target) snake.pop();
+      spawnBoom(head.x, head.y);
+      bomb = null;
+      bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+    }
   }
 
   function die(reason) {
@@ -576,7 +588,6 @@
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
     const how = reason === 'wall' ? 'The walls got you. '
-              : reason === 'bomb' ? 'The bomb got you. '
               : reason === 'ghost' ? 'The ghost got you. '
               : '';
     overlayText.textContent = `${how}You scored ${score}.`;
@@ -604,6 +615,21 @@
         x: cx, y: cy,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
         life: 1, color
+      });
+    }
+  }
+
+  // bomb detonation: a bigger red-and-smoke burst, distinct from eating food
+  function spawnBoom(gx, gy) {
+    const cx = gx * cell + cell / 2;
+    const cy = gy * cell + cell / 2;
+    for (let i = 0; i < 26; i++) {
+      const a = (Math.PI * 2 * i) / 26 + Math.random() * 0.6;
+      const sp = (Math.random() * 2.4 + 1) * (cell / 13);
+      particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 1, color: i % 3 === 0 ? '#e6402a' : '#3a3630'
       });
     }
   }
