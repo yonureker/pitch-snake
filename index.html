@@ -303,7 +303,7 @@
       <canvas id="game"></canvas>
       <div class="overlay" id="overlay">
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
-        <p id="overlayText">Eat the emoji. Don't bite yourself. Edges normally wrap — but when they flash red and turn solid, hitting one is fatal.</p>
+        <p id="overlayText">Eat the emoji to grow. Don't bite your tail. Edges wrap around. Watch the pitch: walls flash then turn solid, and a 💣 shows up now and then. Touch a live wall or eat the bomb and it's full time.</p>
         <div class="entry" id="entry" style="display:none">
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
           <button class="btn small" id="saveBtn">SAVE</button>
@@ -337,6 +337,7 @@
       <span><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
       <span><b>SPACE</b> pause</span>
       <span><b>SWIPE</b> or <b>BUTTONS</b> on mobile</span>
+      <span>dodge <b>WALLS</b> &amp; the <b>&#128163;</b></span>
     </div>
   </div>
 
@@ -369,13 +370,76 @@
   let foodAge = 0;           // ms the current food has existed (resets on placement)
   const FOOD_TTL = 5000;     // uneaten food relocates after this long
 
-  // pac-man style walls
-  let wallState = 'off';   // off | warning | solid
-  let wallsEnabled = true; // toggle: do walls ever activate?
-  let wallClock = 0;       // advances only while playing (ms)
+  // interior "pac-man" walls: symmetric, hand-shaped obstacles that appear in
+  // the pitch, flash as a warning, turn lethal for a while, then vanish. We
+  // never draw random lines; every layout is one of a few 4-fold-symmetric
+  // shapes picked at random.
+  let wallState = 'off';      // off | warning | solid
+  let wallsEnabled = true;    // toggle: do walls ever activate?
+  let wallClock = 0;          // advances only while playing (ms)
   let wallPhaseEnd = 0;
-  const WARN_MS = 1800, SOLID_MS = 10000;
+  let wallCells = [];         // [{x,y}] currently shaped cells (for drawing)
+  let wallLookup = new Set(); // "x,y" keys of wallCells (for collision)
+  const WARN_MS = 1800, SOLID_MS = 9000;
   const rand = (a, b) => a + Math.random() * (b - a);
+
+  // Mirror seed cells across both center axes so a pattern is symmetric no
+  // matter which quadrant the seeds sit in.
+  function sym4(cells) {
+    const s = new Set();
+    for (const [x, y] of cells)
+      for (const xx of [x, GRID - 1 - x])
+        for (const yy of [y, GRID - 1 - y]) s.add(xx + ',' + yy);
+    return s;
+  }
+
+  // Each builder returns a Set of "x,y" cells. Seeds cover one quadrant; sym4
+  // fills the rest, guaranteeing a clean, deliberate symmetric shape.
+  const WALL_PATTERNS = [
+    () => {                                   // thick plus / cross through center
+      const c = [];
+      for (let y = 5; y <= 9; y++) c.push([9, y]);
+      for (let x = 5; x <= 9; x++) c.push([x, 9]);
+      return sym4(c);
+    },
+    () => {                                   // four quadrant blocks (pen tiles)
+      const c = [];
+      for (let x = 3; x <= 6; x++) for (let y = 4; y <= 6; y++) c.push([x, y]);
+      return sym4(c);
+    },
+    () => {                                   // hollow center box, a door each side
+      const c = [];
+      for (let x = 6; x <= 8; x++) c.push([x, 6]);
+      for (let y = 6; y <= 8; y++) c.push([6, y]);
+      return sym4(c);
+    },
+    () => {                                   // L brackets hugging the four corners
+      const c = [];
+      for (let x = 3; x <= 7; x++) c.push([x, 4]);
+      for (let y = 4; y <= 7; y++) c.push([3, y]);
+      return sym4(c);
+    },
+  ];
+
+  function buildWalls() {
+    const set = WALL_PATTERNS[(Math.random() * WALL_PATTERNS.length) | 0]();
+    wallLookup = set;
+    wallCells = [...set].map(k => {
+      const [x, y] = k.split(',').map(Number);
+      return { x, y };
+    });
+  }
+
+  function clearWalls() { wallCells = []; wallLookup = new Set(); }
+
+  // bomb: an occasional 💣 on its own timer (independent of the food). Eating it
+  // ends the game. It shows for a few seconds, then defuses and reschedules.
+  let bomb = null;         // {x,y} or null
+  let bombClock = 0;       // advances only while playing (ms)
+  let bombNextAt = 0;      // when to spawn (while bomb === null)
+  let bombExpireAt = 0;    // when to defuse (while bomb !== null)
+  const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;
+  const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
   // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
@@ -403,6 +467,10 @@
     wallState = 'off';
     wallClock = 0;
     wallPhaseEnd = rand(4000, 9000);
+    clearWalls();
+    bomb = null;
+    bombClock = 0;
+    bombNextAt = rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
     placeFood();
     updateScore();
   }
@@ -413,7 +481,9 @@
       p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
     } while (
       snake.some(s => s.x === p.x && s.y === p.y) ||
-      (food && p.x === food.x && p.y === food.y)
+      (food && p.x === food.x && p.y === food.y) ||
+      (bomb && p.x === bomb.x && p.y === bomb.y) ||
+      wallLookup.has(p.x + ',' + p.y)
     );
     p.bonus = Math.random() < 0.2;
     food = p;
@@ -441,18 +511,20 @@
 
   function step() {
     if (dirQueue.length) dir = dirQueue.shift();
-    let nx = snake[0].x + dir.x;
-    let ny = snake[0].y + dir.y;
+    // edges always wrap now (pac-man tunnels); the hazards live inside the pitch
+    const nx = (snake[0].x + dir.x + GRID) % GRID;
+    const ny = (snake[0].y + dir.y + GRID) % GRID;
 
-    // walls: when solid, head crossing the boundary is fatal; otherwise wrap
-    const outOfBounds = nx < 0 || ny < 0 || nx >= GRID || ny >= GRID;
-    if (outOfBounds && wallState === 'solid') return die('wall');
-    nx = (nx + GRID) % GRID;
-    ny = (ny + GRID) % GRID;
+    // interior walls are lethal only once they're live
+    if (wallState === 'solid' && wallLookup.has(nx + ',' + ny)) return die('wall');
+
     const head = {x: nx, y: ny};
 
     // self collision
     if (snake.some(s => s.x === head.x && s.y === head.y)) return die();
+
+    // eating the bomb ends the run
+    if (bomb && head.x === bomb.x && head.y === bomb.y) return die('bomb');
 
     snake.unshift(head);
 
@@ -473,7 +545,9 @@
     state = 'dead';
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
-    const how = reason === 'wall' ? 'The walls got you. ' : '';
+    const how = reason === 'wall' ? 'The walls got you. '
+              : reason === 'bomb' ? 'The bomb got you. '
+              : '';
     overlayText.textContent = `${how}You scored ${score}.`;
     startBtn.textContent = 'REMATCH';
     savedThisRound = false;
@@ -503,50 +577,126 @@
     }
   }
 
-  // ---- walls (pac-man style) ----
+  // ---- interior walls ----
   function updateWalls() {
-    if (!wallsEnabled) { wallState = 'off'; return; }
+    if (!wallsEnabled) {
+      if (wallState !== 'off') { wallState = 'off'; clearWalls(); }
+      return;
+    }
     if (wallClock < wallPhaseEnd) return;
     if (wallState === 'off') {
+      buildWalls();                 // shape appears and flashes before it bites
       wallState = 'warning';
       wallPhaseEnd = wallClock + WARN_MS;
+      // never leave food or a bomb buried under a freshly formed wall
+      if (food && wallLookup.has(food.x + ',' + food.y)) placeFood();
+      if (bomb && wallLookup.has(bomb.x + ',' + bomb.y)) placeBomb();
     } else if (wallState === 'warning') {
       wallState = 'solid';
       wallPhaseEnd = wallClock + SOLID_MS;
-    } else { // solid -> open, re-arm later
+    } else {                        // solid -> open, re-arm later
       wallState = 'off';
+      clearWalls();
       wallPhaseEnd = wallClock + rand(6000, 14000);
     }
   }
 
-  function drawWalls() {
-    if (wallState === 'off') return;
-    const W = canvas.width, H = canvas.height;
-    const lw = Math.max(3, cell * 0.16);
-    const blinkOn = (Math.floor(wallClock / 140) % 2 === 0);
-    const alpha = wallState === 'warning'
-      ? (blinkOn ? 0.9 : 0.12)
-      : 0.82 + Math.sin(wallClock / 110) * 0.12;
+  // ---- bomb ----
+  function placeBomb() {
+    let p, tries = 0;
+    do {
+      if (++tries > 200) return;    // board too full; skip this cycle
+      p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
+    } while (
+      snake.some(s => s.x === p.x && s.y === p.y) ||
+      (food && p.x === food.x && p.y === food.y) ||
+      wallLookup.has(p.x + ',' + p.y)
+    );
+    bomb = p;
+  }
 
+  function updateBomb() {
+    if (bomb) {
+      if (bombClock >= bombExpireAt) {       // defuse and schedule the next one
+        bomb = null;
+        bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+      }
+    } else if (bombClock >= bombNextAt) {
+      placeBomb();
+      if (bomb) bombExpireAt = bombClock + rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX);
+      else bombNextAt = bombClock + 1000;    // placement failed; retry soon
+    }
+  }
+
+  // interior wall blocks (drawn as a background layer, under the snake)
+  function drawWalls() {
+    if (wallState === 'off' || !wallCells.length) return;
+    const warning = wallState === 'warning';
+    const blinkOn = Math.floor(wallClock / 150) % 2 === 0;
+    const alpha = warning ? (blinkOn ? 0.9 : 0.16)
+                          : 0.88 + Math.sin(wallClock / 120) * 0.1;
+    const pad = cell * 0.05, rad = cell * 0.3;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#e6402a';
-    ctx.lineWidth = lw;
-    ctx.shadowColor = 'rgba(230,64,42,0.9)';
-    ctx.shadowBlur = wallState === 'solid' ? 12 : 8;
-    ctx.strokeRect(lw / 2, lw / 2, W - lw, H - lw);
+    ctx.fillStyle = '#e6402a';
+    ctx.shadowColor = 'rgba(230,64,42,0.85)';
+    ctx.shadowBlur = warning ? 8 : 14;
+    for (const c of wallCells) {
+      roundRect(c.x * cell + pad, c.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
+      ctx.fill();
+    }
     ctx.restore();
+    if (!warning) {                          // beveled inner highlight when live
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = '#ffd9d0';
+      const ip = cell * 0.28;
+      for (const c of wallCells) {
+        roundRect(c.x * cell + ip, c.y * cell + ip, cell - ip * 2, cell - ip * 2, cell * 0.14);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
 
-    // status label
+  // wall status banner (drawn on top so it stays readable)
+  function drawWallLabel() {
+    if (wallState === 'off') return;
+    const blinkOn = Math.floor(wallClock / 150) % 2 === 0;
     ctx.save();
-    ctx.globalAlpha = wallState === 'warning' ? (blinkOn ? 1 : 0.25) : 1;
+    ctx.globalAlpha = wallState === 'warning' ? (blinkOn ? 1 : 0.3) : 0.95;
     ctx.fillStyle = '#fff';
-    ctx.font = `${(cell * 0.7) | 0}px Anton, sans-serif`;
+    ctx.font = `${(cell * 0.6) | 0}px Anton, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.shadowColor = 'rgba(230,64,42,0.95)';
-    ctx.shadowBlur = 14;
-    ctx.fillText(wallState === 'warning' ? 'WALLS CLOSING' : 'WALLS LIVE', W / 2, cell * 0.85);
+    ctx.shadowBlur = 12;
+    ctx.fillText(wallState === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE', canvas.width / 2, cell * 0.5);
+    ctx.restore();
+  }
+
+  // the bomb: a 💣 ringed in danger red; blinks faster just before it defuses
+  function drawBomb() {
+    if (!bomb) return;
+    const bx = bomb.x * cell + cell / 2;
+    const by = bomb.y * cell + cell / 2;
+    const near = bombClock > bombExpireAt - 1200;
+    const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
+    const pulse = 1 + Math.sin(foodPulse * 1.4) * 0.14;
+    ctx.save();
+    ctx.globalAlpha = blink ? 1 : 0.35;
+    ctx.strokeStyle = '#e6402a';
+    ctx.lineWidth = Math.max(2, cell * 0.1);
+    ctx.shadowColor = 'rgba(230,64,42,0.9)';
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(bx, by, cell * 0.46 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 8;
+    ctx.font = `${(cell * 0.62) | 0}px ${EMOJI_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💣', bx, by + cell * 0.02);
     ctx.restore();
   }
 
@@ -574,6 +724,7 @@
   function draw(now) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawArena();
+    drawWalls();
 
     // food (emoji)
     foodPulse += 0.08;
@@ -597,6 +748,8 @@
     ctx.textBaseline = 'middle';
     ctx.fillText(foodEmoji, fx, fy + cell * 0.02);
     ctx.restore();
+
+    drawBomb();
 
     // snake — ivory body with gold ring, echoing the player tokens
     const r = cell * 0.42;
@@ -643,7 +796,7 @@
     }
     ctx.globalAlpha = 1;
 
-    drawWalls();
+    drawWallLabel();
   }
 
   function roundRect(x, y, w, h, rad) {
@@ -669,6 +822,8 @@
       acc += dt;
       wallClock += dt;
       updateWalls();
+      bombClock += dt;
+      updateBomb();
       foodAge += dt;
       if (foodAge >= FOOD_TTL) placeFood();
       while (acc >= tickMs) { step(); acc -= tickMs; }
@@ -847,6 +1002,7 @@
     wallToggle.setAttribute('aria-checked', String(wallsEnabled));
     wallStatus.textContent = wallsEnabled ? 'ON' : 'OFF';
     wallState = 'off';
+    clearWalls();
     if (wallsEnabled) wallPhaseEnd = wallClock + rand(4000, 9000);
   });
 
