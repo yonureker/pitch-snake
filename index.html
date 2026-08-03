@@ -160,9 +160,9 @@
   }
   .lg-ic.ring { border: 2px solid var(--gold-bright); border-radius: 50%; font-size: 15px; }
   .lg-ic.tnt {
-    background: linear-gradient(#d13a1c 0 35%, #d6d6d4 35% 63%, #d13a1c 63% 100%);
-    color: #141414; border-radius: 4px;
-    font-family: 'Anton', sans-serif; font-size: 8px; letter-spacing: 0.3px;
+    background: linear-gradient(#d8461f 0 32%, #dadad8 32% 58%, #a9a9a7 58% 66%, #d8461f 66% 100%);
+    color: #111; border-radius: 2px;
+    font-family: Barlow, "Arial Black", sans-serif; font-weight: 700; font-size: 7px;
   }
   .lg-txt { flex: 1; text-align: left; }
   .lg-val {
@@ -863,57 +863,45 @@
     ctx.restore();
   }
 
-  // the hazard is drawn as a Minecraft-style TNT block: a red block with grey
-  // fuse-wrap caps and a white "TNT" band. Same mechanics as before (costs
-  // points and segments, never fatal); it flashes just before it disappears.
+  // the hazard is drawn as a Minecraft-style TNT block: a sharp-edged red block
+  // with a light-grey "TNT" band and a darker strip beneath it. Integer coords
+  // and fillRect keep the edges crisp and blocky (no rounding). Same mechanics
+  // as before (costs points and segments, never fatal); it flashes before it
+  // disappears.
   function drawBomb() {
     if (!bomb) return;
     const bx = bomb.x * cell + cell / 2;
     const by = bomb.y * cell + cell / 2;
     const near = bombClock > bombExpireAt - 1200;          // about to vanish
     const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
-    const s = cell * 0.9, x0 = bx - s / 2, y0 = by - s / 2, rad = s * 0.08;
+    const sz = Math.round(cell * 0.94);
+    const x0 = Math.round(bx - sz / 2), y0 = Math.round(by - sz / 2);
 
     ctx.save();
     ctx.globalAlpha = blink ? 1 : 0.4;
 
-    // base block with a soft danger glow
-    ctx.shadowColor = 'rgba(209,58,28,0.55)';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = '#d13a1c';
-    roundRect(x0, y0, s, s, rad);
-    ctx.fill();
+    // solid red block with a soft danger glow (sharp square, like a MC block)
+    ctx.shadowColor = 'rgba(216,70,31,0.55)';
+    ctx.shadowBlur = 9;
+    ctx.fillStyle = '#d8461f';
+    ctx.fillRect(x0, y0, sz, sz);
     ctx.shadowBlur = 0;
 
-    // horizontal bands: red, a light-grey band with a darker strip along its
-    // bottom, then red. Clipped so they follow the block's rounded corners.
-    ctx.save();
-    roundRect(x0, y0, s, s, rad);
-    ctx.clip();
-    const bands = [
-      [0.00, 0.36, '#d13a1c'],
-      [0.36, 0.60, '#d6d6d4'],
-      [0.60, 0.66, '#a9a9a7'],
-      [0.66, 1.00, '#d13a1c'],
-    ];
-    for (const [a, b, col] of bands) {
+    // the grey "TNT" band with a darker strip along its bottom edge
+    const band = (a, b, col) => {
+      const ya = y0 + Math.round(sz * a), yb = y0 + Math.round(sz * b);
       ctx.fillStyle = col;
-      ctx.fillRect(x0, y0 + s * a, s, s * (b - a) + 0.6);
-    }
-    ctx.restore();
+      ctx.fillRect(x0, ya, sz, yb - ya);
+    };
+    band(0.32, 0.58, '#dadad8');   // light grey band
+    band(0.58, 0.66, '#a9a9a7');   // darker strip
 
-    // thin outline for edge definition on the dark arena
-    roundRect(x0, y0, s, s, rad);
-    ctx.lineWidth = Math.max(1, cell * 0.035);
-    ctx.strokeStyle = '#7a2410';
-    ctx.stroke();
-
-    // "TNT" in black on the grey band (Anton is bold and condensed)
-    ctx.fillStyle = '#141414';
-    ctx.font = `${(s * 0.26) | 0}px Anton, sans-serif`;
+    // "TNT" in bold black across the band
+    ctx.fillStyle = '#111';
+    ctx.font = `700 ${Math.round(sz * 0.32)}px Barlow, "Arial Black", Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('TNT', bx, by - s * 0.02);
+    ctx.fillText('TNT', bx, y0 + Math.round(sz * 0.45) + 0.5);
 
     ctx.restore();
   }
