@@ -144,6 +144,35 @@
     font-weight: 500;
   }
 
+  /* scoring legend on the intro screen */
+  .legend {
+    display: flex; flex-direction: column; gap: 6px;
+    width: 260px; max-width: 82%; margin: 2px 0;
+  }
+  .lg-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: #e9e0cd; font-weight: 600; letter-spacing: 0.3px;
+  }
+  .lg-ic {
+    width: 28px; height: 28px; flex-shrink: 0; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; line-height: 1;
+  }
+  .lg-ic.ring { border: 2px solid var(--gold-bright); border-radius: 50%; font-size: 15px; }
+  .lg-ic.tnt {
+    background: linear-gradient(#d13a1c 0 35%, #d6d6d4 35% 63%, #d13a1c 63% 100%);
+    color: #141414; border-radius: 4px;
+    font-family: 'Anton', sans-serif; font-size: 8px; letter-spacing: 0.3px;
+  }
+  .lg-txt { flex: 1; text-align: left; }
+  .lg-val {
+    font-family: 'Anton', sans-serif; font-size: 17px;
+    min-width: 36px; text-align: right;
+  }
+  .lg-val.pos { color: var(--gold-bright); }
+  .lg-val.neg { color: var(--food); }
+  .lg-val.die { color: var(--food); font-size: 13px; letter-spacing: 1px; }
+
   .btn {
     font-family: 'Anton', sans-serif;
     font-weight: 400;
@@ -303,7 +332,13 @@
       <canvas id="game"></canvas>
       <div class="overlay" id="overlay">
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
-        <p id="overlayText">Eat the emoji to grow. Don't bite your tail. Edges wrap around. Watch the pitch: walls flash then turn solid, and touching a live one is full time. A 💣 shows up now and then; it won't end your run, but eating it costs 5 points and 5 segments.</p>
+        <p id="overlayText">Eat to grow. Survive the pitch.</p>
+        <div class="legend" id="legend">
+          <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
+          <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block</span><span class="lg-val neg">-10</span></div>
+          <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
+        </div>
         <div class="entry" id="entry" style="display:none">
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
           <button class="btn small" id="saveBtn">SAVE</button>
@@ -337,7 +372,7 @@
       <span><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
       <span><b>SPACE</b> pause</span>
       <span><b>SWIPE</b> or <b>BUTTONS</b> on mobile</span>
-      <span>dodge <b>WALLS</b> &amp; the <b>&#128163;</b></span>
+      <span>dodge <b>WALLS</b> &amp; <b>TNT</b></span>
     </div>
   </div>
 
@@ -355,6 +390,7 @@
   const nameInput = document.getElementById('nameInput');
   const saveBtn = document.getElementById('saveBtn');
   const standingsEl = document.getElementById('standings');
+  const legend = document.getElementById('legend');
 
   const GRID = 20;
   const START_LEN = 3;   // initial snake length; the bomb can't shrink you below this
@@ -455,13 +491,13 @@
   const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;
   const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
-  // pac-man ghost: a slow, roaming surprise that appears once you pass a score
-  // threshold. It creeps through open cells only (never onto the snake, walls,
-  // food or the bomb). Run your head into it and the game is over.
-  let ghost = null;         // {x, y, dir:{x,y}} or null
+  // pac-man ghosts: slow, roaming surprises. A new one appears as the score
+  // passes each threshold (up to three). Each creeps through open cells only
+  // (never onto the snake, walls, food, the bomb, or another ghost). Run your
+  // head into any of them and the game is over.
+  let ghosts = [];          // up to 3, each {x,y,px,py,dir,moveAt}
   let ghostClock = 0;       // advances only while playing (ms)
-  let ghostMoveAt = 0;      // when the ghost next steps one cell
-  const GHOST_SCORE = 10;   // ghost shows up once the score passes this (temp: 10 for testing, was 50)
+  const GHOST_SCORES = [20, 40, 60];   // a new ghost joins as the score passes each
   const GHOST_MS = 500;     // ms per ghost step (deliberately slow)
   const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
   const GHOST_BODY = '#ec1f27', GHOST_EDGE = '#a5121a', GHOST_EYE = '#12379e';
@@ -497,7 +533,7 @@
     bomb = null;
     bombClock = 0;
     bombNextAt = rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
-    ghost = null;
+    ghosts = [];
     ghostClock = 0;
     placeFood();
     updateScore();
@@ -511,7 +547,7 @@
       snake.some(s => s.x === p.x && s.y === p.y) ||
       (food && p.x === food.x && p.y === food.y) ||
       (bomb && p.x === bomb.x && p.y === bomb.y) ||
-      (ghost && p.x === ghost.x && p.y === ghost.y) ||
+      ghosts.some(g => g.x === p.x && g.y === p.y) ||
       wallLookup.has(p.x + ',' + p.y)
     );
     p.bonus = Math.random() < 0.2;
@@ -552,8 +588,8 @@
     // self collision
     if (snake.some(s => s.x === head.x && s.y === head.y)) return die();
 
-    // running into the ghost ends the run (use the cell it visually occupies)
-    if (ghost) { const g = ghostAt(); if (head.x === g.x && head.y === g.y) return die('ghost'); }
+    // running into any ghost ends the run (use the cell each visually occupies)
+    for (const gh of ghosts) { const g = ghostAt(gh); if (head.x === g.x && head.y === g.y) return die('ghost'); }
 
     snake.unshift(head);
 
@@ -570,9 +606,9 @@
     else snake.pop();
 
     // the bomb no longer kills: it lops off up to 5 segments (never below the
-    // starting length) and docks 5 points, which is allowed to go negative
+    // starting length) and docks 10 points, which is allowed to go negative
     if (bomb && head.x === bomb.x && head.y === bomb.y) {
-      score -= 5;
+      score -= 10;
       updateScore();
       pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
       const target = Math.max(START_LEN, snake.length - 5);
@@ -645,10 +681,10 @@
       buildWalls();                 // shape appears and flashes before it bites
       wallState = 'warning';
       wallPhaseEnd = wallClock + WARN_MS;
-      // never leave food, a bomb, or the ghost buried under a fresh wall
+      // never leave food, a bomb, or a ghost buried under a fresh wall
       if (food && wallLookup.has(food.x + ',' + food.y)) placeFood();
       if (bomb && wallLookup.has(bomb.x + ',' + bomb.y)) placeBomb();
-      if (ghost && wallLookup.has(ghost.x + ',' + ghost.y)) nudgeGhost();
+      for (const g of ghosts) if (wallLookup.has(g.x + ',' + g.y)) nudgeGhost(g);
     } else if (wallState === 'warning') {
       wallState = 'solid';
       wallPhaseEnd = wallClock + SOLID_MS;
@@ -668,7 +704,7 @@
     } while (
       snake.some(s => s.x === p.x && s.y === p.y) ||
       (food && p.x === food.x && p.y === food.y) ||
-      (ghost && p.x === ghost.x && p.y === ghost.y) ||
+      ghosts.some(g => g.x === p.x && g.y === p.y) ||
       wallLookup.has(p.x + ',' + p.y)
     );
     bomb = p;
@@ -688,12 +724,14 @@
   }
 
   // ---- ghost ----
-  // a cell the ghost may not enter: the snake, a wall, food, or the bomb
-  function ghostBlocked(x, y) {
+  // a cell a ghost may not enter: the snake, a wall, food, the bomb, or another
+  // ghost (self is excluded so a ghost never blocks itself)
+  function ghostBlocked(x, y, self) {
     return snake.some(s => s.x === x && s.y === y) ||
            wallLookup.has(x + ',' + y) ||
            (food && food.x === x && food.y === y) ||
-           (bomb && bomb.x === x && bomb.y === y);
+           (bomb && bomb.x === x && bomb.y === y) ||
+           ghosts.some(g => g !== self && g.x === x && g.y === y);
   }
 
   // toroidal Manhattan distance, since the edges wrap
@@ -708,28 +746,27 @@
       if (++tries > 400) return;             // board too full; try again later
       p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
     } while (ghostBlocked(p.x, p.y) || wrapDist(p.x, p.y, snake[0].x, snake[0].y) < 7);
-    ghost = {x: p.x, y: p.y, px: p.x, py: p.y, dir: {x: 0, y: 0}};
-    ghostMoveAt = ghostClock + GHOST_MS;
+    ghosts.push({x: p.x, y: p.y, px: p.x, py: p.y, dir: {x: 0, y: 0}, moveAt: ghostClock + GHOST_MS});
   }
 
-  // if a wall forms on the ghost, slide it to the nearest open cell
-  function nudgeGhost() {
+  // if a wall forms on a ghost, slide it to the nearest open cell
+  function nudgeGhost(g) {
     for (let r = 1; r < GRID; r++) {
       for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
-        const nx = (ghost.x + dx + GRID) % GRID, ny = (ghost.y + dy + GRID) % GRID;
-        if (!ghostBlocked(nx, ny)) { ghost.x = ghost.px = nx; ghost.y = ghost.py = ny; return; }
+        const nx = (g.x + dx + GRID) % GRID, ny = (g.y + dy + GRID) % GRID;
+        if (!ghostBlocked(nx, ny, g)) { g.x = g.px = nx; g.y = g.py = ny; return; }
       }
     }
   }
 
-  function moveGhost() {
-    ghost.px = ghost.x; ghost.py = ghost.y;   // remember where we came from (smooth render)
+  function moveGhost(g) {
+    g.px = g.x; g.py = g.y;                    // remember where we came from (smooth render)
     const opts = [];
     for (const d of GHOST_DIRS) {
-      if (ghost.dir.x === -d.x && ghost.dir.y === -d.y) continue; // no reversing
-      const nx = (ghost.x + d.x + GRID) % GRID, ny = (ghost.y + d.y + GRID) % GRID;
-      if (!ghostBlocked(nx, ny)) opts.push({d, nx, ny});
+      if (g.dir.x === -d.x && g.dir.y === -d.y) continue; // no reversing
+      const nx = (g.x + d.x + GRID) % GRID, ny = (g.y + d.y + GRID) % GRID;
+      if (!ghostBlocked(nx, ny, g)) opts.push({d, nx, ny});
     }
     let pick;
     if (opts.length) {
@@ -741,38 +778,41 @@
         pick = opts[(Math.random() * opts.length) | 0];
       }
     } else {                                 // boxed in: reverse if we can, else wait
-      const rx = (ghost.x - ghost.dir.x + GRID) % GRID, ry = (ghost.y - ghost.dir.y + GRID) % GRID;
-      if ((ghost.dir.x || ghost.dir.y) && !ghostBlocked(rx, ry)) {
-        pick = {d: {x: -ghost.dir.x, y: -ghost.dir.y}, nx: rx, ny: ry};
+      const rx = (g.x - g.dir.x + GRID) % GRID, ry = (g.y - g.dir.y + GRID) % GRID;
+      if ((g.dir.x || g.dir.y) && !ghostBlocked(rx, ry, g)) {
+        pick = {d: {x: -g.dir.x, y: -g.dir.y}, nx: rx, ny: ry};
       } else return;
     }
-    ghost.x = pick.nx; ghost.y = pick.ny; ghost.dir = pick.d;
+    g.x = pick.nx; g.y = pick.ny; g.dir = pick.d;
   }
 
-  function updateGhost() {
-    if (!ghost) { if (score >= GHOST_SCORE) spawnGhost(); return; }
-    if (ghostClock >= ghostMoveAt) { moveGhost(); ghostMoveAt = ghostClock + GHOST_MS; }
+  function updateGhosts() {
+    // add the next ghost as the score passes each threshold (max three)
+    if (ghosts.length < GHOST_SCORES.length && score >= GHOST_SCORES[ghosts.length]) spawnGhost();
+    for (const g of ghosts) {
+      if (ghostClock >= g.moveAt) { moveGhost(g); g.moveAt = ghostClock + GHOST_MS; }
+    }
   }
 
-  // 0..1 progress through the current glide between cells
-  function ghostProgress() {
-    return Math.max(0, Math.min(1, 1 - (ghostMoveAt - ghostClock) / GHOST_MS));
+  // 0..1 progress through a ghost's current glide between cells
+  function ghostProgress(g) {
+    return Math.max(0, Math.min(1, 1 - (g.moveAt - ghostClock) / GHOST_MS));
   }
 
   // continuous cell coords, following the shortest (wrapped) path so a tunnel
   // crossing slides across the edge instead of teleporting the long way round
-  function ghostRender() {
-    let dx = ghost.x - ghost.px, dy = ghost.y - ghost.py;
+  function ghostRender(g) {
+    let dx = g.x - g.px, dy = g.y - g.py;
     if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;
     if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
-    const p = ghostProgress();
-    return { cx: ghost.px + dx * p, cy: ghost.py + dy * p };
+    const p = ghostProgress(g);
+    return { cx: g.px + dx * p, cy: g.py + dy * p };
   }
 
-  // the cell the ghost visually occupies right now, used for collision so you
+  // the cell a ghost visually occupies right now, used for collision so you
   // only die when you actually touch the ghost you can see
-  function ghostAt() {
-    const { cx, cy } = ghostRender();
+  function ghostAt(g) {
+    const { cx, cy } = ghostRender(g);
     return { x: ((Math.round(cx) % GRID) + GRID) % GRID, y: ((Math.round(cy) % GRID) + GRID) % GRID };
   }
 
@@ -823,43 +863,74 @@
     ctx.restore();
   }
 
-  // the bomb: a 💣 ringed in danger red; blinks faster just before it defuses
+  // the hazard is drawn as a Minecraft-style TNT block: a red block with grey
+  // fuse-wrap caps and a white "TNT" band. Same mechanics as before (costs
+  // points and segments, never fatal); it flashes just before it disappears.
   function drawBomb() {
     if (!bomb) return;
     const bx = bomb.x * cell + cell / 2;
     const by = bomb.y * cell + cell / 2;
-    const near = bombClock > bombExpireAt - 1200;
+    const near = bombClock > bombExpireAt - 1200;          // about to vanish
     const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
-    const pulse = 1 + Math.sin(foodPulse * 1.4) * 0.14;
+    const s = cell * 0.9, x0 = bx - s / 2, y0 = by - s / 2, rad = s * 0.08;
+
     ctx.save();
-    ctx.globalAlpha = blink ? 1 : 0.35;
-    ctx.strokeStyle = '#e6402a';
-    ctx.lineWidth = Math.max(2, cell * 0.1);
-    ctx.shadowColor = 'rgba(230,64,42,0.9)';
-    ctx.shadowBlur = 18;
-    ctx.beginPath();
-    ctx.arc(bx, by, cell * 0.46 * pulse, 0, Math.PI * 2);
+    ctx.globalAlpha = blink ? 1 : 0.4;
+
+    // base block with a soft danger glow
+    ctx.shadowColor = 'rgba(209,58,28,0.55)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#d13a1c';
+    roundRect(x0, y0, s, s, rad);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // horizontal bands: red, a light-grey band with a darker strip along its
+    // bottom, then red. Clipped so they follow the block's rounded corners.
+    ctx.save();
+    roundRect(x0, y0, s, s, rad);
+    ctx.clip();
+    const bands = [
+      [0.00, 0.36, '#d13a1c'],
+      [0.36, 0.60, '#d6d6d4'],
+      [0.60, 0.66, '#a9a9a7'],
+      [0.66, 1.00, '#d13a1c'],
+    ];
+    for (const [a, b, col] of bands) {
+      ctx.fillStyle = col;
+      ctx.fillRect(x0, y0 + s * a, s, s * (b - a) + 0.6);
+    }
+    ctx.restore();
+
+    // thin outline for edge definition on the dark arena
+    roundRect(x0, y0, s, s, rad);
+    ctx.lineWidth = Math.max(1, cell * 0.035);
+    ctx.strokeStyle = '#7a2410';
     ctx.stroke();
-    ctx.shadowBlur = 8;
-    ctx.font = `${(cell * 0.62) | 0}px ${EMOJI_FONT}`;
+
+    // "TNT" in black on the grey band (Anton is bold and condensed)
+    ctx.fillStyle = '#141414';
+    ctx.font = `${(s * 0.26) | 0}px Anton, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('💣', bx, by + cell * 0.02);
+    ctx.fillText('TNT', bx, by - s * 0.02);
+
     ctx.restore();
   }
 
   // pac-man style ghost, drawn to match the classic red Blinky sprite. It glides
   // smoothly between cells; while sliding across a tunnel we draw a second copy
   // so it leaves one edge and enters the opposite edge at the same time.
-  function drawGhost() {
-    if (!ghost) return;
-    const { cx, cy } = ghostRender();
-    const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
-    const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
-    for (const gxc of xs) for (const gyc of ys) drawGhostBody(gxc, gyc);
+  function drawGhosts() {
+    for (const g of ghosts) {
+      const { cx, cy } = ghostRender(g);
+      const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
+      const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
+      for (const gxc of xs) for (const gyc of ys) drawGhostBody(gxc, gyc, g.dir);
+    }
   }
 
-  function drawGhostBody(cxCell, cyCell) {
+  function drawGhostBody(cxCell, cyCell, look) {
     const r = cell * 0.4;
     const gx = cxCell * cell + cell / 2;
     const gy = cyCell * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
@@ -889,7 +960,6 @@
     // eyes, pupils tracking the travel direction
     const eyeDX = r * 0.42, eyeY = domeY - r * 0.03;
     const ewx = r * 0.28, ewy = r * 0.36;
-    const look = ghost.dir;
     for (const sx of [-1, 1]) {
       const ex = gx + sx * eyeDX;
       ctx.fillStyle = '#fff';
@@ -987,7 +1057,7 @@
       ctx.fill();
     }
 
-    drawGhost();
+    drawGhosts();
 
     // particles
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -1029,7 +1099,7 @@
       bombClock += dt;
       updateBomb();
       ghostClock += dt;
-      updateGhost();
+      updateGhosts();
       foodAge += dt;
       if (foodAge >= FOOD_TTL) placeFood();
       while (acc >= tickMs) { step(); acc -= tickMs; }
@@ -1129,6 +1199,7 @@
     overlayTitle.className = '';
     entry.style.display = 'none';
     standingsEl.style.display = 'none';
+    legend.style.display = 'none';
     overlay.classList.add('hidden');
   }
 
