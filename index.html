@@ -516,6 +516,7 @@
     canvas.width = rect.width * DPR;
     canvas.height = rect.height * DPR;
     cell = canvas.width / GRID;
+    buildArena();
   }
 
   function reset() {
@@ -572,6 +573,20 @@
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
     if (dirQueue.length < 3) dirQueue.push({x, y});
+  }
+
+  // Apply a directional input. If we're already part-way through the current
+  // tick, step right away so the snake turns immediately instead of waiting up
+  // to a full tick; this is what makes the controls feel responsive. Taking a
+  // whole tick off `acc` (rather than zeroing it) keeps the long-run pace locked
+  // to real time, so rapid taps can't be used to move the snake faster.
+  function inputDir(x, y) {
+    const before = dirQueue.length;
+    setDir(x, y);
+    if (state === 'playing' && dirQueue.length > before && acc >= tickMs * 0.4) {
+      step();
+      acc -= tickMs;
+    }
   }
 
   function step() {
@@ -827,8 +842,9 @@
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#e6402a';
-    ctx.shadowColor = 'rgba(230,64,42,0.85)';
-    ctx.shadowBlur = warning ? 8 : 14;
+    // no per-cell canvas shadow here: shadowed fills are very slow on mobile and
+    // this loop runs on every wall cell every frame. The solid red plus the
+    // bevel below reads clearly without it.
     for (const c of wallCells) {
       roundRect(c.x * cell + pad, c.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
       ctx.fill();
@@ -961,29 +977,34 @@
   }
 
   // ---- arena background ----
-  function drawArena() {
+  // The arena (fill, vignette, grid) is identical between resizes, so render it
+  // once to an offscreen canvas and blit that each frame instead of rebuilding a
+  // gradient and 38 grid strokes 60 times a second. A big saving on mobile.
+  const arenaCanvas = document.createElement('canvas');
+  const arenaCtx = arenaCanvas.getContext('2d');
+  function buildArena() {
     const W = canvas.width, H = canvas.height;
-    // warm solid fill with a soft center vignette for depth
-    ctx.fillStyle = getCss('--arena');
-    ctx.fillRect(0, 0, W, H);
-    const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.1, W/2, H/2, Math.max(W,H)*0.72);
+    arenaCanvas.width = W; arenaCanvas.height = H;
+    const c = arenaCtx;
+    c.fillStyle = getCss('--arena');
+    c.fillRect(0, 0, W, H);
+    const g = c.createRadialGradient(W/2, H/2, Math.min(W,H)*0.1, W/2, H/2, Math.max(W,H)*0.72);
     g.addColorStop(0, 'rgba(90,70,44,0.38)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-    // faint grid for spatial readability
-    ctx.strokeStyle = getCss('--line');
-    ctx.lineWidth = 1;
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+    c.strokeStyle = getCss('--line');
+    c.lineWidth = 1;
     for (let i = 1; i < GRID; i++) {
-      ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, H); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(W, i * cell); ctx.stroke();
+      c.beginPath(); c.moveTo(i * cell, 0); c.lineTo(i * cell, H); c.stroke();
+      c.beginPath(); c.moveTo(0, i * cell); c.lineTo(W, i * cell); c.stroke();
     }
   }
 
   // ---- rendering ----
   function draw(now) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawArena();
+    ctx.drawImage(arenaCanvas, 0, 0);
     drawWalls();
 
     // food (emoji)
@@ -1074,8 +1095,11 @@
     ctx.closePath();
   }
 
+  // The CSS custom properties never change at runtime, so memoize them instead
+  // of hitting getComputedStyle (a slow, synchronous DOM read) every frame.
+  const cssCache = {};
   function getCss(v) {
-    return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    return cssCache[v] ?? (cssCache[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim());
   }
 
   // ---- loop ----
@@ -1213,10 +1237,10 @@
     if (e.target && e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
     if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()) || ['w','a','s','d'].includes(k)) e.preventDefault();
-    if (k === 'arrowup' || k === 'w') setDir(0, -1);
-    else if (k === 'arrowdown' || k === 's') setDir(0, 1);
-    else if (k === 'arrowleft' || k === 'a') setDir(-1, 0);
-    else if (k === 'arrowright' || k === 'd') setDir(1, 0);
+    if (k === 'arrowup' || k === 'w') inputDir(0, -1);
+    else if (k === 'arrowdown' || k === 's') inputDir(0, 1);
+    else if (k === 'arrowleft' || k === 'a') inputDir(-1, 0);
+    else if (k === 'arrowright' || k === 'd') inputDir(1, 0);
     else if (k === ' ') togglePause();
   });
 
@@ -1229,8 +1253,8 @@
     const dx = e.touches[0].clientX - touchStart.x;
     const dy = e.touches[0].clientY - touchStart.y;
     if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
-    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
-    else setDir(0, dy > 0 ? 1 : -1);
+    if (Math.abs(dx) > Math.abs(dy)) inputDir(dx > 0 ? 1 : -1, 0);
+    else inputDir(0, dy > 0 ? 1 : -1);
     touchStart = null;
     e.preventDefault();
   }, {passive: false});
@@ -1251,7 +1275,7 @@
 
   document.querySelectorAll('.dpad [data-dir]').forEach(b => {
     const [x, y] = b.dataset.dir.split(',').map(Number);
-    bindHold(b, () => { if (state === 'playing') setDir(x, y); });
+    bindHold(b, () => { if (state === 'playing') inputDir(x, y); });
   });
 
   document.querySelectorAll('.speed-row button').forEach(b => {
