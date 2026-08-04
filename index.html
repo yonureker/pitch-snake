@@ -1049,15 +1049,8 @@
     for (let i = snake.length - 1; i >= 0; i--) {
       const t = i / denom;
       ctx.fillStyle = `rgb(${(244 - t * 30) | 0}, ${(236 - t * 40) | 0}, ${(216 - t * 58) | 0})`;
-      const { cx, cy } = segRenderPos(i, p);
-      const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
-      const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
-      for (const gx of xs) for (const gy of ys) {
-        const x = gx * cell + cell / 2, y = gy * cell + cell / 2;
-        roundRect(x - r, y - r, r * 2, r * 2, rad);
-        ctx.fill();
-        ctx.stroke();
-      }
+      const rp = segRenderPos(i, p);
+      drawBodyCell(rp.cx, rp.cy, r, rad);
     }
 
     // eyes on the head, at its interpolated position
@@ -1093,7 +1086,7 @@
       ctx.font = `${Math.max(11, (cell * 0.5) | 0)}px monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(fpsValue + ' fps', 6, 6);
+      ctx.fillText(fpsValue + ' fps · ' + workMs.toFixed(1) + 'ms', 6, 6);
     }
   }
 
@@ -1122,6 +1115,24 @@
     return _rp;
   }
 
+  // draw one snake segment (current fill/stroke) at continuous cell coords, plus
+  // a wrapped copy when it slides through a tunnel. Allocation-free (no arrays
+  // per segment per frame) to keep the render light on high-refresh screens.
+  function fillRoundCell(cx, cy, r, rad) {
+    const x = cx * cell + cell / 2, y = cy * cell + cell / 2;
+    roundRect(x - r, y - r, r * 2, r * 2, rad);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawBodyCell(cx, cy, r, rad) {
+    fillRoundCell(cx, cy, r, rad);
+    const wx = cx < 0 ? cx + GRID : cx > GRID - 1 ? cx - GRID : null;
+    const wy = cy < 0 ? cy + GRID : cy > GRID - 1 ? cy - GRID : null;
+    if (wx !== null) fillRoundCell(wx, cy, r, rad);
+    if (wy !== null) fillRoundCell(cx, wy, r, rad);
+    if (wx !== null && wy !== null) fillRoundCell(wx, wy, r, rad);
+  }
+
   // The CSS custom properties never change at runtime, so memoize them instead
   // of hitting getComputedStyle (a slow, synchronous DOM read) every frame.
   const cssCache = {};
@@ -1131,17 +1142,11 @@
 
   // optional on-screen FPS meter: load the page with ?fps=1 to measure on-device
   const showFps = new URLSearchParams(location.search).has('fps');
-  let fpsCount = 0, fpsSince = 0, fpsValue = 0;
+  let fpsCount = 0, fpsSince = 0, fpsValue = 0, fpsWork = 0, workMs = 0;
 
   // ---- loop ----
   function loop(now) {
-    if (showFps) {
-      fpsCount++;
-      if (now - fpsSince >= 500) {
-        fpsValue = Math.round(fpsCount * 1000 / (now - fpsSince));
-        fpsCount = 0; fpsSince = now;
-      }
-    }
+    const t0 = showFps ? performance.now() : 0;
     if (state === 'playing') {
       if (!lastTick) lastTick = now;
       const dt = now - lastTick;
@@ -1160,6 +1165,15 @@
       lastTick = now;
     }
     draw(now);
+    if (showFps) {
+      fpsCount++;
+      fpsWork += performance.now() - t0;      // JS + canvas work this frame
+      if (now - fpsSince >= 500) {
+        fpsValue = Math.round(fpsCount * 1000 / (now - fpsSince));
+        workMs = fpsWork / fpsCount;          // avg; if this is far below the frame
+        fpsCount = 0; fpsWork = 0; fpsSince = now;   // budget, a 60 reading is Safari capping
+      }
+    }
     requestAnimationFrame(loop);
   }
 
