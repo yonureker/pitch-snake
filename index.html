@@ -302,12 +302,12 @@
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
     box-shadow: 0 4px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
-    transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.1s ease;
+    /* no transition: instant, paint-cheap press feedback. Animating box-shadow
+       and translateY on every button as the thumb slides across them churned the
+       main thread and nudged hit-testing; a plain background flip avoids both. */
   }
   .dpad button.pressed {
-    transform: translateY(3px);
     background: var(--gold);
-    box-shadow: 0 1px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
   }
   /* up and down stacked in the middle column; left/right span both rows and
      center vertically, so their centers sit midway between up and down. */
@@ -940,8 +940,8 @@
     const gy = cyCell * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
     const domeY = gy - r * 0.16;
     ctx.save();
-    ctx.shadowColor = 'rgba(236,31,39,0.85)';
-    ctx.shadowBlur = 14;
+    // no canvas shadow: with up to three ghosts (each drawn twice mid-tunnel)
+    // the per-frame shadowed fills were a real cost. The bright red reads fine.
     // body: domed top, straight sides, zig-zag skirt along the bottom
     ctx.beginPath();
     ctx.arc(gx, domeY, r, Math.PI, 2 * Math.PI);   // top dome, left to right
@@ -1035,23 +1035,22 @@
 
     drawBomb();
 
-    // snake — ivory body with gold ring, echoing the player tokens
-    const r = cell * 0.42;
+    // snake — ivory body with gold ring, echoing the player tokens. Style set
+    // once outside the loop, no per-segment save/restore, no head glow: for a
+    // long snake this is a big per-frame saving (2 context ops + a shadow per
+    // segment removed).
+    const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, snake.length - 1);
+    ctx.lineWidth = Math.max(1, cell * 0.05);
+    ctx.strokeStyle = 'rgba(194,162,90,0.65)';
     for (let i = snake.length - 1; i >= 0; i--) {
       const s = snake[i];
-      const t = i / Math.max(1, snake.length - 1);
+      const t = i / denom;
       const x = s.x * cell + cell / 2;
       const y = s.y * cell + cell / 2;
-      ctx.save();
-      if (i === 0) { ctx.shadowColor = getCss('--snake-glow'); ctx.shadowBlur = 16; }
-      const cr = 244 - t * 30, cg = 236 - t * 40, cb = 216 - t * 58;
-      ctx.fillStyle = `rgb(${cr|0}, ${cg|0}, ${cb|0})`;
-      roundRect(x - r, y - r, r * 2, r * 2, cell * 0.32);
+      ctx.fillStyle = `rgb(${(244 - t * 30) | 0}, ${(236 - t * 40) | 0}, ${(216 - t * 58) | 0})`;
+      roundRect(x - r, y - r, r * 2, r * 2, rad);
       ctx.fill();
-      ctx.lineWidth = Math.max(1, cell * 0.05);
-      ctx.strokeStyle = 'rgba(194,162,90,0.65)';
       ctx.stroke();
-      ctx.restore();
     }
 
     // eyes on head
@@ -1083,6 +1082,14 @@
     ctx.globalAlpha = 1;
 
     drawWallLabel();
+
+    if (showFps) {
+      ctx.fillStyle = '#7CFC00';
+      ctx.font = `${Math.max(11, (cell * 0.5) | 0)}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(fpsValue + ' fps', 6, 6);
+    }
   }
 
   function roundRect(x, y, w, h, rad) {
@@ -1102,8 +1109,19 @@
     return cssCache[v] ?? (cssCache[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim());
   }
 
+  // optional on-screen FPS meter: load the page with ?fps=1 to measure on-device
+  const showFps = new URLSearchParams(location.search).has('fps');
+  let fpsCount = 0, fpsSince = 0, fpsValue = 0;
+
   // ---- loop ----
   function loop(now) {
+    if (showFps) {
+      fpsCount++;
+      if (now - fpsSince >= 500) {
+        fpsValue = Math.round(fpsCount * 1000 / (now - fpsSince));
+        fpsCount = 0; fpsSince = now;
+      }
+    }
     if (state === 'playing') {
       if (!lastTick) lastTick = now;
       const dt = now - lastTick;
