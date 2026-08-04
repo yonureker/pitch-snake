@@ -577,9 +577,9 @@
 
   // Apply a directional input. If we're already part-way through the current
   // tick, step right away so the snake turns immediately instead of waiting up
-  // to a full tick; this is what makes the controls feel responsive. Taking a
-  // whole tick off `acc` (rather than zeroing it) keeps the long-run pace locked
-  // to real time, so rapid taps can't be used to move the snake faster.
+  // to a full tick; this makes the controls feel responsive. Taking a whole tick
+  // off `acc` (rather than zeroing it) keeps the long-run pace locked to real
+  // time, so rapid taps can't be used to move the snake faster.
   function inputDir(x, y) {
     const before = dirQueue.length;
     setDir(x, y);
@@ -1260,23 +1260,48 @@
   }, {passive: false});
 
   // ---- on-screen directional pad ----
-  // Pointer events cover both touch and mouse. preventDefault on pointerdown
-  // stops the browser from generating a delayed synthetic click, scrolling, or
-  // text selection, so taps register instantly.
-  function bindHold(el, fire) {
-    const press = (e) => { e.preventDefault(); el.classList.add('pressed'); fire(); };
-    const release = () => el.classList.remove('pressed');
-    el.addEventListener('pointerdown', press);
-    el.addEventListener('pointerup', release);
-    el.addEventListener('pointerleave', release);
-    el.addEventListener('pointercancel', release);
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  // Delegate on the whole pad and resolve the button under the touch with
+  // elementFromPoint, on pointerdown AND pointermove. That way a fast thumb that
+  // SLIDES from one button to another (up then left for a quick reversal) fires
+  // each direction it passes over. Per-button pointerdown can't: touch implicitly
+  // captures the pointer to the first button, so a slide never reaches the next
+  // one, which is why zigzags worked on the keyboard but not the on-screen pad.
+  // We track the gesture's pointerId so a second, stationary finger can't inject
+  // stray turns.
+  const dpad = document.getElementById('dpad');
+  const dirButtons = [...document.querySelectorAll('.dpad [data-dir]')];
+  let lastPadBtn = null, padPointerId = null;
+
+  function padButtonAt(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    return el ? el.closest('.dpad [data-dir]') : null;
+  }
+  function firePad(btn) {
+    if (!btn || btn === lastPadBtn) return;      // ignore gaps and staying on one button
+    dirButtons.forEach(b => b.classList.remove('pressed'));
+    btn.classList.add('pressed');
+    lastPadBtn = btn;
+    const [x, y] = btn.dataset.dir.split(',').map(Number);
+    if (state === 'playing') inputDir(x, y);
+  }
+  function padEnd(e) {
+    if (e && e.pointerId !== padPointerId) return;
+    padPointerId = null; lastPadBtn = null;
+    dirButtons.forEach(b => b.classList.remove('pressed'));
   }
 
-  document.querySelectorAll('.dpad [data-dir]').forEach(b => {
-    const [x, y] = b.dataset.dir.split(',').map(Number);
-    bindHold(b, () => { if (state === 'playing') inputDir(x, y); });
+  dpad.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    padPointerId = e.pointerId; lastPadBtn = null;
+    firePad(padButtonAt(e));
   });
+  dpad.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== padPointerId) return;    // only the finger that started the gesture
+    firePad(padButtonAt(e));
+  });
+  dpad.addEventListener('pointerup', padEnd);
+  dpad.addEventListener('pointercancel', padEnd);
+  dpad.addEventListener('contextmenu', (e) => e.preventDefault());
 
   document.querySelectorAll('.speed-row button').forEach(b => {
     b.addEventListener('click', () => {
