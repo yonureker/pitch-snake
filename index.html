@@ -501,7 +501,13 @@
   const GHOST_SCORES = [20, 40, 60];   // a new ghost joins as the score passes each
   const GHOST_MS = 500;     // ms per ghost step (deliberately slow)
   const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
-  const GHOST_BODY = '#ec1f27', GHOST_EDGE = '#a5121a', GHOST_EYE = '#12379e';
+  // each ghost gets its own colour, in spawn order (Pac-Man style)
+  const GHOST_COLORS = [
+    { body: '#ec1f27', edge: '#a5121a' },  // 1st ghost: red
+    { body: '#2f8ef0', edge: '#1a57ab' },  // 2nd ghost: blue
+    { body: '#f5901e', edge: '#b3641a' },  // 3rd ghost: orange
+  ];
+  const GHOST_EYE = '#12379e';
 
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
   // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
@@ -921,15 +927,16 @@
   // smoothly between cells; while sliding across a tunnel we draw a second copy
   // so it leaves one edge and enters the opposite edge at the same time.
   function drawGhosts() {
-    for (const g of ghosts) {
+    ghosts.forEach((g, i) => {
+      const col = GHOST_COLORS[i % GHOST_COLORS.length];
       const { cx, cy } = ghostRender(g);
       const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
       const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
-      for (const gxc of xs) for (const gyc of ys) drawGhostBody(gxc, gyc, g.dir);
-    }
+      for (const gxc of xs) for (const gyc of ys) drawGhostBody(gxc, gyc, g.dir, col);
+    });
   }
 
-  function drawGhostBody(cxCell, cyCell, look) {
+  function drawGhostBody(cxCell, cyCell, look, col) {
     const r = cell * 0.4;
     const gx = cxCell * cell + cell / 2;
     const gy = cyCell * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
@@ -950,10 +957,10 @@
     }
     ctx.lineTo(gx - r, domeY);                      // left side up
     ctx.closePath();
-    ctx.fillStyle = GHOST_BODY;
+    ctx.fillStyle = col.body;
     ctx.fill();
     ctx.lineWidth = Math.max(1, cell * 0.045);
-    ctx.strokeStyle = GHOST_EDGE;
+    ctx.strokeStyle = col.edge;
     ctx.stroke();
     ctx.shadowBlur = 0;
     // eyes, pupils tracking the travel direction
