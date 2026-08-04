@@ -398,6 +398,7 @@
   let DPR = window.devicePixelRatio || 1;
 
   let snake, dir, dirQueue, food, score, best = 0;
+  let tailFrom = null;   // the cell the tail glides out of, for smooth motion
   let tickMs = 110;
   let lastTick = 0;
   let acc = 0;
@@ -524,6 +525,7 @@
     for (let i = 0; i < START_LEN; i++) snake.push({x: 8 - i, y: 10});
     dir = {x: 1, y: 0};
     dirQueue = [];
+    tailFrom = null;
     score = 0;
     particles = [];
     pendingGrowth = 0;
@@ -575,18 +577,11 @@
     if (dirQueue.length < 3) dirQueue.push({x, y});
   }
 
-  // Apply a directional input. If we're already part-way through the current
-  // tick, step right away so the snake turns immediately instead of waiting up
-  // to a full tick; this makes the controls feel responsive. Taking a whole tick
-  // off `acc` (rather than zeroing it) keeps the long-run pace locked to real
-  // time, so rapid taps can't be used to move the snake faster.
+  // A directional input just queues the turn. With smooth motion the turn is
+  // applied on the next grid step and the snake glides into it (an early sub-tick
+  // step would make the glide snap, so we don't do that anymore).
   function inputDir(x, y) {
-    const before = dirQueue.length;
     setDir(x, y);
-    if (state === 'playing' && dirQueue.length > before && acc >= tickMs * 0.4) {
-      step();
-      acc -= tickMs;
-    }
   }
 
   function step() {
@@ -617,8 +612,8 @@
       placeFood();
     }
 
-    if (pendingGrowth > 0) pendingGrowth--;
-    else snake.pop();
+    if (pendingGrowth > 0) { pendingGrowth--; tailFrom = null; }  // grew: tail stays put
+    else tailFrom = snake.pop();                                  // moved: tail glides from here
 
     // the bomb no longer kills: it lops off up to 5 segments (never below the
     // starting length) and docks 10 points, which is allowed to go negative
@@ -1035,33 +1030,35 @@
 
     drawBomb();
 
-    // snake — ivory body with gold ring, echoing the player tokens. Style set
-    // once outside the loop, no per-segment save/restore, no head glow: for a
-    // long snake this is a big per-frame saving (2 context ops + a shadow per
-    // segment removed).
+    // snake — glides smoothly between grid cells. Each segment is interpolated
+    // toward its current cell over the tick (p = 0..1); a second copy is drawn
+    // while a segment slides through a tunnel. Style is set once outside the
+    // loop, no per-segment save/restore, no head glow (cheap per frame).
     const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, snake.length - 1);
+    const p = state === 'playing' ? Math.min(1, acc / tickMs) : 1;
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = 'rgba(194,162,90,0.65)';
     for (let i = snake.length - 1; i >= 0; i--) {
-      const s = snake[i];
       const t = i / denom;
-      const x = s.x * cell + cell / 2;
-      const y = s.y * cell + cell / 2;
       ctx.fillStyle = `rgb(${(244 - t * 30) | 0}, ${(236 - t * 40) | 0}, ${(216 - t * 58) | 0})`;
-      roundRect(x - r, y - r, r * 2, r * 2, rad);
-      ctx.fill();
-      ctx.stroke();
+      const { cx, cy } = segRenderPos(i, p);
+      const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
+      const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
+      for (const gx of xs) for (const gy of ys) {
+        const x = gx * cell + cell / 2, y = gy * cell + cell / 2;
+        roundRect(x - r, y - r, r * 2, r * 2, rad);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
 
-    // eyes on head
+    // eyes on the head, at its interpolated position
     if (snake.length) {
-      const h = snake[0];
-      const hx = h.x * cell + cell / 2;
-      const hy = h.y * cell + cell / 2;
-      const off = cell * 0.16;
+      const { cx, cy } = segRenderPos(0, p);
+      const hx = (((cx % GRID) + GRID) % GRID) * cell + cell / 2;
+      const hy = (((cy % GRID) + GRID) % GRID) * cell + cell / 2;
+      const off = cell * 0.16, ex = dir.x, ey = dir.y, px = ey, py = ex;
       ctx.fillStyle = '#211e1a';
-      const ex = dir.x, ey = dir.y;
-      const px = ey, py = ex;
       ctx.beginPath();
       ctx.arc(hx + ex*off + px*off, hy + ey*off + py*off, cell*0.08, 0, Math.PI*2);
       ctx.arc(hx + ex*off - px*off, hy + ey*off - py*off, cell*0.08, 0, Math.PI*2);
@@ -1100,6 +1097,21 @@
     ctx.arcTo(x, y + h, x, y, rad);
     ctx.arcTo(x, y, x + w, y, rad);
     ctx.closePath();
+  }
+
+  // Interpolated (wrap-aware) continuous cell position of snake segment i at
+  // tick-progress p (0..1), for smooth motion. Each segment glides toward its
+  // current cell from where the segment behind it is (the tail from tailFrom).
+  // A shared object avoids per-segment allocation each frame.
+  const _rp = { cx: 0, cy: 0 };
+  function segRenderPos(i, p) {
+    const s = snake[i];
+    const prev = i < snake.length - 1 ? snake[i + 1] : (tailFrom || s);
+    let dx = s.x - prev.x, dy = s.y - prev.y;
+    if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;   // shortest path across tunnels
+    if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
+    _rp.cx = prev.x + dx * p; _rp.cy = prev.y + dy * p;
+    return _rp;
   }
 
   // The CSS custom properties never change at runtime, so memoize them instead
