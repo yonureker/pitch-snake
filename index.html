@@ -512,7 +512,7 @@
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
   // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
   const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
-  const FOOD_EMOJIS = ['⚽','🥅','🍎','🍓','🍕','🍔','🍩','🌮','🍇','🍑','🥝','🍒','🧀','🍉','🍌','🥑','🏅','🎯'];
+  const FOOD_EMOJIS = ['⚽','🍎','🍓','🍕','🍔','🍩','🌮','🍇','🍑','🥝','🍒','🧀','🍉','🍌','🥑','🏅','🎯'];
   const BONUS_EMOJIS = ['⭐','🏆','👑','💰','💎'];
   let foodEmoji = '⚽';
   let pendingGrowth = 0;
@@ -891,7 +891,8 @@
     const by = bomb.y * cell + cell / 2;
     const near = bombClock > bombExpireAt - 1200;          // about to vanish
     const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
-    const sz = Math.round(cell * 0.94);
+    const pulse = 1 + Math.sin(foodPulse * 1.15) * 0.09;   // breathe, like the emojis
+    const sz = Math.round(cell * 0.9 * pulse);
     const x0 = Math.round(bx - sz / 2), y0 = Math.round(by - sz / 2);
 
     ctx.save();
