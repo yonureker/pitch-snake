@@ -272,46 +272,49 @@
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
-  /* ---- analog stick (mobile) ---- */
-  /* A virtual thumb-stick: a recessed circular well with a gold knob that
-     follows the thumb. Drag from the centre to steer; direction snaps to the
-     dominant cardinal (grid movement is 4-way). */
-  .stick {
-    position: relative;
-    width: min(190px, 56vw);
-    aspect-ratio: 1 / 1;
-    border-radius: 50%;
-    background: radial-gradient(circle at 50% 40%, #fbf6e8, #efe6d0 62%, #e0d4b6 100%);
-    border: 2px solid rgba(194,162,90,0.5);
-    box-shadow:
-      inset 0 5px 12px rgba(33,30,26,0.20),
-      inset 0 -3px 8px rgba(255,255,255,0.55),
-      0 3px 0 rgba(33,30,26,0.10);
+  /* ---- on-screen directional pad (mobile) ---- */
+  /* 3x3 grid with equal square cells: each button fills its own cell, so the
+     buttons stay square, evenly spaced, and never touch (the gap separates them).
+     Left and right sit in the far columns, well apart. */
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    width: min(320px, 88vw);
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+  }
+  .dpad button {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border: none;
+    border-radius: 16px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: clamp(28px, 9vw, 40px);
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    touch-action: none;
     -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 4px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
+    /* no transition: instant, paint-cheap press feedback. Animating box-shadow
+       and translateY on every button as the thumb slides across them churned the
+       main thread and nudged hit-testing; a plain background flip avoids both. */
   }
-  .stick-hint {
-    position: absolute; color: rgba(33,30,26,0.30);
-    font-size: 15px; font-weight: 700; line-height: 1; pointer-events: none;
+  .dpad button.pressed {
+    background: var(--gold);
   }
-  .stick-hint.up    { top: 9px;    left: 50%; transform: translateX(-50%); }
-  .stick-hint.down  { bottom: 9px; left: 50%; transform: translateX(-50%); }
-  .stick-hint.left  { left: 10px;  top: 50%;  transform: translateY(-50%); }
-  .stick-hint.right { right: 10px; top: 50%;  transform: translateY(-50%); }
-  .stick-knob {
-    position: absolute; left: 50%; top: 50%;
-    width: 48%; aspect-ratio: 1 / 1; border-radius: 50%;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(circle at 50% 36%, var(--gold-bright), var(--gold) 68%, #a5813c 100%);
-    box-shadow:
-      0 5px 10px rgba(33,30,26,0.35),
-      inset 0 2px 4px rgba(255,255,255,0.45),
-      inset 0 -4px 6px rgba(33,30,26,0.28);
-    pointer-events: none;
-  }
-  .stick:not(.active) .stick-knob { transition: transform 0.12s ease; }  /* ease back on release */
+  /* up and down stacked in the middle column; left/right span both rows and
+     center vertically, so their centers sit midway between up and down. */
+  .dpad .up    { grid-area: 1 / 2; }
+  .dpad .down  { grid-area: 2 / 2; }
+  .dpad .left  { grid-column: 1; grid-row: 1 / 3; align-self: center; }
+  .dpad .right { grid-column: 3; grid-row: 1 / 3; align-self: center; }
 </style>
 </head>
 <body>
@@ -345,12 +348,11 @@
       </div>
     </div>
 
-    <div class="stick" id="stick" role="group" aria-label="Analog control">
-      <span class="stick-hint up">&uarr;</span>
-      <span class="stick-hint down">&darr;</span>
-      <span class="stick-hint left">&larr;</span>
-      <span class="stick-hint right">&rarr;</span>
-      <span class="stick-knob" id="stickKnob"></span>
+    <div class="dpad" id="dpad" role="group" aria-label="Directional controls">
+      <button class="up"    data-dir="0,-1" aria-label="Up">&uarr;</button>
+      <button class="left"  data-dir="-1,0" aria-label="Left">&larr;</button>
+      <button class="right" data-dir="1,0"  aria-label="Right">&rarr;</button>
+      <button class="down"  data-dir="0,1"  aria-label="Down">&darr;</button>
     </div>
 
     <div class="speed-row">
@@ -369,7 +371,7 @@
     <div class="hint">
       <span><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
       <span><b>SPACE</b> pause</span>
-      <span><b>SWIPE</b> or <b>STICK</b> on mobile</span>
+      <span><b>SWIPE</b> or <b>BUTTONS</b> on mobile</span>
       <span>dodge <b>WALLS</b> &amp; <b>TNT</b></span>
     </div>
   </div>
@@ -1309,55 +1311,49 @@
     e.preventDefault();
   }, {passive: false});
 
-  // ---- analog stick (mobile) ----
-  // A virtual thumb-stick (like the left stick in a football game). Drag from
-  // the centre and the snake heads in the dominant cardinal direction (grid
-  // movement is 4-way). Hysteresis near the diagonals stops it flip-flopping, a
-  // deadzone at the centre ignores tiny wobble, and the knob follows the thumb.
-  // The rect is cached on press so we don't reflow every move; the gesture's
-  // pointerId is tracked so a second finger can't hijack it.
-  const stick = document.getElementById('stick');
-  const stickKnob = document.getElementById('stickKnob');
-  const STICK_CARD = { R: [1, 0], L: [-1, 0], U: [0, -1], D: [0, 1] };
-  let stickId = null, stickRect = null, stickCard = null;
+  // ---- on-screen directional pad ----
+  // Delegate on the whole pad and resolve the button under the touch with
+  // elementFromPoint, on pointerdown AND pointermove. That way a fast thumb that
+  // SLIDES from one button to another (up then left for a quick reversal) fires
+  // each direction it passes over. Per-button pointerdown can't: touch implicitly
+  // captures the pointer to the first button, so a slide never reaches the next
+  // one, which is why zigzags worked on the keyboard but not the on-screen pad.
+  // We track the gesture's pointerId so a second, stationary finger can't inject
+  // stray turns.
+  const dpad = document.getElementById('dpad');
+  const dirButtons = [...document.querySelectorAll('.dpad [data-dir]')];
+  let lastPadBtn = null, padPointerId = null;
 
-  function updateStick(e) {
-    const dx = e.clientX - (stickRect.left + stickRect.width / 2);
-    const dy = e.clientY - (stickRect.top + stickRect.height / 2);
-    const maxR = stickRect.width * 0.30, mag = Math.hypot(dx, dy);
-    const k = mag > maxR ? maxR / mag : 1;       // clamp the knob to the well
-    stickKnob.style.transform =
-      `translate(calc(-50% + ${(dx * k).toFixed(1)}px), calc(-50% + ${(dy * k).toFixed(1)}px))`;
-    if (mag < stickRect.width * 0.13) return;    // deadzone: keep going straight
-    const ax = Math.abs(dx), ay = Math.abs(dy);
-    let card = stickCard;                         // ambiguous near the diagonal: keep current
-    if (ax > ay * 1.2) card = dx > 0 ? 'R' : 'L';
-    else if (ay > ax * 1.2) card = dy > 0 ? 'D' : 'U';
-    if (card && card !== stickCard) {
-      stickCard = card;
-      if (state === 'playing') inputDir(STICK_CARD[card][0], STICK_CARD[card][1]);
-    }
+  function padButtonAt(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    return el ? el.closest('.dpad [data-dir]') : null;
   }
-  function endStick(e) {
-    if (e && e.pointerId !== stickId) return;
-    stickId = null; stickCard = null;
-    stick.classList.remove('active');
-    stickKnob.style.transform = 'translate(-50%, -50%)';
+  function firePad(btn) {
+    if (!btn || btn === lastPadBtn) return;      // ignore gaps and staying on one button
+    dirButtons.forEach(b => b.classList.remove('pressed'));
+    btn.classList.add('pressed');
+    lastPadBtn = btn;
+    const [x, y] = btn.dataset.dir.split(',').map(Number);
+    if (state === 'playing') inputDir(x, y);
   }
-  stick.addEventListener('pointerdown', (e) => {
+  function padEnd(e) {
+    if (e && e.pointerId !== padPointerId) return;
+    padPointerId = null; lastPadBtn = null;
+    dirButtons.forEach(b => b.classList.remove('pressed'));
+  }
+
+  dpad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    stickId = e.pointerId;
-    stickRect = stick.getBoundingClientRect();
-    stick.classList.add('active');
-    updateStick(e);
+    padPointerId = e.pointerId; lastPadBtn = null;
+    firePad(padButtonAt(e));
   });
-  stick.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== stickId) return;
-    updateStick(e);
+  dpad.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== padPointerId) return;    // only the finger that started the gesture
+    firePad(padButtonAt(e));
   });
-  stick.addEventListener('pointerup', endStick);
-  stick.addEventListener('pointercancel', endStick);
-  stick.addEventListener('contextmenu', (e) => e.preventDefault());
+  dpad.addEventListener('pointerup', padEnd);
+  dpad.addEventListener('pointercancel', padEnd);
+  dpad.addEventListener('contextmenu', (e) => e.preventDefault());
 
   document.querySelectorAll('.speed-row button').forEach(b => {
     b.addEventListener('click', () => {
