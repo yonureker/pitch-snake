@@ -407,6 +407,8 @@
   let foodPulse = 0;
   let foodAge = 0;           // ms the current food has existed (resets on placement)
   const FOOD_TTL = 5000;     // uneaten food relocates after this long
+  let regularEaten = 0;      // regular emojis eaten toward the next bonus
+  const BONUS_EVERY = 5;     // a ringed +5 appears after this many regular emojis
 
   // interior "pac-man" walls: symmetric, hand-shaped obstacles that appear in
   // the pitch, flash as a warning, turn lethal for a while, then vanish. We
@@ -544,6 +546,7 @@
     bombNextAt = rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
     ghosts = [];
     ghostClock = 0;
+    regularEaten = 0;
     placeFood();
     updateScore();
   }
@@ -559,7 +562,7 @@
       ghosts.some(g => g.x === p.x && g.y === p.y) ||
       wallLookup.has(p.x + ',' + p.y)
     );
-    p.bonus = Math.random() < 0.2;
+    p.bonus = regularEaten >= BONUS_EVERY;   // ringed +5 only after a full streak
     food = p;
     foodAge = 0;
     foodEmoji = p.bonus
@@ -610,9 +613,13 @@
     snake.unshift(head);
 
     if (head.x === food.x && head.y === food.y) {
-      const gain = food.bonus ? 5 : 1;
-      score += gain;
-      pendingGrowth += gain;
+      if (food.bonus) {
+        score += 5; pendingGrowth += 5;
+        regularEaten = 0;          // bonus taken: restart the streak
+      } else {
+        score += 1; pendingGrowth += 1;
+        regularEaten++;            // count toward the next bonus (every 5)
+      }
       updateScore();
       spawnParticles(food.x, food.y, food.bonus);
       placeFood();
@@ -1016,6 +1023,10 @@
     const fx = food.x * cell + cell / 2;
     const fy = food.y * cell + cell / 2;
     ctx.save();
+    // in its final moment the bonus blinks, so you know to grab it before it goes
+    if (food.bonus && foodAge > FOOD_TTL - 1500) {
+      ctx.globalAlpha = Math.floor(foodAge / 130) % 2 === 0 ? 1 : 0.28;
+    }
     // bonus ring: a plain gold stroke (strokes are unaffected by the emoji bug)
     if (food.bonus) {
       const ringR = cell * 0.5 * pulse;
@@ -1159,7 +1170,10 @@
       ghostClock += dt;
       updateGhosts();
       foodAge += dt;
-      if (foodAge >= FOOD_TTL) placeFood();
+      if (foodAge >= FOOD_TTL) {
+        if (food.bonus) regularEaten = 0;   // missed the bonus in time: lose the streak
+        placeFood();
+      }
       while (acc >= tickMs) { step(); acc -= tickMs; }
     } else {
       lastTick = now;
