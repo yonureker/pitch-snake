@@ -272,17 +272,17 @@
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
-  /* ---- on-screen D-pad: four big round buttons in a plus ---- */
-  /* Each button fills a large square grid cell (the WHOLE square is the tap
-     target, for generous coverage) with a circular face drawn inside via
-     ::before, so edge taps still register. */
+  /* ---- on-screen D-pad: four square buttons, inverted-T (keyboard arrows) ---- */
+  /* 3x2 grid, no gaps: up sits directly above down; left, down, right share the
+     bottom row. Each button fills its whole square cell (full-square tap target)
+     and the cells touch edge to edge. */
   .dpad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 5px;
-    width: min(300px, 86vw);
-    aspect-ratio: 1 / 1;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 0;
+    width: min(300px, 88vw);
+    aspect-ratio: 3 / 2;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -291,24 +291,24 @@
   .dpad button {
     position: relative; z-index: 0;
     border: none; background: transparent; margin: 0; padding: 0;
-    color: var(--text); font-size: clamp(28px, 9vw, 44px); font-weight: 700; line-height: 1;
+    color: var(--text); font-size: clamp(30px, 9vw, 46px); font-weight: 700; line-height: 1;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
   }
   .dpad button::before {
-    content: ''; position: absolute; inset: 2%; z-index: -1;
-    border-radius: 50%;
-    background: radial-gradient(circle at 50% 36%, #fbf6e8, var(--panel) 60%, #e3d8bd 100%);
-    box-shadow: 0 4px 0 rgba(33,30,26,0.26), inset 0 0 0 1.5px rgba(33,30,26,0.10);
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    border-radius: 10px;
+    background: radial-gradient(circle at 50% 34%, #fbf6e8, var(--panel) 68%, #ded2b4 100%);
+    box-shadow:
+      inset 0 2px 2px rgba(255,255,255,0.55),
+      inset 0 -3px 5px rgba(33,30,26,0.16),
+      inset 0 0 0 1.25px rgba(33,30,26,0.16);
   }
-  .dpad button.pressed::before {
-    background: var(--gold);
-    box-shadow: 0 1px 0 rgba(33,30,26,0.26), inset 0 0 0 1.5px rgba(33,30,26,0.10);
-  }
+  .dpad button.pressed::before { background: var(--gold); }
   .dpad .up    { grid-area: 1 / 2; }
   .dpad .left  { grid-area: 2 / 1; }
+  .dpad .down  { grid-area: 2 / 2; }
   .dpad .right { grid-area: 2 / 3; }
-  .dpad .down  { grid-area: 3 / 2; }
 
   /* ---- settings gear + modal ---- */
   .gear {
