@@ -272,37 +272,43 @@
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
-  /* ---- on-screen D-pad: one molded cross (easier to thumb than separate keys) ---- */
-  /* A single plus-shaped surface (.dpad-cross) with four transparent hit zones
-     over the arms, so you can press or slide across a continuous control. */
+  /* ---- on-screen D-pad: four big round buttons in a plus ---- */
+  /* Each button fills a large square grid cell (the WHOLE square is the tap
+     target, for generous coverage) with a circular face drawn inside via
+     ::before, so edge taps still register. */
   .dpad {
-    position: relative;
-    width: min(168px, 50vw);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 5px;
+    width: min(300px, 86vw);
     aspect-ratio: 1 / 1;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .dpad-cross {
-    position: absolute; inset: 0;
-    clip-path: polygon(34% 0, 66% 0, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0 66%, 0 34%, 34% 34%);
-    background: linear-gradient(150deg, #4a4234, #2a241d 55%, #1c1913);
-    box-shadow: inset 0 3px 3px rgba(255,255,255,0.10), inset 0 -7px 12px rgba(0,0,0,0.5);
-    filter: drop-shadow(0 3px 4px rgba(33,30,26,0.35));
-    pointer-events: none;
-  }
   .dpad button {
-    position: absolute; margin: 0; padding: 0; border: none; background: transparent;
-    color: var(--gold-bright); font-size: clamp(17px, 5vw, 24px); font-weight: 700; line-height: 1;
+    position: relative; z-index: 0;
+    border: none; background: transparent; margin: 0; padding: 0;
+    color: var(--text); font-size: clamp(28px, 9vw, 44px); font-weight: 700; line-height: 1;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
   }
-  .dpad .up    { top: 0;    left: 34%; width: 32%; height: 34%; align-items: flex-start;     padding-top: 7%; }
-  .dpad .down  { bottom: 0; left: 34%; width: 32%; height: 34%; align-items: flex-end;       padding-bottom: 7%; }
-  .dpad .left  { left: 0;   top: 34%;  width: 34%; height: 32%; justify-content: flex-start;  padding-left: 7%; }
-  .dpad .right { right: 0;  top: 34%;  width: 34%; height: 32%; justify-content: flex-end;    padding-right: 7%; }
-  .dpad button.pressed { background: rgba(216,179,94,0.22); }
+  .dpad button::before {
+    content: ''; position: absolute; inset: 2%; z-index: -1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 36%, #fbf6e8, var(--panel) 60%, #e3d8bd 100%);
+    box-shadow: 0 4px 0 rgba(33,30,26,0.26), inset 0 0 0 1.5px rgba(33,30,26,0.10);
+  }
+  .dpad button.pressed::before {
+    background: var(--gold);
+    box-shadow: 0 1px 0 rgba(33,30,26,0.26), inset 0 0 0 1.5px rgba(33,30,26,0.10);
+  }
+  .dpad .up    { grid-area: 1 / 2; }
+  .dpad .left  { grid-area: 2 / 1; }
+  .dpad .right { grid-area: 2 / 3; }
+  .dpad .down  { grid-area: 3 / 2; }
 
   /* ---- settings gear + modal ---- */
   .gear {
@@ -371,7 +377,6 @@
     </div>
 
     <div class="dpad" id="dpad" role="group" aria-label="Directional controls">
-      <span class="dpad-cross"></span>
       <button class="up"    data-dir="0,-1" aria-label="Up">&uarr;</button>
       <button class="down"  data-dir="0,1"  aria-label="Down">&darr;</button>
       <button class="left"  data-dir="-1,0" aria-label="Left">&larr;</button>
