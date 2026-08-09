@@ -272,49 +272,70 @@
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
-  /* ---- on-screen directional pad (mobile) ---- */
-  /* 3x3 grid with equal square cells: each button fills its own cell, so the
-     buttons stay square, evenly spaced, and never touch (the gap separates them).
-     Left and right sit in the far columns, well apart. */
+  /* ---- on-screen D-pad: one molded cross (easier to thumb than separate keys) ---- */
+  /* A single plus-shaped surface (.dpad-cross) with four transparent hit zones
+     over the arms, so you can press or slide across a continuous control. */
   .dpad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    width: min(320px, 88vw);
+    position: relative;
+    width: min(168px, 50vw);
+    aspect-ratio: 1 / 1;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dpad-cross {
+    position: absolute; inset: 0;
+    clip-path: polygon(34% 0, 66% 0, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0 66%, 0 34%, 34% 34%);
+    background: linear-gradient(150deg, #4a4234, #2a241d 55%, #1c1913);
+    box-shadow: inset 0 3px 3px rgba(255,255,255,0.10), inset 0 -7px 12px rgba(0,0,0,0.5);
+    filter: drop-shadow(0 3px 4px rgba(33,30,26,0.35));
+    pointer-events: none;
   }
   .dpad button {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    border: none;
-    border-radius: 16px;
-    background: var(--panel);
-    color: var(--text);
-    font-size: clamp(28px, 9vw, 40px);
-    font-weight: 700;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    touch-action: none;
+    position: absolute; margin: 0; padding: 0; border: none; background: transparent;
+    color: var(--gold-bright); font-size: clamp(17px, 5vw, 24px); font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .dpad .up    { top: 0;    left: 34%; width: 32%; height: 34%; align-items: flex-start;     padding-top: 7%; }
+  .dpad .down  { bottom: 0; left: 34%; width: 32%; height: 34%; align-items: flex-end;       padding-bottom: 7%; }
+  .dpad .left  { left: 0;   top: 34%;  width: 34%; height: 32%; justify-content: flex-start;  padding-left: 7%; }
+  .dpad .right { right: 0;  top: 34%;  width: 34%; height: 32%; justify-content: flex-end;    padding-right: 7%; }
+  .dpad button.pressed { background: rgba(216,179,94,0.22); }
+
+  /* ---- settings gear + modal ---- */
+  .gear {
+    position: absolute; top: 8px; right: 8px; z-index: 6;
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 1.5px solid rgba(194,162,90,0.6);
+    background: rgba(33,30,26,0.55); color: var(--gold-bright);
+    font-size: 20px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
     -webkit-tap-highlight-color: transparent;
-    box-shadow: 0 4px 0 rgba(33,30,26,0.28), inset 0 0 0 1.5px rgba(33,30,26,0.12);
-    /* no transition: instant, paint-cheap press feedback. Animating box-shadow
-       and translateY on every button as the thumb slides across them churned the
-       main thread and nudged hit-testing; a plain background flip avoids both. */
+    backdrop-filter: blur(2px);
   }
-  .dpad button.pressed {
-    background: var(--gold);
+  .gear:active { transform: scale(0.94); }
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(20,17,13,0.62); backdrop-filter: blur(3px); padding: 20px;
   }
-  /* up and down stacked in the middle column; left/right span both rows and
-     center vertically, so their centers sit midway between up and down. */
-  .dpad .up    { grid-area: 1 / 2; }
-  .dpad .down  { grid-area: 2 / 2; }
-  .dpad .left  { grid-column: 1; grid-row: 1 / 3; align-self: center; }
-  .dpad .right { grid-column: 3; grid-row: 1 / 3; align-self: center; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal {
+    background: var(--panel); color: var(--text);
+    border: 2px solid var(--gold); border-radius: 14px;
+    padding: 20px 22px; width: min(320px, 90vw);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: 0 20px 40px rgba(33,30,26,0.4);
+  }
+  .modal-title {
+    font-family: 'Anton', sans-serif; font-weight: 400; font-size: 26px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--text);
+  }
+  .modal .speed-row, .modal .toggle-row { justify-content: center; }
+  .lock-hint { font-size: 12px; color: var(--food); font-weight: 700; text-align: center; }
+  .speed-row button:disabled, .switch:disabled { opacity: 0.4; cursor: default; }
 </style>
 </head>
 <body>
@@ -330,6 +351,7 @@
 
     <div class="board-frame">
       <canvas id="game"></canvas>
+      <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
       <div class="overlay" id="overlay">
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
         <p id="overlayText">Eat to grow. Survive the pitch.</p>
@@ -349,30 +371,37 @@
     </div>
 
     <div class="dpad" id="dpad" role="group" aria-label="Directional controls">
+      <span class="dpad-cross"></span>
       <button class="up"    data-dir="0,-1" aria-label="Up">&uarr;</button>
+      <button class="down"  data-dir="0,1"  aria-label="Down">&darr;</button>
       <button class="left"  data-dir="-1,0" aria-label="Left">&larr;</button>
       <button class="right" data-dir="1,0"  aria-label="Right">&rarr;</button>
-      <button class="down"  data-dir="0,1"  aria-label="Down">&darr;</button>
-    </div>
-
-    <div class="speed-row">
-      <span>SPEED</span>
-      <button data-speed="160">SLOW</button>
-      <button data-speed="110" class="active">NORMAL</button>
-      <button data-speed="70">FAST</button>
-    </div>
-
-    <div class="toggle-row">
-      <span>WALLS</span>
-      <button class="switch on" id="wallToggle" role="switch" aria-checked="true"><span class="knob"></span></button>
-      <span class="state" id="wallStatus">ON</span>
     </div>
 
     <div class="hint">
       <span><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
       <span><b>SPACE</b> pause</span>
-      <span><b>SWIPE</b> or <b>BUTTONS</b> on mobile</span>
-      <span>dodge <b>WALLS</b> &amp; <b>TNT</b></span>
+      <span><b>SWIPE</b> or <b>D-PAD</b> on mobile</span>
+      <span><b>&#9881;</b> for settings</span>
+    </div>
+
+    <div class="modal-backdrop" id="settingsModal" hidden>
+      <div class="modal">
+        <div class="modal-title">Settings</div>
+        <div class="speed-row">
+          <span>SPEED</span>
+          <button data-speed="160">SLOW</button>
+          <button data-speed="110" class="active">NORMAL</button>
+          <button data-speed="70">FAST</button>
+        </div>
+        <div class="toggle-row">
+          <span>WALLS</span>
+          <button class="switch on" id="wallToggle" role="switch" aria-checked="true"><span class="knob"></span></button>
+          <span class="state" id="wallStatus">ON</span>
+        </div>
+        <p class="lock-hint" id="lockHint">Finish the round to change settings.</p>
+        <button class="btn small" id="settingsClose">DONE</button>
+      </div>
     </div>
   </div>
 
@@ -659,6 +688,7 @@
     standingsEl.style.display = 'block';
     renderStandings();
     overlay.classList.remove('hidden');
+    refreshSettingsUI();          // round over: gear back, settings editable again
     if (score > 0) setTimeout(() => nameInput.focus(), 60);
   }
 
@@ -1282,6 +1312,8 @@
     standingsEl.style.display = 'none';
     legend.style.display = 'none';
     overlay.classList.add('hidden');
+    settingsModal.hidden = true;
+    refreshSettingsUI();          // hide the gear, lock the settings for this round
   }
 
   function togglePause() {
@@ -1292,6 +1324,7 @@
       overlayText.textContent = 'Take a breather.';
       startBtn.textContent = 'RESUME';
       overlay.classList.remove('hidden');
+      refreshSettingsUI();
     } else if (state === 'paused') {
       play();
     }
@@ -1391,8 +1424,26 @@
 
   window.addEventListener('resize', resize);
 
+  // ---- settings modal (opened by the gear; the controls lock during a round) ----
+  const gearBtn = document.getElementById('gearBtn');
+  const settingsModal = document.getElementById('settingsModal');
+  const settingsClose = document.getElementById('settingsClose');
+  const lockHint = document.getElementById('lockHint');
+
+  // settings are editable only between rounds (ready / dead), never mid-round
+  function refreshSettingsUI() {
+    const inRound = (state === 'playing' || state === 'paused');
+    gearBtn.style.display = (state === 'playing') ? 'none' : 'flex';
+    settingsModal.querySelectorAll('.speed-row button, #wallToggle').forEach(el => { el.disabled = inRound; });
+    lockHint.style.display = inRound ? 'block' : 'none';
+  }
+  gearBtn.addEventListener('click', () => { refreshSettingsUI(); settingsModal.hidden = false; });
+  settingsClose.addEventListener('click', () => { settingsModal.hidden = true; });
+  settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.hidden = true; });
+
   resize();
   reset();
+  refreshSettingsUI();
   refreshBest();
   requestAnimationFrame(loop);
 })();
