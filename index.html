@@ -342,12 +342,47 @@
   .modal .speed-row, .modal .toggle-row { justify-content: center; }
   .lock-hint { font-size: 12px; color: var(--food); font-weight: 700; text-align: center; }
   .speed-row button:disabled, .switch:disabled { opacity: 0.4; cursor: default; }
+
+  /* ---- terminal easter egg (click the P in PITCH) ---- */
+  .p-egg { cursor: pointer; }
+  .terminal {
+    position: fixed; z-index: 30;
+    width: min(430px, 94vw); max-height: 72vh;
+    left: 50%; bottom: 12px; transform: translateX(-50%);
+    background: #0f130d; border: 1px solid #2b3a22; border-radius: 10px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .terminal[hidden] { display: none; }
+  @media (min-width: 1040px) {
+    .terminal { left: auto; right: 24px; bottom: auto; top: 50%; transform: translateY(-50%); }
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 12px; background: #1a2416; border-bottom: 1px solid #2b3a22;
+  }
+  .term-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .term-dot.red { background: #ff5f56; cursor: pointer; }
+  .term-dot.yellow { background: #ffbd2e; }
+  .term-dot.green { background: #27c93f; }
+  .term-title { margin-left: 8px; color: #7a8f63; font-size: 12px; letter-spacing: 0.5px; }
+  .term-body {
+    margin: 0; padding: 14px 16px; color: #9ef01a; font-size: 12.5px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word;
+    overflow-y: auto; max-height: calc(72vh - 42px);
+  }
+  .term-cursor {
+    display: inline-block; width: 7px; height: 14px; background: #9ef01a;
+    vertical-align: text-bottom; animation: term-blink 1s steps(1) infinite;
+  }
+  @keyframes term-blink { 50% { opacity: 0; } }
 </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>PITCH<br>SNAKE</h1>
+      <h1><span class="p-egg" id="pEgg">P</span>ITCH<br>SNAKE</h1>
       <div class="scores">
         <div class="label">Score</div>
         <div class="val" id="score">0</div>
@@ -407,6 +442,16 @@
         <p class="lock-hint" id="lockHint">Finish the round to change settings.</p>
         <button class="btn small" id="settingsClose">DONE</button>
       </div>
+    </div>
+
+    <div class="terminal" id="terminal" hidden>
+      <div class="term-bar">
+        <span class="term-dot red" id="termClose" title="close"></span>
+        <span class="term-dot yellow"></span>
+        <span class="term-dot green"></span>
+        <span class="term-title">pitch-snake — interview</span>
+      </div>
+      <pre class="term-body" id="termBody"></pre>
     </div>
   </div>
 
@@ -1445,6 +1490,54 @@
   gearBtn.addEventListener('click', () => { refreshSettingsUI(); settingsModal.hidden = false; });
   settingsClose.addEventListener('click', () => { settingsModal.hidden = true; });
   settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.hidden = true; });
+
+  // ---- terminal easter egg: click the "P" in PITCH to reveal the hidden brief ----
+  const pEgg = document.getElementById('pEgg');
+  const terminal = document.getElementById('terminal');
+  const termBody = document.getElementById('termBody');
+  const termClose = document.getElementById('termClose');
+  const TERM_TEXT =
+`$ cat interview/top-10-at-scale.md
+
+TOP 10 HIGH SCORES AT SCALE
+
+Hundreds of thousands of players are playing concurrently.
+Every round ends with a score; there is one global Top 10.
+
+At the end of a round:
+  - If the score makes the Top 10, ask the player for their
+    name. After they submit it, show them the Top 10 with
+    their entry in it.
+  - If it does not make the Top 10, still show them the Top 10
+    and tell them how many points short of 10th place they were.
+
+Design how you would store the scores and serve all of this.
+
+$ `;
+  let termTimer = null;
+  function openTerminal() {
+    terminal.hidden = false;
+    clearInterval(termTimer);
+    termBody.textContent = '';
+    let i = 0;
+    termTimer = setInterval(() => {
+      i += 3;
+      if (i < TERM_TEXT.length) {
+        termBody.textContent = TERM_TEXT.slice(0, i);
+        termBody.scrollTop = termBody.scrollHeight;
+      } else {
+        termBody.textContent = TERM_TEXT;
+        clearInterval(termTimer);
+        const cur = document.createElement('span');
+        cur.className = 'term-cursor';
+        termBody.appendChild(cur);
+      }
+    }, 14);
+  }
+  function closeTerminal() { clearInterval(termTimer); terminal.hidden = true; }
+  pEgg.addEventListener('click', () => { if (terminal.hidden) openTerminal(); else closeTerminal(); });
+  termClose.addEventListener('click', closeTerminal);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !terminal.hidden) closeTerminal(); });
 
   resize();
   reset();
