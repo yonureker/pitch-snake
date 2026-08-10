@@ -369,7 +369,7 @@
   .term-title { margin-left: 8px; color: #7a8f63; font-size: 12px; letter-spacing: 0.5px; }
   .term-body {
     margin: 0; padding: 14px 16px; color: #9ef01a; font-size: 12.5px; line-height: 1.5;
-    white-space: pre-wrap; word-break: break-word;
+    white-space: pre-wrap; overflow-wrap: break-word;
     overflow-y: auto; max-height: calc(72vh - 42px);
   }
   .term-cursor {
@@ -1501,15 +1501,13 @@
 
 TOP 10 HIGH SCORES AT SCALE
 
-Hundreds of thousands of players are playing concurrently.
-Every round ends with a score; there is one global Top 10.
+Hundreds of thousands of players are playing concurrently. Every round ends with a score, and there is one global Top 10.
 
 At the end of a round:
-  - If the score makes the Top 10, ask the player for their
-    name. After they submit it, show them the Top 10 with
-    their entry in it.
-  - If it does not make the Top 10, still show them the Top 10
-    and tell them how many points short of 10th place they were.
+
+- If the score makes the Top 10, ask the player for their name. After they submit it, show them the Top 10 with their entry in it.
+
+- If it does not make the Top 10, still show them the Top 10, and tell them how many points short of 10th place they were.
 
 Design how you would store the scores and serve all of this.
 
