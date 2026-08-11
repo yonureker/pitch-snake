@@ -272,20 +272,18 @@
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
-  /* ---- on-screen D-pad: one large invisible directional surface ---- */
-  /* The four arrows are only a visual hint (pointer-events: none). The whole pad
-     is touch-live and split into four wedges by its diagonals: the vector from
-     the pad's center to the touch picks the direction by whichever axis
-     dominates, so landing on a small target is never required and a slide across
-     the pad re-aims cleanly. */
+  /* ---- on-screen D-pad: four big tap zones, no dead space ---- */
+  /* Discrete regions that tile the whole pad: UP is the entire top band and
+     LEFT / DOWN / RIGHT split the bottom row. A tap anywhere inside a zone turns
+     that way (and a slide across zones re-aims). No angle math, no dead-zone, so
+     a tap always registers as the zone it lands in. */
   .dpad {
-    position: relative;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
     gap: 0;
     width: min(340px, 100%);
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 3 / 2;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -296,11 +294,10 @@
     border: none; background: transparent; margin: 0; padding: 0;
     color: var(--text); font-size: clamp(30px, 9vw, 46px); font-weight: 700; line-height: 1;
     display: flex; align-items: center; justify-content: center;
-    pointer-events: none; /* hint only; the .dpad container handles all touches */
-    -webkit-tap-highlight-color: transparent;
+    cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
   }
   .dpad button::before {
-    content: ''; position: absolute; inset: 6px; z-index: -1;
+    content: ''; position: absolute; inset: 4px; z-index: -1;
     border-radius: 12px;
     background: radial-gradient(circle at 50% 34%, #fbf6e8, var(--panel) 68%, #ded2b4 100%);
     box-shadow:
@@ -309,10 +306,10 @@
       inset 0 0 0 1.25px rgba(33,30,26,0.16);
   }
   .dpad button.pressed::before { background: var(--gold); }
-  .dpad .up    { grid-area: 1 / 2; }
+  .dpad .up    { grid-area: 1 / 1 / 2 / 4; }
   .dpad .left  { grid-area: 2 / 1; }
+  .dpad .down  { grid-area: 2 / 2; }
   .dpad .right { grid-area: 2 / 3; }
-  .dpad .down  { grid-area: 3 / 2; }
 
   /* ---- settings gear + modal ---- */
   .gear {
@@ -1413,54 +1410,42 @@
   }, {passive: false});
 
   // ---- on-screen directional pad ----
-  // The pad is one big touch surface, not four little buttons. We split it into
-  // four wedges by its diagonals: the vector from the pad's center to the touch
-  // picks the direction by whichever axis dominates (|dx| vs |dy|). So a touch or
-  // a slide ANYWHERE on the pad turns the snake; you never have to land on a
-  // small target, and dragging across the pad re-aims cleanly. A small center
-  // dead-zone avoids jitter, and we track the gesture's pointerId so a second,
-  // stationary finger can't inject stray turns.
+  // Four big tap zones tile the whole pad (see CSS): no dead gaps, no small
+  // targets to miss, and a tap always registers as the zone it lands in. We
+  // delegate on the pad and resolve the zone under the touch with elementFromPoint
+  // on pointerdown AND pointermove, so a finger that SLIDES from one zone to
+  // another (a quick up-then-left) fires each zone it crosses. We track the
+  // gesture's pointerId so a second, stationary finger can't inject stray turns.
   const dpad = document.getElementById('dpad');
-  const padHint = {};
-  document.querySelectorAll('.dpad [data-dir]').forEach(b => { padHint[b.dataset.dir] = b; });
-  let padPointerId = null, lastPadDir = '';
-  let padCx = 0, padCy = 0, padDead = 0;
+  const dirButtons = [...document.querySelectorAll('.dpad [data-dir]')];
+  let lastPadBtn = null, padPointerId = null;
 
-  function updatePadGeom() {                      // cache center + dead-zone at gesture start
-    const r = dpad.getBoundingClientRect();
-    padCx = r.left + r.width / 2;
-    padCy = r.top + r.height / 2;
-    padDead = Math.min(r.width, r.height) * 0.12;
+  function padButtonAt(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    return el ? el.closest('.dpad [data-dir]') : null;
   }
-  function padDirAt(e) {
-    const dx = e.clientX - padCx, dy = e.clientY - padCy;
-    if (Math.hypot(dx, dy) < padDead) return '';  // center dead-zone: no direction
-    return Math.abs(dx) > Math.abs(dy)
-      ? (dx > 0 ? '1,0' : '-1,0')
-      : (dy > 0 ? '0,1' : '0,-1');
-  }
-  function firePad(dirKey) {
-    if (!dirKey || dirKey === lastPadDir) return; // ignore dead-zone and staying in one wedge
-    lastPadDir = dirKey;
-    for (const k in padHint) padHint[k].classList.toggle('pressed', k === dirKey);
-    const [x, y] = dirKey.split(',').map(Number);
+  function firePad(btn) {
+    if (!btn || btn === lastPadBtn) return;       // ignore gaps and staying in one zone
+    dirButtons.forEach(b => b.classList.remove('pressed'));
+    btn.classList.add('pressed');
+    lastPadBtn = btn;
+    const [x, y] = btn.dataset.dir.split(',').map(Number);
     if (state === 'playing') inputDir(x, y);
   }
   function padEnd(e) {
     if (e && e.pointerId !== padPointerId) return;
-    padPointerId = null; lastPadDir = '';
-    for (const k in padHint) padHint[k].classList.remove('pressed');
+    padPointerId = null; lastPadBtn = null;
+    dirButtons.forEach(b => b.classList.remove('pressed'));
   }
 
   dpad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    padPointerId = e.pointerId; lastPadDir = '';
-    updatePadGeom();
-    firePad(padDirAt(e));
+    padPointerId = e.pointerId; lastPadBtn = null;
+    firePad(padButtonAt(e));
   });
   dpad.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== padPointerId) return;     // only the finger that started the gesture
-    firePad(padDirAt(e));
+    if (e.pointerId !== padPointerId) return;      // only the finger that started the gesture
+    firePad(padButtonAt(e));
   });
   dpad.addEventListener('pointerup', padEnd);
   dpad.addEventListener('pointercancel', padEnd);
