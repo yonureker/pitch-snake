@@ -564,13 +564,20 @@
 
   function clearWalls() { wallCells = []; wallLookup = new Set(); }
 
-  // TNT blocks: static -10 pt / -5 segment hazards (never lethal). The number on
-  // the field grows with the score: 1 from 10 pts, then +1 as it passes 25, 40,
-  // 55 and 70. Each spawns at least MIN_SPAWN_DIST cells from the head, so a fresh
-  // TNT never drops in right in front of you, and stays put until eaten.
-  let bombs = [];              // array of {x,y}
-  let bombsUnlocked = 0;       // how many TNT thresholds the score has passed (only grows)
+  // TNT blocks: -10 pt / -5 segment hazards (never lethal) that blink in as a
+  // wave, sit for a few seconds, then all vanish before the next wave (like the
+  // original single bomb). The wave SIZE grows with the score: 1 from 10 pts,
+  // then +1 as it passes 25, 40, 55 and 70. Each block spawns at least
+  // MIN_SPAWN_DIST cells from the head, so a fresh TNT never lands right in front.
+  let bombs = [];              // {x,y} blocks in the wave currently showing
+  let bombsUnlocked = 0;       // wave size = TNT thresholds the score has passed (only grows)
+  let bombPhase = 'gap';       // 'gap' (none showing) or 'active' (a wave is up)
+  let bombClock = 0;           // advances only while playing (ms)
+  let bombNextAt = 0;          // when the next wave appears (during a gap)
+  let bombExpireAt = 0;        // when the current wave vanishes (while active)
   const TNT_SCORES = [10, 25, 40, 55, 70];
+  const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;   // quiet stretch between waves
+  const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;  // how long a wave stays
 
   // pac-man ghosts: slow, roaming surprises. A new one appears as the score
   // passes each threshold (up to five). Each creeps through open cells only
@@ -624,6 +631,10 @@
     clearWalls();
     bombs = [];
     bombsUnlocked = 0;
+    bombPhase = 'gap';
+    bombClock = 0;
+    bombNextAt = 0;            // once past 10 pts the first wave shows right away
+    bombExpireAt = 0;
     ghosts = [];
     ghostClock = 0;
     regularEaten = 0;
@@ -837,11 +848,21 @@
   }
 
   function updateBombs() {
-    // unlock more TNTs as the score passes each threshold (never un-unlocks, so a
-    // TNT-eaten score dip doesn't remove blocks that already appeared)
+    // grow the wave size as the score passes each threshold (monotonic, so the
+    // -10 dip from eating a TNT never shrinks the wave)
     while (bombsUnlocked < TNT_SCORES.length && score >= TNT_SCORES[bombsUnlocked]) bombsUnlocked++;
-    // keep the field topped up to the unlocked count (refills any that were eaten)
-    while (bombs.length < bombsUnlocked) { if (!spawnBomb()) break; }
+    if (bombsUnlocked === 0) return;             // no TNTs before 10 pts
+    if (bombPhase === 'active') {
+      if (bombClock >= bombExpireAt) {           // wave's up: the whole wave vanishes
+        bombs = [];
+        bombPhase = 'gap';
+        bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+      }
+    } else if (bombClock >= bombNextAt) {        // gap over: blink in a fresh wave of N
+      for (let i = 0; i < bombsUnlocked; i++) spawnBomb();   // each placed >=3 from the head
+      if (bombs.length) { bombPhase = 'active'; bombExpireAt = bombClock + rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX); }
+      else bombNextAt = bombClock + 1000;        // couldn't place any; retry soon
+    }
   }
 
   // ---- ghost ----
@@ -990,7 +1011,10 @@
   function drawBombs() {
     if (!bombs.length) return;
     const pulse = 1 + Math.sin(foodPulse * 1.15) * 0.09;   // breathe, like the emojis
+    const near = bombPhase === 'active' && bombClock > bombExpireAt - 1200;  // about to vanish
+    const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
     ctx.save();
+    ctx.globalAlpha = blink ? 1 : 0.4;                      // the whole wave flashes before it goes
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const b of bombs) {
@@ -1257,6 +1281,7 @@
       acc += dt;
       wallClock += dt;
       updateWalls();
+      bombClock += dt;
       updateBombs();
       ghostClock += dt;
       updateGhosts();
