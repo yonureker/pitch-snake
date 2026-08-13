@@ -472,7 +472,7 @@
   const legend = document.getElementById('legend');
 
   const GRID = 20;
-  const START_LEN = 3;   // initial snake length; the bomb can't shrink you below this
+  const START_LEN = 3;   // initial snake length; TNT can't shrink you below this
   let cell = 20;
   let DPR = window.devicePixelRatio || 1;
 
@@ -564,22 +564,21 @@
 
   function clearWalls() { wallCells = []; wallLookup = new Set(); }
 
-  // bomb: an occasional 💣 on its own timer (independent of the food). Eating it
-  // ends the game. It shows for a few seconds, then defuses and reschedules.
-  let bomb = null;         // {x,y} or null
-  let bombClock = 0;       // advances only while playing (ms)
-  let bombNextAt = 0;      // when to spawn (while bomb === null)
-  let bombExpireAt = 0;    // when to defuse (while bomb !== null)
-  const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;
-  const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
+  // TNT blocks: static -10 pt / -5 segment hazards (never lethal). The number on
+  // the field grows with the score: 1 from 10 pts, then +1 as it passes 25, 40,
+  // 55 and 70. Each spawns at least MIN_SPAWN_DIST cells from the head, so a fresh
+  // TNT never drops in right in front of you, and stays put until eaten.
+  let bombs = [];              // array of {x,y}
+  let bombsUnlocked = 0;       // how many TNT thresholds the score has passed (only grows)
+  const TNT_SCORES = [10, 25, 40, 55, 70];
 
   // pac-man ghosts: slow, roaming surprises. A new one appears as the score
-  // passes each threshold (up to three). Each creeps through open cells only
-  // (never onto the snake, walls, food, the bomb, or another ghost). Run your
-  // head into any of them and the game is over.
-  let ghosts = [];          // up to 3, each {x,y,px,py,dir,moveAt}
+  // passes each threshold (up to five). Each creeps through open cells only
+  // (never onto the snake, walls, food, a TNT, or another ghost) and spawns at
+  // least MIN_SPAWN_DIST cells away. Run your head into any of them: game over.
+  let ghosts = [];          // up to five, each {x,y,px,py,dir,moveAt}
   let ghostClock = 0;       // advances only while playing (ms)
-  const GHOST_SCORES = [20, 40, 60];   // a new ghost joins as the score passes each
+  const GHOST_SCORES = [15, 30, 45, 60, 75];   // a new ghost joins as the score passes each
   const GHOST_MS = 500;     // ms per ghost step (deliberately slow)
   const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
   // each ghost gets its own colour, in spawn order (Pac-Man style)
@@ -587,8 +586,11 @@
     { body: '#ec1f27', edge: '#a5121a' },  // 1st ghost: red
     { body: '#2f8ef0', edge: '#1a57ab' },  // 2nd ghost: blue
     { body: '#f5901e', edge: '#b3641a' },  // 3rd ghost: orange
+    { body: '#f57ec3', edge: '#c74e97' },  // 4th ghost: pink
+    { body: '#25c7d9', edge: '#1592a0' },  // 5th ghost: cyan
   ];
   const GHOST_EYE = '#12379e';
+  const MIN_SPAWN_DIST = 3;   // ghosts and TNTs appear at least this many cells from the head
 
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
   // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
@@ -620,9 +622,8 @@
     wallClock = 0;
     wallPhaseEnd = rand(4000, 9000);
     clearWalls();
-    bomb = null;
-    bombClock = 0;
-    bombNextAt = rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+    bombs = [];
+    bombsUnlocked = 0;
     ghosts = [];
     ghostClock = 0;
     regularEaten = 0;
@@ -637,7 +638,7 @@
     } while (
       snake.some(s => s.x === p.x && s.y === p.y) ||
       (food && p.x === food.x && p.y === food.y) ||
-      (bomb && p.x === bomb.x && p.y === bomb.y) ||
+      bombs.some(b => b.x === p.x && b.y === p.y) ||
       ghosts.some(g => g.x === p.x && g.y === p.y) ||
       wallLookup.has(p.x + ',' + p.y)
     );
@@ -707,17 +708,18 @@
     if (pendingGrowth > 0) { pendingGrowth--; tailFrom = null; }  // grew: tail stays put
     else tailFrom = snake.pop();                                  // moved: tail glides from here
 
-    // the bomb no longer kills: it lops off up to 5 segments (never below the
-    // starting length) and docks 10 points, which is allowed to go negative
-    if (bomb && head.x === bomb.x && head.y === bomb.y) {
+    // TNT never kills: it lops off up to 5 segments (never below the starting
+    // length) and docks 10 points, which is allowed to go negative. The eaten
+    // block is removed; updateBombs tops the field back up elsewhere.
+    const hitBomb = bombs.findIndex(b => head.x === b.x && head.y === b.y);
+    if (hitBomb !== -1) {
       score -= 10;
       updateScore();
       pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
       const target = Math.max(START_LEN, snake.length - 5);
       while (snake.length > target) snake.pop();
       spawnBoom(head.x, head.y);
-      bomb = null;
-      bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+      bombs.splice(hitBomb, 1);
     }
   }
 
@@ -758,7 +760,7 @@
     }
   }
 
-  // bomb detonation: a bigger red-and-smoke burst, distinct from eating food
+  // TNT detonation: a bigger red-and-smoke burst, distinct from eating food
   function spawnBoom(gx, gy) {
     const cx = gx * cell + cell / 2;
     const cy = gy * cell + cell / 2;
@@ -784,9 +786,9 @@
       buildWalls();                 // shape appears and flashes before it bites
       wallState = 'warning';
       wallPhaseEnd = wallClock + WARN_MS;
-      // never leave food, a bomb, or a ghost buried under a fresh wall
+      // never leave food, a TNT, or a ghost buried under a fresh wall
       if (food && wallLookup.has(food.x + ',' + food.y)) placeFood();
-      if (bomb && wallLookup.has(bomb.x + ',' + bomb.y)) placeBomb();
+      for (const b of bombs) if (wallLookup.has(b.x + ',' + b.y)) { const c = spawnCell(MIN_SPAWN_DIST); if (c) { b.x = c.x; b.y = c.y; } }
       for (const g of ghosts) if (wallLookup.has(g.x + ',' + g.y)) nudgeGhost(g);
     } else if (wallState === 'warning') {
       wallState = 'solid';
@@ -798,42 +800,58 @@
     }
   }
 
-  // ---- bomb ----
-  function placeBomb() {
-    let p, tries = 0;
-    do {
-      if (++tries > 200) return;    // board too full; skip this cycle
-      p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
-    } while (
-      snake.some(s => s.x === p.x && s.y === p.y) ||
-      (food && p.x === food.x && p.y === food.y) ||
-      ghosts.some(g => g.x === p.x && g.y === p.y) ||
-      wallLookup.has(p.x + ',' + p.y)
-    );
-    bomb = p;
+  // ---- shared hazard placement ----
+  // a cell nothing new may spawn onto: the snake, a wall, food, a TNT or a ghost
+  function cellOccupied(x, y) {
+    return snake.some(s => s.x === x && s.y === y) ||
+           wallLookup.has(x + ',' + y) ||
+           (food && food.x === x && food.y === y) ||
+           bombs.some(b => b.x === x && b.y === y) ||
+           ghosts.some(g => g.x === x && g.y === y);
   }
 
-  function updateBomb() {
-    if (bomb) {
-      if (bombClock >= bombExpireAt) {       // defuse and schedule the next one
-        bomb = null;
-        bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+  // pick a random empty cell for a hazard, preferring cells at least `minDist`
+  // steps (toroidal Manhattan) from the head so it never appears right in front
+  // of the player. Falls back to any empty cell when none are far enough.
+  function spawnCell(minDist) {
+    const head = snake[0];
+    const far = [], any = [];                 // flat x,y pairs (no per-cell objects)
+    for (let x = 0; x < GRID; x++) {
+      for (let y = 0; y < GRID; y++) {
+        if (cellOccupied(x, y)) continue;
+        any.push(x, y);
+        if (wrapDist(x, y, head.x, head.y) >= minDist) far.push(x, y);
       }
-    } else if (bombClock >= bombNextAt) {
-      placeBomb();
-      if (bomb) bombExpireAt = bombClock + rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX);
-      else bombNextAt = bombClock + 1000;    // placement failed; retry soon
     }
+    const pool = far.length ? far : any;
+    if (!pool.length) return null;            // board completely full
+    const i = ((Math.random() * (pool.length / 2)) | 0) * 2;
+    return { x: pool[i], y: pool[i + 1] };
+  }
+
+  // ---- TNT blocks ----
+  function spawnBomb() {
+    const c = spawnCell(MIN_SPAWN_DIST);
+    if (c) bombs.push(c);
+    return !!c;
+  }
+
+  function updateBombs() {
+    // unlock more TNTs as the score passes each threshold (never un-unlocks, so a
+    // TNT-eaten score dip doesn't remove blocks that already appeared)
+    while (bombsUnlocked < TNT_SCORES.length && score >= TNT_SCORES[bombsUnlocked]) bombsUnlocked++;
+    // keep the field topped up to the unlocked count (refills any that were eaten)
+    while (bombs.length < bombsUnlocked) { if (!spawnBomb()) break; }
   }
 
   // ---- ghost ----
-  // a cell a ghost may not enter: the snake, a wall, food, the bomb, or another
+  // a cell a ghost may not enter: the snake, a wall, food, a TNT, or another
   // ghost (self is excluded so a ghost never blocks itself)
   function ghostBlocked(x, y, self) {
     return snake.some(s => s.x === x && s.y === y) ||
            wallLookup.has(x + ',' + y) ||
            (food && food.x === x && food.y === y) ||
-           (bomb && bomb.x === x && bomb.y === y) ||
+           bombs.some(b => b.x === x && b.y === y) ||
            ghosts.some(g => g !== self && g.x === x && g.y === y);
   }
 
@@ -844,12 +862,9 @@
   }
 
   function spawnGhost() {
-    let p, tries = 0;
-    do {
-      if (++tries > 400) return;             // board too full; try again later
-      p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
-    } while (ghostBlocked(p.x, p.y) || wrapDist(p.x, p.y, snake[0].x, snake[0].y) < 7);
-    ghosts.push({x: p.x, y: p.y, px: p.x, py: p.y, dir: {x: 0, y: 0}, moveAt: ghostClock + GHOST_MS});
+    const c = spawnCell(MIN_SPAWN_DIST);
+    if (!c) return;                          // board too full; try again later
+    ghosts.push({x: c.x, y: c.y, px: c.x, py: c.y, dir: {x: 0, y: 0}, moveAt: ghostClock + GHOST_MS});
   }
 
   // if a wall forms on a ghost, slide it to the nearest open cell
@@ -890,7 +905,7 @@
   }
 
   function updateGhosts() {
-    // add the next ghost as the score passes each threshold (max three)
+    // add the next ghost as the score passes each threshold (max five)
     if (ghosts.length < GHOST_SCORES.length && score >= GHOST_SCORES[ghosts.length]) spawnGhost();
     for (const g of ghosts) {
       if (ghostClock >= g.moveAt) { moveGhost(g); g.moveAt = ghostClock + GHOST_MS; }
@@ -972,42 +987,39 @@
   // and fillRect keep the edges crisp and blocky (no rounding). Same mechanics
   // as before (costs points and segments, never fatal); it flashes before it
   // disappears.
-  function drawBomb() {
-    if (!bomb) return;
-    const bx = bomb.x * cell + cell / 2;
-    const by = bomb.y * cell + cell / 2;
-    const near = bombClock > bombExpireAt - 1200;          // about to vanish
-    const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
+  function drawBombs() {
+    if (!bombs.length) return;
     const pulse = 1 + Math.sin(foodPulse * 1.15) * 0.09;   // breathe, like the emojis
-    const sz = Math.round(cell * 0.9 * pulse);
-    const x0 = Math.round(bx - sz / 2), y0 = Math.round(by - sz / 2);
-
     ctx.save();
-    ctx.globalAlpha = blink ? 1 : 0.4;
-
-    // solid red block with a soft danger glow (sharp square, like a MC block)
-    ctx.shadowColor = 'rgba(216,70,31,0.55)';
-    ctx.shadowBlur = 9;
-    ctx.fillStyle = '#d8461f';
-    ctx.fillRect(x0, y0, sz, sz);
-    ctx.shadowBlur = 0;
-
-    // the grey "TNT" band with a darker strip along its bottom edge
-    const band = (a, b, col) => {
-      const ya = y0 + Math.round(sz * a), yb = y0 + Math.round(sz * b);
-      ctx.fillStyle = col;
-      ctx.fillRect(x0, ya, sz, yb - ya);
-    };
-    band(0.32, 0.58, '#dadad8');   // light grey band
-    band(0.58, 0.66, '#a9a9a7');   // darker strip
-
-    // "TNT" in bold black across the band
-    ctx.fillStyle = '#111';
-    ctx.font = `700 ${Math.round(sz * 0.32)}px Barlow, "Arial Black", Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('TNT', bx, y0 + Math.round(sz * 0.45) + 0.5);
+    for (const b of bombs) {
+      const bx = b.x * cell + cell / 2;
+      const by = b.y * cell + cell / 2;
+      const sz = Math.round(cell * 0.9 * pulse);
+      const x0 = Math.round(bx - sz / 2), y0 = Math.round(by - sz / 2);
 
+      // solid red block with a soft danger glow (sharp square, like a MC block)
+      ctx.shadowColor = 'rgba(216,70,31,0.55)';
+      ctx.shadowBlur = 9;
+      ctx.fillStyle = '#d8461f';
+      ctx.fillRect(x0, y0, sz, sz);
+      ctx.shadowBlur = 0;
+
+      // the grey "TNT" band with a darker strip along its bottom edge
+      const band = (a, bb, col) => {
+        const ya = y0 + Math.round(sz * a), yb = y0 + Math.round(sz * bb);
+        ctx.fillStyle = col;
+        ctx.fillRect(x0, ya, sz, yb - ya);
+      };
+      band(0.32, 0.58, '#dadad8');   // light grey band
+      band(0.58, 0.66, '#a9a9a7');   // darker strip
+
+      // "TNT" in bold black across the band
+      ctx.fillStyle = '#111';
+      ctx.font = `700 ${Math.round(sz * 0.32)}px Barlow, "Arial Black", Arial, sans-serif`;
+      ctx.fillText('TNT', bx, y0 + Math.round(sz * 0.45) + 0.5);
+    }
     ctx.restore();
   }
 
@@ -1127,7 +1139,7 @@
     ctx.fillText(foodEmoji, fx, fy + cell * 0.02);
     ctx.restore();
 
-    drawBomb();
+    drawBombs();
 
     // snake — glides smoothly between grid cells. Each segment is interpolated
     // toward its current cell over the tick (p = 0..1); a second copy is drawn
@@ -1245,8 +1257,7 @@
       acc += dt;
       wallClock += dt;
       updateWalls();
-      bombClock += dt;
-      updateBomb();
+      updateBombs();
       ghostClock += dt;
       updateGhosts();
       foodAge += dt;
