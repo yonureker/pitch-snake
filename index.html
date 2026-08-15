@@ -99,6 +99,30 @@
       inset 0 0 0 2px var(--gold);
   }
 
+  /* wall status pill: floats just above the field so it never covers the play area */
+  .wall-banner {
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
+    padding: 3px 13px;
+    border-radius: 999px;
+    background: rgba(230,64,42,0.92);
+    color: #fff;
+    font-family: 'Anton', sans-serif;
+    font-size: clamp(11px, 3.2vw, 14px);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: 0 3px 12px rgba(230,64,42,0.5);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .wall-banner[hidden] { display: none; }
+  .wall-banner.forming { animation: wallBlink 0.32s steps(1, end) infinite; }
+  @keyframes wallBlink { 50% { opacity: 0.28; } }
+
   canvas {
     display: block;
     width: 100%;
@@ -393,6 +417,7 @@
 
     <div class="board-frame">
       <canvas id="game"></canvas>
+      <div class="wall-banner" id="wallBanner" hidden></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
       <div class="overlay" id="overlay">
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
@@ -466,6 +491,7 @@
   const startBtn = document.getElementById('startBtn');
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
+  const wallBanner = document.getElementById('wallBanner');
   const entry = document.getElementById('entry');
   const nameInput = document.getElementById('nameInput');
   const saveBtn = document.getElementById('saveBtn');
@@ -988,20 +1014,17 @@
     }
   }
 
-  // wall status banner (drawn on top so it stays readable)
-  function drawWallLabel() {
-    if (wallState === 'off') return;
-    const blinkOn = Math.floor(wallClock / 150) % 2 === 0;
-    ctx.save();
-    ctx.globalAlpha = wallState === 'warning' ? (blinkOn ? 1 : 0.3) : 0.95;
-    ctx.fillStyle = '#fff';
-    ctx.font = `${(cell * 0.6) | 0}px Anton, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.shadowColor = 'rgba(230,64,42,0.95)';
-    ctx.shadowBlur = 12;
-    ctx.fillText(wallState === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE', canvas.width / 2, cell * 1.2);
-    ctx.restore();
+  // wall status banner: a DOM pill above the field, kept off the canvas so it
+  // never covers food or the snake. Only touches the DOM when the phase changes;
+  // the "forming" blink is a CSS animation.
+  let wallBannerState = '';
+  function syncWallBanner() {
+    if (wallState === wallBannerState) return;
+    wallBannerState = wallState;
+    if (wallState === 'off') { wallBanner.hidden = true; return; }
+    wallBanner.textContent = wallState === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
+    wallBanner.classList.toggle('forming', wallState === 'warning');
+    wallBanner.hidden = false;
   }
 
   // the hazard is drawn as a Minecraft-style TNT block: a sharp-edged red block
@@ -1207,7 +1230,7 @@
     }
     ctx.globalAlpha = 1;
 
-    drawWallLabel();
+    syncWallBanner();
 
     if (showFps) {
       ctx.fillStyle = '#7CFC00';
