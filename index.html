@@ -299,10 +299,11 @@
   /* ---- on-screen D-pad: wide pad split into four triangular wedges ---- */
   /* A rounded rectangle divided by an X (both diagonals) into four triangles:
      tap (or slide into) the top triangle for up, the bottom for down, the sides
-     for left / right. clip-path makes each wedge a real button for painting AND
-     hit-testing, so there is no dead-zone and no angle math. The wide shape
-     covers more of the bottom of the screen so the targets are big. The arrow
-     sits in the fat outer part of its slice, where the target is unambiguous. */
+     for left / right. clip-path paints each wedge; the pointer handlers resolve
+     the wedge with the same diagonal math, so hit zones work identically on
+     every browser and there is no dead-zone. The wide shape covers more of the
+     bottom of the screen so the targets are big. The arrow sits in the fat
+     outer part of its slice, where the target is unambiguous. */
   .dpad {
     position: relative;
     width: min(440px, 94%);
@@ -504,6 +505,7 @@
   let DPR = window.devicePixelRatio || 1;
 
   let snake, dir, dirQueue, food, score, best = 0;
+  let snakeSet = new Set();  // cells the snake occupies, as integer keys, for O(1) collision checks
   let tailFrom = null;   // the cell the tail glides out of, for smooth motion
   let tickMs = 110;
   let lastTick = 0;
@@ -528,6 +530,8 @@
   let wallLookup = new Set(); // "x,y" keys of wallCells (for collision)
   const WARN_MS = 1800, SOLID_MS = 9000;
   const rand = (a, b) => a + Math.random() * (b - a);
+  const K = (x, y) => x * GRID + y;              // integer cell key: no string building in hot paths
+  const wrap = v => ((v % GRID) + GRID) % GRID;  // toroidal wrap, safe for any delta (and fractions)
 
   // Mirror seed cells across both center axes so a pattern is symmetric no
   // matter which quadrant the seeds sit in.
@@ -535,7 +539,7 @@
     const s = new Set();
     for (const [x, y] of cells)
       for (const xx of [x, GRID - 1 - x])
-        for (const yy of [y, GRID - 1 - y]) s.add(xx + ',' + yy);
+        for (const yy of [y, GRID - 1 - y]) s.add(K(xx, yy));
     return s;
   }
 
@@ -550,7 +554,7 @@
     return c;
   }
 
-  // Each builder returns a Set of "x,y" cells. Seeds cover one quadrant; sym4
+  // Each builder returns a Set of integer cell keys. Seeds cover one quadrant; sym4
   // fills the rest, guaranteeing a clean, deliberate symmetric shape. The mix
   // spans interior shapes and gated border frames so layouts keep varying.
   const WALL_PATTERNS = [
@@ -583,13 +587,38 @@
   function buildWalls() {
     const set = WALL_PATTERNS[(Math.random() * WALL_PATTERNS.length) | 0]();
     wallLookup = set;
-    wallCells = [...set].map(k => {
-      const [x, y] = k.split(',').map(Number);
-      return { x, y };
-    });
+    wallCells = [...set].map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
+    rebuildWallLayer(false);
   }
 
   function clearWalls() { wallCells = []; wallLookup = new Set(); }
+
+  // The wall shape is static for its whole phase, so it is rendered once to an
+  // offscreen layer and blitted each frame. The old path built and filled a
+  // rounded rect per wall cell per frame (up to ~70 cells, two passes when
+  // live). Rebuilt on shape change, on the warning to solid flip, and on resize.
+  const wallLayer = document.createElement('canvas');
+  const wallLayerCtx = wallLayer.getContext('2d');
+  function rebuildWallLayer(bevel) {
+    wallLayer.width = canvas.width; wallLayer.height = canvas.height;
+    const c = wallLayerCtx;
+    const pad = cell * 0.05, rad = cell * 0.3;
+    c.fillStyle = '#e6402a';
+    for (const w of wallCells) {
+      roundRectOn(c, w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
+      c.fill();
+    }
+    if (bevel) {  // beveled inner highlight, only once the walls are live
+      c.globalAlpha = 0.22;
+      c.fillStyle = '#ffd9d0';
+      const ip = cell * 0.28;
+      for (const w of wallCells) {
+        roundRectOn(c, w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2, cell * 0.14);
+        c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+  }
 
   // TNT blocks: -10 pt / -5 segment hazards (never lethal) that blink in as a
   // wave, sit for a few seconds, then all vanish before the next wave (like the
@@ -631,7 +660,6 @@
   const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
   const FOOD_EMOJIS = ['🍪','🍕','🌮','🍿','🍰','🍊','🍋','🍎','🍏','🍑','🍒','🍓','🍅','🥑','🥨','🥯'];
   const BONUS_EMOJIS = ['⭐','🏆','👑','💰','💎'];
-  let foodEmoji = '🍎';
   let pendingGrowth = 0;
 
   function resize() {
@@ -640,12 +668,23 @@
     canvas.width = rect.width * DPR;
     canvas.height = rect.height * DPR;
     cell = canvas.width / GRID;
+    rebuildStaticArt();
+  }
+
+  // everything pre-rendered at the current cell size, in one place so resize
+  // (and a late-arriving web font) can refresh it all
+  function rebuildStaticArt() {
     buildArena();
+    buildTntSprite();
+    buildGhostSprites();
+    buildFoodSprite();
+    if (wallCells.length) rebuildWallLayer(wallState === 'solid');
   }
 
   function reset() {
     snake = [];
-    for (let i = 0; i < START_LEN; i++) snake.push({x: 8 - i, y: 10});
+    snakeSet.clear();
+    for (let i = 0; i < START_LEN; i++) { snake.push({x: 8 - i, y: 10}); snakeSet.add(K(8 - i, 10)); }
     dir = {x: 1, y: 0};
     dirQueue = [];
     tailFrom = null;
@@ -669,23 +708,39 @@
     updateScore();
   }
 
+  // One bounded scan through spawnCell, never the unbounded rejection loop this
+  // used to be (which could spin as the board filled and hang outright on a
+  // full board; spawnCell already handles that case by returning null).
   function placeFood() {
-    let p;
-    do {
-      p = {x: (Math.random() * GRID) | 0, y: (Math.random() * GRID) | 0};
-    } while (
-      snake.some(s => s.x === p.x && s.y === p.y) ||
-      (food && p.x === food.x && p.y === food.y) ||
-      bombs.some(b => b.x === p.x && b.y === p.y) ||
-      ghosts.some(g => g.x === p.x && g.y === p.y) ||
-      wallLookup.has(p.x + ',' + p.y)
-    );
-    p.bonus = regularEaten >= BONUS_EVERY;   // ringed +5 only after a full streak
-    food = p;
-    foodAge = 0;
-    foodEmoji = p.bonus
+    const c = spawnCell(0);
+    if (!c) { foodAge = 0; return; }        // board full: keep the current food
+    c.bonus = regularEaten >= BONUS_EVERY;  // ringed +5 only after a full streak
+    c.emoji = c.bonus
       ? BONUS_EMOJIS[(Math.random() * BONUS_EMOJIS.length) | 0]
       : FOOD_EMOJIS[(Math.random() * FOOD_EMOJIS.length) | 0];
+    food = c;
+    foodAge = 0;
+    buildFoodSprite();
+  }
+
+  // Color-emoji fillText is among the most expensive single canvas calls on
+  // mobile, so the emoji is rasterized once per placement into a small sprite;
+  // the per-frame pulse is then a cheap scaled drawImage of that sprite.
+  const foodSpriteCanvas = document.createElement('canvas');
+  const foodSpriteCtx = foodSpriteCanvas.getContext('2d');
+  let foodS = 0;
+  function buildFoodSprite() {
+    if (!food) return;
+    foodS = Math.ceil(cell * 1.1);
+    foodSpriteCanvas.width = foodS; foodSpriteCanvas.height = foodS;
+    const c = foodSpriteCtx;
+    // solid fill, no shadow or gradient: iOS Safari paints a color emoji as a
+    // silhouette of the active paint when that paint is fancy (the "red cloud")
+    c.fillStyle = '#000';
+    c.font = `${(cell * 0.78) | 0}px ${EMOJI_FONT}`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(food.emoji, foodS / 2, foodS / 2);
   }
 
   function updateScore() {
@@ -697,40 +752,46 @@
   // Queue turns instead of overwriting a single "next" slot, so two quick taps
   // (e.g. up then right) both land on successive ticks instead of the first
   // being lost. Validate each tap against the last queued/active direction.
+  // Every input source (keyboard, swipe, d-pad) calls this directly, and the
+  // playing gate lives here once, so no source can queue turns while paused.
   function setDir(x, y) {
+    if (state !== 'playing') return;
     const ref = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
     if (dirQueue.length < 3) dirQueue.push({x, y});
   }
 
-  // A directional input just queues the turn. With smooth motion the turn is
-  // applied on the next grid step and the snake glides into it (an early sub-tick
-  // step would make the glide snap, so we don't do that anymore).
-  function inputDir(x, y) {
-    setDir(x, y);
-  }
-
   function step() {
     if (dirQueue.length) dir = dirQueue.shift();
     // edges always wrap now (pac-man tunnels); the hazards live inside the pitch
-    const nx = (snake[0].x + dir.x + GRID) % GRID;
-    const ny = (snake[0].y + dir.y + GRID) % GRID;
+    const nx = wrap(snake[0].x + dir.x);
+    const ny = wrap(snake[0].y + dir.y);
+    const nk = K(nx, ny);
 
     // interior walls are lethal only once they're live
-    if (wallState === 'solid' && wallLookup.has(nx + ',' + ny)) return die('wall');
+    if (wallState === 'solid' && wallLookup.has(nk)) return die('wall');
 
-    const head = {x: nx, y: ny};
+    // whether this tick grows decides the tail rule below, so settle it first
+    const ate = nx === food.x && ny === food.y;
+    const grows = pendingGrowth + (ate ? (food.bonus ? 5 : 1) : 0) > 0;
 
-    // self collision
-    if (snake.some(s => s.x === head.x && s.y === head.y)) return die();
+    // self collision, O(1) against the occupancy set. The tail cell is exempt
+    // when the tail glides out of it this very tick (classic tail-chase), which
+    // is exactly the move the smooth renderer shows the player as legal.
+    const tail = snake[snake.length - 1];
+    if (snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return die();
 
     // running into any ghost ends the run (use the cell each visually occupies)
-    for (const gh of ghosts) { const g = ghostAt(gh); if (head.x === g.x && head.y === g.y) return die('ghost'); }
+    for (const gh of ghosts) { const g = ghostAt(gh); if (nx === g.x && ny === g.y) return die('ghost'); }
 
-    snake.unshift(head);
+    // move: pop the vacated tail first so the set stays exact, then add the head
+    if (grows) tailFrom = null;                  // grew: tail stays put
+    else { tailFrom = snake.pop(); snakeSet.delete(K(tailFrom.x, tailFrom.y)); }
+    snake.unshift({x: nx, y: ny});
+    snakeSet.add(nk);
 
-    if (head.x === food.x && head.y === food.y) {
+    if (ate) {
       if (food.bonus) {
         score += 5; pendingGrowth += 5;
         regularEaten = 0;          // bonus taken: restart the streak
@@ -739,25 +800,33 @@
         regularEaten++;            // count toward the next bonus (every 5)
       }
       updateScore();
-      spawnParticles(food.x, food.y, food.bonus);
+      const burstColor = getCss(food.bonus ? '--gold-bright' : '--food');
+      spawnBurst(food.x, food.y, food.bonus ? 30 : 16, 0.5,
+        () => (Math.random() * 2 + 1) * (cell / 14) * (food.bonus ? 1.5 : 1),
+        () => burstColor);
       placeFood();
     }
-
-    if (pendingGrowth > 0) { pendingGrowth--; tailFrom = null; }  // grew: tail stays put
-    else tailFrom = snake.pop();                                  // moved: tail glides from here
+    if (grows) pendingGrowth--;
 
     // TNT never kills: it lops off up to 5 segments (never below the starting
     // length) and docks 10 points, which is allowed to go negative. The eaten
-    // block is removed; updateBombs tops the field back up elsewhere.
-    const hitBomb = bombs.findIndex(b => head.x === b.x && head.y === b.y);
+    // block is removed; eating the wave's last block restarts the quiet gap.
+    const hitBomb = bombs.findIndex(b => nx === b.x && ny === b.y);
     if (hitBomb !== -1) {
       score -= 10;
       updateScore();
       pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
       const target = Math.max(START_LEN, snake.length - 5);
-      while (snake.length > target) snake.pop();
-      spawnBoom(head.x, head.y);
+      while (snake.length > target) { const t = snake.pop(); snakeSet.delete(K(t.x, t.y)); }
+      tailFrom = null;   // the old glide anchor sits far from the new tail; snap instead of streaking
+      spawnBurst(nx, ny, 26, 0.6,
+        () => (Math.random() * 2.4 + 1) * (cell / 13),
+        i => i % 3 === 0 ? '#e6402a' : '#3a3630');
       bombs.splice(hitBomb, 1);
+      if (!bombs.length) {
+        bombPhase = 'gap';
+        bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
+      }
     }
   }
 
@@ -782,33 +851,18 @@
     if (score > 0) setTimeout(() => nameInput.focus(), 60);
   }
 
-  function spawnParticles(gx, gy, bonus) {
+  // one shared ring-burst emitter; the food and TNT effects differ only in
+  // count, angle jitter, speed, and how each particle picks its color
+  function spawnBurst(gx, gy, count, jitter, speedAt, colorAt) {
     const cx = gx * cell + cell / 2;
     const cy = gy * cell + cell / 2;
-    const count = bonus ? 30 : 16;
-    const color = bonus ? getCss('--gold-bright') : getCss('--food');
     for (let i = 0; i < count; i++) {
-      const a = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-      const sp = (Math.random() * 2 + 1) * (cell / 14) * (bonus ? 1.5 : 1);
+      const a = (Math.PI * 2 * i) / count + Math.random() * jitter;
+      const sp = speedAt();
       particles.push({
         x: cx, y: cy,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        life: 1, color
-      });
-    }
-  }
-
-  // TNT detonation: a bigger red-and-smoke burst, distinct from eating food
-  function spawnBoom(gx, gy) {
-    const cx = gx * cell + cell / 2;
-    const cy = gy * cell + cell / 2;
-    for (let i = 0; i < 26; i++) {
-      const a = (Math.PI * 2 * i) / 26 + Math.random() * 0.6;
-      const sp = (Math.random() * 2.4 + 1) * (cell / 13);
-      particles.push({
-        x: cx, y: cy,
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        life: 1, color: i % 3 === 0 ? '#e6402a' : '#3a3630'
+        life: 1, color: colorAt(i)
       });
     }
   }
@@ -825,12 +879,19 @@
       wallState = 'warning';
       wallPhaseEnd = wallClock + WARN_MS;
       // never leave food, a TNT, or a ghost buried under a fresh wall
-      if (food && wallLookup.has(food.x + ',' + food.y)) placeFood();
-      for (const b of bombs) if (wallLookup.has(b.x + ',' + b.y)) { const c = spawnCell(MIN_SPAWN_DIST); if (c) { b.x = c.x; b.y = c.y; } }
-      for (const g of ghosts) if (wallLookup.has(g.x + ',' + g.y)) nudgeGhost(g);
+      if (food && wallLookup.has(K(food.x, food.y))) placeFood();
+      for (let i = bombs.length - 1; i >= 0; i--) {
+        const b = bombs[i];
+        if (!wallLookup.has(K(b.x, b.y))) continue;
+        const c = spawnCell(MIN_SPAWN_DIST);
+        if (c) { b.x = c.x; b.y = c.y; }
+        else bombs.splice(i, 1);   // nowhere safe: drop it rather than bury a "harmless" TNT in a lethal wall
+      }
+      for (const g of ghosts) if (wallLookup.has(K(g.x, g.y))) nudgeGhost(g);
     } else if (wallState === 'warning') {
       wallState = 'solid';
       wallPhaseEnd = wallClock + SOLID_MS;
+      rebuildWallLayer(true);       // bake the live bevel into the layer
     } else {                        // solid -> open, re-arm later
       wallState = 'off';
       clearWalls();
@@ -841,8 +902,8 @@
   // ---- shared hazard placement ----
   // a cell nothing new may spawn onto: the snake, a wall, food, a TNT or a ghost
   function cellOccupied(x, y) {
-    return snake.some(s => s.x === x && s.y === y) ||
-           wallLookup.has(x + ',' + y) ||
+    const k = K(x, y);
+    return snakeSet.has(k) || wallLookup.has(k) ||
            (food && food.x === x && food.y === y) ||
            bombs.some(b => b.x === x && b.y === y) ||
            ghosts.some(g => g.x === x && g.y === y);
@@ -871,7 +932,6 @@
   function spawnBomb() {
     const c = spawnCell(MIN_SPAWN_DIST);
     if (c) bombs.push(c);
-    return !!c;
   }
 
   function updateBombs() {
@@ -896,8 +956,8 @@
   // a cell a ghost may not enter: the snake, a wall, food, a TNT, or another
   // ghost (self is excluded so a ghost never blocks itself)
   function ghostBlocked(x, y, self) {
-    return snake.some(s => s.x === x && s.y === y) ||
-           wallLookup.has(x + ',' + y) ||
+    const k = K(x, y);
+    return snakeSet.has(k) || wallLookup.has(k) ||
            (food && food.x === x && food.y === y) ||
            bombs.some(b => b.x === x && b.y === y) ||
            ghosts.some(g => g !== self && g.x === x && g.y === y);
@@ -920,7 +980,7 @@
     for (let r = 1; r < GRID; r++) {
       for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
-        const nx = (g.x + dx + GRID) % GRID, ny = (g.y + dy + GRID) % GRID;
+        const nx = wrap(g.x + dx), ny = wrap(g.y + dy);
         if (!ghostBlocked(nx, ny, g)) { g.x = g.px = nx; g.y = g.py = ny; return; }
       }
     }
@@ -931,7 +991,7 @@
     const opts = [];
     for (const d of GHOST_DIRS) {
       if (g.dir.x === -d.x && g.dir.y === -d.y) continue; // no reversing
-      const nx = (g.x + d.x + GRID) % GRID, ny = (g.y + d.y + GRID) % GRID;
+      const nx = wrap(g.x + d.x), ny = wrap(g.y + d.y);
       if (!ghostBlocked(nx, ny, g)) opts.push({d, nx, ny});
     }
     let pick;
@@ -944,7 +1004,7 @@
         pick = opts[(Math.random() * opts.length) | 0];
       }
     } else {                                 // boxed in: reverse if we can, else wait
-      const rx = (g.x - g.dir.x + GRID) % GRID, ry = (g.y - g.dir.y + GRID) % GRID;
+      const rx = wrap(g.x - g.dir.x), ry = wrap(g.y - g.dir.y);
       if ((g.dir.x || g.dir.y) && !ghostBlocked(rx, ry, g)) {
         pick = {d: {x: -g.dir.x, y: -g.dir.y}, nx: rx, ny: ry};
       } else return;
@@ -967,51 +1027,33 @@
 
   // continuous cell coords, following the shortest (wrapped) path so a tunnel
   // crossing slides across the edge instead of teleporting the long way round
+  const _gr = { cx: 0, cy: 0 };   // shared scratch, so the render path allocates nothing per ghost
   function ghostRender(g) {
     let dx = g.x - g.px, dy = g.y - g.py;
     if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;
     if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
     const p = ghostProgress(g);
-    return { cx: g.px + dx * p, cy: g.py + dy * p };
+    _gr.cx = g.px + dx * p; _gr.cy = g.py + dy * p;
+    return _gr;
   }
 
   // the cell a ghost visually occupies right now, used for collision so you
   // only die when you actually touch the ghost you can see
   function ghostAt(g) {
     const { cx, cy } = ghostRender(g);
-    return { x: ((Math.round(cx) % GRID) + GRID) % GRID, y: ((Math.round(cy) % GRID) + GRID) % GRID };
+    return { x: wrap(Math.round(cx)), y: wrap(Math.round(cy)) };
   }
 
-  // interior wall blocks (drawn as a background layer, under the snake)
+  // interior wall blocks (drawn as a background layer, under the snake); the
+  // per-cell art lives in the prebuilt layer, so each frame is a single blit
   function drawWalls() {
     if (wallState === 'off' || !wallCells.length) return;
     const warning = wallState === 'warning';
-    const blinkOn = Math.floor(wallClock / 150) % 2 === 0;
-    const alpha = warning ? (blinkOn ? 0.5 : 0.12)   // ghostly while forming
-                          : 0.94 + Math.sin(wallClock / 120) * 0.06; // solid when live
-    const pad = cell * 0.05, rad = cell * 0.3;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#e6402a';
-    // no per-cell canvas shadow here: shadowed fills are very slow on mobile and
-    // this loop runs on every wall cell every frame. The solid red plus the
-    // bevel below reads clearly without it.
-    for (const c of wallCells) {
-      roundRect(c.x * cell + pad, c.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
-      ctx.fill();
-    }
-    ctx.restore();
-    if (!warning) {                          // beveled inner highlight when live
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      ctx.fillStyle = '#ffd9d0';
-      const ip = cell * 0.28;
-      for (const c of wallCells) {
-        roundRect(c.x * cell + ip, c.y * cell + ip, cell - ip * 2, cell - ip * 2, cell * 0.14);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
+    const blinkOn = ((wallClock / 150) | 0) % 2 === 0;
+    ctx.globalAlpha = warning ? (blinkOn ? 0.5 : 0.12)   // ghostly while forming
+                              : 0.94 + Math.sin(wallClock / 120) * 0.06; // solid when live
+    ctx.drawImage(wallLayer, 0, 0);
+    ctx.globalAlpha = 1;
   }
 
   // wall status banner: a DOM pill above the field, kept off the canvas so it
@@ -1019,102 +1061,131 @@
   // the "forming" blink is a CSS animation.
   let wallBannerState = '';
   function syncWallBanner() {
-    if (wallState === wallBannerState) return;
-    wallBannerState = wallState;
-    if (wallState === 'off') { wallBanner.hidden = true; return; }
-    wallBanner.textContent = wallState === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
-    wallBanner.classList.toggle('forming', wallState === 'warning');
+    const shown = state === 'playing' ? wallState : 'off';   // never announce hazards over the menus
+    if (shown === wallBannerState) return;
+    wallBannerState = shown;
+    if (shown === 'off') { wallBanner.hidden = true; return; }
+    wallBanner.textContent = shown === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
+    wallBanner.classList.toggle('forming', shown === 'warning');
     wallBanner.hidden = false;
   }
 
-  // the hazard is drawn as a Minecraft-style TNT block: a sharp-edged red block
-  // with a light-grey "TNT" band and a darker strip beneath it. Integer coords
-  // and fillRect keep the edges crisp and blocky (no rounding). Same mechanics
-  // as before (costs points and segments, never fatal); it flashes before it
-  // disappears.
+  // the hazard is a Minecraft-style TNT block: a sharp-edged red block with a
+  // light-grey "TNT" band and a darker strip beneath it. The face (block, glow,
+  // band, text) is pre-rendered once to a sprite: the old loop re-set a
+  // shadowBlur and a font and re-rasterized the text for every block on every
+  // frame, exactly the per-frame cost the walls and ghosts already avoid. Per
+  // frame each block is one scaled drawImage; the wave still breathes and
+  // flashes exactly as before.
+  const tntCanvas = document.createElement('canvas');
+  const tntCtx = tntCanvas.getContext('2d');
+  let tntS = 0;
+  function buildTntSprite() {
+    const B = Math.max(4, Math.round(cell * 0.9));   // block edge in device px
+    const PAD = 14;                                  // room for the baked glow
+    tntS = B + PAD * 2;
+    tntCanvas.width = tntS; tntCanvas.height = tntS;
+    const c = tntCtx;
+    // solid red block with a soft danger glow (sharp square, like a MC block)
+    c.shadowColor = 'rgba(216,70,31,0.55)';
+    c.shadowBlur = 9;
+    c.fillStyle = '#d8461f';
+    c.fillRect(PAD, PAD, B, B);
+    c.shadowBlur = 0;
+    // the grey "TNT" band with a darker strip along its bottom edge
+    const band = (a, b, col) => {
+      const ya = PAD + Math.round(B * a), yb = PAD + Math.round(B * b);
+      c.fillStyle = col;
+      c.fillRect(PAD, ya, B, yb - ya);
+    };
+    band(0.32, 0.58, '#dadad8');   // light grey band
+    band(0.58, 0.66, '#a9a9a7');   // darker strip
+    // "TNT" in bold black across the band
+    c.fillStyle = '#111';
+    c.font = `700 ${Math.round(B * 0.32)}px Barlow, "Arial Black", Arial, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText('TNT', PAD + B / 2, PAD + Math.round(B * 0.45) + 0.5);
+  }
+
   function drawBombs() {
     if (!bombs.length) return;
     const pulse = 1 + Math.sin(foodPulse * 1.15) * 0.09;   // breathe, like the emojis
     const near = bombPhase === 'active' && bombClock > bombExpireAt - 1200;  // about to vanish
-    const blink = near ? (Math.floor(bombClock / 120) % 2 === 0) : true;
-    ctx.save();
+    const blink = near ? (((bombClock / 120) | 0) % 2 === 0) : true;
     ctx.globalAlpha = blink ? 1 : 0.4;                      // the whole wave flashes before it goes
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    const dw = Math.round(tntS * pulse);
     for (const b of bombs) {
-      const bx = b.x * cell + cell / 2;
-      const by = b.y * cell + cell / 2;
-      const sz = Math.round(cell * 0.9 * pulse);
-      const x0 = Math.round(bx - sz / 2), y0 = Math.round(by - sz / 2);
-
-      // solid red block with a soft danger glow (sharp square, like a MC block)
-      ctx.shadowColor = 'rgba(216,70,31,0.55)';
-      ctx.shadowBlur = 9;
-      ctx.fillStyle = '#d8461f';
-      ctx.fillRect(x0, y0, sz, sz);
-      ctx.shadowBlur = 0;
-
-      // the grey "TNT" band with a darker strip along its bottom edge
-      const band = (a, bb, col) => {
-        const ya = y0 + Math.round(sz * a), yb = y0 + Math.round(sz * bb);
-        ctx.fillStyle = col;
-        ctx.fillRect(x0, ya, sz, yb - ya);
-      };
-      band(0.32, 0.58, '#dadad8');   // light grey band
-      band(0.58, 0.66, '#a9a9a7');   // darker strip
-
-      // "TNT" in bold black across the band
-      ctx.fillStyle = '#111';
-      ctx.font = `700 ${Math.round(sz * 0.32)}px Barlow, "Arial Black", Arial, sans-serif`;
-      ctx.fillText('TNT', bx, y0 + Math.round(sz * 0.45) + 0.5);
+      const x0 = Math.round(b.x * cell + (cell - dw) / 2);
+      const y0 = Math.round(b.y * cell + (cell - dw) / 2);
+      ctx.drawImage(tntCanvas, x0, y0, dw, dw);
     }
-    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
-  // pac-man style ghost, drawn to match the classic red Blinky sprite. It glides
-  // smoothly between cells; while sliding across a tunnel we draw a second copy
-  // so it leaves one edge and enters the opposite edge at the same time.
-  function drawGhosts() {
-    ghosts.forEach((g, i) => {
-      const col = GHOST_COLORS[i % GHOST_COLORS.length];
-      const { cx, cy } = ghostRender(g);
-      const xs = cx < 0 ? [cx, cx + GRID] : cx > GRID - 1 ? [cx, cx - GRID] : [cx];
-      const ys = cy < 0 ? [cy, cy + GRID] : cy > GRID - 1 ? [cy, cy - GRID] : [cy];
-      for (const gxc of xs) for (const gyc of ys) drawGhostBody(gxc, gyc, g.dir, col);
+  // pac-man style ghost, drawn to match the classic sprites. The body (domed
+  // top, straight sides, zig-zag skirt, outline) is pre-rendered once per
+  // colour, so per frame each ghost is one drawImage plus two live eyes (the
+  // pupils track the travel direction). It glides smoothly between cells; while
+  // sliding across a tunnel a second copy is drawn so it leaves one edge and
+  // enters the opposite edge at the same time.
+  let ghostSprites = [], ghostSprW = 0, ghostSprOY = 0;
+  function buildGhostSprites() {
+    const r = cell * 0.4;
+    const lw = Math.max(1, cell * 0.045);
+    ghostSprW = Math.ceil(2 * r + lw + 4);
+    const h = Math.ceil(2.16 * r + lw + 4);
+    ghostSprOY = 1.16 * r + lw / 2 + 2;        // sprite-space y of the body's cell center
+    ghostSprites = GHOST_COLORS.map(col => {
+      const cv = document.createElement('canvas');
+      cv.width = ghostSprW; cv.height = h;
+      const c = cv.getContext('2d');
+      const gx = ghostSprW / 2, gy = ghostSprOY;
+      const domeY = gy - r * 0.16;
+      c.beginPath();
+      c.arc(gx, domeY, r, Math.PI, 2 * Math.PI);   // top dome, left to right
+      c.lineTo(gx + r, gy + r);                     // right side down
+      const n = 4, step = (2 * r) / n;
+      let x = gx + r;
+      for (let i = 0; i < n; i++) {                 // skirt, right to left
+        c.lineTo(x - step / 2, gy + r - r * 0.42);
+        c.lineTo(x - step, gy + r);
+        x -= step;
+      }
+      c.lineTo(gx - r, domeY);                      // left side up
+      c.closePath();
+      c.fillStyle = col.body;
+      c.fill();
+      c.lineWidth = lw;
+      c.strokeStyle = col.edge;
+      c.stroke();
+      return cv;
     });
   }
 
-  function drawGhostBody(cxCell, cyCell, look, col) {
+  function drawGhosts() {
+    for (let i = 0; i < ghosts.length; i++) {
+      const g = ghosts[i];
+      const ci = i % GHOST_COLORS.length;
+      const { cx, cy } = ghostRender(g);
+      const wx = cx < 0 ? cx + GRID : cx > GRID - 1 ? cx - GRID : null;
+      const wy = cy < 0 ? cy + GRID : cy > GRID - 1 ? cy - GRID : null;
+      drawGhostBody(cx, cy, g.dir, ci);
+      if (wx !== null) drawGhostBody(wx, cy, g.dir, ci);
+      if (wy !== null) drawGhostBody(cx, wy, g.dir, ci);
+      if (wx !== null && wy !== null) drawGhostBody(wx, wy, g.dir, ci);
+    }
+  }
+
+  function drawGhostBody(cxCell, cyCell, look, ci) {
     const r = cell * 0.4;
     const gx = cxCell * cell + cell / 2;
     const gy = cyCell * cell + cell / 2 + Math.sin(foodPulse * 1.1) * cell * 0.03;
-    const domeY = gy - r * 0.16;
-    ctx.save();
-    // no canvas shadow: with up to three ghosts (each drawn twice mid-tunnel)
-    // the per-frame shadowed fills were a real cost. The bright red reads fine.
-    // body: domed top, straight sides, zig-zag skirt along the bottom
-    ctx.beginPath();
-    ctx.arc(gx, domeY, r, Math.PI, 2 * Math.PI);   // top dome, left to right
-    ctx.lineTo(gx + r, gy + r);                     // right side down
-    const n = 4, step = (2 * r) / n;
-    let x = gx + r;
-    for (let i = 0; i < n; i++) {                   // skirt, right to left
-      ctx.lineTo(x - step / 2, gy + r - r * 0.42);
-      ctx.lineTo(x - step, gy + r);
-      x -= step;
-    }
-    ctx.lineTo(gx - r, domeY);                      // left side up
-    ctx.closePath();
-    ctx.fillStyle = col.body;
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, cell * 0.045);
-    ctx.strokeStyle = col.edge;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    // eyes, pupils tracking the travel direction
-    const eyeDX = r * 0.42, eyeY = domeY - r * 0.03;
+    ctx.drawImage(ghostSprites[ci], gx - ghostSprW / 2, gy - ghostSprOY);
+    // eyes, pupils tracking the travel direction (kept live over the sprite)
+    const eyeDX = r * 0.42, eyeY = gy - r * 0.16 - r * 0.03;
     const ewx = r * 0.28, ewy = r * 0.36;
-    for (const sx of [-1, 1]) {
+    for (let sx = -1; sx <= 1; sx += 2) {
       const ex = gx + sx * eyeDX;
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.ellipse(ex, eyeY, ewx, ewy, 0, 0, 2 * Math.PI); ctx.fill();
@@ -1123,7 +1194,6 @@
       ctx.arc(ex + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, 0, 2 * Math.PI);
       ctx.fill();
     }
-    ctx.restore();
   }
 
   // ---- arena background ----
@@ -1152,21 +1222,20 @@
   }
 
   // ---- rendering ----
-  function draw(now) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(arenaCanvas, 0, 0);
+  function draw(dt) {
+    ctx.drawImage(arenaCanvas, 0, 0);   // opaque and full-surface: doubles as the clear
     drawWalls();
 
-    // food (emoji)
-    foodPulse += 0.08;
+    // food: the pre-rendered emoji sprite, scaled each frame for the pulse.
+    // foodPulse is the shared animation clock; it advances by real time so a
+    // 120Hz screen shows the same speed as a 60Hz one (0.08 per 60Hz frame).
+    foodPulse += dt * 0.0048;
     const pulse = 1 + Math.sin(foodPulse) * 0.12;
     const fx = food.x * cell + cell / 2;
     const fy = food.y * cell + cell / 2;
-    ctx.save();
     // in its final moment the bonus blinks, so you know to grab it before it goes
-    if (food.bonus && foodAge > FOOD_TTL - 1500) {
-      ctx.globalAlpha = Math.floor(foodAge / 130) % 2 === 0 ? 1 : 0.28;
-    }
+    const foodDim = food.bonus && foodAge > FOOD_TTL - 1500 && ((foodAge / 130) | 0) % 2 !== 0;
+    if (foodDim) ctx.globalAlpha = 0.28;
     // bonus ring: a plain gold stroke (strokes are unaffected by the emoji bug)
     if (food.bonus) {
       const ringR = cell * 0.5 * pulse;
@@ -1174,32 +1243,25 @@
       ctx.lineWidth = Math.max(2, cell * 0.08);
       ctx.beginPath(); ctx.arc(fx, fy, ringR, 0, Math.PI * 2); ctx.stroke();
     }
-    // Draw the emoji with a SOLID fill and no shadow/gradient. iOS Safari paints
-    // a color emoji as a silhouette filled with the active paint when that paint
-    // is a shadow or a gradient (the "red cloud"); a plain solid colour avoids
-    // it, and color emojis ignore the fill anyway. No glow here, by design.
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#000';
-    ctx.font = `${(cell * 0.78 * pulse) | 0}px ${EMOJI_FONT}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(foodEmoji, fx, fy + cell * 0.02);
-    ctx.restore();
+    const fd = Math.round(foodS * pulse);
+    ctx.drawImage(foodSpriteCanvas, Math.round(fx - fd / 2), Math.round(fy + cell * 0.02 - fd / 2), fd, fd);
+    if (foodDim) ctx.globalAlpha = 1;
 
     drawBombs();
 
-    // snake — glides smoothly between grid cells. Each segment is interpolated
+    // snake: glides smoothly between grid cells. Each segment is interpolated
     // toward its current cell over the tick (p = 0..1); a second copy is drawn
-    // while a segment slides through a tunnel. Style is set once outside the
-    // loop, no per-segment save/restore, no head glow (cheap per frame).
+    // while a segment slides through a tunnel. Fill shades come from a fixed
+    // lookup table and are only re-set when the shade changes (no rgb() string
+    // built per segment), no per-segment save/restore, nothing allocated.
     const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, snake.length - 1);
     const p = state === 'playing' ? Math.min(1, acc / tickMs) : 1;
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = 'rgba(194,162,90,0.65)';
+    let lastShade = -1;
     for (let i = snake.length - 1; i >= 0; i--) {
-      const t = i / denom;
-      ctx.fillStyle = `rgb(${(244 - t * 30) | 0}, ${(236 - t * 40) | 0}, ${(216 - t * 58) | 0})`;
+      const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
+      if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
       const rp = segRenderPos(i, p);
       drawBodyCell(rp.cx, rp.cy, r, rad);
     }
@@ -1207,8 +1269,8 @@
     // eyes on the head, at its interpolated position
     if (snake.length) {
       const { cx, cy } = segRenderPos(0, p);
-      const hx = (((cx % GRID) + GRID) % GRID) * cell + cell / 2;
-      const hy = (((cy % GRID) + GRID) % GRID) * cell + cell / 2;
+      const hx = wrap(cx) * cell + cell / 2;
+      const hy = wrap(cy) * cell + cell / 2;
       const off = cell * 0.16, ex = dir.x, ey = dir.y, px = ey, py = ex;
       ctx.fillStyle = '#211e1a';
       ctx.beginPath();
@@ -1219,14 +1281,23 @@
 
     drawGhosts();
 
-    // particles
+    // particles, integrated over real time so bursts look the same at any Hz;
+    // dead ones are swap-removed instead of splicing the array per particle
+    const f = dt / 16.667;                 // 1 at 60Hz, 0.5 at 120Hz
+    const damp = Math.pow(0.92, f);        // per-frame damping, hoisted: same for every particle
     for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx; p.y += p.vy; p.vx *= 0.92; p.vy *= 0.92; p.life -= 0.04;
-      if (p.life <= 0) { particles.splice(i, 1); continue; }
-      ctx.globalAlpha = p.life;
-      ctx.fillStyle = p.color || getCss('--food');
-      ctx.beginPath(); ctx.arc(p.x, p.y, cell * 0.1 * p.life, 0, Math.PI * 2); ctx.fill();
+      const pt = particles[i];
+      pt.x += pt.vx * f; pt.y += pt.vy * f;
+      pt.vx *= damp; pt.vy *= damp;
+      pt.life -= 0.04 * f;
+      if (pt.life <= 0) {
+        particles[i] = particles[particles.length - 1];
+        particles.pop();
+        continue;
+      }
+      ctx.globalAlpha = pt.life;
+      ctx.fillStyle = pt.color;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, cell * 0.1 * pt.life, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
 
@@ -1241,15 +1312,16 @@
     }
   }
 
-  function roundRect(x, y, w, h, rad) {
-    ctx.beginPath();
-    ctx.moveTo(x + rad, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rad);
-    ctx.arcTo(x + w, y + h, x, y + h, rad);
-    ctx.arcTo(x, y + h, x, y, rad);
-    ctx.arcTo(x, y, x + w, y, rad);
-    ctx.closePath();
+  function roundRectOn(c, x, y, w, h, rad) {
+    c.beginPath();
+    c.moveTo(x + rad, y);
+    c.arcTo(x + w, y, x + w, y + h, rad);
+    c.arcTo(x + w, y + h, x, y + h, rad);
+    c.arcTo(x, y + h, x, y, rad);
+    c.arcTo(x, y, x + w, y, rad);
+    c.closePath();
   }
+  function roundRect(x, y, w, h, rad) { roundRectOn(ctx, x, y, w, h, rad); }
 
   // Interpolated (wrap-aware) continuous cell position of snake segment i at
   // tick-progress p (0..1), for smooth motion. Each segment glides toward its
@@ -1291,17 +1363,31 @@
     return cssCache[v] ?? (cssCache[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim());
   }
 
+  // body shades from head (t=0) to tail (t=1), precomputed once: the old code
+  // built an rgb() string for every segment on every frame
+  const SNAKE_SHADES = 64;
+  const SNAKE_LUT = Array.from({ length: SNAKE_SHADES }, (_, i) => {
+    const t = i / (SNAKE_SHADES - 1);
+    return `rgb(${(244 - t * 30) | 0}, ${(236 - t * 40) | 0}, ${(216 - t * 58) | 0})`;
+  });
+
   // optional on-screen FPS meter: load the page with ?fps=1 to measure on-device
-  const showFps = new URLSearchParams(location.search).has('fps');
+  const fpsFlag = new URLSearchParams(location.search).get('fps');
+  const showFps = fpsFlag !== null && fpsFlag !== '0';
   let fpsCount = 0, fpsSince = 0, fpsValue = 0, fpsWork = 0, workMs = 0;
 
   // ---- loop ----
+  // rAF stops in a hidden tab; MAX_DT caps how much wall time one frame may
+  // inject so waking up never fast-forwards the snake or the hazard clocks.
+  const MAX_DT = 100;
   function loop(now) {
     const t0 = showFps ? performance.now() : 0;
+    if (resizeQueued) { resizeQueued = false; resize(); }
+    if (!lastTick) lastTick = now;
+    let dt = now - lastTick;
+    lastTick = now;
+    if (dt > MAX_DT) dt = MAX_DT;
     if (state === 'playing') {
-      if (!lastTick) lastTick = now;
-      const dt = now - lastTick;
-      lastTick = now;
       acc += dt;
       wallClock += dt;
       updateWalls();
@@ -1314,11 +1400,11 @@
         if (food.bonus) regularEaten = 0;   // missed the bonus in time: lose the streak
         placeFood();
       }
-      while (acc >= tickMs) { step(); acc -= tickMs; }
-    } else {
-      lastTick = now;
+      // the state guard stops the drain the moment a step dies, so no zombie
+      // steps run (and the score can't change) after FULL TIME is already up
+      while (state === 'playing' && acc >= tickMs) { step(); acc -= tickMs; }
     }
-    draw(now);
+    draw(dt);
     if (showFps) {
       fpsCount++;
       fpsWork += performance.now() - t0;      // JS + canvas work this frame
@@ -1336,16 +1422,22 @@
   let savedThisRound = false;
   const MAX_ENTRIES = 10;
 
+  // A stored value that parses but is not an array (a foreign write on the
+  // shared github.io origin, an old format, a devtools edit) must never crash
+  // the standings UI, so every load path is normalized through asList. The
+  // fallback order also mirrors persistStandings now: a failing storage
+  // backend falls through to localStorage instead of silently returning [].
+  const asList = v => Array.isArray(v) ? v : [];
   async function loadStandings() {
     if (window.storage) {
       try {
         const r = await window.storage.get('standings');
-        return r && r.value ? JSON.parse(r.value) : [];
-      } catch (e) { return []; }
+        if (r && r.value) return asList(JSON.parse(r.value));
+      } catch (e) {}
     }
     try {
       const v = localStorage.getItem('snakeStandings');
-      return v ? JSON.parse(v) : [];
+      if (v) return asList(JSON.parse(v));
     } catch (e) {}
     return memStandings.slice();
   }
@@ -1367,8 +1459,14 @@
     return ts;
   }
 
+  // renders race when the async storage backend is slow (die() fires one
+  // without awaiting, a quick save fires another); the generation counter lets
+  // only the newest render win, so a stale list can't overwrite the saved one
+  let standingsGen = 0;
   async function renderStandings(highlightTs) {
+    const gen = ++standingsGen;
     const list = await loadStandings();
+    if (gen !== standingsGen) return;
     standingsEl.innerHTML = '';
     if (!list.length) {
       const li = document.createElement('li');
@@ -1401,10 +1499,17 @@
     savedThisRound = true;
     saveBtn.disabled = true;
     nameInput.disabled = true;
-    const ts = await saveScore(name, score);
-    await refreshBest();
-    await renderStandings(ts);
-    entry.style.display = 'none';
+    try {
+      const ts = await saveScore(name, score);
+      await refreshBest();
+      await renderStandings(ts);
+      entry.style.display = 'none';
+    } catch (e) {
+      // a failed save must not lock the entry for the round; let them retry
+      savedThisRound = false;
+      saveBtn.disabled = false;
+      nameInput.disabled = false;
+    }
   }
 
   saveBtn.addEventListener('click', submitScore);
@@ -1442,15 +1547,20 @@
 
   startBtn.addEventListener('click', play);
 
+  const GAME_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'w', 'a', 's', 'd']);
   document.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
-    if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()) || ['w','a','s','d'].includes(k)) e.preventDefault();
-    if (k === 'arrowup' || k === 'w') inputDir(0, -1);
-    else if (k === 'arrowdown' || k === 's') inputDir(0, 1);
-    else if (k === 'arrowleft' || k === 'a') inputDir(-1, 0);
-    else if (k === 'arrowright' || k === 'd') inputDir(1, 0);
-    else if (k === ' ') togglePause();
+    if (!GAME_KEYS.has(k)) return;
+    // Space on a focused button (START / REMATCH / SAVE) must stay a click,
+    // not a swallowed pause; without this the overlay buttons ignore Space
+    if (k === ' ' && e.target && e.target.tagName === 'BUTTON') return;
+    e.preventDefault();
+    if (k === 'arrowup' || k === 'w') setDir(0, -1);
+    else if (k === 'arrowdown' || k === 's') setDir(0, 1);
+    else if (k === 'arrowleft' || k === 'a') setDir(-1, 0);
+    else if (k === 'arrowright' || k === 'd') setDir(1, 0);
+    else togglePause();
   });
 
   let touchStart = null;
@@ -1462,49 +1572,66 @@
     const dx = e.touches[0].clientX - touchStart.x;
     const dy = e.touches[0].clientY - touchStart.y;
     if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
-    if (Math.abs(dx) > Math.abs(dy)) inputDir(dx > 0 ? 1 : -1, 0);
-    else inputDir(0, dy > 0 ? 1 : -1);
+    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
+    else setDir(0, dy > 0 ? 1 : -1);
     touchStart = null;
     e.preventDefault();
   }, {passive: false});
 
   // ---- on-screen directional pad ----
   // Four big tap zones tile the whole pad (see CSS): no dead gaps, no small
-  // targets to miss, and a tap always registers as the zone it lands in. We
-  // delegate on the pad and resolve the zone under the touch with elementFromPoint
-  // on pointerdown AND pointermove, so a finger that SLIDES from one zone to
-  // another (a quick up-then-left) fires each zone it crosses. We track the
-  // gesture's pointerId so a second, stationary finger can't inject stray turns.
+  // targets to miss. The zone under the finger is resolved with the same
+  // diagonal math the CSS paints (|u| versus |v| in pad coordinates), on
+  // pointerdown AND pointermove, so a finger that SLIDES from one zone to
+  // another (a quick up-then-left) fires each zone it crosses; no forced
+  // hit-test per move. The first finger owns the whole gesture: later fingers
+  // are ignored until it lifts (so a resting second thumb can't inject stray
+  // turns or steal steering), and pointer capture keeps the release visible
+  // even off the pad (mice have no implicit capture, so without it a release
+  // outside left the gesture stuck and bare hovering kept steering the snake).
   const dpad = document.getElementById('dpad');
   const dirButtons = [...document.querySelectorAll('.dpad [data-dir]')];
-  let lastPadBtn = null, padPointerId = null;
+  const padDirOf = new Map();   // button element to its {x, y}, parsed once
+  const padBtn = {};            // up / down / left / right to button element
+  for (const b of dirButtons) {
+    const [x, y] = b.dataset.dir.split(',').map(Number);
+    padDirOf.set(b, { x, y });
+    padBtn[x === 0 ? (y < 0 ? 'up' : 'down') : (x < 0 ? 'left' : 'right')] = b;
+  }
+  let lastPadBtn = null, padPointerId = null, padRect = null;
 
-  function padButtonAt(e) {
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    return el ? el.closest('.dpad [data-dir]') : null;
+  function padZone(e) {
+    const u = (e.clientX - padRect.left) / padRect.width - 0.5;
+    const v = (e.clientY - padRect.top) / padRect.height - 0.5;
+    return Math.abs(u) > Math.abs(v) ? (u > 0 ? padBtn.right : padBtn.left)
+                                     : (v > 0 ? padBtn.down : padBtn.up);
   }
   function firePad(btn) {
-    if (!btn || btn === lastPadBtn) return;       // ignore gaps and staying in one zone
-    dirButtons.forEach(b => b.classList.remove('pressed'));
+    if (!btn || btn === lastPadBtn) return;       // staying in one zone fires once
+    if (lastPadBtn) lastPadBtn.classList.remove('pressed');
     btn.classList.add('pressed');
     lastPadBtn = btn;
-    const [x, y] = btn.dataset.dir.split(',').map(Number);
-    if (state === 'playing') inputDir(x, y);
+    const d = padDirOf.get(btn);
+    setDir(d.x, d.y);
   }
   function padEnd(e) {
     if (e && e.pointerId !== padPointerId) return;
-    padPointerId = null; lastPadBtn = null;
-    dirButtons.forEach(b => b.classList.remove('pressed'));
+    padPointerId = null;
+    if (lastPadBtn) { lastPadBtn.classList.remove('pressed'); lastPadBtn = null; }
   }
 
   dpad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    padPointerId = e.pointerId; lastPadBtn = null;
-    firePad(padButtonAt(e));
+    if (padPointerId !== null) return;             // one finger owns the gesture
+    padPointerId = e.pointerId;
+    lastPadBtn = null;
+    padRect = dpad.getBoundingClientRect();        // cached for the whole gesture
+    try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
+    firePad(padZone(e));
   });
   dpad.addEventListener('pointermove', (e) => {
     if (e.pointerId !== padPointerId) return;      // only the finger that started the gesture
-    firePad(padButtonAt(e));
+    firePad(padZone(e));
   });
   dpad.addEventListener('pointerup', padEnd);
   dpad.addEventListener('pointercancel', padEnd);
@@ -1530,7 +1657,16 @@
     if (wallsEnabled) wallPhaseEnd = wallClock + rand(4000, 9000);
   });
 
-  window.addEventListener('resize', resize);
+  // resize events arrive in bursts while a window drags; coalesce them so the
+  // arena and sprites rebuild at most once per frame, at the top of the loop
+  let resizeQueued = false;
+  window.addEventListener('resize', () => { resizeQueued = true; });
+
+  // a hidden tab stops rAF; pause the round so coming back never means finding
+  // the aftermath (MAX_DT already caps the sim jump as the second line of defense)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'playing') togglePause();
+  });
 
   // ---- settings modal (opened by the gear; the controls lock during a round) ----
   const gearBtn = document.getElementById('gearBtn');
@@ -1599,6 +1735,9 @@ $ `;
   reset();
   refreshSettingsUI();
   refreshBest();
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
+  }
   requestAnimationFrame(loop);
 })();
 </script>
