@@ -507,7 +507,9 @@
   let snake, dir, dirQueue, food, score, best = 0;
   let snakeSet = new Set();  // cells the snake occupies, as integer keys, for O(1) collision checks
   let tailFrom = null;   // the cell the tail glides out of, for smooth motion
-  let tickMs = 110;
+  let tickMs = 110;      // grid steps per second when running straight
+  let stepMs = 110;      // duration of the step in progress; a pending turn shortens it
+  const TURN_SNAP = 0.5; // a turn may cut the current step to this fraction of a tick
   let lastTick = 0;
   let acc = 0;
   let state = 'ready';
@@ -760,6 +762,21 @@
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
     if (dirQueue.length < 3) dirQueue.push({x, y});
+    compressStep();
+  }
+
+  // Turns used to wait out the whole tick they landed in, so a fast corner
+  // (up then left, pressed milliseconds apart) could take a full 220ms to play
+  // out no matter how quickly you pressed. A pending turn now shortens the step
+  // in progress to TURN_SNAP of a tick, which halves that. We only ever shorten
+  // to a point the glide has NOT reached yet, so the snake simply finishes the
+  // cell faster and never jumps: that visual snap is why an older early-step
+  // attempt was removed. Straight-line speed is untouched; only the cell you
+  // turn on is quicker, so this cannot be used to outrun the difficulty curve.
+  function compressStep() {
+    if (!dirQueue.length) return;
+    const target = tickMs * TURN_SNAP;
+    if (acc < target && target < stepMs) stepMs = target;
   }
 
   function step() {
@@ -1262,7 +1279,7 @@
     // lookup table and are only re-set when the shade changes (no rgb() string
     // built per segment), no per-segment save/restore, nothing allocated.
     const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, snake.length - 1);
-    const p = state === 'playing' ? Math.min(1, acc / tickMs) : 1;
+    const p = state === 'playing' ? Math.min(1, acc / stepMs) : 1;
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = 'rgba(194,162,90,0.65)';
     let lastShade = -1;
@@ -1409,7 +1426,12 @@
       }
       // the state guard stops the drain the moment a step dies, so no zombie
       // steps run (and the score can't change) after FULL TIME is already up
-      while (state === 'playing' && acc >= tickMs) { step(); acc -= tickMs; }
+      while (state === 'playing' && acc >= stepMs) {
+        step();
+        acc -= stepMs;
+        stepMs = tickMs;     // back to full length, unless another turn is already waiting
+        compressStep();
+      }
     }
     draw(dt);
     if (showFps) {
@@ -1528,7 +1550,7 @@
   function play() {
     if (state === 'dead' || state === 'ready') reset();
     state = 'playing';
-    lastTick = 0; acc = 0;
+    lastTick = 0; acc = 0; stepMs = tickMs;
     overlayTitle.className = '';
     entry.style.display = 'none';
     standingsEl.style.display = 'none';
@@ -1656,6 +1678,7 @@
       document.querySelectorAll('.speed-row button').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       tickMs = parseInt(b.dataset.speed, 10);
+      stepMs = tickMs;
     });
   });
 
