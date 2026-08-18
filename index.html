@@ -1589,15 +1589,17 @@
 
   // ---- on-screen directional pad ----
   // Four big tap zones tile the whole pad (see CSS): no dead gaps, no small
-  // targets to miss. The zone under the finger is resolved with the same
-  // diagonal math the CSS paints (|u| versus |v| in pad coordinates), on
-  // pointerdown AND pointermove, so a finger that SLIDES from one zone to
-  // another (a quick up-then-left) fires each zone it crosses; no forced
-  // hit-test per move. The first finger owns the whole gesture: later fingers
-  // are ignored until it lifts (so a resting second thumb can't inject stray
-  // turns or steal steering), and pointer capture keeps the release visible
-  // even off the pad (mice have no implicit capture, so without it a release
-  // outside left the gesture stuck and bare hovering kept steering the snake).
+  // targets to miss. The zone under a finger is resolved with the same diagonal
+  // math the CSS paints (|u| versus |v| in pad coordinates), on pointerdown AND
+  // pointermove, so a finger that SLIDES from one zone to another (a quick
+  // up-then-left) fires each zone it crosses; no forced hit-test per move.
+  // Every finger is tracked on its own and a press is always a turn request,
+  // even while another finger is still down: that overlap is exactly how a fast
+  // two-thumb combo (up, then right milliseconds later) is played, and the
+  // keyboard has always accepted it. setDir filters what is genuinely invalid
+  // (reversals and repeats). Pointers are captured so a release away from the
+  // pad still ends that press; mice get no implicit capture, and without it a
+  // release outside left the gesture stuck and bare hovering steered the snake.
   const dpad = document.getElementById('dpad');
   const dirButtons = [...document.querySelectorAll('.dpad [data-dir]')];
   const padDirOf = new Map();   // button element to its {x, y}, parsed once
@@ -1607,7 +1609,8 @@
     padDirOf.set(b, { x, y });
     padBtn[x === 0 ? (y < 0 ? 'up' : 'down') : (x < 0 ? 'left' : 'right')] = b;
   }
-  let lastPadBtn = null, padPointerId = null, padRect = null;
+  const padPointers = new Map();   // pointerId to the wedge that finger is in
+  let padRect = null;
 
   function padZone(e) {
     const u = (e.clientX - padRect.left) / padRect.width - 0.5;
@@ -1615,35 +1618,37 @@
     return Math.abs(u) > Math.abs(v) ? (u > 0 ? padBtn.right : padBtn.left)
                                      : (v > 0 ? padBtn.down : padBtn.up);
   }
-  function firePad(btn) {
-    if (!btn || btn === lastPadBtn) return;       // staying in one zone fires once
-    if (lastPadBtn) lastPadBtn.classList.remove('pressed');
-    btn.classList.add('pressed');
-    lastPadBtn = btn;
+  // light every wedge that currently has a finger on it
+  function paintPad() {
+    const held = new Set(padPointers.values());
+    for (const b of dirButtons) b.classList.toggle('pressed', held.has(b));
+  }
+  // a finger entering a wedge is a turn request; holding inside one fires once
+  function firePad(id, btn) {
+    if (!btn || padPointers.get(id) === btn) return;
+    padPointers.set(id, btn);
+    paintPad();
     const d = padDirOf.get(btn);
     setDir(d.x, d.y);
   }
   function padEnd(e) {
-    if (e && e.pointerId !== padPointerId) return;
-    padPointerId = null;
-    if (lastPadBtn) { lastPadBtn.classList.remove('pressed'); lastPadBtn = null; }
+    if (!padPointers.delete(e.pointerId)) return;   // not a finger we were tracking
+    paintPad();
   }
 
   dpad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    if (padPointerId !== null) return;             // one finger owns the gesture
-    padPointerId = e.pointerId;
-    lastPadBtn = null;
-    padRect = dpad.getBoundingClientRect();        // cached for the whole gesture
+    padRect = dpad.getBoundingClientRect();   // re-read per press: layout may have changed
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
-    firePad(padZone(e));
+    firePad(e.pointerId, padZone(e));
   });
   dpad.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== padPointerId) return;      // only the finger that started the gesture
-    firePad(padZone(e));
+    if (!padPointers.has(e.pointerId)) return;   // only fingers that pressed the pad
+    firePad(e.pointerId, padZone(e));
   });
   dpad.addEventListener('pointerup', padEnd);
   dpad.addEventListener('pointercancel', padEnd);
+  dpad.addEventListener('lostpointercapture', padEnd);   // safety net if a press ends unseen
   dpad.addEventListener('contextmenu', (e) => e.preventDefault());
 
   document.querySelectorAll('.speed-row button').forEach(b => {

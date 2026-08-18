@@ -26,6 +26,11 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 10. Every loop is bounded: no rejection sampling that can spin when the board fills up. Enumerate the free cells and pick one (`spawnCell`).
 11. Full-board scans are allowed only on spawn events (wall build, wave spawn, food placement), never per frame.
 
+### Input
+
+12. Every input source (keyboard, swipe, d-pad) goes through `setDir`, which owns the playing-state gate and the reversal/repeat filter. Do not add per-source gating.
+13. Track d-pad fingers independently. A press is a turn request even while another finger is down, because overlapping presses are how fast combos are played and the keyboard has always accepted them. Never gate the pad on a single owning pointer.
+
 ## Verify before shipping
 
 1. Syntax-check the script body with `new vm.Script(...)` via `node -e`.
