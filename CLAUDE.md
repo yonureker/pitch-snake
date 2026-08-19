@@ -30,7 +30,7 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 
 12. Every input source (keyboard, swipe, d-pad) goes through `setDir`, which owns the playing-state gate and the reversal/repeat filter. Do not add per-source gating.
 13. Track d-pad fingers independently. A press is a turn request even while another finger is down, because overlapping presses are how fast combos are played and the keyboard has always accepted them. Never gate the pad on a single owning pointer.
-14. A pending turn shortens the step in progress (`compressStep`), so input latency is about half a tick rather than a full one. Only ever shorten to a point the glide has not passed yet: cutting behind it teleports the snake, which is why an earlier early-step attempt was reverted. Render interpolation reads `stepMs`, never `tickMs`.
+14. A pending turn shortens the step in progress (`compressStep`), so input latency is about half a tick rather than a full one. This is only safe because step progress is stored as the fraction `prog` (advanced by `dt / stepMs`) and rendered as is, so changing `stepMs` alters only the rate of what remains. Never store elapsed milliseconds and divide by `stepMs` at render time: that makes every shortening jump the snake forward by up to half a cell, which reads as teleporting. Any change here needs a test asserting the rendered position is unchanged across a compression, not just that the constants are right.
 
 ### Round states
 

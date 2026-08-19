@@ -541,7 +541,13 @@
   let stepMs = 110;      // duration of the step in progress; a pending turn shortens it
   const TURN_SNAP = 0.5; // a turn may cut the current step to this fraction of a tick
   let lastTick = 0;
-  let acc = 0;
+  // Progress through the current step, 0..1, advanced by dt/stepMs rather than
+  // held as elapsed ms. This is what lets a turn shorten the step without the
+  // snake moving: rendering reads `prog` directly, so changing stepMs only
+  // changes how fast the rest of the glide plays out. Holding elapsed ms here
+  // instead and dividing at render time made every compression jump the snake
+  // forward (up to half a cell), which read as teleporting rather than turning.
+  let prog = 0;
   let state = 'ready';
   let particles = [];
   let foodPulse = 0;
@@ -799,16 +805,16 @@
 
   // Turns used to wait out the whole tick they landed in, so a fast corner
   // (up then left, pressed milliseconds apart) could take a full 220ms to play
-  // out no matter how quickly you pressed. A pending turn now shortens the step
-  // in progress to TURN_SNAP of a tick, which halves that. We only ever shorten
-  // to a point the glide has NOT reached yet, so the snake simply finishes the
-  // cell faster and never jumps: that visual snap is why an older early-step
-  // attempt was removed. Straight-line speed is untouched; only the cell you
-  // turn on is quicker, so this cannot be used to outrun the difficulty curve.
+  // out no matter how quickly you pressed. A pending turn shortens the step in
+  // progress to TURN_SNAP of a tick, which halves that. Shortening is safe at
+  // any point in the step because `prog` is a fraction the renderer reads as
+  // is: the snake keeps exactly the position it had and simply covers what is
+  // left of the cell faster. Straight-line speed is untouched; only the cell
+  // you turn on is quicker, so this cannot outrun the difficulty curve.
   function compressStep() {
     if (!dirQueue.length) return;
     const target = tickMs * TURN_SNAP;
-    if (acc < target && target < stepMs) stepMs = target;
+    if (target < stepMs) stepMs = target;
   }
 
   function step() {
@@ -1345,7 +1351,7 @@
     // lookup table and are only re-set when the shade changes (no rgb() string
     // built per segment), no per-segment save/restore, nothing allocated.
     const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, snake.length - 1);
-    const p = state === 'playing' ? Math.min(1, acc / stepMs) : 1;
+    const p = state === 'playing' ? Math.min(1, prog) : 1;
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = 'rgba(194,162,90,0.65)';
     let lastShade = -1;
@@ -1478,17 +1484,18 @@
     let dt = now - lastTick;
     lastTick = now;
     if (dt > MAX_DT) dt = MAX_DT;
+    else if (dt < 0) dt = 0;     // a clock that ever hands back time must not rewind the glide
     if (state === 'countdown') {
       countClock += dt;
       if (countClock >= COUNT_TOTAL) {   // kick off: a turn buffered during the
         state = 'playing';               // countdown still gets its quick first step
-        acc = 0;
+        prog = 0;
         stepMs = tickMs;
         compressStep();
       }
     }
     if (state === 'playing') {
-      acc += dt;
+      prog += dt / stepMs;
       wallClock += dt;
       updateWalls();
       bombClock += dt;
@@ -1502,9 +1509,9 @@
       }
       // the state guard stops the drain the moment a step dies, so no zombie
       // steps run (and the score can't change) after FULL TIME is already up
-      while (state === 'playing' && acc >= stepMs) {
+      while (state === 'playing' && prog >= 1) {
         step();
-        acc -= stepMs;
+        prog -= 1;
         stepMs = tickMs;     // back to full length, unless another turn is already waiting
         compressStep();
       }
@@ -1628,7 +1635,7 @@
     state = 'countdown';          // the round opens on 3, 2, 1, START!
     countClock = 0; countBeat = -1;
     dirQueue = [];                // a turn queued before the pause must not fire on resume
-    lastTick = 0; acc = 0; stepMs = tickMs;
+    lastTick = 0; prog = 0; stepMs = tickMs;
     overlayTitle.className = '';
     entry.style.display = 'none';
     standingsEl.style.display = 'none';
