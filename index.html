@@ -537,16 +537,11 @@
   let snake, dir, dirQueue, food, score, best = 0;
   let snakeSet = new Set();  // cells the snake occupies, as integer keys, for O(1) collision checks
   let tailFrom = null;   // the cell the tail glides out of, for smooth motion
-  let tickMs = 110;      // grid steps per second when running straight
-  let stepMs = 110;      // duration of the step in progress; a pending turn shortens it
-  const TURN_SNAP = 0.5; // a turn may cut the current step to this fraction of a tick
+  let tickMs = 110;      // ms per grid cell, constant: the snake never changes pace
   let lastTick = 0;
-  // Progress through the current step, 0..1, advanced by dt/stepMs rather than
-  // held as elapsed ms. This is what lets a turn shorten the step without the
-  // snake moving: rendering reads `prog` directly, so changing stepMs only
-  // changes how fast the rest of the glide plays out. Holding elapsed ms here
-  // instead and dividing at render time made every compression jump the snake
-  // forward (up to half a cell), which read as teleporting rather than turning.
+  // Progress through the current cell, 0..1, advanced by dt/tickMs and rendered
+  // as is. Kept as a fraction rather than elapsed ms so the render can never be
+  // knocked off by a change of pace.
   let prog = 0;
   let state = 'ready';
   let particles = [];
@@ -800,22 +795,17 @@
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
     if (dirQueue.length < 3) dirQueue.push({x, y});
-    compressStep();
   }
 
-  // Turns used to wait out the whole tick they landed in, so a fast corner
-  // (up then left, pressed milliseconds apart) could take a full 220ms to play
-  // out no matter how quickly you pressed. A pending turn shortens the step in
-  // progress to TURN_SNAP of a tick, which halves that. Shortening is safe at
-  // any point in the step because `prog` is a fraction the renderer reads as
-  // is: the snake keeps exactly the position it had and simply covers what is
-  // left of the cell faster. Straight-line speed is untouched; only the cell
-  // you turn on is quicker, so this cannot outrun the difficulty curve.
-  function compressStep() {
-    if (!dirQueue.length) return;
-    const target = tickMs * TURN_SNAP;
-    if (target < stepMs) stepMs = target;
-  }
+  // A queued turn is applied at the next cell boundary and never sooner. An
+  // earlier version shortened the step a turn landed in to cut input latency in
+  // half, which worked, but shortening a step means the snake covers that cell
+  // at double speed: on a two-turn corner it lurched forward for two cells and
+  // then dropped back to normal, and that change of pace reads as jumping even
+  // though the position stays continuous. Pace is held constant instead. On a
+  // grid, turn latency is bounded by the time to the next boundary, so the only
+  // way to sharpen corners without a lurch is a shorter tick (the speed
+  // setting), not a variable one.
 
   function step() {
     if (dirQueue.length) dir = dirQueue.shift();
@@ -1487,15 +1477,10 @@
     else if (dt < 0) dt = 0;     // a clock that ever hands back time must not rewind the glide
     if (state === 'countdown') {
       countClock += dt;
-      if (countClock >= COUNT_TOTAL) {   // kick off: a turn buffered during the
-        state = 'playing';               // countdown still gets its quick first step
-        prog = 0;
-        stepMs = tickMs;
-        compressStep();
-      }
+      if (countClock >= COUNT_TOTAL) { state = 'playing'; prog = 0; }   // kick off
     }
     if (state === 'playing') {
-      prog += dt / stepMs;
+      prog += dt / tickMs;
       wallClock += dt;
       updateWalls();
       bombClock += dt;
@@ -1509,12 +1494,7 @@
       }
       // the state guard stops the drain the moment a step dies, so no zombie
       // steps run (and the score can't change) after FULL TIME is already up
-      while (state === 'playing' && prog >= 1) {
-        step();
-        prog -= 1;
-        stepMs = tickMs;     // back to full length, unless another turn is already waiting
-        compressStep();
-      }
+      while (state === 'playing' && prog >= 1) { step(); prog -= 1; }
     }
     draw(dt);
     if (showFps) {
@@ -1635,7 +1615,7 @@
     state = 'countdown';          // the round opens on 3, 2, 1, START!
     countClock = 0; countBeat = -1;
     dirQueue = [];                // a turn queued before the pause must not fire on resume
-    lastTick = 0; prog = 0; stepMs = tickMs;
+    lastTick = 0; prog = 0;
     overlayTitle.className = '';
     entry.style.display = 'none';
     standingsEl.style.display = 'none';
@@ -1763,7 +1743,6 @@
       document.querySelectorAll('.speed-row button').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       tickMs = parseInt(b.dataset.speed, 10);
-      stepMs = tickMs;
     });
   });
 
