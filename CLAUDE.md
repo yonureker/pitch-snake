@@ -32,6 +32,10 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 13. Track d-pad fingers independently. A press is a turn request even while another finger is down, because overlapping presses are how fast combos are played and the keyboard has always accepted them. Never gate the pad on a single owning pointer.
 14. A pending turn shortens the step in progress (`compressStep`), so input latency is about half a tick rather than a full one. Only ever shorten to a point the glide has not passed yet: cutting behind it teleports the snake, which is why an earlier early-step attempt was reverted. Render interpolation reads `stepMs`, never `tickMs`.
 
+### Round states
+
+15. The states are `ready`, `countdown`, `playing`, `paused`, `dead`. Anything gating on `playing` has to decide what `countdown` does: the field is on screen and drawn, input buffers into the queue, but nothing simulates. Timed sequences run off the loop clock with the shared dt clamp, never `setTimeout` or `setInterval`.
+
 ## Verify before shipping
 
 1. Syntax-check the script body with `new vm.Script(...)` via `node -e`.
