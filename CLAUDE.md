@@ -36,6 +36,12 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 
 15. The states are `ready`, `countdown`, `playing`, `paused`, `dead`. Anything gating on `playing` has to decide what `countdown` does: the field is on screen and drawn, input buffers into the queue, but nothing simulates. Timed sequences run off the loop clock with the shared dt clamp, never `setTimeout` or `setInterval`.
 
+### Teleport windows
+
+16. A hop is one step, never a change of pace. The head spends a step standing in the entry cell and the next step lands it on the exit cell; the body still advances one cell and the heading is untouched. Do not "cover" the jump by shortening or lengthening the step, which is the rule 14 mistake in a new costume.
+17. The two ends are always at least `PORTAL_MIN_GAP` apart, so any segment whose two cells are non-adjacent after the tunnel wrap correction is mid hop. `segRenderPos` and `ghostRender` both snap such a segment to one end or the other at the half-way point of the step. Interpolating across the gap streaks a segment right across the board.
+18. Nothing else may spawn on a window (`cellOccupied` covers both ends), a wall forming over one closes the pair rather than leave a trap, a pair does not close while a body is still coming through (`portalBusy`), and no ghost may take an exit while a head is already committed in the entry.
+
 ## Verify before shipping
 
 1. Syntax-check the script body with `new vm.Script(...)` via `node -e`.
