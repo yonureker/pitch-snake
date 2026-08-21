@@ -227,8 +227,8 @@
     display: inline-block; width: 17px; height: 17px; border-radius: 50%;
     box-sizing: border-box; vertical-align: middle;
   }
-  .tp.in  { border: 3px solid #2ad4ff; background: rgba(42,212,255,0.22); }
-  .tp.out { border: 3px solid #c561ff; background: rgba(197,97,255,0.22); }
+  .tp.a { border: 3px solid #2ad4ff; background: radial-gradient(circle, #c561ff 0 38%, rgba(42,212,255,0.22) 38%); }
+  .tp.b { border: 3px solid #c561ff; background: radial-gradient(circle, #2ad4ff 0 38%, rgba(197,97,255,0.22) 38%); }
   .lg-val { line-height: 1; }
   .lg-val.pos { color: var(--gold-bright); }
   .lg-val.neg { color: var(--food); }
@@ -464,8 +464,8 @@
         <div class="legend" id="legend">
           <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
           <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-val pos">+5</span></div>
-          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block</span><span class="lg-val neg">-10</span></div>
-          <div class="lg-row"><span class="lg-ic"><i class="tp in"></i></span><span class="lg-txt">Teleport: blue in, violet out</span><span class="lg-val"><i class="tp out"></i></span></div>
+          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-val neg">-10</span></div>
+          <div class="lg-row"><span class="lg-ic"><i class="tp a"></i></span><span class="lg-txt">Teleport: hop either way</span><span class="lg-val"><i class="tp b"></i></span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
         </div>
         <div class="entry" id="entry" style="display:none">
@@ -697,13 +697,15 @@
   const GHOST_EYE = '#12379e';
   const MIN_SPAWN_DIST = 3;   // ghosts and TNTs appear at least this many cells from the head
 
-  // teleport windows: a pair opens somewhere on the pitch at a random moment,
-  // stays for a few seconds, then closes. Run the head into the blue entry
-  // window and the next step brings it out of the violet exit window on the far
-  // side of the pitch; ghosts take them too. The hop is a genuine
-  // discontinuity, so stepping into the entry is a commitment: from inside the
-  // window the only move is the one out of the other end.
-  let portal = null;           // {ax, ay, bx, by}: entry cell, then exit cell
+  // teleport windows: a linked pair opens somewhere on the pitch at a random
+  // moment, stays for a few seconds, then closes. Run the head into either
+  // window and the next step brings it out of the other one on the far side of
+  // the pitch; ghosts take them too. Each window wears its partner's colour at
+  // its core, so the blue one shows you it lands you at the violet one and the
+  // other way about. The hop is a genuine discontinuity, so stepping into a
+  // window is a commitment: from inside one the only move is out of the far end.
+  let portal = null;           // {ax, ay, bx, by}: the blue end, then the violet end
+  let warpedIn = false;        // the head is standing where a window just put it
   let portalClock = 0;         // advances only while playing (ms)
   let portalPhase = 'gap';     // 'gap' (nothing open) or 'open'
   let portalNextAt = 0;        // when the next pair opens (during a gap)
@@ -714,7 +716,7 @@
   const PORTAL_OPEN_MS = 320;    // the windows scale open over this
   const PORTAL_WARN_MS = 1500;   // ...and blink this long before they close
   const PORTAL_MIN_GAP = 6;      // cells between the ends, so a hop is always a real jump
-  const PORTAL_IN = '#2ad4ff', PORTAL_OUT = '#c561ff';
+  const PORTAL_A = '#2ad4ff', PORTAL_B = '#c561ff';   // the blue end, the violet end
 
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
   // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
@@ -766,6 +768,7 @@
     ghosts = [];
     ghostClock = 0;
     portal = null;
+    warpedIn = false;
     portalClock = 0;
     portalPhase = 'gap';
     portalNextAt = rand(5000, 10000);   // the first pair opens early in the round
@@ -844,16 +847,19 @@
 
   function step() {
     if (dirQueue.length) dir = dirQueue.shift();
-    // A head already standing in the entry window spends this step coming out of
-    // the exit window instead of moving on. It is still exactly one step: the
-    // body advances one cell as it always does, and the heading is untouched, so
-    // the snake keeps its pace across the hop and simply continues out the far
-    // side. Everything below (walls, self, ghosts, food, TNT) then tests the
-    // cell it actually lands on, wherever that is.
-    const inWindow = portal !== null && snake[0].x === portal.ax && snake[0].y === portal.ay;
+    // A head already standing in a window spends this step coming out of the
+    // far one instead of moving on. It is still exactly one step: the body
+    // advances one cell as it always does, and the heading is untouched, so the
+    // snake keeps its pace across the hop and simply carries on out the far
+    // side. Both ends work both ways, so a head that has just arrived through a
+    // window has to be free to walk off it: only a head that got there under its
+    // own steam is carried, never one the far end has just put down, or the pair
+    // would bounce it back and forth for ever. Everything below (walls, self,
+    // ghosts, food, TNT) then tests the cell it lands on, wherever that is.
+    const win = warpedIn ? 0 : portalEndAt(snake[0].x, snake[0].y);
     // edges always wrap now (pac-man tunnels); the hazards live inside the pitch
-    const nx = inWindow ? portal.bx : wrap(snake[0].x + dir.x);
-    const ny = inWindow ? portal.by : wrap(snake[0].y + dir.y);
+    const nx = win === 1 ? portal.bx : win === 2 ? portal.ax : wrap(snake[0].x + dir.x);
+    const ny = win === 1 ? portal.by : win === 2 ? portal.ay : wrap(snake[0].y + dir.y);
     const nk = K(nx, ny);
 
     // interior walls are lethal only once they're live
@@ -877,9 +883,13 @@
     else { tailFrom = snake.pop(); snakeSet.delete(K(tailFrom.x, tailFrom.y)); }
     snake.unshift({x: nx, y: ny});
     snakeSet.add(nk);
-    if (inWindow) {   // a flare at each end, so the hop reads at a glance
-      spawnBurst(portal.ax, portal.ay, 14, 0.7, () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => PORTAL_IN);
-      spawnBurst(portal.bx, portal.by, 18, 0.7, () => (Math.random() * 2.2 + 1) * (cell / 14), () => PORTAL_OUT);
+    warpedIn = win !== 0;
+    if (win) {        // a flare at each end, in that end's colour, so the hop reads at a glance
+      const fromA = win === 1;
+      spawnBurst(fromA ? portal.ax : portal.bx, fromA ? portal.ay : portal.by, 14, 0.7,
+        () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => fromA ? PORTAL_A : PORTAL_B);
+      spawnBurst(nx, ny, 18, 0.7,
+        () => (Math.random() * 2.2 + 1) * (cell / 14), () => fromA ? PORTAL_B : PORTAL_A);
     }
 
     if (ate) {
@@ -908,7 +918,14 @@
       updateScore();
       pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
       const target = Math.max(START_LEN, snake.length - 5);
-      while (snake.length > target) { const t = snake.pop(); snakeSet.delete(K(t.x, t.y)); }
+      while (snake.length > target) {
+        const t = snake.pop();
+        snakeSet.delete(K(t.x, t.y));
+        // puff where each lost segment stood: the shortening is the real bite of
+        // a TNT, and without this it is something you work out from the score
+        // afterwards rather than something you watch happen
+        spawnBurst(t.x, t.y, 6, 0.9, () => (Math.random() * 1.2 + 0.5) * (cell / 14), () => '#f4ecd8');
+      }
       tailFrom = null;   // the old glide anchor sits far from the new tail; snap instead of streaking
       spawnBurst(nx, ny, 26, 0.6,
         () => (Math.random() * 2.4 + 1) * (cell / 13),
@@ -1051,11 +1068,14 @@
   // a cell a ghost may not enter: the snake, a wall, food, a TNT, or another
   // ghost (self is excluded so a ghost never blocks itself)
   function ghostBlocked(x, y, self) {
-    // while a head is standing in the entry window the exit is spoken for: a
-    // ghost drifting onto it would be a death the player was already committed
-    // to and could not have seen coming
-    if (portal !== null && x === portal.bx && y === portal.by &&
-        snake[0].x === portal.ax && snake[0].y === portal.ay) return true;
+    // while a head is committed in a window the far end is spoken for: a ghost
+    // drifting onto it would be a death the player was already committed to and
+    // could not have seen coming
+    if (!warpedIn) {
+      const hw = portalEndAt(snake[0].x, snake[0].y);
+      if (hw === 1 && x === portal.bx && y === portal.by) return true;
+      if (hw === 2 && x === portal.ax && y === portal.ay) return true;
+    }
     const k = K(x, y);
     return snakeSet.has(k) || wallLookup.has(k) ||
            (food && food.x === x && food.y === y) ||
@@ -1072,7 +1092,7 @@
   function spawnGhost() {
     const c = spawnCell(MIN_SPAWN_DIST);
     if (!c) return;                          // board too full; try again later
-    ghosts.push({x: c.x, y: c.y, px: c.x, py: c.y, dir: {x: 0, y: 0}, moveAt: ghostClock + GHOST_MS});
+    ghosts.push({x: c.x, y: c.y, px: c.x, py: c.y, dir: {x: 0, y: 0}, warped: false, moveAt: ghostClock + GHOST_MS});
   }
 
   // if a wall forms on a ghost, slide it to the nearest open cell
@@ -1088,14 +1108,17 @@
 
   function moveGhost(g) {
     g.px = g.x; g.py = g.y;                    // remember where we came from (smooth render)
-    // a ghost that drifted into the entry window spends this move coming out of
-    // the exit one, keeping its heading, but only when the far side is clear: a
-    // ghost may never land on the snake
-    if (portal !== null && g.x === portal.ax && g.y === portal.ay &&
-        !ghostBlocked(portal.bx, portal.by, g)) {
-      g.x = portal.bx; g.y = portal.by;
-      return;
+    // a ghost that drifted into either window spends this move coming out of the
+    // other, keeping its heading, but only when the far side is clear (a ghost
+    // may never land on the snake) and never straight back out of the window
+    // that has just put it down
+    const win = g.warped ? 0 : portalEndAt(g.x, g.y);
+    if (win) {
+      const tx = win === 1 ? portal.bx : portal.ax;
+      const ty = win === 1 ? portal.by : portal.ay;
+      if (!ghostBlocked(tx, ty, g)) { g.x = tx; g.y = ty; g.warped = true; return; }
     }
+    g.warped = false;
     const opts = [];
     for (const d of GHOST_DIRS) {
       if (g.dir.x === -d.x && g.dir.y === -d.y) continue; // no reversing
@@ -1163,6 +1186,15 @@
   // ends are never neighbours (a hop between adjacent cells would render as an
   // ordinary step). No cell far enough means the board is effectively full, so
   // nothing opens and the next attempt comes a beat later.
+  // which end of the open pair a cell is: 1 the blue one, 2 the violet one, 0
+  // neither. Both ends read the same way round, since either takes you to the other.
+  function portalEndAt(x, y) {
+    if (portal === null) return 0;
+    if (x === portal.ax && y === portal.ay) return 1;
+    if (x === portal.bx && y === portal.by) return 2;
+    return 0;
+  }
+
   function spawnPortal() {
     const a = spawnCell(MIN_SPAWN_DIST);
     if (!a) return false;
@@ -1185,8 +1217,8 @@
   function portalBusy() {
     if (portal === null) return false;
     if (snakeSet.has(K(portal.ax, portal.ay)) || snakeSet.has(K(portal.bx, portal.by))) return true;
-    if (tailFrom && tailFrom.x === portal.ax && tailFrom.y === portal.ay) return true;  // the tail is still coming through
-    for (const g of ghosts) if (g.x === portal.ax && g.y === portal.ay) return true;
+    if (tailFrom && portalEndAt(tailFrom.x, tailFrom.y)) return true;   // the tail is still coming through
+    for (const g of ghosts) if (portalEndAt(g.x, g.y)) return true;
     return false;
   }
 
@@ -1403,21 +1435,22 @@
   }
 
   // ---- teleport window art ----
-  // Both ends are the same shape in two colours: a dark well, a bright
-  // segmented rim, and four radial darts that point inwards on the entry and
-  // outwards on the exit, so which end is which reads even without the colour.
-  // Baked once per size and spun live with a rotate, which is why the rim is
-  // segmented: a plain circle would show no motion.
+  // The two ends are the same shape in two colours, because either one takes
+  // you to the other: a dark well, a bright segmented rim, an inner ring, and a
+  // core in the PARTNER's colour, which is the whole trick. Standing at the
+  // blue window you can see the violet pip in it and know where you will
+  // surface. Baked once per size and spun live with a rotate, which is why the
+  // rings are segmented: plain circles would show no motion.
   const portalSprites = [];
   let portalS = 0;
   function buildPortalSprites() {
     portalS = Math.ceil(cell * 1.72);          // a cell, plus room for the baked halo
     const R = cell * 0.48;
     const SPECS = [
-      { rim: '#7ce9ff', hot: PORTAL_IN,  mid: '#0b6d96', deep: '#04202f',
-        halo: 'rgba(42,212,255,', dart: '#eafcff', inward: true },
-      { rim: '#e2a6ff', hot: PORTAL_OUT, mid: '#6a1fa6', deep: '#1d0630',
-        halo: 'rgba(197,97,255,', dart: '#faeeff', inward: false },
+      { rim: '#7ce9ff', hot: PORTAL_A, mid: '#0b6d96', deep: '#04202f',
+        halo: 'rgba(42,212,255,', core: PORTAL_B, coreEdge: '#f0d8ff' },
+      { rim: '#e2a6ff', hot: PORTAL_B, mid: '#6a1fa6', deep: '#1d0630',
+        halo: 'rgba(197,97,255,', core: PORTAL_A, coreEdge: '#d6f6ff' },
     ];
     portalSprites.length = 0;
     for (const s of SPECS) {
@@ -1446,20 +1479,21 @@
         const a0 = i * Math.PI / 2 + 0.24;
         c.beginPath(); c.arc(m, m, R, a0, a0 + Math.PI / 2 - 0.48); c.stroke();
       }
-      const rr = R * 0.52, t = R * 0.3;
-      c.fillStyle = s.dart;
+      c.globalAlpha = 0.7;                     // a second ring, offset, for depth
+      c.lineWidth = Math.max(1, cell * 0.05);
       for (let i = 0; i < 4; i++) {
-        const a = i * Math.PI / 2 + Math.PI / 4;
-        const ux = Math.cos(a), uy = Math.sin(a), vx = -uy, vy = ux;
-        const tip  = s.inward ? rr - t : rr + t;
-        const base = s.inward ? rr + t * 0.4 : rr - t * 0.4;
-        c.beginPath();
-        c.moveTo(m + ux * tip, m + uy * tip);
-        c.lineTo(m + ux * base + vx * t * 0.62, m + uy * base + vy * t * 0.62);
-        c.lineTo(m + ux * base - vx * t * 0.62, m + uy * base - vy * t * 0.62);
-        c.closePath();
-        c.fill();
+        const a0 = i * Math.PI / 2 + Math.PI / 4 + 0.3;
+        c.beginPath(); c.arc(m, m, R * 0.66, a0, a0 + Math.PI / 2 - 0.6); c.stroke();
       }
+      c.globalAlpha = 1;
+      // the core, in the far window's colour: where this one lands you
+      c.fillStyle = s.deep;
+      c.beginPath(); c.arc(m, m, R * 0.36, 0, Math.PI * 2); c.fill();
+      c.fillStyle = s.core;
+      c.beginPath(); c.arc(m, m, R * 0.28, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = s.coreEdge;
+      c.lineWidth = Math.max(1, cell * 0.03);
+      c.beginPath(); c.arc(m, m, R * 0.28, 0, Math.PI * 2); c.stroke();
       portalSprites.push(cv);
     }
   }
