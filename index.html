@@ -464,7 +464,7 @@
         <div class="legend" id="legend">
           <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
           <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-val pos">+5</span></div>
-          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-val neg">-10</span></div>
+          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-val neg">-5</span></div>
           <div class="lg-row"><span class="lg-ic"><i class="tp a"></i></span><span class="lg-txt">Teleport: hop either way</span><span class="lg-val"><i class="tp b"></i></span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
         </div>
@@ -671,28 +671,29 @@
     }
   }
 
-  // TNT blocks: -10 pt / -5 segment hazards (never lethal) that blink in as a
+  // TNT blocks: -5 pt / -5 segment hazards (never lethal) that blink in as a
   // wave, sit for a few seconds, then all vanish before the next wave (like the
-  // original single bomb). The wave SIZE grows with the score: 1 from 10 pts,
-  // then +1 as it passes 25, 40, 55 and 70. Each block spawns at least
-  // MIN_SPAWN_DIST cells from the head, so a fresh TNT never lands right in front.
+  // original single bomb). The wave SIZE grows with the score: one block from 15
+  // pts and another every ten points after that, up to nine. Each block spawns
+  // at least MIN_SPAWN_DIST cells from the head, so a fresh TNT never lands
+  // right in front.
   let bombs = [];              // {x,y} blocks in the wave currently showing
   let bombsUnlocked = 0;       // wave size = TNT thresholds the score has passed (only grows)
   let bombPhase = 'gap';       // 'gap' (none showing) or 'active' (a wave is up)
   let bombClock = 0;           // advances only while playing (ms)
   let bombNextAt = 0;          // when the next wave appears (during a gap)
   let bombExpireAt = 0;        // when the current wave vanishes (while active)
-  const TNT_SCORES = [10, 25, 40, 55, 70];
+  const TNT_SCORES = [15, 25, 35, 45, 55, 65, 75, 85, 95];
   const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;   // quiet stretch between waves
   const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;  // how long a wave stays
 
   // pac-man ghosts: slow, roaming surprises. A new one appears as the score
-  // passes each threshold (up to five). Each creeps through open cells only
+  // passes each threshold (up to five, from 10 pts and every ten after). Each creeps through open cells only
   // (never onto the snake, walls, food, a TNT, or another ghost) and spawns at
   // least MIN_SPAWN_DIST cells away. Run your head into any of them: game over.
   let ghosts = [];          // up to five, each {x,y,px,py,dir,moveAt}
   let ghostClock = 0;       // advances only while playing (ms)
-  const GHOST_SCORES = [15, 30, 45, 60, 75];   // a new ghost joins as the score passes each
+  const GHOST_SCORES = [10, 20, 30, 40, 50];   // a new ghost joins as the score passes each
   const GHOST_MS = 500;     // ms per ghost step (deliberately slow)
   const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
   // each ghost gets its own colour, in spawn order (Pac-Man style)
@@ -706,21 +707,24 @@
   const GHOST_EYE = '#12379e';
   const MIN_SPAWN_DIST = 3;   // ghosts and TNTs appear at least this many cells from the head
 
-  // teleport windows: a linked pair opens somewhere on the pitch at a random
-  // moment, stays for a few seconds, then closes. Run the head into either
-  // window and the next step brings it out of the other one on the far side of
-  // the pitch; ghosts take them too. Each window wears its partner's colour at
-  // its core, so the blue one shows you it lands you at the violet one and the
-  // other way about. The hop is a genuine discontinuity, so stepping into a
-  // window is a commitment: from inside one the only move is out of the far end.
+  // teleport windows: a linked pair opens as a reward for getting somewhere,
+  // not on a timer. Nothing before 30 points, then one pair as the score passes
+  // each of PORTAL_SCORES; it stays for a few seconds and closes again. Run the
+  // head into either window and the next step brings it out of the other one on
+  // the far side of the pitch; ghosts take them too. Each window wears its
+  // partner's colour at its core, so the blue one shows you it lands you at the
+  // violet one and the other way about. The hop is a genuine discontinuity, so
+  // stepping into a window is a commitment: from inside one the only move is out
+  // of the far end.
   let portal = null;           // {ax, ay, bx, by}: the blue end, then the violet end
   let warpedIn = false;        // the head is standing where a window just put it
   let portalClock = 0;         // advances only while playing (ms)
-  let portalPhase = 'gap';     // 'gap' (nothing open) or 'open'
-  let portalNextAt = 0;        // when the next pair opens (during a gap)
+  let portalsUnlocked = 0;     // score thresholds passed (only grows)
+  let portalsOpened = 0;       // pairs actually opened, so one threshold buys one pair
+  let portalRetryAt = 0;       // nowhere to put a pair just now: look again after this
   let portalExpireAt = 0;      // when the open pair closes
   let portalOpenedAt = 0;      // when it opened, for the scale-open animation
-  const PORTAL_GAP_MIN = 8000, PORTAL_GAP_MAX = 15000;    // quiet stretch between pairs
+  const PORTAL_SCORES = [32, 42, 52, 62, 72, 82, 92];     // a pair opens as the score passes each
   const PORTAL_LIFE_MIN = 8000, PORTAL_LIFE_MAX = 12000;  // how long a pair stays open
   const PORTAL_OPEN_MS = 320;    // the windows scale open over this
   const PORTAL_WARN_MS = 1500;   // ...and blink this long before they close
@@ -779,8 +783,9 @@
     portal = null;
     warpedIn = false;
     portalClock = 0;
-    portalPhase = 'gap';
-    portalNextAt = rand(5000, 10000);   // the first pair opens early in the round
+    portalsUnlocked = 0;
+    portalsOpened = 0;
+    portalRetryAt = 0;
     portalExpireAt = 0;
     portalOpenedAt = 0;
     regularEaten = 0;
@@ -919,11 +924,11 @@
     if (grows) pendingGrowth--;
 
     // TNT never kills: it lops off up to 5 segments (never below the starting
-    // length) and docks 10 points, which is allowed to go negative. The eaten
+    // length) and docks 5 points, which is allowed to go negative. The eaten
     // block is removed; eating the wave's last block restarts the quiet gap.
     const hitBomb = bombs.findIndex(b => nx === b.x && ny === b.y);
     if (hitBomb !== -1) {
-      score -= 10;
+      score -= 5;
       updateScore();
       pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
       const target = Math.max(START_LEN, snake.length - 5);
@@ -1007,7 +1012,7 @@
       for (const g of ghosts) if (wallLookup.has(K(g.x, g.y))) nudgeGhost(g);
       // a window under a fresh wall would be a trap the moment the wall goes
       // live, so the pair closes rather than move: half a teleport is worse
-      if (portal && (wallLookup.has(K(portal.ax, portal.ay)) || wallLookup.has(K(portal.bx, portal.by)))) closePortal();
+      if (portal && (wallLookup.has(K(portal.ax, portal.ay)) || wallLookup.has(K(portal.bx, portal.by)))) closePortal(true);
     } else if (wallState === 'warning') {
       wallState = 'solid';
       wallPhaseEnd = wallClock + SOLID_MS;
@@ -1059,7 +1064,7 @@
     // grow the wave size as the score passes each threshold (monotonic, so the
     // -10 dip from eating a TNT never shrinks the wave)
     while (bombsUnlocked < TNT_SCORES.length && score >= TNT_SCORES[bombsUnlocked]) bombsUnlocked++;
-    if (bombsUnlocked === 0) return;             // no TNTs before 10 pts
+    if (bombsUnlocked === 0) return;             // no TNTs before 15 pts
     if (bombPhase === 'active') {
       if (bombClock >= bombExpireAt) {           // wave's up: the whole wave vanishes
         bombs = [];
@@ -1231,22 +1236,28 @@
     return false;
   }
 
-  function closePortal() {
+  // A pair cut short rather than expired is owed again: the score thresholds
+  // promise a window at each one, so a pair a wall happened to land on re-opens
+  // somewhere clear a moment later instead of being spent on bad luck.
+  function closePortal(refund) {
     portal = null;
-    portalPhase = 'gap';
-    portalNextAt = portalClock + rand(PORTAL_GAP_MIN, PORTAL_GAP_MAX);
+    if (refund && portalsOpened > 0) { portalsOpened--; portalRetryAt = portalClock + 2000; }
   }
 
   function updatePortals() {
-    if (portalPhase === 'open') {
-      if (portalClock >= portalExpireAt && !portalBusy()) closePortal();
-    } else if (portalClock >= portalNextAt) {
-      if (spawnPortal()) {
-        portalPhase = 'open';
-        portalExpireAt = portalClock + rand(PORTAL_LIFE_MIN, PORTAL_LIFE_MAX);
-      } else {
-        portalNextAt = portalClock + 1000;     // no room right now; try again shortly
-      }
+    // one pair per threshold passed, counted monotonically like the TNT wave, so
+    // a TNT dropping the score back under a mark never re-arms a pair already had
+    while (portalsUnlocked < PORTAL_SCORES.length && score >= PORTAL_SCORES[portalsUnlocked]) portalsUnlocked++;
+    if (portal !== null) {
+      if (portalClock >= portalExpireAt && !portalBusy()) closePortal(false);
+      return;
+    }
+    if (portalsOpened >= portalsUnlocked || portalClock < portalRetryAt) return;
+    if (spawnPortal()) {
+      portalsOpened++;
+      portalExpireAt = portalClock + rand(PORTAL_LIFE_MIN, PORTAL_LIFE_MAX);
+    } else {
+      portalRetryAt = portalClock + 1000;      // board too full right now; look again shortly
     }
   }
 
