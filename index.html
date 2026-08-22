@@ -726,12 +726,12 @@
   let portalRetryAt = 0;       // nowhere to put a pair just now: look again after this
   let portalExpireAt = 0;      // when the open pair closes
   let portalOpenedAt = 0;      // when it opened, for the scale-open animation
-  const PORTAL_SCORES = [15, 30, 45, 60, 75, 90];         // a pair opens as the score passes each
-  // Paid once per pair, for the first trip through it, and deliberately smaller
-  // than the spacing of PORTAL_SCORES. A paid hop has to carry you most of the
-  // way to the next mark without ever covering all of it: at the same size as
-  // the spacing the pairs chain, each trip buying the next window outright, and
-  // the whole system burns through in a minute instead of pacing the round.
+  const PORTAL_SCORES = [10, 30, 50, 70, 90];             // a pair opens as the score passes each
+  // Paid once per pair, for the first trip through it, and deliberately well
+  // under the spacing of PORTAL_SCORES: half of it, so a trip covers half the
+  // ground to the next window and food covers the rest. Sized at the spacing the
+  // pairs chain, each trip buying the next window outright and the whole system
+  // burning through in a minute rather than pacing the round.
   const PORTAL_BONUS = 10;
   const PORTAL_LIFE_MIN = 8000, PORTAL_LIFE_MAX = 12000;  // how long a pair stays open
   const PORTAL_OPEN_MS = 320;    // the windows scale open over this
