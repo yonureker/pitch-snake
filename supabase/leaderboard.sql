@@ -82,6 +82,11 @@ revoke all on function public.pitch_snake_submit_score(text, integer) from publi
 grant execute on function public.pitch_snake_top_scores(integer)      to anon, authenticated;
 grant execute on function public.pitch_snake_submit_score(text, integer) to anon, authenticated;
 
+-- `supabase db advisors` will flag both functions as SECURITY DEFINER routines
+-- executable by anon. That is this design working, not a finding: the table is
+-- shut and these two are the door. Do not "fix" it by switching them to
+-- SECURITY INVOKER or revoking anon, which turns the leaderboard off.
+--
 -- ---------------------------------------------------------------------------
 -- What this does NOT do, stated plainly: the browser reports its own score, so
 -- anyone who opens devtools can call submit_score with whatever number they
