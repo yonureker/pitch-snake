@@ -723,8 +723,8 @@
   const MIN_SPAWN_DIST = 3;   // ghosts and TNTs appear at least this many cells from the head
 
   // teleport windows: a linked pair opens as a reward for getting somewhere,
-  // not on a timer. One pair as the score passes each of PORTAL_SCORES; it stays
-  // for a few seconds and closes again. Run the
+  // not on a timer. One pair every twenty points, for ever; it stays for a few
+  // seconds and closes again. Run the
   // head into either window and the next step brings it out of the other one on
   // the far side of the pitch; ghosts take them too. Each window wears its
   // partner's colour at its core, so the blue one shows you it lands you at the
@@ -739,7 +739,13 @@
   let portalRetryAt = 0;       // nowhere to put a pair just now: look again after this
   let portalExpireAt = 0;      // when the open pair closes
   let portalOpenedAt = 0;      // when it opened, for the scale-open animation
-  const PORTAL_SCORES = [10, 30, 50, 70, 90];             // a pair opens as the score passes each
+  // A pair falls due every PORTAL_EVERY points from PORTAL_FIRST, and keeps
+  // falling due for as long as the round lasts. This used to be a list of five
+  // and it ran out: past ninety there were no windows at all, so a hundred and
+  // thirty was played on the same board as a ninety five, which is the one place
+  // the game stopped having anything new to say.
+  const PORTAL_FIRST = 10, PORTAL_EVERY = 20;
+  const portalMark = n => PORTAL_FIRST + n * PORTAL_EVERY;   // 10, 30, 50, 70, 90, 110, ...
   // One trip a pair, paid the same as a ringed bonus emoji, so a window is worth
   // going out of your way for. Well under the twenty between marks, though: a
   // trip covers a quarter of the ground to the next window and food covers the
@@ -1286,9 +1292,13 @@
   }
 
   function updatePortals() {
-    // one pair per threshold passed, counted monotonically like the TNT wave, so
-    // a TNT dropping the score back under a mark never re-arms a pair already had
-    while (portalsUnlocked < PORTAL_SCORES.length && score >= PORTAL_SCORES[portalsUnlocked]) portalsUnlocked++;
+    // How many marks the score has ever passed. Closed form rather than a loop,
+    // so a score that jumps a long way in one tick cannot spin here, and raised
+    // only, never lowered: a TNT dropping you back under a mark must not re-arm a
+    // pair you have already had, or falling under one and climbing back over it
+    // would be a way to farm windows five points at a time.
+    const due = score >= PORTAL_FIRST ? ((score - PORTAL_FIRST) / PORTAL_EVERY | 0) + 1 : 0;
+    if (due > portalsUnlocked) portalsUnlocked = due;
     if (portal !== null) {
       // A used pair is finished, but it cannot vanish on the spot: the body is
       // still coming through, a cell a step, and windows disappearing from under
