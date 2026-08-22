@@ -227,8 +227,10 @@
     display: inline-block; width: 17px; height: 17px; border-radius: 50%;
     box-sizing: border-box; vertical-align: middle;
   }
-  .tp.a { border: 3px solid #2ad4ff; background: radial-gradient(circle, #c561ff 0 38%, rgba(42,212,255,0.22) 38%); }
-  .tp.b { border: 3px solid #c561ff; background: radial-gradient(circle, #2ad4ff 0 38%, rgba(197,97,255,0.22) 38%); }
+  .tp.pair {
+    border: 3px solid; border-color: #2ad4ff #c561ff #c561ff #2ad4ff;
+    background: linear-gradient(135deg, rgba(42,212,255,0.3) 0 50%, rgba(197,97,255,0.3) 50%);
+  }
   .lg-val { line-height: 1; }
   .lg-val.pos { color: var(--gold-bright); }
   .lg-val.neg { color: var(--food); }
@@ -465,7 +467,7 @@
           <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
           <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-val neg">-5</span></div>
-          <div class="lg-row"><span class="lg-ic"><i class="tp a"></i></span><span class="lg-txt">Teleport: hop either way</span><span class="lg-val"><i class="tp b"></i></span></div>
+          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, first hop</span><span class="lg-val pos">+10</span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
         </div>
         <div class="entry" id="entry" style="display:none">
@@ -725,6 +727,11 @@
   let portalExpireAt = 0;      // when the open pair closes
   let portalOpenedAt = 0;      // when it opened, for the scale-open animation
   const PORTAL_SCORES = [32, 42, 52, 62, 72, 82, 92];     // a pair opens as the score passes each
+  // Paid once per pair, for the first trip through it. Worth knowing that this
+  // is exactly the spacing of PORTAL_SCORES, so a paid hop advances you one full
+  // mark: take every window and they chain, the next pair falling due the moment
+  // the current one closes.
+  const PORTAL_BONUS = 10;
   const PORTAL_LIFE_MIN = 8000, PORTAL_LIFE_MAX = 12000;  // how long a pair stays open
   const PORTAL_OPEN_MS = 320;    // the windows scale open over this
   const PORTAL_WARN_MS = 1500;   // ...and blink this long before they close
@@ -898,12 +905,26 @@
     snake.unshift({x: nx, y: ny});
     snakeSet.add(nk);
     warpedIn = win !== 0;
-    if (win) {        // a flare at each end, in that end's colour, so the hop reads at a glance
+    if (win) {
+      // Going through is a gamble taken blind: you commit at the mouth, you
+      // surface wherever the far end happens to be, and by the score windows
+      // open at, the pitch is busy. So the trip pays. It pays ONCE per pair,
+      // though: both ends work both ways, so an award on every hop would just be
+      // a four step loop farmed for points. The award lands here, after the
+      // walls, self, ghost and TNT tests above, so surfacing into something
+      // fatal pays nothing. Nothing else can share the landing cell, so this is
+      // the only score change this tick.
       const fromA = win === 1;
+      const paid = !portal.scored;
+      if (paid) { portal.scored = true; score += PORTAL_BONUS; updateScore(); }
+      const leaveCol = fromA ? PORTAL_A : PORTAL_B;
+      const arriveCol = fromA ? PORTAL_B : PORTAL_A;
+      const payCol = getCss('--gold-bright');    // gold in the flare means that one paid
       spawnBurst(fromA ? portal.ax : portal.bx, fromA ? portal.ay : portal.by, 14, 0.7,
-        () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => fromA ? PORTAL_A : PORTAL_B);
-      spawnBurst(nx, ny, 18, 0.7,
-        () => (Math.random() * 2.2 + 1) * (cell / 14), () => fromA ? PORTAL_B : PORTAL_A);
+        () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => leaveCol);
+      spawnBurst(nx, ny, paid ? 26 : 18, 0.7,
+        () => (Math.random() * 2.2 + 1) * (cell / 14),
+        i => paid && i % 3 === 0 ? payCol : arriveCol);
     }
 
     if (ate) {
@@ -1221,7 +1242,7 @@
     }
     if (!far.length) return false;
     const i = ((Math.random() * (far.length / 2)) | 0) * 2;
-    portal = { ax: a.x, ay: a.y, bx: far[i], by: far[i + 1] };
+    portal = { ax: a.x, ay: a.y, bx: far[i], by: far[i + 1], scored: false };
     portalOpenedAt = portalClock;
     return true;
   }
