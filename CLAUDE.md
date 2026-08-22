@@ -44,6 +44,15 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 19. A pair carries **one trip**. The first head through sets `portal.used`, which pays `PORTAL_BONUS` and makes the pair inert for snake and ghosts alike; both ends work both ways, so anything less than this is a four step loop run for free travel. A used pair cannot vanish on the spot, though: the body is still coming through a cell at a time, and windows disappearing from under it would leave segments jumping across nothing, so `portalBusy` holds them open until the tail is clear. The award sits after the wall, self, ghost and TNT tests in `step()`, so a trip that kills you pays nothing; nothing else can share a landing cell, so it is the only score change that tick. A wall closing a pair refunds its mark only when the pair was never used.
 20. Nothing else may spawn on a window (`cellOccupied` covers both ends), a wall forming over one closes the pair rather than leave a trap, a pair does not close while a body is still coming through (`portalBusy`), and no ghost may take the far end while a head is committed in a window.
 
+## Leaderboard
+
+The board is global when `SB_URL` and `SB_KEY` are set in `index.html`, and local when they are not. Schema and RPCs live in `supabase/leaderboard.sql`.
+
+1. The key in the page is the **publishable** key and it is meant to be public. What makes that safe is that `pitch_snake_scores` has RLS on with no policies and no grants, so the key reaches exactly the two `pitch_snake_` functions and nothing else. Never put a secret key in the page, and never add a policy to that table to "fix" an access error: the RPCs are the access.
+2. Every path falls back to the local board. Unconfigured, offline, or a Data API having a bad day all end up on the browser's own list rather than an empty screen or a hang, and the board says which one you are looking at. Every call carries an abort timer for the same reason.
+3. BEST is the player's own best in `localStorage`, not the top of the standings. Those were the same thing while the board was local and are not once it is global.
+4. The browser reports its own score, so the board is only as honest as the client. The range check in `pitch_snake_submit_score` stops the board being taken over by one absurd number, nothing more. Making it authoritative means the server has to decide the score.
+
 ## Verify before shipping
 
 1. Syntax-check the script body with `new vm.Script(...)` via `node -e`.

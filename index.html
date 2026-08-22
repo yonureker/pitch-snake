@@ -319,6 +319,15 @@
   .btn.small:active { transform: translateY(3px); box-shadow: 0 1px 0 #b32f1c; }
   .btn:disabled { opacity: 0.5; cursor: default; }
 
+  .board-head {
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--gold); font-weight: 700; margin-bottom: -8px;
+  }
+  .save-note {
+    font-size: 12px; font-weight: 600; color: var(--food);
+    max-width: 260px; text-align: center;
+  }
+  .save-note[hidden] { display: none; }
   .standings {
     list-style: none; margin: 2px 0; padding: 10px 14px; width: 230px;
     background: rgba(33,30,26,0.5); border-radius: 8px;
@@ -474,6 +483,8 @@
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
           <button class="btn small" id="saveBtn">SAVE</button>
         </div>
+        <div class="save-note" id="saveNote" hidden></div>
+        <div class="board-head" id="boardHead" style="display:none">Top 10</div>
         <ol class="standings" id="standings" style="display:none"></ol>
         <button class="btn" id="startBtn">START</button>
       </div>
@@ -538,6 +549,8 @@
   const nameInput = document.getElementById('nameInput');
   const saveBtn = document.getElementById('saveBtn');
   const standingsEl = document.getElementById('standings');
+  const boardHead = document.getElementById('boardHead');
+  const saveNote = document.getElementById('saveNote');
   const legend = document.getElementById('legend');
 
   const GRID = 20;
@@ -990,7 +1003,10 @@
     nameInput.disabled = false;
     nameInput.value = '';
     entry.style.display = score > 0 ? 'flex' : 'none';
+    saveNote.hidden = true;
     standingsEl.style.display = 'block';
+    boardHead.style.display = 'block';
+    savePersonalBest();          // the round is over; that best is worth keeping
     renderStandings();
     overlay.classList.remove('hidden');
     refreshSettingsUI();          // round over: gear back, settings editable again
@@ -1815,56 +1831,126 @@
     requestAnimationFrame(loop);
   }
 
-  // ---- standings (persistent) ----
+  // ---- standings ----
+  // The board is global when a Supabase project is configured below, and the
+  // browser's own list when it is not, so the game still works on a fork with no
+  // keys, offline, and while the Data API is having a bad day.
+  //
+  // The publishable key belongs in this file. It is what names the project to
+  // the Data API and it is meant to be public; what keeps it harmless is that
+  // the scores table has RLS on with no policies and no grants, so this key can
+  // reach exactly the two pitch_snake_ functions in supabase/leaderboard.sql and
+  // nothing else. Do NOT put a secret key here: that one really is a secret.
+  let SB_URL = '';                   // https://<ref>.supabase.co
+  let SB_KEY = '';                   // sb_publishable_... (the legacy anon JWT also works, for now)
+  const sbOn = () => !!(SB_URL && SB_KEY);
+  const SB_TIMEOUT = 6000;
+
   let memStandings = [];
   let savedThisRound = false;
   const MAX_ENTRIES = 10;
 
+  // One call shape for both functions. Every call carries its own abort timer,
+  // because a request that never answers must not leave FULL TIME sitting there
+  // with a dead SAVE button. The key goes in both headers with the same value,
+  // which is what a publishable key allows and what a legacy anon key expects.
+  async function sbRpc(fn, args) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), SB_TIMEOUT);
+    try {
+      const res = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SB_KEY,
+          Authorization: 'Bearer ' + SB_KEY,
+        },
+        body: JSON.stringify(args),
+        signal: ac.signal,
+      });
+      if (!res.ok) throw new Error(fn + ': ' + res.status);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   // A stored value that parses but is not an array (a foreign write on the
   // shared github.io origin, an old format, a devtools edit) must never crash
-  // the standings UI, so every load path is normalized through asList. The
-  // fallback order also mirrors persistStandings now: a failing storage
-  // backend falls through to localStorage instead of silently returning [].
+  // the standings UI, so every load path is normalized through these. Entries
+  // carry a key rather than a timestamp now, since a remote row is identified by
+  // its id and a local one by when it was written.
   const asList = v => Array.isArray(v) ? v : [];
-  async function loadStandings() {
+  const asLocal = list => asList(list)
+    .filter(e => e && typeof e.score === 'number')
+    .map(e => ({ key: 'l' + e.ts, name: String(e.name || 'YOU'), score: e.score, ts: e.ts }));
+
+  async function loadLocalStandings() {
     if (window.storage) {
       try {
         const r = await window.storage.get('standings');
-        if (r && r.value) return asList(JSON.parse(r.value));
+        if (r && r.value) return asLocal(JSON.parse(r.value));
       } catch (e) {}
     }
     try {
       const v = localStorage.getItem('snakeStandings');
-      if (v) return asList(JSON.parse(v));
+      if (v) return asLocal(JSON.parse(v));
     } catch (e) {}
-    return memStandings.slice();
+    return asLocal(memStandings);
   }
 
-  async function persistStandings(list) {
-    if (window.storage) {
-      try { await window.storage.set('standings', JSON.stringify(list)); return; } catch (e) {}
+  // true once a remote read has failed, so the board can say whose list this is
+  let boardIsLocal = true;
+  async function loadStandings() {
+    if (sbOn()) {
+      try {
+        const rows = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES });
+        boardIsLocal = false;
+        return asList(rows)
+          .filter(r => r && typeof r.score === 'number')
+          .map(r => ({ key: 'r' + r.id, name: String(r.name || 'YOU'), score: r.score }));
+      } catch (e) {
+        boardIsLocal = true;      // fall through and show what we have
+      }
     }
-    try { localStorage.setItem('snakeStandings', JSON.stringify(list)); return; } catch (e) {}
-    memStandings = list;
+    return loadLocalStandings();
   }
 
+  async function persistLocalStandings(list) {
+    const plain = list.map(e => ({ name: e.name, score: e.score, ts: e.ts }));
+    if (window.storage) {
+      try { await window.storage.set('standings', JSON.stringify(plain)); return; } catch (e) {}
+    }
+    try { localStorage.setItem('snakeStandings', JSON.stringify(plain)); return; } catch (e) {}
+    memStandings = plain;
+  }
+
+  // Returns the key of the row just written, so the render can point at it. A
+  // remote save that fails throws, and submitScore turns the form back on: the
+  // score is not quietly written somewhere else, because a local copy of a
+  // global board is a lie the next session would expose.
   async function saveScore(name, sc) {
-    const list = await loadStandings();
+    if (sbOn()) {
+      const id = await sbRpc('pitch_snake_submit_score', { p_name: name, p_score: sc });
+      return 'r' + id;
+    }
+    const list = await loadLocalStandings();
     const ts = Date.now();
-    list.push({ name, score: sc, ts });
+    list.push({ key: 'l' + ts, name, score: sc, ts });
     list.sort((a, b) => b.score - a.score || a.ts - b.ts);
-    await persistStandings(list.slice(0, MAX_ENTRIES));
-    return ts;
+    await persistLocalStandings(list.slice(0, MAX_ENTRIES));
+    return 'l' + ts;
   }
 
-  // renders race when the async storage backend is slow (die() fires one
-  // without awaiting, a quick save fires another); the generation counter lets
-  // only the newest render win, so a stale list can't overwrite the saved one
+  // renders race when the backend is slow (die() fires one without awaiting, a
+  // quick save fires another); the generation counter lets only the newest
+  // render win, so a stale list can't overwrite the saved one
   let standingsGen = 0;
-  async function renderStandings(highlightTs) {
+  async function renderStandings(highlightKey) {
     const gen = ++standingsGen;
     const list = await loadStandings();
     if (gen !== standingsGen) return;
+    boardHead.textContent = boardIsLocal ? 'Top 10 on this device' : 'Top 10 worldwide';
     standingsEl.innerHTML = '';
     if (!list.length) {
       const li = document.createElement('li');
@@ -1875,7 +1961,7 @@
     }
     list.forEach((e, i) => {
       const li = document.createElement('li');
-      if (highlightTs && e.ts === highlightTs) li.className = 'me';
+      if (highlightKey && e.key === highlightKey) li.className = 'me';
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = e.score;
@@ -1884,10 +1970,16 @@
     });
   }
 
-  async function refreshBest() {
-    const list = await loadStandings();
-    const top = list.length ? list[0].score : 0;
-    if (top > best) { best = top; bestEl.textContent = best; }
+  // BEST is the player's own best, kept in this browser. It used to be the top
+  // of the standings, which was the same thing while the board was local and
+  // would be somebody else's record now that it is not.
+  const BEST_KEY = 'snakeBest';
+  function loadPersonalBest() {
+    try { best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { best = 0; }
+    bestEl.textContent = best;
+  }
+  function savePersonalBest() {
+    try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
   }
 
   async function submitScore() {
@@ -1897,16 +1989,19 @@
     savedThisRound = true;
     saveBtn.disabled = true;
     nameInput.disabled = true;
+    saveNote.hidden = true;
     try {
-      const ts = await saveScore(name, score);
-      await refreshBest();
-      await renderStandings(ts);
+      const key = await saveScore(name, score);
+      await renderStandings(key);
       entry.style.display = 'none';
     } catch (e) {
-      // a failed save must not lock the entry for the round; let them retry
+      // a failed save must not lock the entry for the round; let them retry, and
+      // say why rather than leaving a button that silently did nothing
       savedThisRound = false;
       saveBtn.disabled = false;
       nameInput.disabled = false;
+      saveNote.textContent = 'Could not reach the leaderboard. Try again.';
+      saveNote.hidden = false;
     }
   }
 
@@ -1924,7 +2019,9 @@
     lastTick = 0; prog = 0;
     overlayTitle.className = '';
     entry.style.display = 'none';
+    saveNote.hidden = true;
     standingsEl.style.display = 'none';
+    boardHead.style.display = 'none';
     legend.style.display = 'none';
     overlay.classList.add('hidden');
     settingsModal.hidden = true;
@@ -2141,7 +2238,7 @@ $ `;
   resize();
   reset();
   refreshSettingsUI();
-  refreshBest();
+  loadPersonalBest();
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
