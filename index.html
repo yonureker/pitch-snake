@@ -710,8 +710,8 @@
   const MIN_SPAWN_DIST = 3;   // ghosts and TNTs appear at least this many cells from the head
 
   // teleport windows: a linked pair opens as a reward for getting somewhere,
-  // not on a timer. Nothing before 30 points, then one pair as the score passes
-  // each of PORTAL_SCORES; it stays for a few seconds and closes again. Run the
+  // not on a timer. One pair as the score passes each of PORTAL_SCORES; it stays
+  // for a few seconds and closes again. Run the
   // head into either window and the next step brings it out of the other one on
   // the far side of the pitch; ghosts take them too. Each window wears its
   // partner's colour at its core, so the blue one shows you it lands you at the
@@ -726,11 +726,12 @@
   let portalRetryAt = 0;       // nowhere to put a pair just now: look again after this
   let portalExpireAt = 0;      // when the open pair closes
   let portalOpenedAt = 0;      // when it opened, for the scale-open animation
-  const PORTAL_SCORES = [32, 42, 52, 62, 72, 82, 92];     // a pair opens as the score passes each
-  // Paid once per pair, for the first trip through it. Worth knowing that this
-  // is exactly the spacing of PORTAL_SCORES, so a paid hop advances you one full
-  // mark: take every window and they chain, the next pair falling due the moment
-  // the current one closes.
+  const PORTAL_SCORES = [15, 30, 45, 60, 75, 90];         // a pair opens as the score passes each
+  // Paid once per pair, for the first trip through it, and deliberately smaller
+  // than the spacing of PORTAL_SCORES. A paid hop has to carry you most of the
+  // way to the next mark without ever covering all of it: at the same size as
+  // the spacing the pairs chain, each trip buying the next window outright, and
+  // the whole system burns through in a minute instead of pacing the round.
   const PORTAL_BONUS = 10;
   const PORTAL_LIFE_MIN = 8000, PORTAL_LIFE_MAX = 12000;  // how long a pair stays open
   const PORTAL_OPEN_MS = 320;    // the windows scale open over this
