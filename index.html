@@ -1108,8 +1108,12 @@
   }
 
   function updateBombs() {
-    // grow the wave size as the score passes each threshold (monotonic, so the
-    // -10 dip from eating a TNT never shrinks the wave)
+    // The score only ever sets the SIZE of a wave, never whether one comes. Past
+    // the last mark the size is pinned at TNT_SCORES.length and the cycle below
+    // carries on regardless, so a two hundred point run still gets a wave of nine
+    // every ten seconds or so; it just never gets a tenth block. Do not add a
+    // score check below this line: that is what would make waves stop.
+    // Monotonic, so the five points a TNT takes can never shrink the wave.
     while (bombsUnlocked < TNT_SCORES.length && score >= TNT_SCORES[bombsUnlocked]) bombsUnlocked++;
     if (bombsUnlocked === 0) return;             // no TNTs before 15 pts
     if (bombPhase === 'active') {

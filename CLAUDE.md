@@ -45,6 +45,10 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 20. A pair carries **one trip**. The first head through sets `portal.used`, which pays `PORTAL_BONUS` and makes the pair inert for snake and ghosts alike; both ends work both ways, so anything less than this is a four step loop run for free travel. A used pair cannot vanish on the spot, though: the body is still coming through a cell at a time, and windows disappearing from under it would leave segments jumping across nothing, so `portalBusy` holds them open until the tail is clear. The award sits after the wall, self, ghost and TNT tests in `step()`, so a trip that kills you pays nothing; nothing else can share a landing cell, so it is the only score change that tick. A wall closing a pair refunds its mark only when the pair was never used.
 21. Nothing else may spawn on a window (`cellOccupied` covers both ends), a wall forming over one closes the pair rather than leave a trap, a pair does not close while a body is still coming through (`portalBusy`), and no ghost may take the far end while a head is committed in a window.
 
+### Hazard ladders
+
+22. A score threshold sets how much of a hazard there is, never whether it comes at all. TNT waves cycle for ever once past the first mark and only the wave size is capped; ghosts never leave once they join; teleport marks have no last one. The only thing a score gate is allowed to do is scale.
+
 ## Leaderboard
 
 The board is global when `SB_URL` and `SB_KEY` are set in `index.html`, and local when they are not. Schema and RPCs live in `supabase/leaderboard.sql`.
