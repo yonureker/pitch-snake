@@ -496,9 +496,9 @@
         <div class="modal-title">Settings</div>
         <div class="speed-row">
           <span>SPEED</span>
-          <button data-speed="160">SLOW</button>
-          <button data-speed="110" class="active">NORMAL</button>
-          <button data-speed="70">FAST</button>
+          <button data-speed="200">SLOW</button>
+          <button data-speed="150" class="active">NORMAL</button>
+          <button data-speed="100">FAST</button>
         </div>
         <div class="toggle-row">
           <span>WALLS</span>
@@ -546,7 +546,17 @@
   let snake, dir, dirQueue, food, score, best = 0;
   let snakeSet = new Set();  // cells the snake occupies, as integer keys, for O(1) collision checks
   let tailFrom = null;   // the cell the tail glides out of, for smooth motion
-  let tickMs = 110;      // ms per grid cell, constant: the snake never changes pace
+  // ms per grid cell, constant: the snake never changes pace. The three
+  // settings are 200 / 150 / 100, which is four, three and two seconds to cross
+  // the twenty cell board. They are deliberately slower than they were: on a
+  // phone the thing that makes a corner hard is not the speed itself but how
+  // little wall-clock time there is to see it coming and get a thumb down, and
+  // rule 14 means a tap can only land at the next cell boundary, so the tick
+  // length IS the reaction budget. They are also exact multiples of a 60Hz
+  // frame (12, 9 and 6 frames a cell), so a step boundary lands on a frame
+  // boundary instead of drifting through the frame cycle. NORMAL is the
+  // reference pace: anything that has to agree across machines assumes 150.
+  let tickMs = 150;
   let lastTick = 0;
   // Progress through the current cell, 0..1, advanced by dt/tickMs and rendered
   // as is. Kept as a fraction rather than elapsed ms so the render can never be
