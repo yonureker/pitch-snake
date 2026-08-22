@@ -467,7 +467,7 @@
           <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
           <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-val neg">-5</span></div>
-          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-val pos">+1</span></div>
+          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
         </div>
         <div class="entry" id="entry" style="display:none">
@@ -727,9 +727,12 @@
   let portalExpireAt = 0;      // when the open pair closes
   let portalOpenedAt = 0;      // when it opened, for the scale-open animation
   const PORTAL_SCORES = [10, 30, 50, 70, 90];             // a pair opens as the score passes each
-  // A token for the trip rather than a payday: a pair is worth one point and one
-  // trip, so what it is really for is the ground it covers, not the scoreline.
-  const PORTAL_BONUS = 1;
+  // One trip a pair, paid the same as a ringed bonus emoji, so a window is worth
+  // going out of your way for. Well under the twenty between marks, though: a
+  // trip covers a quarter of the ground to the next window and food covers the
+  // rest. Sized at the spacing, the pairs would chain, each trip buying the next
+  // window outright and the system burning through instead of pacing the round.
+  const PORTAL_BONUS = 5;
   const PORTAL_LIFE_MIN = 8000, PORTAL_LIFE_MAX = 12000;  // how long a pair stays open
   const PORTAL_OPEN_MS = 320;    // the windows scale open over this
   const PORTAL_WARN_MS = 1500;   // ...and blink this long before they close
