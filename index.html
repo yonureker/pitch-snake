@@ -232,6 +232,13 @@
      with a first-touch fallback for touchscreen desktops. */
   html.touchless .dpad, html.touchless .touch-only { display: none; }
   html.touch .kb-only { display: none; }
+
+  /* A fine-pointer machine has no pad below the board, so the column stops
+     pretending to be a phone: its width follows the viewport HEIGHT (board
+     plus header, hint and gaps, about 200px of chrome), never narrower than
+     the phone column, never wider than the window. The header spans the same
+     column, so the logo and the scores ride the board's own edges. */
+  html.touchless .wrap { max-width: max(540px, min(94vw, calc(100dvh - 200px))); }
   .overlay.hidden { opacity: 0; pointer-events: none; }
 
   .overlay h2 {
@@ -1997,12 +2004,14 @@ $ `;
   function applyPointerClass() {
     document.documentElement.classList.toggle('touch', coarseMq.matches);
     document.documentElement.classList.toggle('touchless', !coarseMq.matches);
+    resizeQueued = true;         // the class changes the column width
   }
   applyPointerClass();
   coarseMq.addEventListener('change', applyPointerClass);
   window.addEventListener('touchstart', () => {
     document.documentElement.classList.add('touch');
     document.documentElement.classList.remove('touchless');
+    resizeQueued = true;
   }, { once: true, passive: true });
 
   resize();
