@@ -1238,13 +1238,8 @@
   // the scores table has RLS on with no policies and no grants, so this key can
   // reach exactly the two pitch_snake_ functions in supabase/leaderboard.sql and
   // nothing else. Do NOT put a secret key here: that one really is a secret.
-  let SB_URL = 'https://hzgsvlernnufogdpfnot.supabase.co';
-  // This project still issues the legacy anon JWT rather than an sb_publishable_
-  // key. It works and is public by the same design, but Supabase retires the
-  // legacy keys at the end of 2026: mint a publishable key in the dashboard and
-  // swap it in here before then. The call below sends whichever it is in both
-  // headers with the identical value, which suits either.
-  let SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6Z3N2bGVybm51Zm9nZHBmbm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwOTgwNjYsImV4cCI6MjA2NDY3NDA2Nn0.eQkgc04KaYPkA9EYLPPETFqD8IaMGpFQR4VUYy-xFPE';
+  let SB_URL = 'https://vyqlwoqvsnxyziutmgqz.supabase.co';
+  let SB_KEY = 'sb_publishable_tbNA8JWlc3V9twrk2knWtg__g6-K8lj';   // sb_publishable_: public by design; the table behind it is shut
   const sbOn = () => !!(SB_URL && SB_KEY);
   const SB_TIMEOUT = 6000;
 
