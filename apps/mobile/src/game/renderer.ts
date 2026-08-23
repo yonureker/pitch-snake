@@ -1,14 +1,19 @@
 /**
  * The Skia renderer: records one SkPicture per frame from engine state.
  *
- * This is a pure consumer of `@pitch-snake/engine` - nothing here decides
- * gameplay. It is the mobile twin of the web page's draw(): same layering
- * (arena, walls, portals, food, TNT, snake, ghosts, particles), same
- * interpolation rules (renderProg for the glide, half-step snapping across a
- * teleport hop), same palette. Recording happens on the JS thread into a
- * picture that the Canvas replays natively; per-sprite work inside one
- * recording costs no JSI crossings, which is the pattern that benchmarks well
- * into the hundreds of sprites.
+ * A pure consumer of `@pitch-snake/engine`; nothing here decides gameplay. It
+ * is the mobile twin of the web draw() in architecture as well as look: all
+ * repeated art is pre-rendered ONCE into offscreen images (the web page's
+ * rule 7), so a frame is a short run of drawImage calls whose count barely
+ * changes when walls, portals or TNT waves arrive. That flatness is the
+ * point: frame cost spikes come from drawing art out of primitives, and
+ * primitives per frame are exactly what this file no longer does.
+ *
+ * Baked at cell-size change: the arena (fill + grid), 64 pre-tinted snake
+ * body cells with the outline baked in, the five ghost bodies with eye
+ * whites, the TNT block face, both portal ends. Baked on wall-phase events:
+ * the whole wall layer (the web's rebuildWallLayer). Per frame the only
+ * primitive draws left are the pupils, the bonus ring, and particles.
  * @module
  */
 import {
@@ -18,11 +23,11 @@ import {
   matchFont,
   type SkCanvas,
   type SkColor,
-  type SkFont,
   type SkImage,
   type SkPicture,
+  type SkSurface,
 } from '@shopify/react-native-skia';
-import { Platform } from 'react-native';
+import { PixelRatio, Platform } from 'react-native';
 
 import {
   GRID,
@@ -30,7 +35,6 @@ import {
   PORTAL_OPEN_MS,
   PORTAL_WARN_MS,
   ghostRenderPos,
-  type Cell,
   type Game,
 } from '@pitch-snake/engine';
 
@@ -52,10 +56,8 @@ const ATLAS_CELL = 128;
 const ATLAS_COLS = 6;
 const BONUS_KIND_OFFSET = 16;
 
-// Renderer-local PRNG for particle jitter only. Deliberately NOT the engine's
-// seeded stream: particles are paint, never simulation, and the app-side lint
-// ban on Math.random exists to keep gameplay out of components, not to make
-// confetti deterministic.
+// Renderer-local PRNG for particle jitter only; particles are paint, never
+// simulation, so the engine's seeded stream stays untouched.
 let jitterState = 0x9e3779b9;
 function jitter(): number {
   jitterState ^= jitterState << 13;
@@ -83,8 +85,8 @@ export function clearParticles(): void {
 }
 
 /**
- * Emit a ring burst at a grid cell, matching the web emitter's shape:
- * count, angular jitter, speed range and a color picker per particle.
+ * Emit a ring burst at a grid cell: count, angular jitter, a speed range and
+ * a color picker per particle, matching the web emitter's shape.
  */
 export function spawnBurst(
   gx: number,
@@ -106,7 +108,7 @@ export function spawnBurst(
   }
 }
 
-/** Advance and cull the particle pool by dt (ms), 60Hz-normalized like the web. */
+/** Advance and cull the particle pool by dt (ms), 60Hz-normalized. */
 export function stepParticles(dtMs: number): void {
   const f = dtMs / 16.667;
   const damp = Math.pow(0.92, f);
@@ -128,15 +130,10 @@ export function stepParticles(dtMs: number): void {
 
 const wrapf = (v: number): number => ((v % GRID) + GRID) % GRID;
 
-// Paints, colors and fonts are module-level and reused: recording is
-// single-threaded on the JS side, and precomputing every SkColor once means
-// the steady-state frame allocates no color objects at all.
+// shared paints; recording is single-threaded on the JS side
 const fillPaint = Skia.Paint();
 const strokePaint = Skia.Paint();
 strokePaint.setStyle(PaintStyle.Stroke);
-
-const snakeColors: SkColor[] = [];
-for (let i = 0; i < SNAKE_SHADES; i++) snakeColors.push(Skia.Color(snakeShade(i)));
 
 const C = {
   arena: Skia.Color(GameColors.arena),
@@ -152,16 +149,9 @@ const C = {
   snakeOutline: Skia.Color(GameColors.snakeOutline),
   white: Skia.Color('#ffffff'),
   ghostEye: Skia.Color(GameColors.ghostEye),
-  portalARim: Skia.Color(GameColors.portalARim),
-  portalA: Skia.Color(GameColors.portalA),
-  portalADeep: Skia.Color(GameColors.portalADeep),
-  portalBRim: Skia.Color(GameColors.portalBRim),
-  portalB: Skia.Color(GameColors.portalB),
-  portalBDeep: Skia.Color(GameColors.portalBDeep),
 } as const;
-const ghostBodyColors = GhostColors.map((g) => Skia.Color(g.body));
-const ghostEdgeColors = GhostColors.map((g) => Skia.Color(g.edge));
-// particle colors are strings from the event layer; memoize their SkColors
+const snakeColors: SkColor[] = [];
+for (let i = 0; i < SNAKE_SHADES; i++) snakeColors.push(Skia.Color(snakeShade(i)));
 const particleColorCache = new Map<string, SkColor>();
 function particleColor(hex: string): SkColor {
   let c = particleColorCache.get(hex);
@@ -172,14 +162,268 @@ function particleColor(hex: string): SkColor {
   return c;
 }
 
+// ---- the sprite bakery -----------------------------------------------------
+// Everything below draws once into offscreen surfaces at device resolution
+// and snapshots to images; per frame each sprite is a single drawImageRect.
+
+const DPR = PixelRatio.get();
+
+interface Baked {
+  image: SkImage;
+  /** dp width/height the sprite is meant to be drawn at (scale 1). */
+  w: number;
+  h: number;
+}
+
+function bake(w: number, h: number, draw: (canvas: SkCanvas) => void): Baked | null {
+  const surface: SkSurface | null = Skia.Surface.MakeOffscreen(Math.ceil(w * DPR), Math.ceil(h * DPR));
+  if (surface === null) return null;
+  const canvas = surface.getCanvas();
+  canvas.scale(DPR, DPR);
+  draw(canvas);
+  surface.flush();
+  // The snapshot is texture-backed on THIS thread's GPU context; the picture
+  // replays on the render thread's context, where foreign textures draw as
+  // nothing. makeNonTextureImage raster-backs it, valid on any thread.
+  const textureImage = surface.makeImageSnapshot();
+  const image = textureImage.makeNonTextureImage();
+  textureImage.dispose();
+  surface.dispose();
+  if (image === null) return null;
+  return { image, w, h };
+}
+
+function drawBaked(canvas: SkCanvas, b: Baked, x: number, y: number, w?: number, h?: number): void {
+  canvas.drawImageRect(
+    b.image,
+    Skia.XYWHRect(0, 0, b.image.width(), b.image.height()),
+    Skia.XYWHRect(x, y, w ?? b.w, h ?? b.h),
+    fillPaint,
+  );
+}
+
+let bakedCell = 0;
+let bakedBoard = 0;
+let arenaSprite: Baked | null = null;
+let snakeSprites: (Baked | null)[] = [];
+let ghostSprites: (Baked | null)[] = [];
+let ghostSpriteOriginY = 0;
+let tntSprite: Baked | null = null;
+let portalSpriteA: Baked | null = null;
+let portalSpriteB: Baked | null = null;
+let wallSprite: Baked | null = null;
+
 const tntFontFamily = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
-let tntFont: SkFont | null = null;
-let tntFontSize = 0;
-let tntLabelWidth = 0;
+
+function bakeArena(boardPx: number): void {
+  arenaSprite = bake(boardPx, boardPx, (c) => {
+    fillPaint.setColor(C.arena);
+    c.drawRect(Skia.XYWHRect(0, 0, boardPx, boardPx), fillPaint);
+    strokePaint.setColor(C.gridLine);
+    strokePaint.setStrokeWidth(1);
+    strokePaint.setStrokeCap(StrokeCap.Butt);
+    const cell = boardPx / GRID;
+    for (let i = 1; i < GRID; i++) {
+      c.drawLine(i * cell, 0, i * cell, boardPx, strokePaint);
+      c.drawLine(0, i * cell, boardPx, i * cell, strokePaint);
+    }
+  });
+}
+
+function bakeSnakeCells(cell: number): void {
+  const r = cell * 0.42;
+  const rad = cell * 0.32;
+  const lw = Math.max(1, cell * 0.05);
+  const s = r * 2 + lw + 2;
+  for (const old of snakeSprites) old?.image.dispose();
+  snakeSprites = snakeColors.map((color) =>
+    bake(s, s, (c) => {
+      const rect = Skia.RRectXY(Skia.XYWHRect(s / 2 - r, s / 2 - r, r * 2, r * 2), rad, rad);
+      fillPaint.setColor(color);
+      c.drawRRect(rect, fillPaint);
+      strokePaint.setColor(C.snakeOutline);
+      strokePaint.setStrokeWidth(lw);
+      c.drawRRect(rect, strokePaint);
+    }),
+  );
+}
+
+function bakeGhosts(cell: number): void {
+  const r = cell * 0.4;
+  const lw = Math.max(1, cell * 0.045);
+  const w = 2 * r + lw + 4;
+  const h = 2.16 * r + lw + 4;
+  ghostSpriteOriginY = 1.16 * r + lw / 2 + 2;
+  for (const old of ghostSprites) old?.image.dispose();
+  ghostSprites = GhostColors.map((col) =>
+    bake(w, h, (c) => {
+      const gx = w / 2;
+      const gy = ghostSpriteOriginY;
+      const domeY = -r * 0.16;
+      const path = Skia.Path.Make();
+      path.addArc(Skia.XYWHRect(gx - r, gy + domeY - r, r * 2, r * 2), 180, 180);
+      path.lineTo(gx + r, gy + r);
+      const n = 4;
+      const step = (2 * r) / n;
+      let x = gx + r;
+      for (let i = 0; i < n; i++) {
+        path.lineTo(x - step / 2, gy + r - r * 0.42);
+        path.lineTo(x - step, gy + r);
+        x -= step;
+      }
+      path.lineTo(gx - r, gy + domeY);
+      path.close();
+      fillPaint.setColor(Skia.Color(col.body));
+      c.drawPath(path, fillPaint);
+      strokePaint.setColor(Skia.Color(col.edge));
+      strokePaint.setStrokeWidth(lw);
+      c.drawPath(path, strokePaint);
+      // eye whites are direction-independent, so they bake in; pupils stay live
+      const eyeDX = r * 0.42;
+      const eyeY = gy + domeY - r * 0.03;
+      const ewx = r * 0.28;
+      const ewy = r * 0.36;
+      fillPaint.setColor(C.white);
+      for (let sx = -1; sx <= 1; sx += 2) {
+        c.drawOval(Skia.XYWHRect(gx + sx * eyeDX - ewx, eyeY - ewy, ewx * 2, ewy * 2), fillPaint);
+      }
+    }),
+  );
+}
+
+function bakeTnt(cell: number): void {
+  const B = cell * 0.9;
+  const fontSize = Math.round(cell * 0.27);
+  const font = matchFont({ fontFamily: tntFontFamily, fontSize, fontWeight: 'bold' });
+  const labelWidth = font.measureText('TNT').width;
+  tntSprite?.image.dispose();
+  tntSprite = bake(B, B, (c) => {
+    fillPaint.setColor(C.tntBody);
+    c.drawRect(Skia.XYWHRect(0, 0, B, B), fillPaint);
+    fillPaint.setColor(C.tntBandLight);
+    c.drawRect(Skia.XYWHRect(0, B * 0.32, B, B * 0.26), fillPaint);
+    fillPaint.setColor(C.tntBandDark);
+    c.drawRect(Skia.XYWHRect(0, B * 0.58, B, B * 0.08), fillPaint);
+    fillPaint.setColor(C.tntInk);
+    c.drawText('TNT', (B - labelWidth) / 2, B * 0.45 + fontSize * 0.36, fillPaint, font);
+  });
+}
+
+function bakePortalEnd(cell: number, rim: string, hot: string, deep: string, core: string): Baked | null {
+  const R = cell * 0.48;
+  const s = cell * 1.9; // room for the halo
+  return bake(s, s, (c) => {
+    const m = s / 2;
+    fillPaint.setColor(Skia.Color(hot));
+    fillPaint.setAlphaf(0.18);
+    c.drawCircle(m, m, R * 1.55, fillPaint);
+    fillPaint.setAlphaf(1);
+    fillPaint.setColor(Skia.Color(deep));
+    c.drawCircle(m, m, R, fillPaint);
+    strokePaint.setColor(Skia.Color(rim));
+    strokePaint.setStrokeWidth(Math.max(2, cell * 0.12));
+    strokePaint.setStrokeCap(StrokeCap.Round);
+    const box = Skia.XYWHRect(m - R, m - R, R * 2, R * 2);
+    for (let i = 0; i < 4; i++) c.drawArc(box, i * 90 + 14, 62, false, strokePaint);
+    strokePaint.setStrokeWidth(Math.max(1, cell * 0.05));
+    strokePaint.setAlphaf(0.7);
+    const box2 = Skia.XYWHRect(m - R * 0.66, m - R * 0.66, R * 1.32, R * 1.32);
+    for (let i = 0; i < 4; i++) c.drawArc(box2, i * 90 + 62, 55, false, strokePaint);
+    strokePaint.setAlphaf(1);
+    fillPaint.setColor(Skia.Color(deep));
+    c.drawCircle(m, m, R * 0.36, fillPaint);
+    fillPaint.setColor(Skia.Color(core));
+    c.drawCircle(m, m, R * 0.28, fillPaint);
+  });
+}
+
+function ensureSprites(boardPx: number): void {
+  const cell = boardPx / GRID;
+  if (boardPx !== bakedBoard) {
+    bakedBoard = boardPx;
+    arenaSprite?.image.dispose();
+    bakeArena(boardPx);
+  }
+  if (cell !== bakedCell) {
+    bakedCell = cell;
+    bakeSnakeCells(cell);
+    bakeGhosts(cell);
+    bakeTnt(cell);
+    portalSpriteA?.image.dispose();
+    portalSpriteB?.image.dispose();
+    portalSpriteA = bakePortalEnd(
+      cell,
+      GameColors.portalARim,
+      GameColors.portalA,
+      GameColors.portalADeep,
+      GameColors.portalB,
+    );
+    portalSpriteB = bakePortalEnd(
+      cell,
+      GameColors.portalBRim,
+      GameColors.portalB,
+      GameColors.portalBDeep,
+      GameColors.portalA,
+    );
+    // shape-dependent; rebaked from the wall event with the live game
+    wallSprite?.image.dispose();
+    wallSprite = null;
+  }
+}
+
+/**
+ * Bake the current wall shape into a single layer image (the web page's
+ * rebuildWallLayer). Call on 'wall' events: bevel=false when the shape
+ * forms, bevel=true when it turns solid. Nothing draws when the state is
+ * 'off', so clearing is implicit.
+ */
+export function bakeWallLayer(game: Game, boardPx: number, bevel: boolean): void {
+  ensureSprites(boardPx);
+  const cell = boardPx / GRID;
+  wallSprite?.image.dispose();
+  wallSprite = bake(boardPx, boardPx, (c) => {
+    const pad = cell * 0.05;
+    const rad = cell * 0.3;
+    fillPaint.setColor(C.wall);
+    for (const w of game.wallCells) {
+      c.drawRRect(
+        Skia.RRectXY(
+          Skia.XYWHRect(w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2),
+          rad,
+          rad,
+        ),
+        fillPaint,
+      );
+    }
+    if (bevel) {
+      const ip = cell * 0.28;
+      fillPaint.setColor(C.wallBevel);
+      fillPaint.setAlphaf(0.22);
+      for (const w of game.wallCells) {
+        c.drawRRect(
+          Skia.RRectXY(
+            Skia.XYWHRect(w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2),
+            cell * 0.14,
+            cell * 0.14,
+          ),
+          fillPaint,
+        );
+      }
+      fillPaint.setAlphaf(1);
+    }
+  });
+}
+
+/** Drop the baked wall layer (round reset). */
+export function clearWallLayer(): void {
+  wallSprite?.image.dispose();
+  wallSprite = null;
+}
+
+// ---- the frame -------------------------------------------------------------
 
 // segment glide, ported from the web segRenderPos: interpolate from the cell
-// behind, shortest way through tunnels, and snap ends across a teleport hop
-// at the half-way point of the step (engine rule 18)
+// behind, shortest way through tunnels, snap ends across a teleport hop
 const _rp = { cx: 0, cy: 0 };
 function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: number } {
   const s = game.snake[i];
@@ -203,23 +447,10 @@ function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: numbe
   return _rp;
 }
 
-function drawRoundCellAt(
-  canvas: SkCanvas,
-  cxCell: number,
-  cyCell: number,
-  cell: number,
-  r: number,
-  rad: number,
-): void {
-  const x = cxCell * cell + cell / 2;
-  const y = cyCell * cell + cell / 2;
-  const rect = Skia.RRectXY(Skia.XYWHRect(x - r, y - r, r * 2, r * 2), rad, rad);
-  canvas.drawRRect(rect, fillPaint);
-  canvas.drawRRect(rect, strokePaint);
-}
-
-function drawBodyCell(canvas: SkCanvas, cx: number, cy: number, cell: number, r: number, rad: number): void {
-  drawRoundCellAt(canvas, cx, cy, cell, r, rad);
+function drawSegmentSprite(canvas: SkCanvas, sprite: Baked, cx: number, cy: number, cell: number): void {
+  const x = cx * cell + cell / 2 - sprite.w / 2;
+  const y = cy * cell + cell / 2 - sprite.h / 2;
+  drawBaked(canvas, sprite, x, y);
   const wx =
     cx < 0 ? cx + GRID
     : cx > GRID - 1 ? cx - GRID
@@ -228,199 +459,67 @@ function drawBodyCell(canvas: SkCanvas, cx: number, cy: number, cell: number, r:
     cy < 0 ? cy + GRID
     : cy > GRID - 1 ? cy - GRID
     : null;
-  if (wx !== null) drawRoundCellAt(canvas, wx, cy, cell, r, rad);
-  if (wy !== null) drawRoundCellAt(canvas, cx, wy, cell, r, rad);
-  if (wx !== null && wy !== null) drawRoundCellAt(canvas, wx, wy, cell, r, rad);
+  if (wx !== null) drawBaked(canvas, sprite, wx * cell + cell / 2 - sprite.w / 2, y);
+  if (wy !== null) drawBaked(canvas, sprite, x, wy * cell + cell / 2 - sprite.h / 2);
+  if (wx !== null && wy !== null)
+    drawBaked(canvas, sprite, wx * cell + cell / 2 - sprite.w / 2, wy * cell + cell / 2 - sprite.h / 2);
 }
 
-function ghostPath(cell: number): ReturnType<typeof Skia.Path.Make> {
-  // the classic dome + zig-zag skirt, in cell-local coords centered on (0, 0)
-  const r = cell * 0.4;
-  const domeY = -r * 0.16;
-  const path = Skia.Path.Make();
-  path.addArc(Skia.XYWHRect(-r, domeY - r, r * 2, r * 2), 180, 180);
-  path.lineTo(r, r);
-  const n = 4;
-  const step = (2 * r) / n;
-  let x = r;
-  for (let i = 0; i < n; i++) {
-    path.lineTo(x - step / 2, r - r * 0.42);
-    path.lineTo(x - step, r);
-    x -= step;
-  }
-  path.lineTo(-r, domeY);
-  path.close();
-  return path;
-}
-
-let ghostPathCache: ReturnType<typeof Skia.Path.Make> | null = null;
-let ghostPathCell = 0;
-
-function drawGhostBody(
+function drawGhost(
   canvas: SkCanvas,
-  cxCell: number,
-  cyCell: number,
-  look: Cell,
-  colorIndex: number,
+  index: number,
+  cx: number,
+  cy: number,
+  look: { x: number; y: number },
   bob: number,
   cell: number,
 ): void {
-  const ci = colorIndex % GhostColors.length;
+  const sprite = ghostSprites[index % ghostSprites.length];
+  if (sprite === null || sprite === undefined) return;
+  const gx = cx * cell + cell / 2;
+  const gy = cy * cell + cell / 2 + bob;
+  drawBaked(canvas, sprite, gx - sprite.w / 2, gy - ghostSpriteOriginY);
   const r = cell * 0.4;
-  const gx = cxCell * cell + cell / 2;
-  const gy = cyCell * cell + cell / 2 + bob;
-  if (ghostPathCache === null || ghostPathCell !== cell) {
-    ghostPathCache = ghostPath(cell);
-    ghostPathCell = cell;
-  }
-  canvas.save();
-  canvas.translate(gx, gy);
-  const body = ghostBodyColors[ci];
-  if (body !== undefined) fillPaint.setColor(body);
-  canvas.drawPath(ghostPathCache, fillPaint);
-  const edge = ghostEdgeColors[ci];
-  if (edge !== undefined) strokePaint.setColor(edge);
-  strokePaint.setStrokeWidth(Math.max(1, cell * 0.045));
-  canvas.drawPath(ghostPathCache, strokePaint);
-  // eyes: whites plus pupils tracking the travel direction
   const eyeDX = r * 0.42;
-  const eyeY = -r * 0.16 - r * 0.03;
+  const eyeY = gy - r * 0.16 - r * 0.03;
   const ewx = r * 0.28;
   const ewy = r * 0.36;
-  fillPaint.setColor(C.white);
-  for (let sx = -1; sx <= 1; sx += 2) {
-    canvas.drawOval(Skia.XYWHRect(sx * eyeDX - ewx, eyeY - ewy, ewx * 2, ewy * 2), fillPaint);
-  }
   fillPaint.setColor(C.ghostEye);
   for (let sx = -1; sx <= 1; sx += 2) {
-    canvas.drawCircle(sx * eyeDX + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, fillPaint);
+    canvas.drawCircle(gx + sx * eyeDX + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, fillPaint);
   }
-  canvas.restore();
-}
-
-function drawPortalEnd(
-  canvas: SkCanvas,
-  gx: number,
-  gy: number,
-  cell: number,
-  scale: number,
-  angle: number,
-  dim: number,
-  rim: SkColor,
-  hot: SkColor,
-  deep: SkColor,
-  core: SkColor,
-): void {
-  const R = cell * 0.48 * scale;
-  if (R <= 0) return;
-  const cx = gx * cell + cell / 2;
-  const cy = gy * cell + cell / 2;
-  canvas.save();
-  canvas.translate(cx, cy);
-  canvas.rotate((angle * 180) / Math.PI, 0, 0);
-  // soft halo
-  fillPaint.setColor(hot);
-  fillPaint.setAlphaf(0.18 * dim);
-  canvas.drawCircle(0, 0, R * 1.55, fillPaint);
-  // the well
-  fillPaint.setColor(deep);
-  fillPaint.setAlphaf(dim);
-  canvas.drawCircle(0, 0, R, fillPaint);
-  fillPaint.setAlphaf(1);
-  // segmented rim arcs
-  strokePaint.setColor(rim);
-  strokePaint.setAlphaf(dim);
-  strokePaint.setStrokeWidth(Math.max(2, cell * 0.12));
-  strokePaint.setStrokeCap(StrokeCap.Round);
-  const box = Skia.XYWHRect(-R, -R, R * 2, R * 2);
-  for (let i = 0; i < 4; i++) {
-    const a0 = i * 90 + 14;
-    canvas.drawArc(box, a0, 62, false, strokePaint);
-  }
-  // inner offset ring
-  strokePaint.setStrokeWidth(Math.max(1, cell * 0.05));
-  strokePaint.setAlphaf(0.7 * dim);
-  const box2 = Skia.XYWHRect(-R * 0.66, -R * 0.66, R * 1.32, R * 1.32);
-  for (let i = 0; i < 4; i++) {
-    const a0 = i * 90 + 62;
-    canvas.drawArc(box2, a0, 55, false, strokePaint);
-  }
-  strokePaint.setAlphaf(1);
-  // the partner-colored core: where this end lands you
-  fillPaint.setColor(deep);
-  fillPaint.setAlphaf(dim);
-  canvas.drawCircle(0, 0, R * 0.36, fillPaint);
-  fillPaint.setColor(core);
-  fillPaint.setAlphaf(dim);
-  canvas.drawCircle(0, 0, R * 0.28, fillPaint);
-  fillPaint.setAlphaf(1);
-  canvas.restore();
 }
 
 /**
- * Record one frame of the field as an SkPicture. Pure read of the game plus
- * the particle pool; never mutates gameplay state.
+ * Record one frame of the field. Pure read of the game and the particle
+ * pool; the only per-frame primitives are pupils, the bonus ring and
+ * particles - everything else is a baked image.
  */
 export function buildPicture(game: Game, rc: RenderContext): SkPicture {
+  ensureSprites(rc.boardPx);
   const recorder = Skia.PictureRecorder();
   const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, rc.boardPx, rc.boardPx));
   const cell = rc.boardPx / GRID;
   const now = game.renderNow();
 
-  // arena: flat fill plus the faint grid
-  fillPaint.setColor(C.arena);
-  canvas.drawRect(Skia.XYWHRect(0, 0, rc.boardPx, rc.boardPx), fillPaint);
-  strokePaint.setColor(C.gridLine);
-  strokePaint.setStrokeWidth(1);
-  strokePaint.setStrokeCap(StrokeCap.Butt);
-  for (let i = 1; i < GRID; i++) {
-    canvas.drawLine(i * cell, 0, i * cell, rc.boardPx, strokePaint);
-    canvas.drawLine(0, i * cell, rc.boardPx, i * cell, strokePaint);
-  }
+  if (arenaSprite !== null) drawBaked(canvas, arenaSprite, 0, 0);
 
-  // interior walls: ghostly blink while forming, solid pulse when live
-  if (game.wallState !== 'off' && game.wallCells.length > 0) {
+  // walls: one image, alpha animated per frame
+  if (game.wallState !== 'off' && wallSprite !== null) {
     const warning = game.wallState === 'warning';
     const blinkOn = ((now / 150) | 0) % 2 === 0;
-    const alpha =
+    fillPaint.setAlphaf(
       warning ?
         blinkOn ? 0.5
         : 0.12
-      : 0.94 + Math.sin(now / 120) * 0.06;
-    const pad = cell * 0.05;
-    const rad = cell * 0.3;
-    fillPaint.setColor(C.wall);
-    fillPaint.setAlphaf(alpha);
-    for (const w of game.wallCells) {
-      canvas.drawRRect(
-        Skia.RRectXY(
-          Skia.XYWHRect(w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2),
-          rad,
-          rad,
-        ),
-        fillPaint,
-      );
-    }
-    if (!warning) {
-      const ip = cell * 0.28;
-      fillPaint.setColor(C.wallBevel);
-      fillPaint.setAlphaf(0.22 * alpha);
-      for (const w of game.wallCells) {
-        canvas.drawRRect(
-          Skia.RRectXY(
-            Skia.XYWHRect(w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2),
-            cell * 0.14,
-            cell * 0.14,
-          ),
-          fillPaint,
-        );
-      }
-    }
+      : 0.94 + Math.sin(now / 120) * 0.06,
+    );
+    drawBaked(canvas, wallSprite, 0, 0);
     fillPaint.setAlphaf(1);
   }
 
-  // teleport windows: scale open, spin, dim once spent, blink before timeout
-  if (game.portal !== null) {
+  // portals: one image per end, scaled open, spun, dimmed once spent
+  if (game.portal !== null && portalSpriteA !== null && portalSpriteB !== null) {
     const age = now - game.portalOpenedAt;
     const t = age < PORTAL_OPEN_MS ? age / PORTAL_OPEN_MS : 1;
     const open = 1 - (1 - t) * (1 - t) * (1 - t);
@@ -430,36 +529,26 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       : near && ((now / 130) | 0) % 2 !== 0 ? 0.3
       : 1;
     const sc = open * (1 + Math.sin(rc.pulseMs * 0.0048 * 1.3) * 0.05);
-    const spin = rc.pulseMs * 0.0048 * 0.5;
-    drawPortalEnd(
-      canvas,
-      game.portal.ax,
-      game.portal.ay,
-      cell,
-      sc,
-      spin,
-      dim,
-      C.portalARim,
-      C.portalA,
-      C.portalADeep,
-      C.portalB,
-    );
-    drawPortalEnd(
-      canvas,
-      game.portal.bx,
-      game.portal.by,
-      cell,
-      sc,
-      -spin,
-      dim,
-      C.portalBRim,
-      C.portalB,
-      C.portalBDeep,
-      C.portalA,
-    );
+    const spin = ((rc.pulseMs * 0.0048 * 0.5 * 180) / Math.PI) % 360;
+    const ends: [Baked, number, number, number][] = [
+      [portalSpriteA, game.portal.ax, game.portal.ay, spin],
+      [portalSpriteB, game.portal.bx, game.portal.by, -spin],
+    ];
+    fillPaint.setAlphaf(dim);
+    for (const [sprite, gx, gy, angle] of ends) {
+      const px = gx * cell + cell / 2;
+      const py = gy * cell + cell / 2;
+      const d = sprite.w * sc;
+      canvas.save();
+      canvas.translate(px, py);
+      canvas.rotate(angle, 0, 0);
+      drawBaked(canvas, sprite, -d / 2, -d / 2, d, d);
+      canvas.restore();
+    }
+    fillPaint.setAlphaf(1);
   }
 
-  // food: atlas sprite with the breathing pulse; gold ring on a bonus
+  // food: atlas sprite with the pulse; gold ring on a bonus
   const pulse = 1 + Math.sin(rc.pulseMs * 0.0048) * 0.12;
   const food = game.food;
   const fx = food.x * cell + cell / 2;
@@ -488,59 +577,28 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     fillPaint.setAlphaf(1);
   }
 
-  // TNT blocks: red block, grey band, label; whole wave blinks before it goes
-  if (game.bombs.length > 0) {
+  // TNT: one image per block; wave blink via alpha, pulse via dst size
+  if (game.bombs.length > 0 && tntSprite !== null) {
     const tntPulse = 1 + Math.sin(rc.pulseMs * 0.0048 * 1.15) * 0.09;
     const nearGone = game.bombPhase === 'active' && now > game.bombExpireAt - 1200;
     const blinkOn = nearGone ? ((now / 120) | 0) % 2 === 0 : true;
-    const B = cell * 0.9 * tntPulse;
-    // the font caches by CELL size: deriving it from the pulsing block edge
-    // rebuilt a matchFont every frame, which is exactly the churn that janks
-    if (tntFont === null || tntFontSize !== Math.round(cell * 0.27)) {
-      tntFontSize = Math.round(cell * 0.27);
-      tntFont = matchFont({ fontFamily: tntFontFamily, fontSize: tntFontSize, fontWeight: 'bold' });
-      tntLabelWidth = tntFont.measureText('TNT').width;
-    }
-    const tntAlpha = blinkOn ? 1 : 0.4;
-    fillPaint.setAlphaf(tntAlpha);
+    const d = tntSprite.w * tntPulse;
+    fillPaint.setAlphaf(blinkOn ? 1 : 0.4);
     for (const b of game.bombs) {
-      const x0 = b.x * cell + (cell - B) / 2;
-      const y0 = b.y * cell + (cell - B) / 2;
-      fillPaint.setColor(C.tntBody);
-      canvas.drawRect(Skia.XYWHRect(x0, y0, B, B), fillPaint);
-      fillPaint.setColor(C.tntBandLight);
-      canvas.drawRect(Skia.XYWHRect(x0, y0 + B * 0.32, B, B * 0.26), fillPaint);
-      fillPaint.setColor(C.tntBandDark);
-      canvas.drawRect(Skia.XYWHRect(x0, y0 + B * 0.58, B, B * 0.08), fillPaint);
-      fillPaint.setColor(C.tntInk);
-      canvas.drawText(
-        'TNT',
-        x0 + (B - tntLabelWidth) / 2,
-        y0 + B * 0.45 + tntFontSize * 0.36,
-        fillPaint,
-        tntFont,
-      );
+      drawBaked(canvas, tntSprite, b.x * cell + (cell - d) / 2, b.y * cell + (cell - d) / 2, d, d);
     }
     fillPaint.setAlphaf(1);
   }
 
-  // the snake: shaded RRects gliding by renderProg, wrapped copies in tunnels
-  const r = cell * 0.42;
-  const rad = cell * 0.32;
+  // the snake: one pre-tinted image per segment (outline baked in)
   const denom = Math.max(1, game.snake.length - 1);
   const p = rc.playing ? game.renderProg() : 1;
-  strokePaint.setColor(C.snakeOutline);
-  strokePaint.setStrokeWidth(Math.max(1, cell * 0.05));
-  let lastShade = -1;
   for (let i = game.snake.length - 1; i >= 0; i--) {
     const shade = ((i * (SNAKE_SHADES - 1)) / denom) | 0;
-    if (shade !== lastShade) {
-      const c = snakeColors[shade];
-      if (c !== undefined) fillPaint.setColor(c);
-      lastShade = shade;
-    }
+    const sprite = snakeSprites[shade];
+    if (sprite === null || sprite === undefined) continue;
     const rp = segRenderPos(game, i, p);
-    drawBodyCell(canvas, rp.cx, rp.cy, cell, r, rad);
+    drawSegmentSprite(canvas, sprite, rp.cx, rp.cy, cell);
   }
 
   // eyes on the head, at its interpolated position
@@ -558,14 +616,13 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     canvas.drawCircle(hx + ex * off - px * off, hy + ey * off - py * off, cell * 0.08, fillPaint);
   }
 
-  // ghosts: glide by the shared helper, tunnel copies like the web
+  // ghosts: baked body + live pupils, tunnel copies like the web
   const bob = Math.sin(rc.pulseMs * 0.0048 * 1.1) * cell * 0.03;
-  const gnow = now;
   const scratch = { cx: 0, cy: 0 };
   for (let i = 0; i < game.ghosts.length; i++) {
     const gh = game.ghosts[i];
     if (gh === undefined) continue;
-    const pos = ghostRenderPos(gh, gnow, scratch);
+    const pos = ghostRenderPos(gh, now, scratch);
     const wx =
       pos.cx < 0 ? pos.cx + GRID
       : pos.cx > GRID - 1 ? pos.cx - GRID
@@ -574,13 +631,13 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       pos.cy < 0 ? pos.cy + GRID
       : pos.cy > GRID - 1 ? pos.cy - GRID
       : null;
-    drawGhostBody(canvas, pos.cx, pos.cy, gh.dir, i, bob, cell);
-    if (wx !== null) drawGhostBody(canvas, wx, pos.cy, gh.dir, i, bob, cell);
-    if (wy !== null) drawGhostBody(canvas, pos.cx, wy, gh.dir, i, bob, cell);
-    if (wx !== null && wy !== null) drawGhostBody(canvas, wx, wy, gh.dir, i, bob, cell);
+    drawGhost(canvas, i, pos.cx, pos.cy, gh.dir, bob, cell);
+    if (wx !== null) drawGhost(canvas, i, wx, pos.cy, gh.dir, bob, cell);
+    if (wy !== null) drawGhost(canvas, i, pos.cx, wy, gh.dir, bob, cell);
+    if (wx !== null && wy !== null) drawGhost(canvas, i, wx, wy, gh.dir, bob, cell);
   }
 
-  // particles, already stepped by the loop
+  // particles
   for (const pt of particles) {
     fillPaint.setColor(particleColor(pt.color));
     fillPaint.setAlphaf(Math.max(0, pt.life));

@@ -20,7 +20,14 @@ import { createGame, GRID, SPEEDS, type Game, type GameEvent } from '@pitch-snak
 import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';
 
 import { GameColors } from './theme';
-import { buildPicture, clearParticles, spawnBurst, stepParticles } from './renderer';
+import {
+  bakeWallLayer,
+  buildPicture,
+  clearParticles,
+  clearWallLayer,
+  spawnBurst,
+  stepParticles,
+} from './renderer';
 
 /** The page-side round phases, mirroring the web version. */
 export type RoundPhase = 'ready' | 'countdown' | 'playing' | 'paused' | 'dead';
@@ -47,6 +54,8 @@ export interface GameLoop {
   start: () => void;
   /** DEV-only: end the current round immediately (drives the FULL TIME UI). */
   debugDie: () => void;
+  /** DEV-only frame meter: "fps avg / worst-frame ms", refreshed each second. */
+  perfText: string;
   pause: () => void;
   /** Direction input from any source; gated on phase like the web page. */
   steer: (x: number, y: number) => void;
@@ -66,6 +75,9 @@ function freshSeed(): number {
 interface LoopBox {
   /** Pictures from the last two frames; [0] may still be replaying natively. */
   retired: (SkPicture | null)[];
+  frameCount: number;
+  frameWorst: number;
+  frameWindowStart: number;
   phase: RoundPhase;
   tickMs: number;
   countClock: number;
@@ -94,6 +106,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const game = useRef<Game | null>(null);
   const boxRef = useRef<LoopBox>({
     retired: [null, null],
+    frameCount: 0,
+    frameWorst: 0,
+    frameWindowStart: 0,
     phase: 'ready',
     tickMs: SPEEDS.normal,
     countClock: 0,
@@ -113,6 +128,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [wallBanner, setWallBanner] = useState('');
   const [deadReason, setDeadReason] = useState('');
   const [tickMs, setTickMsState] = useState<number>(SPEEDS.normal);
+  const [perfText, setPerfText] = useState('');
 
   // mirror render props into the loop's box after render, never during it
   useEffect(() => {
@@ -130,7 +146,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   useEffect(() => {
     const box = boxRef.current;
     game.current ??= createGame({ seed: freshSeed(), tickMs: SPEEDS.normal });
-    const handleEvents = (events: GameEvent[], cellPx: number): void => {
+    const handleEvents = (g: Game, events: GameEvent[], cellPx: number): void => {
       for (const e of events) {
         switch (e.t) {
           case 'eat': {
@@ -159,6 +175,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             spawnBurst(e.x, e.y, cellPx, 26, 0.6, cellPx / 13, (cellPx / 13) * 3.4, (i) =>
               i % 3 === 0 ? GameColors.wall : '#3a3630',
             );
+            break;
+          }
+          case 'wall': {
+            if (e.phase === 'warning') bakeWallLayer(g, box.boardPx, false);
+            else if (e.phase === 'solid') bakeWallLayer(g, box.boardPx, true);
             break;
           }
           case 'die': {
@@ -214,7 +235,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       }
       if (box.phase === 'playing') {
         g.advance(dt);
-        handleEvents(g.drainEvents(), cellPx);
+        handleEvents(g, g.drainEvents(), cellPx);
         if (g.score !== box.lastScore) {
           box.lastScore = g.score;
           setScore(g.score);
@@ -230,6 +251,19 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         }
       }
       stepParticles(dt);
+      if (__DEV__) {
+        box.frameCount++;
+        if (dt > box.frameWorst) box.frameWorst = dt;
+        if (now - box.frameWindowStart >= 1000) {
+          if (box.frameWindowStart > 0) {
+            const fps = Math.round((box.frameCount * 1000) / (now - box.frameWindowStart));
+            setPerfText(`${String(fps)} fps · worst ${box.frameWorst.toFixed(1)}ms`);
+          }
+          box.frameWindowStart = now;
+          box.frameCount = 0;
+          box.frameWorst = 0;
+        }
+      }
       const previous = picture.value;
       picture.value = buildPicture(g, {
         boardPx: box.boardPx,
@@ -258,6 +292,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       game.current = createGame({ seed: freshSeed(), tickMs: box.tickMs });
       game.current.drainEvents();
       clearParticles();
+      clearWallLayer();
       box.lastScore = -1;
       setScore(0);
     } else {
@@ -326,5 +361,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     pause,
     steer,
     debugDie,
+    perfText,
   };
 }

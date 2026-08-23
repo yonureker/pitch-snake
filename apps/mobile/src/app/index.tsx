@@ -135,6 +135,7 @@ export default function Index() {
         </Pressable>
       </View>
 
+      {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
       <View style={styles.boardWrap}>
         {loop.wallBanner !== '' && (
           <View style={styles.banner}>
@@ -355,6 +356,17 @@ const styles = StyleSheet.create({
   scoreValue: { fontFamily: ANTON, fontSize: 30, color: GameColors.ink, lineHeight: 32 },
   bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   boardWrap: { alignItems: 'center' },
+  perf: {
+    position: 'absolute',
+    top: 2,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontFamily: BARLOW,
+    fontSize: 10,
+    color: GameColors.muted,
+    zIndex: 10,
+  },
   banner: {
     position: 'absolute',
     top: -12,
