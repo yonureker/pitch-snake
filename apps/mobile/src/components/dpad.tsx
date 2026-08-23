@@ -53,6 +53,15 @@ function pushTrace(tag: string): string {
   return traceBuffer.join(' ');
 }
 
+// one haptic per physical press: the dual pipelines deliver each down twice,
+// and two selection ticks 2ms apart feel like a buzz
+let lastHapticAt = 0;
+function hapticOncePerPress(now: number): void {
+  if (now - lastHapticAt < 40) return;
+  lastHapticAt = now;
+  void Haptics.selectionAsync();
+}
+
 // module scope: the compiler's purity rule (rightly) refuses impure calls in
 // component-body functions it cannot prove are event-only; handlers pass the
 // timestamp in instead
@@ -136,8 +145,13 @@ export function Dpad({ onDir }: DpadProps) {
       : null;
   };
 
-  const fire = (id: number, zone: Zone, tag: string): void => {
-    if (fingers.current.get(id) === zone) return;
+  // A DOWN always fires: iOS reuses touch identifiers and can run a fast
+  // tap-tap on one wedge together into a single continuous touch (no End in
+  // between), so equality-bailing on downs eats genuine re-presses - the bug
+  // behind "some turns skip" in rapid two-thumb play. Duplicate delivery from
+  // the dual pipelines is absorbed by the engine's own repeat filter, which
+  // is the same deduplication the web page relies on.
+  const fireDown = (id: number, zone: Zone, tag: string): void => {
     note(`${tag}${String(id)}${ZONE_GLYPH[zone]}`);
     fingers.current.set(id, zone);
     const now = nowMs();
@@ -145,7 +159,14 @@ export function Dpad({ onDir }: DpadProps) {
     paint(now);
     const d = ZONE_DIRECTION[zone];
     onDir(d.x, d.y);
-    void Haptics.selectionAsync();
+    hapticOncePerPress(now);
+  };
+
+  // a MOVE fires only on zone change: a finger resting in a wedge is one
+  // press, not a stream of them
+  const fireMove = (id: number, zone: Zone): void => {
+    if (fingers.current.get(id) === zone) return;
+    fireDown(id, zone, 'm');
   };
 
   // Grant = the responder begins (first touch); Start = EVERY touch-down,
@@ -154,7 +175,7 @@ export function Dpad({ onDir }: DpadProps) {
   const handleDown = (e: GestureResponderEvent, tag: string): void => {
     measure(); // layout can shift; refresh for the next event at worst
     for (const t of touchesOf(e)) {
-      fire(Number(t.identifier), zoneAt(t.pageX, t.pageY), tag);
+      fireDown(Number(t.identifier), zoneAt(t.pageX, t.pageY), tag);
     }
   };
   const onDownGrant = (e: GestureResponderEvent): void => {
@@ -169,7 +190,7 @@ export function Dpad({ onDir }: DpadProps) {
 
   const onTouchMove = (e: GestureResponderEvent): void => {
     for (const t of touchesOf(e)) {
-      fire(Number(t.identifier), zoneAt(t.pageX, t.pageY), 'm');
+      fireMove(Number(t.identifier), zoneAt(t.pageX, t.pageY));
     }
   };
 

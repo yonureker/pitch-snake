@@ -495,3 +495,33 @@ test('the engine source touches no host API', () => {
     assert.ok(!src.includes(banned), `engine source must not contain "${banned}"`);
   }
 });
+
+test('the two-thumb drill: 20 alternating taps all land', () => {
+  // down-left-down-left at 140ms per tap against a 130ms tick: consumption
+  // keeps up, the queue never saturates, and every one of the 20 turns must
+  // execute. This is the exact drill reported from device testing; if a turn
+  // ever skips with this passing, the loss is in input delivery, not here.
+  const g = quietGame({ tickMs: 130 });
+  foodFar(g);
+  setSnake(g, [[10, 3], [9, 3], [8, 3]], 1, 0);
+  let taps = 0;
+  let turns = 0;
+  let lastDir = `${String(g.dir.x)},${String(g.dir.y)}`;
+  for (let q = 0; q < 4000; q++) {
+    if (q % 14 === 0 && taps < 20) {
+      const d = taps % 2 === 0 ? [0, 1] : [-1, 0];   // down, left, down, left...
+      g.setDir(d[0] ?? 0, d[1] ?? 0);
+      taps++;
+    }
+    g.advanceQuanta(1);
+    const dir = `${String(g.dir.x)},${String(g.dir.y)}`;
+    if (dir !== lastDir) {
+      turns++;
+      lastDir = dir;
+    }
+    if (!g.alive) break;
+  }
+  assert.equal(g.alive, true, 'the staircase run survives');
+  assert.equal(taps, 20, 'all twenty taps were issued');
+  assert.equal(turns, 20, 'and every single one executed as a turn');
+});
