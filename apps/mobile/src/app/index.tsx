@@ -502,7 +502,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
-  padWrap: { flex: 1, marginTop: 2 },
+  // full bleed: a left thumb striking at the screen edge must still land ON
+  // the pad, so it cancels the screen's horizontal padding
+  padWrap: { flex: 1, marginTop: 2, marginHorizontal: -12 },
   entryRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   nameInput: {
     width: 120,

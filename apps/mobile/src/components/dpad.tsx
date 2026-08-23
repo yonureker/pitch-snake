@@ -42,6 +42,17 @@ const ZONE_DIRECTION: Record<Zone, PadDirection> = {
 /** How long a press stays lit after the finger leaves, so taps read. */
 const FLASH_MS = 180;
 
+const ZONE_GLYPH: Record<Zone, string> = { up: '↑', down: '↓', left: '←', right: '→' };
+
+// module-scope DEV trace buffer (not a ref: it is diagnostics, not UI state,
+// and the compiler's ref rules rightly stay out of module scope)
+const traceBuffer: string[] = [];
+function pushTrace(tag: string): string {
+  traceBuffer.push(tag);
+  if (traceBuffer.length > 12) traceBuffer.shift();
+  return traceBuffer.join(' ');
+}
+
 // module scope: the compiler's purity rule (rightly) refuses impure calls in
 // component-body functions it cannot prove are event-only; handlers pass the
 // timestamp in instead
@@ -75,6 +86,14 @@ export function Dpad({ onDir }: DpadProps) {
   const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lit, setLit] = useState<ReadonlySet<Zone>>(new Set());
   const [padSize, setPadSize] = useState({ w: 0, h: 0 });
+  // DEV-only delivery trace: which touches actually arrived, from which
+  // pipeline (g grant, s start, t touch, m move, e end), so a dropped press
+  // is distinguishable from a press that never reached JS at all
+  const [trace, setTrace] = useState('');
+  const note = (tag: string): void => {
+    if (!__DEV__) return;
+    setTrace(pushTrace(tag));
+  };
 
   useEffect(() => {
     return () => {
@@ -117,8 +136,9 @@ export function Dpad({ onDir }: DpadProps) {
       : null;
   };
 
-  const fire = (id: number, zone: Zone): void => {
+  const fire = (id: number, zone: Zone, tag: string): void => {
     if (fingers.current.get(id) === zone) return;
+    note(`${tag}${String(id)}${ZONE_GLYPH[zone]}`);
     fingers.current.set(id, zone);
     const now = nowMs();
     flashUntil.current[zone] = now + FLASH_MS;
@@ -131,16 +151,25 @@ export function Dpad({ onDir }: DpadProps) {
   // Grant = the responder begins (first touch); Start = EVERY touch-down,
   // including additional fingers while responding. Both route through fire,
   // which de-duplicates, so double delivery of the first touch is harmless.
-  const onTouchDown = (e: GestureResponderEvent): void => {
+  const handleDown = (e: GestureResponderEvent, tag: string): void => {
     measure(); // layout can shift; refresh for the next event at worst
     for (const t of touchesOf(e)) {
-      fire(Number(t.identifier), zoneAt(t.pageX, t.pageY));
+      fire(Number(t.identifier), zoneAt(t.pageX, t.pageY), tag);
     }
+  };
+  const onDownGrant = (e: GestureResponderEvent): void => {
+    handleDown(e, 'g');
+  };
+  const onDownStart = (e: GestureResponderEvent): void => {
+    handleDown(e, 's');
+  };
+  const onDownRaw = (e: GestureResponderEvent): void => {
+    handleDown(e, 't');
   };
 
   const onTouchMove = (e: GestureResponderEvent): void => {
     for (const t of touchesOf(e)) {
-      fire(Number(t.identifier), zoneAt(t.pageX, t.pageY));
+      fire(Number(t.identifier), zoneAt(t.pageX, t.pageY), 'm');
     }
   };
 
@@ -148,7 +177,7 @@ export function Dpad({ onDir }: DpadProps) {
   // Terminate = the system took the responder away. All must clean up.
   const onTouchUp = (e: GestureResponderEvent): void => {
     for (const t of touchesOf(e)) {
-      fingers.current.delete(Number(t.identifier));
+      if (fingers.current.delete(Number(t.identifier))) note(`e${String(t.identifier)}`);
     }
     paint(nowMs());
   };
@@ -208,12 +237,16 @@ export function Dpad({ onDir }: DpadProps) {
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
       onResponderTerminationRequest={() => false}
-      onResponderGrant={onTouchDown}
-      onResponderStart={onTouchDown}
+      onResponderGrant={onDownGrant}
+      onResponderStart={onDownStart}
       onResponderMove={onTouchMove}
       onResponderEnd={onTouchUp}
       onResponderRelease={onTouchUp}
       onResponderTerminate={onTerminate}
+      onTouchStart={onDownRaw}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchUp}
+      onTouchCancel={onTerminate}
     >
       {padSize.w > 0 && (
         <>
@@ -249,6 +282,11 @@ export function Dpad({ onDir }: DpadProps) {
       <Text pointerEvents="none" style={[styles.arrow, styles.right, lit.has('right') && styles.arrowOn]}>
         →
       </Text>
+      {__DEV__ && trace !== '' && (
+        <Text pointerEvents="none" style={styles.trace}>
+          {trace}
+        </Text>
+      )}
     </View>
   );
 }
@@ -279,6 +317,15 @@ const styles = StyleSheet.create({
     color: GameColors.ink,
   },
   arrowOn: { color: GameColors.goldBright },
+  trace: {
+    position: 'absolute',
+    bottom: 4,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 10,
+    color: GameColors.muted,
+  },
   up: { top: '8%', left: '50%', transform: [{ translateX: '-50%' }] },
   down: { bottom: '8%', left: '50%', transform: [{ translateX: '-50%' }] },
   left: { left: '5%', top: '50%', transform: [{ translateY: '-50%' }] },
