@@ -1,0 +1,12 @@
+{
+  "name": "pitch-snake",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "node --test packages/engine/engine.test.js",
+    "mobile": "npm --workspace apps/mobile run start"
+  }
+}
