@@ -569,7 +569,7 @@ test('the chaser closes distance and reaches lethal range, deterministically', (
 
 test('personalities survive the replay contract (version 2)', () => {
   const g = createGame({ seed: 424242, tickMs: 130 });
-  assert.equal(g.log.v, 2, 'rounds record as engine version 2');
+  assert.equal(g.log.v, 3, 'rounds record as the current engine version');
   const script = [[40, 0, 1], [90, 1, 0], [200, 0, -1], [700, -1, 0]];
   let s = 0;
   for (let q = 0; q < 60000 && g.alive; q++) {
@@ -580,4 +580,35 @@ test('personalities survive the replay contract (version 2)', () => {
   const r = replay(g.log);
   assert.equal(r.score, g.score, 'ghost decisions replay identically under seeded targeting');
   assert.deepEqual(r.snake, g.snake);
+});
+
+test('ghosts route through portals on purpose, and never through spent ones', () => {
+  // metric first: with an open pair the wormhole route must price in
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[17, 17], [16, 17], [15, 17]], 1, 0);
+  g.portal = { ax: 3, ay: 2, bx: 16, by: 16, used: false };
+  const direct = wrapDist(2, 2, 17, 17);
+  const via = g._ghostDist(2, 2, 17, 17);
+  assert.ok(via < direct, `the wormhole route is shorter (${String(via)} vs direct ${String(direct)})`);
+  assert.equal(via, 1 + 1 + wrapDist(16, 16, 17, 17), 'priced as walk to the end, one hop, walk out');
+  g.portal.used = true;
+  assert.equal(g._ghostDist(2, 2, 17, 17), direct, 'a spent pair prices as if it were not there');
+
+  // behavior second: a chaser far from the head, with a window at its feet
+  // whose far side opens next to the head, dives through
+  const h = quietGame({ seed: 11 });
+  foodFar(h);
+  setSnake(h, [[17, 17], [16, 17], [15, 17]], 1, 0);
+  h.portal = { ax: 3, ay: 2, bx: 16, by: 15, used: false };
+  h.portalExpireAt = 1e12;
+  h.ghosts.push({ x: 2, y: 2, px: 2, py: 2, dir: { x: 0, y: 0 }, warped: false, role: 0, moveAt: 0 });
+  const gh = h.ghosts[0];
+  assert.ok(gh, 'ghost placed');
+  let hopped = false;
+  for (let n = 0; n < 8 && !hopped; n++) {
+    h._moveGhost(gh);
+    if (gh.x === h.portal.bx && gh.y === h.portal.by) hopped = true;
+  }
+  assert.ok(hopped, 'the chaser walked into the window and surfaced beside the head');
 });

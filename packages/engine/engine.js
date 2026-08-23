@@ -20,7 +20,7 @@
 // interpolation) live with the renderers; the engine reports what happened
 // through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 2;
+export const ENGINE_VERSION = 3;
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -350,6 +350,25 @@ export function createGame(cfg = {}) {
     });
   }
 
+  // A ghost's sense of distance: the shortest wrapped walk OR the route
+  // through an open, unused teleport pair (to an end, one hop, out the far
+  // side). One formula makes portal use deliberate and personality-dependent
+  // at once: whichever cell a ghost wants, it will dive through a window when
+  // the window genuinely gets it there sooner - and never when the pair is
+  // spent. A step landing ON an end is priced as the far side plus the hop,
+  // which is exactly what the forced hop next move will do to it.
+  function ghostDist(x, y, tx, ty) {
+    let d = wrapDist(x, y, tx, ty);
+    const p = S.portal;
+    if (p !== null && !p.used) {
+      const viaA = wrapDist(x, y, p.ax, p.ay) + 1 + wrapDist(p.bx, p.by, tx, ty);
+      if (viaA < d) d = viaA;
+      const viaB = wrapDist(x, y, p.bx, p.by) + 1 + wrapDist(p.ax, p.ay, tx, ty);
+      if (viaB < d) d = viaB;
+    }
+    return d;
+  }
+
   // Where a ghost is trying to be, by personality. Pure targeting: the legs
   // (GHOST_MS, the no-reverse rule, blocked cells) are identical for all five.
   function ghostTarget(g) {
@@ -416,10 +435,10 @@ export function createGame(cfg = {}) {
         const target = ghostTarget(g);
         let bestDist = Infinity;
         for (const o of opts) {
-          const d = wrapDist(o.nx, o.ny, target.x, target.y);
+          const d = ghostDist(o.nx, o.ny, target.x, target.y);
           if (d < bestDist) bestDist = d;
         }
-        const best = opts.filter((o) => wrapDist(o.nx, o.ny, target.x, target.y) === bestDist);
+        const best = opts.filter((o) => ghostDist(o.nx, o.ny, target.x, target.y) === bestDist);
         pick = best[(random() * best.length) | 0];  // ties break by the seeded PRNG
       } else {
         pick = opts[(random() * opts.length) | 0];
@@ -679,7 +698,7 @@ export function createGame(cfg = {}) {
     // exposed for tests and the validator; not for renderers
     _step: step, _updateWalls: updateWalls, _updateBombs: updateBombs,
     _updateGhosts: updateGhosts, _updatePortals: updatePortals,
-    _moveGhost: moveGhost, _ghostTarget: ghostTarget, _spawnPortal: spawnPortal, _closePortal: closePortal,
+    _moveGhost: moveGhost, _ghostTarget: ghostTarget, _ghostDist: ghostDist, _spawnPortal: spawnPortal, _closePortal: closePortal,
     _placeFood: placeFood, _spawnCell: spawnCell,
   });
 }
