@@ -32,11 +32,11 @@ const SPEED_LABELS: { label: string; ms: number }[] = [
 ];
 
 const MODE_LABELS: { mode: UiMode; label: string }[] = [
-  { mode: 'classic', label: 'NO TIME LIMIT' },
+  { mode: 'classic', label: 'CLASSIC' },
   { mode: 'speedrun', label: 'SPEED RUN' },
   { mode: 'tourney', label: 'TOURNAMENT' },
 ];
-const RULE_LABEL: Record<RuleMode, string> = { classic: 'NO TIME LIMIT', speedrun: 'SPEED RUN' };
+const RULE_LABEL: Record<RuleMode, string> = { classic: 'CLASSIC', speedrun: 'SPEED RUN' };
 const DURATION_LABELS: { label: string; minutes: number }[] = [
   { label: '1 HOUR', minutes: 60 },
   { label: '24 HOURS', minutes: 1440 },

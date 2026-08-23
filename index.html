@@ -521,7 +521,7 @@
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
         <p id="overlayText">Eat to grow. Survive the pitch.</p>
         <div class="mode-row" id="modeRow">
-          <button data-mode="classic" class="active">NO TIME LIMIT</button>
+          <button data-mode="classic" class="active">CLASSIC</button>
           <button data-mode="speedrun">SPEED RUN</button>
           <button data-mode="tourney">TOURNAMENT</button>
         </div>
@@ -536,7 +536,7 @@
               <input id="tTitle" maxlength="24" placeholder="PITCH CUP" autocomplete="off" spellcheck="false">
             </div>
             <div class="t-chips" id="tModeChips">
-              <button data-tmode="classic" class="active">NO TIME LIMIT</button>
+              <button data-tmode="classic" class="active">CLASSIC</button>
               <button data-tmode="speedrun">SPEED RUN</button>
             </div>
             <div class="t-chips" id="tDurChips">
@@ -1633,7 +1633,7 @@
     tCard.hidden = !tourney;
     if (tourney) {
       const st = tourneyState();
-      tCardTitle.textContent = tourney.title + ' \u00b7 ' + (tourney.mode === 'speedrun' ? 'SPEED RUN' : 'NO TIME LIMIT');
+      tCardTitle.textContent = tourney.title + ' \u00b7 ' + (tourney.mode === 'speedrun' ? 'SPEED RUN' : 'CLASSIC');
       tCardCode.textContent = tourney.code;
       tCardMeta.textContent = st === 'upcoming' ? 'STARTS ' + fmtWhen(tourney.starts_at)
                             : st === 'open' ? 'ENDS ' + fmtWhen(tourney.ends_at)
@@ -1656,7 +1656,7 @@
         : 'TOURNAMENT \u00b7 NONE JOINED';
     }
     // START names the ruleset it is about to run; a pause needs no reminder
-    startSub.textContent = ruleMode() === 'speedrun' ? 'SPEED RUN' : 'NO TIME LIMIT';
+    startSub.textContent = ruleMode() === 'speedrun' ? 'SPEED RUN' : 'CLASSIC';
     startSub.hidden = state === 'paused';
     const playable = mode !== 'tourney' || tourneyState() === 'open';
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
