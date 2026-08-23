@@ -175,7 +175,7 @@ export function createGame(cfg = {}) {
     dir: { x: 1, y: 0 }, dirQueue: [],
     score: 0, pendingGrowth: 0,
 
-    food: null,         // {x, y, bonus, kind} — kind indexes the renderer's emoji list
+    food: null,         // {x, y, bonus, kind} - kind indexes the renderer's emoji list
     foodAge: 0, regularEaten: 0,
 
     wallState: 'off', wallPhaseEnd: 0, wallCells: [], wallLookup: new Set(),

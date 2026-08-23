@@ -7,6 +7,12 @@
   ],
   "scripts": {
     "test": "node --test packages/engine/engine.test.js",
-    "mobile": "npm --workspace apps/mobile run start"
+    "mobile": "npm --workspace apps/mobile run start",
+    "install-hooks": "sh scripts/install-hooks.sh",
+    "lint": "npm --workspace apps/mobile run lint",
+    "typecheck": "npm --workspace apps/mobile run typecheck"
+  },
+  "overrides": {
+    "eslint-plugin-react-hooks": "^7.1.1"
   }
 }

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Pre-commit: plain shell, no husky (the False9 approach).
+# Fails the commit if the engine tests, the mobile linter, or tsc fail.
+set -e
+echo "pre-commit: engine tests"
+npm test --silent
+if [ -d apps/mobile/node_modules ]; then
+  echo "pre-commit: mobile lint + typecheck"
+  npm --workspace apps/mobile run lint --silent
+  npm --workspace apps/mobile run typecheck --silent
+fi

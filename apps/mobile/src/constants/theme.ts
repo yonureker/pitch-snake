@@ -7,6 +7,7 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+/** The palette, defined per color scheme. */
 export const Colors = {
   light: {
     text: '#000000',
@@ -24,8 +25,10 @@ export const Colors = {
   },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+/** A key into the palette. */
+export type ThemeColor = keyof typeof Colors.light;
 
+/** Platform-resolved font families. */
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
@@ -51,6 +54,7 @@ export const Fonts = Platform.select({
   },
 });
 
+/** The spacing scale. */
 export const Spacing = {
   half: 2,
   one: 4,
@@ -61,5 +65,7 @@ export const Spacing = {
   six: 64,
 } as const;
 
+/** BottomTabInset. */
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+/** MaxContentWidth. */
 export const MaxContentWidth = 800;

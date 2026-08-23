@@ -4,6 +4,7 @@
 // lives here, plus the two guarantees the browser could never test well:
 // determinism and replay.
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   createGame, replay, ghostRenderPos,
@@ -305,7 +306,7 @@ test('teleport marks come every twenty for ever and never re-arm', () => {
 });
 
 test('a wall refunds only a pair you never used', () => {
-  // find a seed whose first wall pattern covers (0,0) — the frame patterns do
+  // find a seed whose first wall pattern covers (0,0) - the frame patterns do
   let g = null;
   for (let seed = 1; seed < 60; seed++) {
     const t = createGame({ seed });
@@ -473,4 +474,24 @@ test('a hopping ghost renders in the window it left, then the far one', () => {
   const late = ghostRenderPos(gh, GHOST_MS * 0.75);
   assert.deepEqual({ x: early.cx, y: early.cy }, { x: 5, y: 5 });
   assert.deepEqual({ x: late.cx, y: late.cy }, { x: 15, y: 15 });
+});
+
+// ---------------------------------------------------------------- purity
+test('the engine source touches no host API', () => {
+  // The engine must run identically in a browser module, a Reanimated
+  // worklet, Node and Deno, and stay deterministic. Any of these tokens
+  // appearing in the source is a portability or determinism leak. (The app
+  // side enforces its half with ESLint; the engine is plain JS, so the test
+  // IS its linter.)
+  const raw = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
+  // scan code, not commentary: the header is allowed to SAY "no Math.random"
+  const src = raw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const banned of [
+    'Math.random', 'Date.now', 'new Date', 'performance.',
+    'setTimeout', 'setInterval', 'requestAnimationFrame',
+    'document.', 'window.', 'navigator.', 'localStorage', 'fetch(',
+    'console.',
+  ]) {
+    assert.ok(!src.includes(banned), `engine source must not contain "${banned}"`);
+  }
 });
