@@ -317,7 +317,7 @@ export default function Index() {
       </View>
 
       <View style={styles.padWrap}>
-        <Dpad onDir={loop.steer} />
+        <Dpad onDir={loop.steer} heading={loop.effectiveHeading} />
       </View>
     </View>
   );

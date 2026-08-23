@@ -16,6 +16,12 @@
  *
  * Press feedback is a wedge fill like the web pad, held for a minimum flash
  * so even the quickest tap visibly reacts.
+ *
+ * The pad also knows the snake's effective heading, for one purpose only:
+ * a tap within a thumb's width of a wedge boundary that would request the
+ * axis the snake already moves on (a repeat or a reversal, both dead on
+ * arrival in the engine) fires the live neighbor wedge instead, because
+ * that is what the finger meant. See resolveDown.
  */
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
@@ -68,9 +74,15 @@ function hapticOncePerPress(now: number): void {
 // timestamp in instead
 const nowMs = (): number => performance.now();
 
-/** Props: the pad reports turn requests and nothing else. */
+/** Props: the pad reports turn requests, informed by where the snake heads. */
 export interface DpadProps {
   onDir: (x: number, y: number) => void;
+  /**
+   * The direction the snake will be moving when this input lands (queue tail
+   * or current heading), or null when nothing is accepting input. Used only
+   * to disambiguate taps near a wedge boundary; see resolveDown.
+   */
+  heading?: () => { x: number; y: number } | null;
 }
 
 interface TouchPoint {
@@ -88,7 +100,7 @@ function touchesOf(e: GestureResponderEvent): TouchPoint[] {
 }
 
 /** The four-wedge multi-touch pad. */
-export function Dpad({ onDir }: DpadProps) {
+export function Dpad({ onDir, heading }: DpadProps) {
   const padRef = useRef<View>(null);
   const frame = useRef({ x: 0, y: 0, w: 1, h: 1 });
   const fingers = useRef(new Map<number, Zone>());
@@ -97,8 +109,9 @@ export function Dpad({ onDir }: DpadProps) {
   const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lit, setLit] = useState<ReadonlySet<Zone>>(new Set());
   const [padSize, setPadSize] = useState({ w: 0, h: 0 });
-  // DEV-only delivery trace: what actually arrived (t down, m slide-fire,
-  // e lift, x swallowed echo), with the finger id and wedge, so a dropped
+  // DEV-only delivery trace: what actually arrived (t down, a boundary-
+  // assisted down, m slide-fire, e lift, x swallowed echo), with the finger
+  // id and wedge, so a dropped
   // press is distinguishable from one that never reached JS, a fat-finger
   // wrong-wedge press shows its real glyph, and an x proves the echo guard
   // caught a double delivery
@@ -162,7 +175,7 @@ export function Dpad({ onDir }: DpadProps) {
   const fireDown = (id: number, zone: Zone, tag: string): void => {
     const now = nowMs();
     const last = lastDownAt.current.get(id) ?? -1e9;
-    if (fingers.current.get(id) === zone && now - last < ECHO_MS) {
+    if (fingers.current.has(id) && now - last < ECHO_MS) {
       note(`x${String(id)}`);
       lastDownAt.current.set(id, now);
       return;
@@ -184,16 +197,52 @@ export function Dpad({ onDir }: DpadProps) {
     fireDown(id, zone, 'm');
   };
 
+  // The boundary assist. A thumb drilling fast alternations strikes near the
+  // diagonal between two wedges, and when the tap resolves to the axis the
+  // snake is already moving on, the request is DEAD: the engine filters a
+  // repeat and refuses a reversal, so the press does nothing at all, which
+  // players report as "the turn skipped" (proven by a field trace showing
+  // down-down pairs during a down-left drill). Within a thumb's width of the
+  // diagonal, that reading is never what the player meant: the neighbor wedge
+  // across the boundary is a live perpendicular turn, so fire that instead.
+  // A clean press far from any boundary, or one already perpendicular to the
+  // heading, is untouched. Downs only; a finger sliding wedge to wedge is
+  // deliberate and keeps the literal geometry.
+  const ASSIST_PT = 24; // half a thumb pad; the one dial, in screen points
+  const resolveDown = (pageX: number, pageY: number): { zone: Zone; assisted: boolean } => {
+    const primary = zoneAt(pageX, pageY);
+    const h = heading?.() ?? null;
+    if (h === null) return { zone: primary, assisted: false };
+    const pd = ZONE_DIRECTION[primary];
+    if (pd.x * h.x + pd.y * h.y === 0) return { zone: primary, assisted: false };
+    const f = frame.current;
+    const px = pageX - f.x - f.w / 2;
+    const py = pageY - f.y - f.h / 2;
+    // perpendicular distance in points to the nearest drawn diagonal
+    const offDiagonal =
+      Math.min(Math.abs(f.h * px - f.w * py), Math.abs(f.h * px + f.w * py)) / Math.hypot(f.w, f.h);
+    if (offDiagonal >= ASSIST_PT) return { zone: primary, assisted: false };
+    const neighbor: Zone =
+      pd.x !== 0 ?
+        py > 0 ?
+          'down'
+        : 'up'
+      : px > 0 ? 'right'
+      : 'left';
+    return { zone: neighbor, assisted: true };
+  };
+
   // onTouchStart fires per changed touch, second and third fingers included,
   // with no responder negotiation involved
-  const handleDown = (e: GestureResponderEvent, tag: string): void => {
+  const handleDown = (e: GestureResponderEvent): void => {
     measure(); // layout can shift; refresh for the next event at worst
     for (const t of touchesOf(e)) {
-      fireDown(Number(t.identifier), zoneAt(t.pageX, t.pageY), tag);
+      const r = resolveDown(t.pageX, t.pageY);
+      fireDown(Number(t.identifier), r.zone, r.assisted ? 'a' : 't');
     }
   };
   const onDownRaw = (e: GestureResponderEvent): void => {
-    handleDown(e, 't');
+    handleDown(e);
   };
 
   const onTouchMove = (e: GestureResponderEvent): void => {

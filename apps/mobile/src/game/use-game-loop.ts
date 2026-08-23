@@ -59,6 +59,14 @@ export interface GameLoop {
   pause: () => void;
   /** Direction input from any source; gated on phase like the web page. */
   steer: (x: number, y: number) => void;
+  /**
+   * The direction the snake will actually be moving when the next input
+   * lands: the tail of the turn queue if turns are pending, else the current
+   * heading. This is the same reference setDir filters against, so the pad
+   * can tell a live turn from a dead repeat or reversal. Null when no round
+   * is accepting input.
+   */
+  effectiveHeading: () => { x: number; y: number } | null;
 }
 
 const COUNT_BEAT = 650;
@@ -321,6 +329,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     game.current?.setDir(x, y);
   };
 
+  const effectiveHeading = (): { x: number; y: number } | null => {
+    const box = boxRef.current;
+    if (box.phase !== 'playing' && box.phase !== 'countdown') return null;
+    const g = game.current;
+    if (g === null) return null;
+    return g.dirQueue[g.dirQueue.length - 1] ?? g.dir;
+  };
+
   const debugDie = (): void => {
     const g = game.current;
     if (g === null || boxRef.current.phase !== 'playing') return;
@@ -360,6 +376,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     start,
     pause,
     steer,
+    effectiveHeading,
     debugDie,
     perfText,
   };
