@@ -31,7 +31,15 @@ export declare function ghostProgress(g: Ghost, nowMs: number): number;
 export declare function ghostRenderPos(g: Ghost, nowMs: number, out?: { cx: number; cy: number }): { cx: number; cy: number };
 
 export interface Cell { x: number; y: number }
-export interface Ghost extends Cell { px: number; py: number; dir: Cell; warped: boolean; moveAt: number }
+export interface Ghost extends Cell {
+  px: number;
+  py: number;
+  dir: Cell;
+  warped: boolean;
+  /** Personality by spawn order: 0 chaser, 1 ambusher, 2 flanker, 3 cutoff, 4 warden. */
+  role?: number;
+  moveAt: number;
+}
 export interface Portal { ax: number; ay: number; bx: number; by: number; used: boolean }
 export interface Food extends Cell { bonus: boolean; kind: number }
 export type GameEvent =

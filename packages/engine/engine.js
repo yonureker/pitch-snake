@@ -20,7 +20,7 @@
 // interpolation) live with the renderers; the engine reports what happened
 // through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -45,6 +45,15 @@ export const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 export const GHOST_SCORES = [10, 20, 30, 40, 50];
 export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed setting
 const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+// How often a ghost takes the step that closes on its target rather than a
+// random open one. The noise that remains keeps five ghosts from collapsing
+// into single file and walks them around walls they cannot path through.
+const GHOST_FOCUS = 0.85;
+// the Flanker's post: it breaks off toward this corner once within this range
+const FLANKER_POST = { x: 0, y: 19 };
+const FLANKER_RANGE = 8;
+// shortest wrapped delta between two coordinates, in [-GRID/2, GRID/2)
+const wrapDelta = (a, b) => ((a - b + GRID * 1.5) % GRID) - GRID / 2;
 
 // teleport windows: a pair falls due every PORTAL_EVERY points from
 // PORTAL_FIRST, for ever (rule 22: a score gate scales a hazard, it never
@@ -330,7 +339,46 @@ export function createGame(cfg = {}) {
   function spawnGhost() {
     const c = spawnCell(MIN_SPAWN_DIST);
     if (!c) return;                          // board too full; try again later
-    S.ghosts.push({ x: c.x, y: c.y, px: c.x, py: c.y, dir: { x: 0, y: 0 }, warped: false, moveAt: S.clockMs + GHOST_MS });
+    // the personality is the spawn position in the ladder, and since ghosts
+    // never leave, it is also the color: red chases, blue ambushes, orange
+    // flanks, pink cuts off, cyan wardens the food
+    S.ghosts.push({
+      x: c.x, y: c.y, px: c.x, py: c.y,
+      dir: { x: 0, y: 0 }, warped: false,
+      role: S.ghosts.length,
+      moveAt: S.clockMs + GHOST_MS,
+    });
+  }
+
+  // Where a ghost is trying to be, by personality. Pure targeting: the legs
+  // (GHOST_MS, the no-reverse rule, blocked cells) are identical for all five.
+  function ghostTarget(g) {
+    const head = S.snake[0];
+    switch (g.role ?? 0) {
+      case 1: {  // the Ambusher: four cells ahead of the heading
+        return { x: wrap(head.x + S.dir.x * 4), y: wrap(head.y + S.dir.y * 4) };
+      }
+      case 2: {  // the Flanker: chase from afar, swing to the post up close
+        return wrapDist(g.x, g.y, head.x, head.y) > FLANKER_RANGE ? head : FLANKER_POST;
+      }
+      case 3: {  // the Cutoff: double the vector from the Chaser through the
+                 // point two ahead, arriving on your far side
+        const px = wrap(head.x + S.dir.x * 2);
+        const py = wrap(head.y + S.dir.y * 2);
+        const chaser = S.ghosts[0];
+        if (!chaser) return { x: px, y: py };
+        return {
+          x: wrap(px + wrapDelta(px, chaser.x)),
+          y: wrap(py + wrapDelta(py, chaser.y)),
+        };
+      }
+      case 4: {  // the Warden: camp the food. It cannot stand on it (food
+                 // blocks ghosts), so it orbits the thing you must approach.
+        return S.food ?? head;
+      }
+      default:   // the Chaser: your head, plainly
+        return head;
+    }
   }
 
   // if a wall forms on a ghost, slide it to the nearest open cell
@@ -364,10 +412,15 @@ export function createGame(cfg = {}) {
     }
     let pick;
     if (opts.length) {
-      const head = S.snake[0];
-      if (random() < 0.55) {                 // gentle chase: drift toward the head
-        opts.sort((a, b) => wrapDist(a.nx, a.ny, head.x, head.y) - wrapDist(b.nx, b.ny, head.x, head.y));
-        pick = opts[0];
+      if (random() < GHOST_FOCUS) {          // take a step toward the personality's target
+        const target = ghostTarget(g);
+        let bestDist = Infinity;
+        for (const o of opts) {
+          const d = wrapDist(o.nx, o.ny, target.x, target.y);
+          if (d < bestDist) bestDist = d;
+        }
+        const best = opts.filter((o) => wrapDist(o.nx, o.ny, target.x, target.y) === bestDist);
+        pick = best[(random() * best.length) | 0];  // ties break by the seeded PRNG
       } else {
         pick = opts[(random() * opts.length) | 0];
       }
@@ -626,7 +679,7 @@ export function createGame(cfg = {}) {
     // exposed for tests and the validator; not for renderers
     _step: step, _updateWalls: updateWalls, _updateBombs: updateBombs,
     _updateGhosts: updateGhosts, _updatePortals: updatePortals,
-    _moveGhost: moveGhost, _spawnPortal: spawnPortal, _closePortal: closePortal,
+    _moveGhost: moveGhost, _ghostTarget: ghostTarget, _spawnPortal: spawnPortal, _closePortal: closePortal,
     _placeFood: placeFood, _spawnCell: spawnCell,
   });
 }

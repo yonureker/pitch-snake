@@ -525,3 +525,59 @@ test('the two-thumb drill: 20 alternating taps all land', () => {
   assert.equal(taps, 20, 'all twenty taps were issued');
   assert.equal(turns, 20, 'and every single one executed as a turn');
 });
+
+// ---------------------------------------------------------- ghost personalities
+test('five personalities, five targets, speed untouched', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[10, 10], [9, 10], [8, 10]], 1, 0);   // head (10,10) heading right
+  g.food = { x: 3, y: 16, bonus: false, kind: 0 };
+  const mk = (role, x, y) => ({ x, y, px: x, py: y, dir: { x: 0, y: 0 }, warped: false, role, moveAt: 0 });
+
+  assert.deepEqual(g._ghostTarget(mk(0, 2, 2)), { x: 10, y: 10 }, 'the chaser targets the head');
+  assert.deepEqual(g._ghostTarget(mk(1, 2, 2)), { x: 14, y: 10 }, 'the ambusher targets four ahead of the heading');
+  // wrap check: heading right from x=18 puts four-ahead at x=2
+  setSnake(g, [[18, 5], [17, 5], [16, 5]], 1, 0);
+  assert.deepEqual(g._ghostTarget(mk(1, 2, 2)), { x: 2, y: 5 }, 'and it wraps through the tunnel');
+  setSnake(g, [[10, 10], [9, 10], [8, 10]], 1, 0);
+
+  assert.deepEqual(g._ghostTarget(mk(2, 1, 19)), { x: 10, y: 10 }, 'the flanker far away chases the head');
+  assert.deepEqual(g._ghostTarget(mk(2, 8, 10)), { x: 0, y: 19 }, 'and near the head swings to its post');
+
+  // the cutoff doubles the vector from the chaser through two-ahead
+  g.ghosts.length = 0;
+  g.ghosts.push(mk(0, 8, 8));                          // the chaser
+  // pivot = (12,10); delta from chaser = (+4,+2); target = (16,12)
+  assert.deepEqual(g._ghostTarget(mk(3, 2, 2)), { x: 16, y: 12 }, 'the cutoff arrives on the far side');
+
+  const wardenTarget = g._ghostTarget(mk(4, 2, 2));
+  assert.equal(`${String(wardenTarget.x)},${String(wardenTarget.y)}`, '3,16', 'the warden camps the food');
+});
+
+test('the chaser closes distance and reaches lethal range, deterministically', () => {
+  const g = quietGame({ seed: 99 });
+  foodFar(g);
+  setSnake(g, [[10, 3], [9, 3], [8, 3]], 1, 0);
+  g.ghosts.push({ x: 10, y: 13, px: 10, py: 13, dir: { x: 0, y: 0 }, warped: false, role: 0, moveAt: 0 });
+  const gh = g.ghosts[0];
+  assert.ok(gh, 'ghost placed');
+  const startDist = wrapDist(gh.x, gh.y, 10, 3);
+  for (let n = 0; n < 12; n++) g._moveGhost(gh);
+  const endDist = wrapDist(gh.x, gh.y, 10, 3);
+  assert.ok(endDist < startDist - 4, `it closes hard on a still head (from ${String(startDist)} to ${String(endDist)})`);
+});
+
+test('personalities survive the replay contract (version 2)', () => {
+  const g = createGame({ seed: 424242, tickMs: 130 });
+  assert.equal(g.log.v, 2, 'rounds record as engine version 2');
+  const script = [[40, 0, 1], [90, 1, 0], [200, 0, -1], [700, -1, 0]];
+  let s = 0;
+  for (let q = 0; q < 60000 && g.alive; q++) {
+    while (s < script.length && script[s][0] === q) { g.setDir(script[s][1] ?? 0, script[s][2] ?? 0); s++; }
+    g.advanceQuanta(1);
+  }
+  assert.equal(g.alive, false, 'the round ended');
+  const r = replay(g.log);
+  assert.equal(r.score, g.score, 'ghost decisions replay identically under seeded targeting');
+  assert.deepEqual(r.snake, g.snake);
+});
