@@ -225,6 +225,13 @@
     overflow-y: auto;
   }
   .overlay { overflow-y: auto; }
+
+  /* Pointer dialects: a fine-pointer machine talks keyboard and needs no
+     pad; a coarse-pointer one talks touch and needs no key names. The class
+     is set from the (pointer: coarse) media query at boot and tracked live,
+     with a first-touch fallback for touchscreen desktops. */
+  html.touchless .dpad, html.touchless .touch-only { display: none; }
+  html.touch .kb-only { display: none; }
   .overlay.hidden { opacity: 0; pointer-events: none; }
 
   .overlay h2 {
@@ -589,9 +596,9 @@
     </div>
 
     <div class="hint">
-      <span><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
-      <span><b>SPACE</b> pause</span>
-      <span><b>SWIPE</b> or <b>D-PAD</b> on mobile</span>
+      <span class="kb-only"><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
+      <span class="kb-only"><b>SPACE</b> pause</span>
+      <span class="touch-only"><b>SWIPE</b> or <b>D-PAD</b> move</span>
       <span><b>&#9881;</b> for settings</span>
     </div>
 
@@ -1651,7 +1658,7 @@
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     // the caption carries only what the START button cannot: which
     // tournament, and whether its window is open
-    const showCaption = onMenu && !modesOpen && mode === 'tourney';
+    const showCaption = onMenu && !modesOpen && mode === 'tourney' && !(state === 'dead' && tourney);
     modeCaption.style.display = showCaption ? '' : 'none';
     if (showCaption) {
       modeCaption.textContent =
@@ -1983,6 +1990,20 @@ $ `;
   termClose.addEventListener('click', closeTerminal);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !terminal.hidden) closeTerminal(); });
 
+
+  // desktop web, mobile web, or the app: the app is its own build, and the
+  // two webs split by what the PRIMARY pointer is, never by user agent
+  const coarseMq = window.matchMedia('(pointer: coarse)');
+  function applyPointerClass() {
+    document.documentElement.classList.toggle('touch', coarseMq.matches);
+    document.documentElement.classList.toggle('touchless', !coarseMq.matches);
+  }
+  applyPointerClass();
+  coarseMq.addEventListener('change', applyPointerClass);
+  window.addEventListener('touchstart', () => {
+    document.documentElement.classList.add('touch');
+    document.documentElement.classList.remove('touchless');
+  }, { once: true, passive: true });
 
   resize();
   newRound();

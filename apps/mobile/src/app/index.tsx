@@ -701,7 +701,9 @@ export default function Index() {
                       ))}
                     </View>
                   )}
-                  {menuPhase && uiMode === 'tourney' && <Text style={styles.modeCaption}>{modeCaption}</Text>}
+                  {menuPhase && uiMode === 'tourney' && !(dead && tourney !== null) && (
+                    <Text style={styles.modeCaption}>{modeCaption}</Text>
+                  )}
                   <View style={styles.btnRow}>
                     {(loop.phase === 'paused' || uiMode !== 'tourney' || tStatus === 'open') && (
                       <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
