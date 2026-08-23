@@ -78,10 +78,19 @@ const suspenseFallbackSelectors = [
       "JSXElement[openingElement.name.name='Suspense'] > JSXOpeningElement > JSXAttribute[name.name='fallback'] > JSXExpressionContainer > JSXFragment",
     message: 'Suspense fallback={<></>} hides the loading state - render a placeholder matching the shape.',
   },
+  {
+    selector:
+      "JSXElement[openingElement.name.name='Suspense'] > JSXOpeningElement > JSXAttribute[name.name='fallback'] > JSXExpressionContainer > JSXElement > JSXOpeningElement[name.name='ActivityIndicator']",
+    message: 'Use a layout-mirroring placeholder instead of ActivityIndicator inside <Suspense fallback>.',
+  },
 ];
 
 // Service-role identifiers are forbidden in client code, full stop.
 const serviceRoleSelectors = [
+  {
+    selector: "Identifier[name='adminClient']",
+    message: 'adminClient bypasses RLS - never use on the client. Edge functions only.',
+  },
   {
     selector: "Identifier[name='SUPABASE_SERVICE_ROLE_KEY']",
     message: 'SUPABASE_SERVICE_ROLE_KEY must never appear in client code. Edge functions only.',
@@ -205,7 +214,10 @@ module.exports = defineConfig([
       'unused-imports/no-unused-vars': ['error', { args: 'none', vars: 'all', varsIgnorePattern: '^_' }],
       // High-entropy strings (tokens, keys) must not be committed. The
       // Supabase publishable key belongs in app config, not source.
-      'no-secrets/no-secrets': ['error', { tolerance: 4.5 }],
+      'no-secrets/no-secrets': [
+        'error',
+        { tolerance: 4.5, ignoreContent: ['\\.apps\\.googleusercontent\\.com$'] },
+      ],
       '@typescript-eslint/no-explicit-any': 'error',
       // Spell identifiers out. Whitelist mirrors False9's JS/React
       // conventions, plus this game's own vocabulary.

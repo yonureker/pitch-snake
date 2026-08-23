@@ -34,7 +34,14 @@ export interface Cell { x: number; y: number }
 export interface Ghost extends Cell { px: number; py: number; dir: Cell; warped: boolean; moveAt: number }
 export interface Portal { ax: number; ay: number; bx: number; by: number; used: boolean }
 export interface Food extends Cell { bonus: boolean; kind: number }
-export interface GameEvent { t: string; [k: string]: unknown }
+export type GameEvent =
+  | { t: 'food' }
+  | { t: 'eat'; bonus: boolean; x: number; y: number }
+  | { t: 'hop'; fromA: boolean; fx: number; fy: number; tx: number; ty: number }
+  | { t: 'tnt'; x: number; y: number; lost: Cell[] }
+  | { t: 'wall'; phase: 'off' | 'warning' | 'solid' }
+  | { t: 'portal'; open: boolean }
+  | { t: 'die'; reason: string };
 export interface RoundLog {
   v: number; seed: number; tickMs: number; wallsEnabled: boolean;
   inputs: [number, number, number][]; end: number; finalScore: number;
