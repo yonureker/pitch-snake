@@ -44,6 +44,15 @@ export const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
 export const GHOST_SCORES = [10, 20, 30, 40, 50];
 export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed setting
+
+// Round presets. A mode IS a config: the shells pass MODES[name] into
+// createGame and decide nothing of their own, so a tournament, a replay and a
+// local round all mean the same thing by construction. Every duration is a
+// multiple of SIM_DT like any other timing constant.
+export const MODES = {
+  classic: {},                              // endless: the run ends when you do
+  speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
+};
 const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
 // How often a ghost takes the step that closes on its target rather than a
 // random open one. The noise that remains keeps five ghosts from collapsing
@@ -164,7 +173,9 @@ export function createGame(cfg = {}) {
   const seed = (cfg.seed ?? 1) >>> 0;
   const tickMs = cfg.tickMs ?? SPEEDS.normal;
   const wallsEnabled = cfg.wallsEnabled ?? true;
+  const durationMs = cfg.durationMs ?? 0;   // 0 = endless
   if (tickMs % SIM_DT !== 0) throw new Error('tickMs must be a multiple of SIM_DT');
+  if (durationMs % SIM_DT !== 0 || durationMs < 0) throw new Error('durationMs must be a non-negative multiple of SIM_DT');
 
   const random = mulberry32(seed);
   const rand = (a, b) => a + random() * (b - a);
@@ -172,7 +183,7 @@ export function createGame(cfg = {}) {
   // S is both the internal state and the public surface: renderers read these
   // fields every frame, tests may poke them. Methods below close over S.
   const S = {
-    seed, tickMs, wallsEnabled,
+    seed, tickMs, wallsEnabled, durationMs,
     alive: true,
     deadReason: null,
     quanta: 0,          // sim quanta elapsed; the replay clock
@@ -204,7 +215,7 @@ export function createGame(cfg = {}) {
     // bursts, sprites and DOM updates. Sim state never depends on it.
     events: [],
     // the round's replayable record. end/finalScore are stamped on death.
-    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, inputs: [], end: 0, finalScore: 0 },
+    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, inputs: [], end: 0, finalScore: 0 },
   };
 
   const emit = e => S.events.push(e);
@@ -666,6 +677,11 @@ export function createGame(cfg = {}) {
       }
       S.headMajX = hx; S.headMajY = hy;
     }
+    // ---- the whistle ----
+    // A timed round ends at exactly durationMs, after everything else in the
+    // quantum, so a point scored on the final tick counts. 'time' is an end,
+    // not a death: the shells show FULL TIME rather than a cause.
+    if (S.alive && S.durationMs && S.clockMs >= S.durationMs) die('time');
   }
 
   // ---- the public surface ----
@@ -738,7 +754,7 @@ export function createGame(cfg = {}) {
 // exact by construction.
 export function replay(log) {
   if (!log || log.v !== ENGINE_VERSION) throw new Error('unsupported log version');
-  const game = createGame({ seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled });
+  const game = createGame({ seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled, durationMs: log.durationMs ?? 0 });
   const inputs = log.inputs;
   let i = 0;
   for (let q = 0; q < log.end && game.alive; q++) {

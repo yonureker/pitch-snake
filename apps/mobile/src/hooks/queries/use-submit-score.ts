@@ -6,15 +6,18 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { submitScore } from '@/lib/leaderboard';
+import type { RuleMode } from '@/lib/modes';
 
 import { TOP_SCORES_KEY } from './use-top-scores';
 
-/** Submit { name, score }; resolves to the new row id for highlighting. */
+/** Submit { name, score, mode }; resolves to the new row id for highlighting. */
 export function useSubmitScore() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, score }: { name: string; score: number }) => submitScore(name, score),
+    mutationFn: ({ name, score, mode }: { name: string; score: number; mode: RuleMode }) =>
+      submitScore(name, score, mode),
     onSuccess: async () => {
+      // the prefix invalidates every mode's board; only the played one refetches
       await client.invalidateQueries({ queryKey: TOP_SCORES_KEY });
     },
   });

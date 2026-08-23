@@ -6,6 +6,7 @@
  * hooks in hooks/queries/ are the sanctioned wrappers.
  * @module
  */
+import { isRuleMode, type RuleMode } from './modes';
 import { SUPABASE_ANON_KEY, SUPABASE_CONFIGURED, SUPABASE_URL } from './supabase-config';
 
 /** One row of the global board. */
@@ -48,9 +49,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-/** The global top N, best first; server-ordered, server-limited. */
-export async function fetchTopScores(limit = 10): Promise<ScoreRow[]> {
-  const rows = await rpc('pitch_snake_top_scores', { limit_count: limit });
+/** The global top N for one rule mode, best first; server-ordered, server-limited. */
+export async function fetchTopScores(limit = 10, mode: RuleMode = 'classic'): Promise<ScoreRow[]> {
+  const rows = await rpc('pitch_snake_top_scores', { limit_count: limit, p_mode: mode });
   if (!Array.isArray(rows)) return [];
   const list: unknown[] = rows;
   const out: ScoreRow[] = [];
@@ -69,8 +70,83 @@ export async function fetchTopScores(limit = 10): Promise<ScoreRow[]> {
  * refuses impossible scores; the returned id identifies the new row so the
  * board can highlight it.
  */
-export async function submitScore(name: string, score: number): Promise<number> {
-  const id = await rpc('pitch_snake_submit_score', { p_name: name, p_score: score });
+export async function submitScore(name: string, score: number, mode: RuleMode): Promise<number> {
+  const id = await rpc('pitch_snake_submit_score', { p_name: name, p_score: score, p_mode: mode });
   if (typeof id !== 'number') throw new Error('unexpected submit response');
   return id;
+}
+
+// ---- tournaments ----
+
+/** One tournament, as the server describes it. Times are ISO strings. */
+export interface TournamentRow {
+  code: string;
+  title: string;
+  mode: RuleMode;
+  startsAt: string;
+  endsAt: string;
+}
+
+/** One row of a tournament board: best per name, so the name is the identity. */
+export interface TournamentScoreRow {
+  name: string;
+  score: number;
+}
+
+function asTournament(r: unknown): TournamentRow | null {
+  if (!isRecord(r)) return null;
+  const { code, title, mode, starts_at: startsAt, ends_at: endsAt } = r;
+  if (
+    typeof code !== 'string' ||
+    typeof title !== 'string' ||
+    !isRuleMode(mode) ||
+    typeof startsAt !== 'string' ||
+    typeof endsAt !== 'string'
+  ) {
+    return null;
+  }
+  return { code, title, mode, startsAt, endsAt };
+}
+
+/** Look up a tournament by its 6-character code; null when there is none. */
+export async function fetchTournament(code: string): Promise<TournamentRow | null> {
+  const rows = await rpc('pitch_snake_tournament_get', { p_code: code });
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return asTournament(rows[0]);
+}
+
+/** Create a tournament that opens now; the server generates the code and the clock. */
+export async function createTournament(args: {
+  title: string;
+  mode: RuleMode;
+  durationMinutes: number;
+}): Promise<TournamentRow> {
+  const rows = await rpc('pitch_snake_tournament_create', {
+    p_title: args.title,
+    p_mode: args.mode,
+    p_starts_in_minutes: 0,
+    p_duration_minutes: args.durationMinutes,
+  });
+  const t = Array.isArray(rows) ? asTournament(rows[0]) : null;
+  if (t === null) throw new Error('unexpected create response');
+  return t;
+}
+
+/** A tournament's standings: each name's best, ranked. */
+export async function fetchTournamentTop(code: string, limit = 10): Promise<TournamentScoreRow[]> {
+  const rows = await rpc('pitch_snake_tournament_top', { p_code: code, limit_count: limit });
+  if (!Array.isArray(rows)) return [];
+  const list: unknown[] = rows;
+  const out: TournamentScoreRow[] = [];
+  for (const r of list) {
+    if (!isRecord(r)) continue;
+    const { name, score } = r;
+    if (typeof name === 'string' && typeof score === 'number') out.push({ name, score });
+  }
+  return out;
+}
+
+/** Submit into a tournament; the server enforces the window and the range. */
+export async function submitTournamentScore(code: string, name: string, score: number): Promise<void> {
+  await rpc('pitch_snake_tournament_submit', { p_code: code, p_name: name, p_score: score });
 }

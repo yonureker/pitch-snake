@@ -6,16 +6,17 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchTopScores } from '@/lib/leaderboard';
+import type { RuleMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
-/** Key shared with the submit mutation's invalidation. */
+/** Key prefix shared with the submit mutation's invalidation; mode is appended. */
 export const TOP_SCORES_KEY = ['leaderboard', 'top'] as const;
 
-/** The global top ten, when `enabled` and configured. */
-export function useTopScores(enabled: boolean) {
+/** One rule mode's global top ten, when `enabled` and configured. */
+export function useTopScores(enabled: boolean, mode: RuleMode) {
   return useQuery({
-    queryKey: TOP_SCORES_KEY,
-    queryFn: () => fetchTopScores(10),
+    queryKey: [...TOP_SCORES_KEY, mode],
+    queryFn: () => fetchTopScores(10, mode),
     enabled: enabled && SUPABASE_CONFIGURED,
   });
 }

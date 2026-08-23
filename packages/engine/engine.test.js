@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
-  createGame, replay, ghostRenderPos, ENGINE_VERSION,
+  createGame, replay, ghostRenderPos, ENGINE_VERSION, MODES,
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
   TNT_SCORES, GHOST_SCORES, GHOST_MS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
@@ -582,6 +582,29 @@ test('personalities and contact survive the replay contract', () => {
   const r = replay(g.log);
   assert.equal(r.score, g.score, 'ghost decisions replay identically under seeded targeting');
   assert.deepEqual(r.snake, g.snake);
+});
+
+test('speed run: the whistle at exactly durationMs, and the log replays it', () => {
+  // A short timed round on a quiet board: the snake runs straight and wraps,
+  // nothing can kill it, so the only possible end is the clock. The whistle
+  // must land on the exact final quantum, the reason must read 'time', and
+  // the log must carry the duration so a replay ends the same way.
+  const g = quietGame({ tickMs: 100, durationMs: 3000 });
+  foodFar(g);
+  g.advanceQuanta(299);
+  assert.equal(g.alive, true, 'one quantum before the minute the round is live');
+  g.advanceQuanta(1);
+  assert.equal(g.alive, false, 'the whistle lands at exactly durationMs');
+  assert.equal(g.deadReason, 'time');
+  assert.equal(g.clockMs, 3000);
+  assert.equal(g.log.durationMs, 3000, 'the duration is part of the record');
+  const r = replay(g.log);
+  assert.equal(r.deadReason, 'time', 'a replay ends on the same whistle');
+  assert.equal(r.score, g.score);
+  assert.equal(r.quanta, g.quanta);
+  assert.equal(MODES.speedrun.durationMs, 60_000, 'the shipping mode is one minute');
+  assert.equal(createGame({ seed: 1 }).durationMs, 0, 'classic stays endless');
+  assert.throws(() => createGame({ seed: 1, durationMs: 1234 }), /multiple of SIM_DT/);
 });
 
 test('contact: a ghost sliding majority-onto the head kills between snake steps', () => {

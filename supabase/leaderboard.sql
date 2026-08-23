@@ -1,35 +1,84 @@
--- Pitch Snake: the global top ten.
+-- Pitch Snake: the global boards and the tournaments.
 --
 -- Everything here is prefixed pitch_snake_ so it can sit in a project that
 -- already has other things in public without colliding with them.
 --
--- Run this once in the SQL editor of the project you want the board to live in
--- (Dashboard -> SQL Editor -> New query -> paste -> Run). It is idempotent, so
--- running it twice is harmless.
+-- Run this once in the SQL editor of the project the boards live in
+-- (Dashboard -> SQL Editor -> New query -> paste -> Run). It is idempotent
+-- both for a fresh project and for one that already carries the v1 schema:
+-- tables are created if missing, columns are added if missing, and functions
+-- are dropped by their old signatures before the current ones are created.
 --
--- The shape here is deliberate: the table is never exposed to the Data API at
--- all. RLS is on with no policies, and the anon role holds no grants on
--- it, so a browser cannot read it, write it, or page through it. The only way
--- in is the two functions at the bottom, which are SECURITY DEFINER precisely
--- because of that. Keep them boring: one reads the top N, one inserts a single
--- validated row, and neither takes anything else from the caller.
+-- The shape is deliberate: no table here is ever exposed to the Data API.
+-- RLS is on with no policies and the anon role holds no grants, so a browser
+-- cannot read, write, or page through any of them. The only doors are the
+-- SECURITY DEFINER functions at the bottom, and each one stays boring: read
+-- a board, insert one validated row, create or look up one tournament.
+
+-- ------------------------------------------------------------- scores ----
+-- One row per submitted run. mode partitions the boards ('classic',
+-- 'speedrun'); seed and user_id are recorded now so that server-side replay
+-- validation and accounts arrive later without a migration. Ties go to
+-- whoever got there first, which is why created_at is part of every order.
 
 create table if not exists public.pitch_snake_scores (
   id          bigint generated always as identity primary key,
   name        text        not null,
   score       integer     not null,
+  mode        text        not null default 'classic',
+  seed        bigint,
+  user_id     uuid,
   created_at  timestamptz not null default now()
 );
 
--- the whole leaderboard read is one index scan; ties go to whoever got there first
-create index if not exists pitch_snake_scores_board_idx
-  on public.pitch_snake_scores (score desc, created_at asc);
+alter table public.pitch_snake_scores add column if not exists mode    text not null default 'classic';
+alter table public.pitch_snake_scores add column if not exists seed    bigint;
+alter table public.pitch_snake_scores add column if not exists user_id uuid;
+
+drop index if exists public.pitch_snake_scores_board_idx;
+create index if not exists pitch_snake_scores_mode_board_idx
+  on public.pitch_snake_scores (mode, score desc, created_at asc);
 
 alter table public.pitch_snake_scores enable row level security;
 revoke all on table public.pitch_snake_scores from anon, authenticated;
 
+-- -------------------------------------------------------- tournaments ----
+-- A tournament is a code, a window, and a mode; nothing else. It is created
+-- by anyone, immutable once made, and simply expires. Its board is its own
+-- table, and the standings read is best-per-name so one player hammering
+-- entries fills one row of the table, not ten.
+
+create table if not exists public.pitch_snake_tournaments (
+  id          bigint generated always as identity primary key,
+  code        text        not null unique,
+  title       text        not null,
+  mode        text        not null,
+  starts_at   timestamptz not null,
+  ends_at     timestamptz not null,
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.pitch_snake_tournament_scores (
+  id             bigint generated always as identity primary key,
+  tournament_id  bigint      not null references public.pitch_snake_tournaments (id) on delete cascade,
+  name           text        not null,
+  score          integer     not null,
+  user_id        uuid,
+  created_at     timestamptz not null default now()
+);
+
+create index if not exists pitch_snake_tournament_scores_board_idx
+  on public.pitch_snake_tournament_scores (tournament_id, score desc, created_at asc);
+
+alter table public.pitch_snake_tournaments enable row level security;
+alter table public.pitch_snake_tournament_scores enable row level security;
+revoke all on table public.pitch_snake_tournaments from anon, authenticated;
+revoke all on table public.pitch_snake_tournament_scores from anon, authenticated;
+
 -- ---------------------------------------------------------------- read ----
-create or replace function public.pitch_snake_top_scores(limit_count integer default 10)
+drop function if exists public.pitch_snake_top_scores(integer);
+
+create or replace function public.pitch_snake_top_scores(limit_count integer default 10, p_mode text default 'classic')
 returns table (id bigint, name text, score integer, created_at timestamptz)
 language sql
 security definer
@@ -38,15 +87,19 @@ stable
 as $$
   select s.id, s.name, s.score, s.created_at
   from public.pitch_snake_scores s
+  where s.mode = coalesce(p_mode, 'classic')
   order by s.score desc, s.created_at asc
   limit least(greatest(coalesce(limit_count, 10), 1), 100);
 $$;
 
 -- --------------------------------------------------------------- write ----
--- Names are squashed to at most five A-Z0-9 characters, so the board cannot be
--- used as a message channel, and the score has to be inside a believable range.
--- Neither check makes this authoritative: see the note at the bottom.
-create or replace function public.pitch_snake_submit_score(p_name text, p_score integer)
+-- Names are squashed to at most five A-Z0-9 characters, so no board can be
+-- used as a message channel, and each mode has its own believable range: a
+-- minute of speed run cannot produce a classic-sized number. Neither check
+-- makes this authoritative: see the note at the bottom.
+drop function if exists public.pitch_snake_submit_score(text, integer);
+
+create or replace function public.pitch_snake_submit_score(p_name text, p_score integer, p_mode text default 'classic')
 returns bigint
 language plpgsql
 security definer
@@ -56,7 +109,12 @@ declare
   clean_name text;
   new_id     bigint;
 begin
-  if p_score is null or p_score < -999 or p_score > 9999 then
+  if p_mode is null or p_mode not in ('classic', 'speedrun') then
+    raise exception 'unknown mode';
+  end if;
+  if p_score is null or p_score < -999
+     or (p_mode = 'classic'  and p_score > 9999)
+     or (p_mode = 'speedrun' and p_score > 300) then
     raise exception 'score out of range';
   end if;
 
@@ -65,8 +123,153 @@ begin
     clean_name := 'YOU';
   end if;
 
-  insert into public.pitch_snake_scores (name, score)
-  values (clean_name, p_score)
+  insert into public.pitch_snake_scores (name, score, mode)
+  values (clean_name, p_score, p_mode)
+  returning id into new_id;
+
+  return new_id;
+end;
+$$;
+
+-- --------------------------------------------------- tournament: create ----
+-- The code is six characters from an alphabet with no 0/O or 1/I, 32^6 of
+-- them, generated server-side and retried on the (astronomical) collision.
+-- Times are computed here from now(): the client sends offsets, never
+-- timestamps, so nobody's wrong clock can schedule anything.
+drop function if exists public.pitch_snake_tournament_create(text, text, integer, integer);
+
+create or replace function public.pitch_snake_tournament_create(
+  p_title text,
+  p_mode text default 'classic',
+  p_starts_in_minutes integer default 0,
+  p_duration_minutes integer default 1440
+)
+returns table (code text, title text, mode text, starts_at timestamptz, ends_at timestamptz)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  alphabet    constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  clean_title text;
+  new_code    text;
+  t_start     timestamptz;
+  t_end       timestamptz;
+  i           integer;
+begin
+  if p_mode is null or p_mode not in ('classic', 'speedrun') then
+    raise exception 'unknown mode';
+  end if;
+  if p_starts_in_minutes is null or p_starts_in_minutes < 0 or p_starts_in_minutes > 43200 then
+    raise exception 'start must be between now and 30 days out';
+  end if;
+  if p_duration_minutes is null or p_duration_minutes < 10 or p_duration_minutes > 10080 then
+    raise exception 'duration must be between 10 minutes and 7 days';
+  end if;
+
+  clean_title := left(regexp_replace(trim(upper(regexp_replace(coalesce(p_title, ''), '[^A-Za-z0-9 ]', '', 'g'))), ' +', ' ', 'g'), 24);
+  if clean_title = '' then
+    clean_title := 'PITCH CUP';
+  end if;
+
+  t_start := now() + make_interval(mins => p_starts_in_minutes);
+  t_end   := t_start + make_interval(mins => p_duration_minutes);
+
+  for attempt in 1..20 loop
+    new_code := '';
+    for i in 1..6 loop
+      new_code := new_code || substr(alphabet, 1 + floor(random() * 32)::integer, 1);
+    end loop;
+    begin
+      insert into public.pitch_snake_tournaments (code, title, mode, starts_at, ends_at)
+      values (new_code, clean_title, p_mode, t_start, t_end);
+      return query select new_code, clean_title, p_mode, t_start, t_end;
+      return;
+    exception when unique_violation then
+      -- roll the dice again
+    end;
+  end loop;
+  raise exception 'could not allocate a code';
+end;
+$$;
+
+-- ----------------------------------------------------- tournament: look up ----
+drop function if exists public.pitch_snake_tournament_get(text);
+
+create or replace function public.pitch_snake_tournament_get(p_code text)
+returns table (code text, title text, mode text, starts_at timestamptz, ends_at timestamptz)
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select t.code, t.title, t.mode, t.starts_at, t.ends_at
+  from public.pitch_snake_tournaments t
+  where t.code = upper(trim(coalesce(p_code, '')));
+$$;
+
+-- --------------------------------------------------- tournament: standings ----
+-- Best score per name, then ranked. distinct on picks each name's best
+-- (earliest on a tie), and the outer order ranks those bests.
+drop function if exists public.pitch_snake_tournament_top(text, integer);
+
+create or replace function public.pitch_snake_tournament_top(p_code text, limit_count integer default 10)
+returns table (name text, score integer, created_at timestamptz)
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select b.name, b.score, b.created_at
+  from (
+    select distinct on (s.name) s.name, s.score, s.created_at
+    from public.pitch_snake_tournament_scores s
+    join public.pitch_snake_tournaments t on t.id = s.tournament_id
+    where t.code = upper(trim(coalesce(p_code, '')))
+    order by s.name, s.score desc, s.created_at asc
+  ) b
+  order by b.score desc, b.created_at asc
+  limit least(greatest(coalesce(limit_count, 10), 1), 100);
+$$;
+
+-- ------------------------------------------------------ tournament: submit ----
+-- A submission lands only while the window is open, checked against the
+-- server's clock, and the range check follows the tournament's own mode.
+drop function if exists public.pitch_snake_tournament_submit(text, text, integer);
+
+create or replace function public.pitch_snake_tournament_submit(p_code text, p_name text, p_score integer)
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  t          record;
+  clean_name text;
+  new_id     bigint;
+begin
+  select id, mode, starts_at, ends_at into t
+  from public.pitch_snake_tournaments
+  where code = upper(trim(coalesce(p_code, '')));
+  if not found then
+    raise exception 'no such tournament';
+  end if;
+  if now() < t.starts_at or now() > t.ends_at then
+    raise exception 'tournament is not open';
+  end if;
+  if p_score is null or p_score < -999
+     or (t.mode = 'classic'  and p_score > 9999)
+     or (t.mode = 'speedrun' and p_score > 300) then
+    raise exception 'score out of range';
+  end if;
+
+  clean_name := left(upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')), 5);
+  if clean_name = '' then
+    clean_name := 'YOU';
+  end if;
+
+  insert into public.pitch_snake_tournament_scores (tournament_id, name, score)
+  values (t.id, clean_name, p_score)
   returning id into new_id;
 
   return new_id;
@@ -74,24 +277,29 @@ end;
 $$;
 
 -- Postgres grants EXECUTE to PUBLIC on every new function, which would make
--- these callable by roles we never considered. Take that back, then hand it out
--- deliberately. EXECUTE is also all it takes to publish a function at
+-- these callable by roles we never considered. Take that back, then hand it
+-- out deliberately. EXECUTE is also all it takes to publish a function at
 -- /rest/v1/rpc/<name>; tables need far more, which is exactly why we use these.
-revoke all on function public.pitch_snake_top_scores(integer)      from public;
-revoke all on function public.pitch_snake_submit_score(text, integer) from public;
-grant execute on function public.pitch_snake_top_scores(integer)      to anon, authenticated;
-grant execute on function public.pitch_snake_submit_score(text, integer) to anon, authenticated;
+revoke all on function public.pitch_snake_top_scores(integer, text)                       from public;
+revoke all on function public.pitch_snake_submit_score(text, integer, text)               from public;
+revoke all on function public.pitch_snake_tournament_create(text, text, integer, integer) from public;
+revoke all on function public.pitch_snake_tournament_get(text)                            from public;
+revoke all on function public.pitch_snake_tournament_top(text, integer)                   from public;
+revoke all on function public.pitch_snake_tournament_submit(text, text, integer)          from public;
+grant execute on function public.pitch_snake_top_scores(integer, text)                       to anon, authenticated;
+grant execute on function public.pitch_snake_submit_score(text, integer, text)               to anon, authenticated;
+grant execute on function public.pitch_snake_tournament_create(text, text, integer, integer) to anon, authenticated;
+grant execute on function public.pitch_snake_tournament_get(text)                            to anon, authenticated;
+grant execute on function public.pitch_snake_tournament_top(text, integer)                   to anon, authenticated;
+grant execute on function public.pitch_snake_tournament_submit(text, text, integer)          to anon, authenticated;
 
--- `supabase db advisors` will flag both functions as SECURITY DEFINER routines
--- executable by anon. That is this design working, not a finding: the table is
--- shut and these two are the door. Do not "fix" it by switching them to
--- SECURITY INVOKER or revoking anon, which turns the leaderboard off.
+-- `supabase db advisors` will flag every function above as a SECURITY DEFINER
+-- routine executable by anon. That is this design working, not a finding: the
+-- tables are shut and these are the doors. Do not "fix" it by switching them
+-- to SECURITY INVOKER or revoking anon, which turns the boards off.
 --
--- ---------------------------------------------------------------------------
--- What this does NOT do, stated plainly: the browser reports its own score, so
--- anyone who opens devtools can call submit_score with whatever number they
--- like. The range check only stops the board being taken over by 999999999.
--- Making the score trustworthy means the server has to be the one that decides
--- it: either an Edge Function that hands out a signed round token and validates
--- the run against it, or replaying the input log server side. Neither is worth
--- building until someone actually cheats.
+-- The browser still reports its own score, so every board is only as honest
+-- as the client. The per-mode range checks stop a board being taken over by
+-- one absurd number, nothing more. Making it authoritative means submitting
+-- (seed, log) and letting the server replay the round; the seed column above
+-- is the first brick of that.

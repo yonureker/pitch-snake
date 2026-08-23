@@ -1,6 +1,8 @@
 // Hand-written surface types for the pure JS engine (kept buildless so the
 // web page can import it raw). Extend as the mobile app consumes more.
 export declare const ENGINE_VERSION: number;
+/** Round presets: a mode is a config. Spread MODES[name] into createGame. */
+export declare const MODES: { classic: GameConfig; speedrun: GameConfig };
 export declare const GRID: number;
 export declare const START_LEN: number;
 export declare const SIM_DT: number;
@@ -59,6 +61,8 @@ export interface RoundLog {
 export interface Game {
   seed: number; tickMs: number; wallsEnabled: boolean;
   alive: boolean; deadReason: string | null;
+  /** 0 = endless; a timed round ends with deadReason 'time' at exactly this clock. */
+  durationMs: number;
   quanta: number; clockMs: number; progMs: number; accMs: number;
   snake: Cell[]; snakeSet: Set<number>; tailFrom: Cell | null;
   dir: Cell; dirQueue: Cell[];
@@ -87,5 +91,6 @@ export interface Game {
   portalBusy(): boolean;
 }
 
-export declare function createGame(cfg?: { seed?: number; tickMs?: number; wallsEnabled?: boolean }): Game;
+export interface GameConfig { seed?: number; tickMs?: number; wallsEnabled?: boolean; durationMs?: number }
+export declare function createGame(cfg?: GameConfig): Game;
 export declare function replay(log: RoundLog): Game;

@@ -5,12 +5,19 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = 'pitchSnakeBest';
+import type { RuleMode } from './modes';
 
-/** Read the stored best; 0 when unset or unreadable. */
-export async function loadPersonalBest(): Promise<number> {
+// classic keeps the historical key, so a best saved before modes existed
+// carries over without a migration step
+const KEYS: Record<RuleMode, string> = {
+  classic: 'pitchSnakeBest',
+  speedrun: 'pitchSnakeBest.speedrun',
+};
+
+/** Read the stored best for one rule mode; 0 when unset or unreadable. */
+export async function loadPersonalBest(mode: RuleMode): Promise<number> {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
+    const raw = await AsyncStorage.getItem(KEYS[mode]);
     const n = raw === null ? 0 : Number.parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : 0;
   } catch {
@@ -19,9 +26,9 @@ export async function loadPersonalBest(): Promise<number> {
 }
 
 /** Persist a new best; failures are swallowed (a save must never break play). */
-export async function savePersonalBest(score: number): Promise<void> {
+export async function savePersonalBest(mode: RuleMode, score: number): Promise<void> {
   try {
-    await AsyncStorage.setItem(KEY, String(score));
+    await AsyncStorage.setItem(KEYS[mode], String(score));
   } catch {
     // storage being unavailable must not surface into the game
   }

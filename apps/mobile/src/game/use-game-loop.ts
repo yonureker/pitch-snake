@@ -15,7 +15,9 @@ import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
-import { createGame, GRID, SPEEDS, type Game, type GameEvent } from '@pitch-snake/engine';
+import { createGame, GRID, MODES, SPEEDS, type Game, type GameEvent } from '@pitch-snake/engine';
+
+import type { RuleMode } from '@/lib/modes';
 
 import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';
 
@@ -50,6 +52,11 @@ export interface GameLoop {
   /** Selected speed in ms per cell (applies to the next round). */
   tickMs: number;
   setTickMs: (ms: number) => void;
+  /** The ruleset the next round runs under; refused mid-round. */
+  mode: RuleMode;
+  setMode: (m: RuleMode) => void;
+  /** M:SS remaining in a timed round, '' in an endless one. */
+  clockText: string;
   /** Start a round from ready/dead, or resume from pause. */
   start: () => void;
   /** DEV-only: end the current round immediately (drives the FULL TIME UI). */
@@ -78,6 +85,12 @@ const MAX_DT = 100;
 // bodies; event handlers reach the clock through this instead
 const nowMs = (): number => performance.now();
 
+// M:SS from milliseconds remaining, ceiling seconds so 0:00 only shows at the whistle
+function fmtClock(leftMs: number): string {
+  const sec = Math.max(0, Math.ceil(leftMs / 1000));
+  return `${String(Math.floor(sec / 60))}:${String(sec % 60).padStart(2, '0')}`;
+}
+
 function freshSeed(): number {
   const a = new Uint32Array(1);
   Crypto.getRandomValues(a);
@@ -92,6 +105,9 @@ interface LoopBox {
   frameWindowStart: number;
   phase: RoundPhase;
   tickMs: number;
+  mode: RuleMode;
+  /** the last clock text pushed to state, so the DOM-ish update happens once a second */
+  lastClock: string;
   /** performance.now() of the last sim advance (frame loop or input), 0 before the first frame. */
   lastFrameTs: number;
   countClock: number;
@@ -125,6 +141,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     frameWindowStart: 0,
     phase: 'ready',
     tickMs: SPEEDS.normal,
+    mode: 'classic',
+    lastClock: '',
     countClock: 0,
     pulseMs: 0,
     lastFrameTs: 0,
@@ -143,6 +161,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [wallBanner, setWallBanner] = useState('');
   const [deadReason, setDeadReason] = useState('');
   const [tickMs, setTickMsState] = useState<number>(SPEEDS.normal);
+  const [mode, setModeState] = useState<RuleMode>('classic');
+  const [clockText, setClockText] = useState('');
   const [perfText, setPerfText] = useState('');
 
   // mirror render props into the loop's box after render, never during it
@@ -153,7 +173,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
 
   // the stored personal best arrives once, async, and only ever raises
   useEffect(() => {
-    void loadPersonalBest().then((stored) => {
+    void loadPersonalBest('classic').then((stored) => {
       setBest((current) => (stored > current ? stored : current));
     });
   }, []);
@@ -205,7 +225,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             const finalScore = game.current?.score ?? 0;
             setBest((current) => {
               if (finalScore > current) {
-                void savePersonalBest(finalScore);
+                void savePersonalBest(box.mode, finalScore);
                 return finalScore;
               }
               return current;
@@ -264,6 +284,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           box.lastBanner = banner;
           setWallBanner(banner);
         }
+        const clock = g.durationMs > 0 ? fmtClock(g.durationMs - g.clockMs) : '';
+        if (clock !== box.lastClock) {
+          box.lastClock = clock;
+          setClockText(clock);
+        }
       }
       stepParticles(dt);
       if (__DEV__) {
@@ -304,8 +329,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const start = (): void => {
     const box = boxRef.current;
     if (box.phase === 'dead' || box.phase === 'ready') {
-      game.current = createGame({ seed: freshSeed(), tickMs: box.tickMs });
+      game.current = createGame({ seed: freshSeed(), tickMs: box.tickMs, ...MODES[box.mode] });
       game.current.drainEvents();
+      box.lastClock = game.current.durationMs > 0 ? fmtClock(game.current.durationMs) : '';
+      setClockText(box.lastClock);
       clearParticles();
       clearWallLayer();
       box.lastScore = -1;
@@ -385,6 +412,22 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setTickMsState(ms);
   };
 
+  // The ruleset for the NEXT round; refused mid-round so a running game can
+  // never change shape under the player. BEST swaps with it: zero first so a
+  // stale value never shows, then the stored best raises it when it arrives
+  // (and only if the mode is still the one it was loaded for).
+  const setMode = (m: RuleMode): void => {
+    const box = boxRef.current;
+    if (box.phase !== 'ready' && box.phase !== 'dead') return;
+    if (box.mode === m) return;
+    box.mode = m;
+    setModeState(m);
+    setBest(0);
+    void loadPersonalBest(m).then((stored) => {
+      if (boxRef.current.mode === m) setBest((current) => (stored > current ? stored : current));
+    });
+  };
+
   return {
     game,
     picture,
@@ -396,6 +439,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     deadReason,
     tickMs,
     setTickMs,
+    mode,
+    setMode,
+    clockText,
     start,
     pause,
     steer,
