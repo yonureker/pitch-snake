@@ -1,0 +1,14 @@
+{
+  "name": "@pitch-snake/engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "engine.js",
+  "exports": {
+    ".": "./engine.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "types": "engine.d.ts"
+}

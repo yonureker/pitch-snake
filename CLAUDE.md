@@ -1,6 +1,15 @@
 # Pitch Snake
 
-One file: `index.html` (inline CSS plus one script IIFE). Deployed to GitHub Pages from `main` at the repo root; live at https://yonureker.github.io/pitch-snake/ .
+A monorepo (npm workspaces), deployed to GitHub Pages from `main` at the repo root; live at https://yonureker.github.io/pitch-snake/ .
+
+- `packages/engine/` — **the only copy of the rules.** Pure, seeded, deterministic ES module: no DOM, no canvas, no fetch, no timers, no `Math.random`. Imported raw by the web page, by the mobile app, and by the server-side replay validator. Its tests run with `node --test packages/engine/engine.test.js`.
+- `index.html` — the web game: renderer + app shell only, buildless, imports the engine as an ES module. Nothing in this file may decide gameplay.
+- `apps/mobile/` — the Expo app (React Native + Skia planned), same engine import. Conventions follow the False9 app (`~/Desktop/false9`): TanStack Query for server data, Zustand for UI state only, strict TS.
+- `supabase/` — schema and RPCs; git is the source of truth, never the dashboard.
+
+## Determinism (the engine's reason to exist)
+
+A round is a pure function of `(seed, config, inputs)`. The engine advances in fixed `SIM_DT` (10ms) quanta; every tick length and timing constant is a multiple of it, so steps land exactly on quanta. `setDir` records accepted inputs with their quantum into `game.log`; `replay(log)` re-runs a finished round to the identical score — that is the server-side score check, fair shared-seed multiplayer, and replays. Renderers add `accMs` (the sub-quantum remainder) for interpolation, so smoothness costs nothing. Rules for keeping it true: no host APIs in the engine, no floats fed in from outside (advance() quantizes), every random decision through the seeded PRNG, and any new timing constant a multiple of `SIM_DT`.
 
 ## Engine performance rules
 
@@ -60,6 +69,8 @@ The board is global when `SB_URL` and `SB_KEY` are set in `index.html`, and loca
 
 ## Verify before shipping
 
-1. Syntax-check the script body with `new vm.Script(...)` via `node -e`.
-2. Drive the game headless with a temporary `?vtest` hook and a headless Chrome screenshot; remove the hook before committing (zero `vtest` references may remain).
-3. Push to `main`, then poll the live URL for a marker string unique to the change.
+1. `npm test` (the engine suite, `node --test`) must pass — behaviour lives there now.
+2. Page/module syntax: extract the script body to a `.mjs` and `node --check` it.
+3. Drive the page headless with a temporary `?vtest` hook (scratchpad `hook.py on/off`) plus the browser harness for render/UI, and a headless Chrome screenshot; remove the hook before committing (zero `vtest` references may remain).
+4. If the engine changed and mobile exists, `npx expo export` in `apps/mobile` must still bundle.
+5. Push to `main`, then poll the live URL for a marker unique to the change — including that `packages/engine/engine.js` itself serves 200 from Pages, since the page cannot boot without it.

@@ -534,8 +534,18 @@
     </div>
   </div>
 
-<script>
-(() => {
+<script type="module">
+  // The page is a renderer and an app shell. The rules live in
+  // packages/engine/engine.js, shared verbatim with the mobile app and the
+  // server-side replay validator; nothing in this file may decide gameplay.
+  // Same performance rules as ever: zero allocations per frame in steady
+  // state, no string building in hot loops, DOM only on state change.
+  import {
+    createGame, ghostRenderPos,
+    GRID, SPEEDS, FOOD_TTL,
+    PORTAL_OPEN_MS, PORTAL_WARN_MS,
+  } from './packages/engine/engine.js';
+
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const overlay = document.getElementById('overlay');
@@ -553,217 +563,113 @@
   const saveNote = document.getElementById('saveNote');
   const legend = document.getElementById('legend');
 
-  const GRID = 20;
-  const START_LEN = 3;   // initial snake length; TNT can't shrink you below this
   let cell = 20;
   let DPR = window.devicePixelRatio || 1;
 
-  let snake, dir, dirQueue, food, score, best = 0;
-  let snakeSet = new Set();  // cells the snake occupies, as integer keys, for O(1) collision checks
-  let tailFrom = null;   // the cell the tail glides out of, for smooth motion
-  // ms per grid cell, constant: the snake never changes pace. The three
-  // settings are 200 / 130 / 100, which is four, two and a bit, and two seconds
-  // to cross the twenty cell board. On a phone the thing that makes a corner
-  // hard is not the speed itself but how little wall-clock time there is to see
-  // it coming and get a thumb down, and rule 14 means a tap can only land at the
-  // next cell boundary, so the tick length IS the reaction budget: 130 sits
-  // between the 110 that was too tight to corner on and the 150 that dragged.
-  // NORMAL is the reference pace: anything that has to agree across machines
-  // assumes 130.
-  let tickMs = 130;
-  let lastTick = 0;
-  // Progress through the current cell, 0..1, advanced by dt/tickMs and rendered
-  // as is. Kept as a fraction rather than elapsed ms so the render can never be
-  // knocked off by a change of pace.
-  let prog = 0;
-  let state = 'ready';
+  // ---- the game ----
+  // One engine instance per round, seeded fresh each time; the seed plus the
+  // input log the engine keeps is what makes a round replayable server-side.
+  let g = null;
+  let state = 'ready';           // ready | countdown | playing | paused | dead
+  let pageTickMs = SPEEDS.normal;
+  let pageWalls = true;
+  let lastShownScore = null;
+  let best = 0;
+
+  function newRound() {
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    g = createGame({ seed, tickMs: pageTickMs, wallsEnabled: pageWalls });
+    lastShownScore = null;
+    handleEvents(g.drainEvents());   // the constructor placed the first food
+    syncScoreDom();
+  }
+
+  // every input source funnels here; the page owns the round-state gate
+  // (buffering during the countdown is allowed and lands on the first step)
+  function dirInput(x, y) {
+    if (state !== 'playing' && state !== 'countdown') return;
+    g.setDir(x, y);
+  }
+
+  function syncScoreDom() {
+    if (g.score === lastShownScore) return;
+    lastShownScore = g.score;
+    scoreEl.textContent = g.score;
+    if (g.score > best) best = g.score;
+    bestEl.textContent = best;
+  }
+
+  // ---- engine events -> effects (bursts, sprites, the death overlay) ----
+  function handleEvents(events) {
+    for (const e of events) {
+      if (e.t === 'food') buildFoodSprite();
+      else if (e.t === 'eat') {
+        const burstColor = getCss(e.bonus ? '--gold-bright' : '--food');
+        spawnBurst(e.x, e.y, e.bonus ? 30 : 16, 0.5,
+          () => (Math.random() * 2 + 1) * (cell / 14) * (e.bonus ? 1.5 : 1),
+          () => burstColor);
+      } else if (e.t === 'hop') {
+        const leaveCol = e.fromA ? PORTAL_A : PORTAL_B;
+        const arriveCol = e.fromA ? PORTAL_B : PORTAL_A;
+        const payCol = getCss('--gold-bright');
+        spawnBurst(e.fx, e.fy, 14, 0.7, () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => leaveCol);
+        spawnBurst(e.tx, e.ty, 26, 0.7, () => (Math.random() * 2.2 + 1) * (cell / 14),
+          i => i % 3 === 0 ? payCol : arriveCol);
+      } else if (e.t === 'tnt') {
+        for (const t of e.lost)
+          spawnBurst(t.x, t.y, 6, 0.9, () => (Math.random() * 1.2 + 0.5) * (cell / 14), () => '#f4ecd8');
+        spawnBurst(e.x, e.y, 26, 0.6, () => (Math.random() * 2.4 + 1) * (cell / 13),
+          i => i % 3 === 0 ? '#e6402a' : '#3a3630');
+      } else if (e.t === 'wall') {
+        if (e.phase === 'warning') rebuildWallLayer(false);
+        else if (e.phase === 'solid') rebuildWallLayer(true);
+      } else if (e.t === 'die') {
+        onDeath(e.reason);
+      }
+    }
+  }
+
+  function onDeath(reason) {
+    state = 'dead';
+    syncScoreDom();
+    overlayTitle.textContent = 'FULL TIME';
+    overlayTitle.className = 'dead';
+    const how = reason === 'wall' ? 'The walls got you. '
+              : reason === 'ghost' ? 'The ghost got you. '
+              : '';
+    overlayText.textContent = `${how}You scored ${g.score}.`;
+    startBtn.textContent = 'REMATCH';
+    savedThisRound = false;
+    saveBtn.disabled = false;
+    nameInput.disabled = false;
+    nameInput.value = '';
+    entry.style.display = g.score > 0 ? 'flex' : 'none';
+    saveNote.hidden = true;
+    standingsEl.style.display = 'block';
+    boardHead.style.display = 'block';
+    savePersonalBest();          // the round is over; that best is worth keeping
+    renderStandings();
+    overlay.classList.remove('hidden');
+    refreshSettingsUI();
+    if (g.score > 0) setTimeout(() => nameInput.focus(), 60);
+  }
+
+  // ---- rendering: sprites, layers, particles (all page-side) ----
   let particles = [];
   let foodPulse = 0;
-  let foodAge = 0;           // ms the current food has existed (resets on placement)
-  const FOOD_TTL = 5000;     // uneaten food relocates after this long
-  let regularEaten = 0;      // regular emojis eaten toward the next bonus
-  const BONUS_EVERY = 5;     // a ringed +5 appears after this many regular emojis
 
-  // interior "pac-man" walls: symmetric, hand-shaped obstacles that appear in
-  // the pitch, flash as a warning, turn lethal for a while, then vanish. We
-  // never draw random lines; every layout is one of a few 4-fold-symmetric
-  // shapes picked at random.
-  let wallState = 'off';      // off | warning | solid
-  let wallsEnabled = true;    // toggle: do walls ever activate?
-  let wallClock = 0;          // advances only while playing (ms)
-  let wallPhaseEnd = 0;
-  let wallCells = [];         // [{x,y}] currently shaped cells (for drawing)
-  let wallLookup = new Set(); // "x,y" keys of wallCells (for collision)
-  const WARN_MS = 1800, SOLID_MS = 9000;
-  const rand = (a, b) => a + Math.random() * (b - a);
-  const K = (x, y) => x * GRID + y;              // integer cell key: no string building in hot paths
-  const wrap = v => ((v % GRID) + GRID) % GRID;  // toroidal wrap, safe for any delta (and fractions)
-
-  // Mirror seed cells across both center axes so a pattern is symmetric no
-  // matter which quadrant the seeds sit in.
-  function sym4(cells) {
-    const s = new Set();
-    for (const [x, y] of cells)
-      for (const xx of [x, GRID - 1 - x])
-        for (const yy of [y, GRID - 1 - y]) s.add(K(xx, yy));
-    return s;
-  }
-
-  // A border seed builds the arena frame for one quadrant, leaving a centered
-  // gate. `solidTo` is the last wall index out from each corner (cells 0..solidTo
-  // stay wall), so the middle of each side is open. Because sym4 mirrors the
-  // gaps, the gates line up on opposite sides: the snake can shoot straight
-  // through a gate and wrap to the far edge, but touching a live frame is fatal.
-  function borderSeeds(solidTo) {
-    const c = [];
-    for (let i = 0; i <= solidTo; i++) { c.push([i, 0]); c.push([0, i]); }
-    return c;
-  }
-
-  // Each builder returns a Set of integer cell keys. Seeds cover one quadrant; sym4
-  // fills the rest, guaranteeing a clean, deliberate symmetric shape. The mix
-  // spans interior shapes and gated border frames so layouts keep varying.
-  const WALL_PATTERNS = [
-    () => {                                   // thick plus / cross through center
-      const c = [];
-      for (let y = 5; y <= 9; y++) c.push([9, y]);
-      for (let x = 5; x <= 9; x++) c.push([x, 9]);
-      return sym4(c);
-    },
-    () => {                                   // four quadrant blocks
-      const c = [];
-      for (let x = 3; x <= 6; x++) for (let y = 4; y <= 6; y++) c.push([x, y]);
-      return sym4(c);
-    },
-    () => {                                   // hollow center box, a door each side
-      const c = [];
-      for (let x = 6; x <= 8; x++) c.push([x, 6]);
-      for (let y = 6; y <= 8; y++) c.push([6, y]);
-      return sym4(c);
-    },
-    () => sym4(borderSeeds(6)),               // full frame, a gate mid each side
-    () => sym4(borderSeeds(3)),               // corner brackets on the edge, wide gates
-    () => {                                   // frame plus four inner pillars
-      const c = borderSeeds(6);
-      for (let x = 5; x <= 6; x++) for (let y = 5; y <= 6; y++) c.push([x, y]);
-      return sym4(c);
-    },
-  ];
-
-  function buildWalls() {
-    const set = WALL_PATTERNS[(Math.random() * WALL_PATTERNS.length) | 0]();
-    wallLookup = set;
-    wallCells = [...set].map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
-    rebuildWallLayer(false);
-  }
-
-  function clearWalls() { wallCells = []; wallLookup = new Set(); }
-
-  // The wall shape is static for its whole phase, so it is rendered once to an
-  // offscreen layer and blitted each frame. The old path built and filled a
-  // rounded rect per wall cell per frame (up to ~70 cells, two passes when
-  // live). Rebuilt on shape change, on the warning to solid flip, and on resize.
-  const wallLayer = document.createElement('canvas');
-  const wallLayerCtx = wallLayer.getContext('2d');
-  function rebuildWallLayer(bevel) {
-    wallLayer.width = canvas.width; wallLayer.height = canvas.height;
-    const c = wallLayerCtx;
-    const pad = cell * 0.05, rad = cell * 0.3;
-    c.fillStyle = '#e6402a';
-    for (const w of wallCells) {
-      roundRectOn(c, w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
-      c.fill();
-    }
-    if (bevel) {  // beveled inner highlight, only once the walls are live
-      c.globalAlpha = 0.22;
-      c.fillStyle = '#ffd9d0';
-      const ip = cell * 0.28;
-      for (const w of wallCells) {
-        roundRectOn(c, w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2, cell * 0.14);
-        c.fill();
-      }
-      c.globalAlpha = 1;
+  // one shared ring-burst emitter; effects differ only in count, jitter,
+  // speed, and how each particle picks its color. Page-side Math.random is
+  // fine here: particles are paint, never simulation.
+  function spawnBurst(gx, gy, count, jitter, speedAt, colorAt) {
+    const cx = gx * cell + cell / 2;
+    const cy = gy * cell + cell / 2;
+    for (let i = 0; i < count; i++) {
+      const a = (Math.PI * 2 * i) / count + Math.random() * jitter;
+      const sp = speedAt();
+      particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, color: colorAt(i) });
     }
   }
-
-  // TNT blocks: -5 pt / -5 segment hazards (never lethal) that blink in as a
-  // wave, sit for a few seconds, then all vanish before the next wave (like the
-  // original single bomb). The wave SIZE grows with the score: one block from 15
-  // pts and another every ten points after that, up to nine. Each block spawns
-  // at least MIN_SPAWN_DIST cells from the head, so a fresh TNT never lands
-  // right in front.
-  let bombs = [];              // {x,y} blocks in the wave currently showing
-  let bombsUnlocked = 0;       // wave size = TNT thresholds the score has passed (only grows)
-  let bombPhase = 'gap';       // 'gap' (none showing) or 'active' (a wave is up)
-  let bombClock = 0;           // advances only while playing (ms)
-  let bombNextAt = 0;          // when the next wave appears (during a gap)
-  let bombExpireAt = 0;        // when the current wave vanishes (while active)
-  const TNT_SCORES = [15, 25, 35, 45, 55, 65, 75, 85, 95];
-  const BOMB_GAP_MIN = 6000, BOMB_GAP_MAX = 12000;   // quiet stretch between waves
-  const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;  // how long a wave stays
-
-  // pac-man ghosts: slow, roaming surprises. A new one appears as the score
-  // passes each threshold (up to five, from 10 pts and every ten after). Each creeps through open cells only
-  // (never onto the snake, walls, food, a TNT, or another ghost) and spawns at
-  // least MIN_SPAWN_DIST cells away. Run your head into any of them: game over.
-  let ghosts = [];          // up to five, each {x,y,px,py,dir,moveAt}
-  let ghostClock = 0;       // advances only while playing (ms)
-  const GHOST_SCORES = [10, 20, 30, 40, 50];   // a new ghost joins as the score passes each
-  const GHOST_MS = 500;     // ms per ghost step (deliberately slow)
-  const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
-  // each ghost gets its own colour, in spawn order (Pac-Man style)
-  const GHOST_COLORS = [
-    { body: '#ec1f27', edge: '#a5121a' },  // 1st ghost: red
-    { body: '#2f8ef0', edge: '#1a57ab' },  // 2nd ghost: blue
-    { body: '#f5901e', edge: '#b3641a' },  // 3rd ghost: orange
-    { body: '#f57ec3', edge: '#c74e97' },  // 4th ghost: pink
-    { body: '#25c7d9', edge: '#1592a0' },  // 5th ghost: cyan
-  ];
-  const GHOST_EYE = '#12379e';
-  const MIN_SPAWN_DIST = 3;   // ghosts and TNTs appear at least this many cells from the head
-
-  // teleport windows: a linked pair opens as a reward for getting somewhere,
-  // not on a timer. One pair every twenty points, for ever; it stays for a few
-  // seconds and closes again. Run the
-  // head into either window and the next step brings it out of the other one on
-  // the far side of the pitch; ghosts take them too. Each window wears its
-  // partner's colour at its core, so the blue one shows you it lands you at the
-  // violet one and the other way about. The hop is a genuine discontinuity, so
-  // stepping into a window is a commitment: from inside one the only move is out
-  // of the far end.
-  let portal = null;           // {ax, ay, bx, by}: the blue end, then the violet end
-  let warpedIn = false;        // the head is standing where a window just put it
-  let portalClock = 0;         // advances only while playing (ms)
-  let portalsUnlocked = 0;     // score thresholds passed (only grows)
-  let portalsOpened = 0;       // pairs actually opened, so one threshold buys one pair
-  let portalRetryAt = 0;       // nowhere to put a pair just now: look again after this
-  let portalExpireAt = 0;      // when the open pair closes
-  let portalOpenedAt = 0;      // when it opened, for the scale-open animation
-  // A pair falls due every PORTAL_EVERY points from PORTAL_FIRST, and keeps
-  // falling due for as long as the round lasts. This used to be a list of five
-  // and it ran out: past ninety there were no windows at all, so a hundred and
-  // thirty was played on the same board as a ninety five, which is the one place
-  // the game stopped having anything new to say.
-  const PORTAL_FIRST = 10, PORTAL_EVERY = 20;
-  const portalMark = n => PORTAL_FIRST + n * PORTAL_EVERY;   // 10, 30, 50, 70, 90, 110, ...
-  // One trip a pair, paid the same as a ringed bonus emoji, so a window is worth
-  // going out of your way for. Well under the twenty between marks, though: a
-  // trip covers a quarter of the ground to the next window and food covers the
-  // rest. Sized at the spacing, the pairs would chain, each trip buying the next
-  // window outright and the system burning through instead of pacing the round.
-  const PORTAL_BONUS = 5;
-  const PORTAL_LIFE_MIN = 8000, PORTAL_LIFE_MAX = 12000;  // how long a pair stays open
-  const PORTAL_OPEN_MS = 320;    // the windows scale open over this
-  const PORTAL_WARN_MS = 1500;   // ...and blink this long before they close
-  const PORTAL_MIN_GAP = 6;      // cells between the ends, so a hop is always a real jump
-  const PORTAL_A = '#2ad4ff', PORTAL_B = '#c561ff';   // the blue end, the violet end
-
-  // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
-  // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
-  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
-  const FOOD_EMOJIS = ['🍪','🍕','🌮','🍿','🍰','🍊','🍋','🍎','🍏','🍑','🍒','🍓','🍅','🥑','🥨','🥯'];
-  const BONUS_EMOJIS = ['⭐','🏆','👑','💰','💎'];
-  let pendingGrowth = 0;
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
@@ -782,58 +688,16 @@
     buildGhostSprites();
     buildPortalSprites();
     buildFoodSprite();
-    if (wallCells.length) rebuildWallLayer(wallState === 'solid');
+    if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
   }
 
-  function reset() {
-    snake = [];
-    snakeSet.clear();
-    for (let i = 0; i < START_LEN; i++) { snake.push({x: 8 - i, y: 10}); snakeSet.add(K(8 - i, 10)); }
-    dir = {x: 1, y: 0};
-    dirQueue = [];
-    tailFrom = null;
-    score = 0;
-    particles = [];
-    pendingGrowth = 0;
-    wallState = 'off';
-    wallClock = 0;
-    wallPhaseEnd = rand(4000, 9000);
-    clearWalls();
-    bombs = [];
-    bombsUnlocked = 0;
-    bombPhase = 'gap';
-    bombClock = 0;
-    bombNextAt = 0;            // once past 10 pts the first wave shows right away
-    bombExpireAt = 0;
-    ghosts = [];
-    ghostClock = 0;
-    portal = null;
-    warpedIn = false;
-    portalClock = 0;
-    portalsUnlocked = 0;
-    portalsOpened = 0;
-    portalRetryAt = 0;
-    portalExpireAt = 0;
-    portalOpenedAt = 0;
-    regularEaten = 0;
-    placeFood();
-    updateScore();
-  }
-
-  // One bounded scan through spawnCell, never the unbounded rejection loop this
-  // used to be (which could spin as the board filled and hang outright on a
-  // full board; spawnCell already handles that case by returning null).
-  function placeFood() {
-    const c = spawnCell(0);
-    if (!c) { foodAge = 0; return; }        // board full: keep the current food
-    c.bonus = regularEaten >= BONUS_EVERY;  // ringed +5 only after a full streak
-    c.emoji = c.bonus
-      ? BONUS_EMOJIS[(Math.random() * BONUS_EMOJIS.length) | 0]
-      : FOOD_EMOJIS[(Math.random() * FOOD_EMOJIS.length) | 0];
-    food = c;
-    foodAge = 0;
-    buildFoodSprite();
-  }
+  // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
+  // emoji font on many mobile browsers, so glyphs render as blank/tofu there.
+  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
+  // the engine picks food.kind; these lists are what a kind looks like here.
+  // Lengths must match REGULAR_KINDS / BONUS_KINDS in the engine.
+  const FOOD_EMOJIS = ['🍪','🍕','🌮','🍿','🍰','🍊','🍋','🍎','🍏','🍑','🍒','🍓','🍅','🥑','🥨','🥯'];
+  const BONUS_EMOJIS = ['⭐','🏆','👑','💰','💎'];
 
   // Color-emoji fillText is among the most expensive single canvas calls on
   // mobile, so the emoji is rasterized once per placement into a small sprite;
@@ -842,552 +706,59 @@
   const foodSpriteCtx = foodSpriteCanvas.getContext('2d');
   let foodS = 0;
   function buildFoodSprite() {
-    if (!food) return;
+    if (!g || !g.food) return;
     foodS = Math.ceil(cell * 1.1);
     foodSpriteCanvas.width = foodS; foodSpriteCanvas.height = foodS;
     const c = foodSpriteCtx;
     // solid fill, no shadow or gradient: iOS Safari paints a color emoji as a
-    // silhouette of the active paint when that paint is fancy (the "red cloud")
+    // silhouette of the active paint when that paint is fancy
     c.fillStyle = '#000';
     c.font = `${(cell * 0.78) | 0}px ${EMOJI_FONT}`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(food.emoji, foodS / 2, foodS / 2);
+    const glyph = (g.food.bonus ? BONUS_EMOJIS : FOOD_EMOJIS)[g.food.kind];
+    c.fillText(glyph, foodS / 2, foodS / 2);
   }
 
-  function updateScore() {
-    scoreEl.textContent = score;
-    if (score > best) { best = score; }
-    bestEl.textContent = best;
-  }
-
-  // Queue turns instead of overwriting a single "next" slot, so two quick taps
-  // (e.g. up then right) both land on successive ticks instead of the first
-  // being lost. Validate each tap against the last queued/active direction.
-  // Every input source (keyboard, swipe, d-pad) calls this directly, and the
-  // playing gate lives here once, so no source can queue turns while paused.
-  function setDir(x, y) {
-    // buffering a turn during the countdown is allowed: it lands on the first
-    // step, so the round can open on a direction you already chose
-    if (state !== 'playing' && state !== 'countdown') return;
-    const ref = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
-    if (x === -ref.x && y === -ref.y) return; // no 180° reversal
-    if (x === ref.x && y === ref.y) return;   // ignore repeats
-    if (dirQueue.length < 3) dirQueue.push({x, y});
-  }
-
-  // A queued turn is applied at the next cell boundary and never sooner. An
-  // earlier version shortened the step a turn landed in to cut input latency in
-  // half, which worked, but shortening a step means the snake covers that cell
-  // at double speed: on a two-turn corner it lurched forward for two cells and
-  // then dropped back to normal, and that change of pace reads as jumping even
-  // though the position stays continuous. Pace is held constant instead. On a
-  // grid, turn latency is bounded by the time to the next boundary, so the only
-  // way to sharpen corners without a lurch is a shorter tick (the speed
-  // setting), not a variable one.
-
-  function step() {
-    if (dirQueue.length) dir = dirQueue.shift();
-    // A head already standing in a window spends this step coming out of the
-    // far one instead of moving on. It is still exactly one step: the body
-    // advances one cell as it always does, and the heading is untouched, so the
-    // snake keeps its pace across the hop and simply carries on out the far
-    // side. Both ends work both ways, so a head that has just arrived through a
-    // window has to be free to walk off it: only a head that got there under its
-    // own steam is carried, never one the far end has just put down, or the pair
-    // would bounce it back and forth for ever. Everything below (walls, self,
-    // ghosts, food, TNT) then tests the cell it lands on, wherever that is.
-    const win = (warpedIn || portal === null || portal.used) ? 0
-              : portalEndAt(snake[0].x, snake[0].y);
-    // edges always wrap now (pac-man tunnels); the hazards live inside the pitch
-    const nx = win === 1 ? portal.bx : win === 2 ? portal.ax : wrap(snake[0].x + dir.x);
-    const ny = win === 1 ? portal.by : win === 2 ? portal.ay : wrap(snake[0].y + dir.y);
-    const nk = K(nx, ny);
-
-    // interior walls are lethal only once they're live
-    if (wallState === 'solid' && wallLookup.has(nk)) return die('wall');
-
-    // whether this tick grows decides the tail rule below, so settle it first
-    const ate = nx === food.x && ny === food.y;
-    const grows = pendingGrowth + (ate ? (food.bonus ? 5 : 1) : 0) > 0;
-
-    // self collision, O(1) against the occupancy set. The tail cell is exempt
-    // when the tail glides out of it this very tick (classic tail-chase), which
-    // is exactly the move the smooth renderer shows the player as legal.
-    const tail = snake[snake.length - 1];
-    if (snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return die();
-
-    // running into any ghost ends the run (use the cell each visually occupies)
-    for (const gh of ghosts) { const g = ghostAt(gh); if (nx === g.x && ny === g.y) return die('ghost'); }
-
-    // move: pop the vacated tail first so the set stays exact, then add the head
-    if (grows) tailFrom = null;                  // grew: tail stays put
-    else { tailFrom = snake.pop(); snakeSet.delete(K(tailFrom.x, tailFrom.y)); }
-    snake.unshift({x: nx, y: ny});
-    snakeSet.add(nk);
-    warpedIn = win !== 0;
-    if (win) {
-      // Going through is a gamble taken blind: you commit at the mouth, you
-      // surface wherever the far end happens to be, and by the score windows
-      // open at, the pitch is busy. So the trip pays. It pays ONCE per pair,
-      // though: both ends work both ways, so an award on every hop would just be
-      // a four step loop farmed for points. The award lands here, after the
-      // walls, self, ghost and TNT tests above, so surfacing into something
-      // fatal pays nothing. Nothing else can share the landing cell, so this is
-      // the only score change this tick.
-      const fromA = win === 1;
-      portal.used = true;                        // one trip a pair; it shuts behind you
-      score += PORTAL_BONUS;
-      updateScore();
-      const leaveCol = fromA ? PORTAL_A : PORTAL_B;
-      const arriveCol = fromA ? PORTAL_B : PORTAL_A;
-      const payCol = getCss('--gold-bright');
-      spawnBurst(fromA ? portal.ax : portal.bx, fromA ? portal.ay : portal.by, 14, 0.7,
-        () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => leaveCol);
-      spawnBurst(nx, ny, 26, 0.7,
-        () => (Math.random() * 2.2 + 1) * (cell / 14),
-        i => i % 3 === 0 ? payCol : arriveCol);
+  // The wall shape is static for its whole phase, so it is rendered once to an
+  // offscreen layer and blitted each frame. Rebuilt on shape change, on the
+  // warning-to-solid flip, and on resize.
+  const wallLayer = document.createElement('canvas');
+  const wallLayerCtx = wallLayer.getContext('2d');
+  function rebuildWallLayer(bevel) {
+    wallLayer.width = canvas.width; wallLayer.height = canvas.height;
+    const c = wallLayerCtx;
+    const pad = cell * 0.05, rad = cell * 0.3;
+    c.fillStyle = '#e6402a';
+    for (const w of g.wallCells) {
+      roundRectOn(c, w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
+      c.fill();
     }
-
-    if (ate) {
-      if (food.bonus) {
-        score += 5; pendingGrowth += 5;
-        regularEaten = 0;          // bonus taken: restart the streak
-      } else {
-        score += 1; pendingGrowth += 1;
-        regularEaten++;            // count toward the next bonus (every 5)
+    if (bevel) {  // beveled inner highlight, only once the walls are live
+      c.globalAlpha = 0.22;
+      c.fillStyle = '#ffd9d0';
+      const ip = cell * 0.28;
+      for (const w of g.wallCells) {
+        roundRectOn(c, w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2, cell * 0.14);
+        c.fill();
       }
-      updateScore();
-      const burstColor = getCss(food.bonus ? '--gold-bright' : '--food');
-      spawnBurst(food.x, food.y, food.bonus ? 30 : 16, 0.5,
-        () => (Math.random() * 2 + 1) * (cell / 14) * (food.bonus ? 1.5 : 1),
-        () => burstColor);
-      placeFood();
-    }
-    if (grows) pendingGrowth--;
-
-    // TNT never kills: it lops off up to 5 segments (never below the starting
-    // length) and docks 5 points, which is allowed to go negative. The eaten
-    // block is removed; eating the wave's last block restarts the quiet gap.
-    const hitBomb = bombs.findIndex(b => nx === b.x && ny === b.y);
-    if (hitBomb !== -1) {
-      score -= 5;
-      updateScore();
-      pendingGrowth = 0;                       // cancel queued growth so the shrink sticks
-      const target = Math.max(START_LEN, snake.length - 5);
-      while (snake.length > target) {
-        const t = snake.pop();
-        snakeSet.delete(K(t.x, t.y));
-        // puff where each lost segment stood: the shortening is the real bite of
-        // a TNT, and without this it is something you work out from the score
-        // afterwards rather than something you watch happen
-        spawnBurst(t.x, t.y, 6, 0.9, () => (Math.random() * 1.2 + 0.5) * (cell / 14), () => '#f4ecd8');
-      }
-      tailFrom = null;   // the old glide anchor sits far from the new tail; snap instead of streaking
-      spawnBurst(nx, ny, 26, 0.6,
-        () => (Math.random() * 2.4 + 1) * (cell / 13),
-        i => i % 3 === 0 ? '#e6402a' : '#3a3630');
-      bombs.splice(hitBomb, 1);
-      if (!bombs.length) {
-        bombPhase = 'gap';
-        bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
-      }
+      c.globalAlpha = 1;
     }
   }
 
-  function die(reason) {
-    state = 'dead';
-    overlayTitle.textContent = 'FULL TIME';
-    overlayTitle.className = 'dead';
-    const how = reason === 'wall' ? 'The walls got you. '
-              : reason === 'ghost' ? 'The ghost got you. '
-              : '';
-    overlayText.textContent = `${how}You scored ${score}.`;
-    startBtn.textContent = 'REMATCH';
-    savedThisRound = false;
-    saveBtn.disabled = false;
-    nameInput.disabled = false;
-    nameInput.value = '';
-    entry.style.display = score > 0 ? 'flex' : 'none';
-    saveNote.hidden = true;
-    standingsEl.style.display = 'block';
-    boardHead.style.display = 'block';
-    savePersonalBest();          // the round is over; that best is worth keeping
-    renderStandings();
-    overlay.classList.remove('hidden');
-    refreshSettingsUI();          // round over: gear back, settings editable again
-    if (score > 0) setTimeout(() => nameInput.focus(), 60);
-  }
-
-  // one shared ring-burst emitter; the food and TNT effects differ only in
-  // count, angle jitter, speed, and how each particle picks its color
-  function spawnBurst(gx, gy, count, jitter, speedAt, colorAt) {
-    const cx = gx * cell + cell / 2;
-    const cy = gy * cell + cell / 2;
-    for (let i = 0; i < count; i++) {
-      const a = (Math.PI * 2 * i) / count + Math.random() * jitter;
-      const sp = speedAt();
-      particles.push({
-        x: cx, y: cy,
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        life: 1, color: colorAt(i)
-      });
-    }
-  }
-
-  // ---- interior walls ----
-  function updateWalls() {
-    if (!wallsEnabled) {
-      if (wallState !== 'off') { wallState = 'off'; clearWalls(); }
-      return;
-    }
-    if (wallClock < wallPhaseEnd) return;
-    if (wallState === 'off') {
-      buildWalls();                 // shape appears and flashes before it bites
-      wallState = 'warning';
-      wallPhaseEnd = wallClock + WARN_MS;
-      // never leave food, a TNT, or a ghost buried under a fresh wall
-      if (food && wallLookup.has(K(food.x, food.y))) placeFood();
-      for (let i = bombs.length - 1; i >= 0; i--) {
-        const b = bombs[i];
-        if (!wallLookup.has(K(b.x, b.y))) continue;
-        const c = spawnCell(MIN_SPAWN_DIST);
-        if (c) { b.x = c.x; b.y = c.y; }
-        else bombs.splice(i, 1);   // nowhere safe: drop it rather than bury a "harmless" TNT in a lethal wall
-      }
-      for (const g of ghosts) if (wallLookup.has(K(g.x, g.y))) nudgeGhost(g);
-      // a window under a fresh wall would be a trap the moment the wall goes
-      // live, so the pair closes rather than move: half a teleport is worse
-      if (portal && (wallLookup.has(K(portal.ax, portal.ay)) || wallLookup.has(K(portal.bx, portal.by))))
-        closePortal(!portal.used);   // only a pair you never got to use is owed again
-    } else if (wallState === 'warning') {
-      wallState = 'solid';
-      wallPhaseEnd = wallClock + SOLID_MS;
-      rebuildWallLayer(true);       // bake the live bevel into the layer
-    } else {                        // solid -> open, re-arm later
-      wallState = 'off';
-      clearWalls();
-      wallPhaseEnd = wallClock + rand(6000, 14000);
-    }
-  }
-
-  // ---- shared hazard placement ----
-  // a cell nothing new may spawn onto: the snake, a wall, food, a TNT or a ghost
-  function cellOccupied(x, y) {
-    const k = K(x, y);
-    return snakeSet.has(k) || wallLookup.has(k) ||
-           (food && food.x === x && food.y === y) ||
-           (portal !== null && ((portal.ax === x && portal.ay === y) || (portal.bx === x && portal.by === y))) ||
-           bombs.some(b => b.x === x && b.y === y) ||
-           ghosts.some(g => g.x === x && g.y === y);
-  }
-
-  // pick a random empty cell for a hazard, preferring cells at least `minDist`
-  // steps (toroidal Manhattan) from the head so it never appears right in front
-  // of the player. Falls back to any empty cell when none are far enough.
-  function spawnCell(minDist) {
-    const head = snake[0];
-    const far = [], any = [];                 // flat x,y pairs (no per-cell objects)
-    for (let x = 0; x < GRID; x++) {
-      for (let y = 0; y < GRID; y++) {
-        if (cellOccupied(x, y)) continue;
-        any.push(x, y);
-        if (wrapDist(x, y, head.x, head.y) >= minDist) far.push(x, y);
-      }
-    }
-    const pool = far.length ? far : any;
-    if (!pool.length) return null;            // board completely full
-    const i = ((Math.random() * (pool.length / 2)) | 0) * 2;
-    return { x: pool[i], y: pool[i + 1] };
-  }
-
-  // ---- TNT blocks ----
-  function spawnBomb() {
-    const c = spawnCell(MIN_SPAWN_DIST);
-    if (c) bombs.push(c);
-  }
-
-  function updateBombs() {
-    // The score only ever sets the SIZE of a wave, never whether one comes. Past
-    // the last mark the size is pinned at TNT_SCORES.length and the cycle below
-    // carries on regardless, so a two hundred point run still gets a wave of nine
-    // every ten seconds or so; it just never gets a tenth block. Do not add a
-    // score check below this line: that is what would make waves stop.
-    // Monotonic, so the five points a TNT takes can never shrink the wave.
-    while (bombsUnlocked < TNT_SCORES.length && score >= TNT_SCORES[bombsUnlocked]) bombsUnlocked++;
-    if (bombsUnlocked === 0) return;             // no TNTs before 15 pts
-    if (bombPhase === 'active') {
-      if (bombClock >= bombExpireAt) {           // wave's up: the whole wave vanishes
-        bombs = [];
-        bombPhase = 'gap';
-        bombNextAt = bombClock + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
-      }
-    } else if (bombClock >= bombNextAt) {        // gap over: blink in a fresh wave of N
-      for (let i = 0; i < bombsUnlocked; i++) spawnBomb();   // each placed >=3 from the head
-      if (bombs.length) { bombPhase = 'active'; bombExpireAt = bombClock + rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX); }
-      else bombNextAt = bombClock + 1000;        // couldn't place any; retry soon
-    }
-  }
-
-  // ---- ghost ----
-  // a cell a ghost may not enter: the snake, a wall, food, a TNT, or another
-  // ghost (self is excluded so a ghost never blocks itself)
-  function ghostBlocked(x, y, self) {
-    // while a head is committed in a window the far end is spoken for: a ghost
-    // drifting onto it would be a death the player was already committed to and
-    // could not have seen coming
-    if (!warpedIn && portal !== null && !portal.used) {
-      const hw = portalEndAt(snake[0].x, snake[0].y);
-      if (hw === 1 && x === portal.bx && y === portal.by) return true;
-      if (hw === 2 && x === portal.ax && y === portal.ay) return true;
-    }
-    const k = K(x, y);
-    return snakeSet.has(k) || wallLookup.has(k) ||
-           (food && food.x === x && food.y === y) ||
-           bombs.some(b => b.x === x && b.y === y) ||
-           ghosts.some(g => g !== self && g.x === x && g.y === y);
-  }
-
-  // toroidal Manhattan distance, since the edges wrap
-  function wrapDist(ax, ay, bx, by) {
-    const dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
-    return Math.min(dx, GRID - dx) + Math.min(dy, GRID - dy);
-  }
-
-  function spawnGhost() {
-    const c = spawnCell(MIN_SPAWN_DIST);
-    if (!c) return;                          // board too full; try again later
-    ghosts.push({x: c.x, y: c.y, px: c.x, py: c.y, dir: {x: 0, y: 0}, warped: false, moveAt: ghostClock + GHOST_MS});
-  }
-
-  // if a wall forms on a ghost, slide it to the nearest open cell
-  function nudgeGhost(g) {
-    for (let r = 1; r < GRID; r++) {
-      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
-        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
-        const nx = wrap(g.x + dx), ny = wrap(g.y + dy);
-        if (!ghostBlocked(nx, ny, g)) { g.x = g.px = nx; g.y = g.py = ny; return; }
-      }
-    }
-  }
-
-  function moveGhost(g) {
-    g.px = g.x; g.py = g.y;                    // remember where we came from (smooth render)
-    // a ghost that drifted into either window spends this move coming out of the
-    // other, keeping its heading, but only when the far side is clear (a ghost
-    // may never land on the snake) and never straight back out of the window
-    // that has just put it down
-    const win = (g.warped || portal === null || portal.used) ? 0 : portalEndAt(g.x, g.y);
-    if (win) {
-      const tx = win === 1 ? portal.bx : portal.ax;
-      const ty = win === 1 ? portal.by : portal.ay;
-      if (!ghostBlocked(tx, ty, g)) { g.x = tx; g.y = ty; g.warped = true; return; }
-    }
-    g.warped = false;
-    const opts = [];
-    for (const d of GHOST_DIRS) {
-      if (g.dir.x === -d.x && g.dir.y === -d.y) continue; // no reversing
-      const nx = wrap(g.x + d.x), ny = wrap(g.y + d.y);
-      if (!ghostBlocked(nx, ny, g)) opts.push({d, nx, ny});
-    }
-    let pick;
-    if (opts.length) {
-      const head = snake[0];
-      if (Math.random() < 0.55) {            // gentle chase: drift toward the head
-        opts.sort((a, b) => wrapDist(a.nx, a.ny, head.x, head.y) - wrapDist(b.nx, b.ny, head.x, head.y));
-        pick = opts[0];
-      } else {
-        pick = opts[(Math.random() * opts.length) | 0];
-      }
-    } else {                                 // boxed in: reverse if we can, else wait
-      const rx = wrap(g.x - g.dir.x), ry = wrap(g.y - g.dir.y);
-      if ((g.dir.x || g.dir.y) && !ghostBlocked(rx, ry, g)) {
-        pick = {d: {x: -g.dir.x, y: -g.dir.y}, nx: rx, ny: ry};
-      } else return;
-    }
-    g.x = pick.nx; g.y = pick.ny; g.dir = pick.d;
-  }
-
-  function updateGhosts() {
-    // add the next ghost as the score passes each threshold (max five)
-    if (ghosts.length < GHOST_SCORES.length && score >= GHOST_SCORES[ghosts.length]) spawnGhost();
-    for (const g of ghosts) {
-      if (ghostClock >= g.moveAt) { moveGhost(g); g.moveAt = ghostClock + GHOST_MS; }
-    }
-  }
-
-  // 0..1 progress through a ghost's current glide between cells
-  function ghostProgress(g) {
-    return Math.max(0, Math.min(1, 1 - (g.moveAt - ghostClock) / GHOST_MS));
-  }
-
-  // continuous cell coords, following the shortest (wrapped) path so a tunnel
-  // crossing slides across the edge instead of teleporting the long way round
-  const _gr = { cx: 0, cy: 0 };   // shared scratch, so the render path allocates nothing per ghost
-  function ghostRender(g) {
-    let dx = g.x - g.px, dy = g.y - g.py;
-    if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;
-    if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
-    const p = ghostProgress(g);
-    if (dx > 1 || dx < -1 || dy > 1 || dy < -1) {   // took a window: see segRenderPos
-      _gr.cx = p < 0.5 ? g.px : g.x; _gr.cy = p < 0.5 ? g.py : g.y;
-      return _gr;
-    }
-    _gr.cx = g.px + dx * p; _gr.cy = g.py + dy * p;
-    return _gr;
-  }
-
-  // the cell a ghost visually occupies right now, used for collision so you
-  // only die when you actually touch the ghost you can see
-  function ghostAt(g) {
-    const { cx, cy } = ghostRender(g);
-    return { x: wrap(Math.round(cx)), y: wrap(Math.round(cy)) };
-  }
-
-  // ---- teleport windows ----
-  // Both ends are placed by enumerating free cells, never by rejection sampling:
-  // the entry keeps its distance from the head like any other spawn, and the
-  // exit has to be at least PORTAL_MIN_GAP away, which also guarantees the two
-  // ends are never neighbours (a hop between adjacent cells would render as an
-  // ordinary step). No cell far enough means the board is effectively full, so
-  // nothing opens and the next attempt comes a beat later.
-  // which end of the open pair a cell is: 1 the blue one, 2 the violet one, 0
-  // neither. Both ends read the same way round, since either takes you to the other.
-  function portalEndAt(x, y) {
-    if (portal === null) return 0;
-    if (x === portal.ax && y === portal.ay) return 1;
-    if (x === portal.bx && y === portal.by) return 2;
-    return 0;
-  }
-
-  function spawnPortal() {
-    const a = spawnCell(MIN_SPAWN_DIST);
-    if (!a) return false;
-    const far = [];                           // flat x,y pairs (no per-cell objects)
-    for (let x = 0; x < GRID; x++) {
-      for (let y = 0; y < GRID; y++) {
-        if (cellOccupied(x, y)) continue;
-        if (wrapDist(x, y, a.x, a.y) >= PORTAL_MIN_GAP) far.push(x, y);
-      }
-    }
-    if (!far.length) return false;
-    const i = ((Math.random() * (far.length / 2)) | 0) * 2;
-    portal = { ax: a.x, ay: a.y, bx: far[i], by: far[i + 1], used: false };
-    portalOpenedAt = portalClock;
-    return true;
-  }
-
-  // the windows never close on someone standing in one: a body strung between
-  // the two ends would be cut in half, and a ghost in the mouth stranded
-  function portalBusy() {
-    if (portal === null) return false;
-    if (snakeSet.has(K(portal.ax, portal.ay)) || snakeSet.has(K(portal.bx, portal.by))) return true;
-    if (tailFrom && portalEndAt(tailFrom.x, tailFrom.y)) return true;   // the tail is still coming through
-    for (const g of ghosts) if (portalEndAt(g.x, g.y)) return true;
-    return false;
-  }
-
-  // A pair cut short rather than expired is owed again: the score thresholds
-  // promise a window at each one, so a pair a wall happened to land on re-opens
-  // somewhere clear a moment later instead of being spent on bad luck.
-  function closePortal(refund) {
-    portal = null;
-    if (refund && portalsOpened > 0) { portalsOpened--; portalRetryAt = portalClock + 2000; }
-  }
-
-  function updatePortals() {
-    // How many marks the score has ever passed. Closed form rather than a loop,
-    // so a score that jumps a long way in one tick cannot spin here, and raised
-    // only, never lowered: a TNT dropping you back under a mark must not re-arm a
-    // pair you have already had, or falling under one and climbing back over it
-    // would be a way to farm windows five points at a time.
-    const due = score >= PORTAL_FIRST ? ((score - PORTAL_FIRST) / PORTAL_EVERY | 0) + 1 : 0;
-    if (due > portalsUnlocked) portalsUnlocked = due;
-    if (portal !== null) {
-      // A used pair is finished, but it cannot vanish on the spot: the body is
-      // still coming through, a cell a step, and windows disappearing from under
-      // it would leave segments jumping across nothing. portalBusy holds them
-      // open until the tail is clear, so a long snake keeps its own exit alive
-      // for as long as it needs it.
-      if ((portal.used || portalClock >= portalExpireAt) && !portalBusy()) closePortal(false);
-      return;
-    }
-    if (portalsOpened >= portalsUnlocked || portalClock < portalRetryAt) return;
-    if (spawnPortal()) {
-      portalsOpened++;
-      portalExpireAt = portalClock + rand(PORTAL_LIFE_MIN, PORTAL_LIFE_MAX);
-    } else {
-      portalRetryAt = portalClock + 1000;      // board too full right now; look again shortly
-    }
-  }
-
-  // interior wall blocks (drawn as a background layer, under the snake); the
-  // per-cell art lives in the prebuilt layer, so each frame is a single blit
+  // interior wall blocks: per frame a single blit of the prebuilt layer
   function drawWalls() {
-    if (wallState === 'off' || !wallCells.length) return;
-    const warning = wallState === 'warning';
-    const blinkOn = ((wallClock / 150) | 0) % 2 === 0;
+    if (g.wallState === 'off' || !g.wallCells.length) return;
+    const now = g.renderNow();
+    const warning = g.wallState === 'warning';
+    const blinkOn = ((now / 150) | 0) % 2 === 0;
     ctx.globalAlpha = warning ? (blinkOn ? 0.5 : 0.12)   // ghostly while forming
-                              : 0.94 + Math.sin(wallClock / 120) * 0.06; // solid when live
+                              : 0.94 + Math.sin(now / 120) * 0.06; // solid when live
     ctx.drawImage(wallLayer, 0, 0);
     ctx.globalAlpha = 1;
   }
 
-  // wall status banner: a DOM pill above the field, kept off the canvas so it
-  // never covers food or the snake. Only touches the DOM when the phase changes;
-  // the "forming" blink is a CSS animation.
-  let wallBannerState = '';
-  function syncWallBanner() {
-    // the field is on screen during the countdown too, so the banner tracks it;
-    // over the menus it always hides rather than announce a frozen hazard
-    const live = state === 'playing' || state === 'countdown';
-    const shown = live ? wallState : 'off';
-    if (shown === wallBannerState) return;
-    wallBannerState = shown;
-    if (shown === 'off') { wallBanner.hidden = true; return; }
-    wallBanner.textContent = shown === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
-    wallBanner.classList.toggle('forming', shown === 'warning');
-    wallBanner.hidden = false;
-  }
-
-  // ---- pre-round countdown ----
-  // Three beats then START!, over a dimmed but still visible field, so a round
-  // never begins under your fingers. Driven by the loop clock rather than a
-  // timer, so it obeys the same dt clamp as the rest of the sim and cannot
-  // leak or fire while the tab is hidden. Only touches the DOM on a beat change.
-  const countdownEl = document.getElementById('countdown');
-  const countNumEl = document.getElementById('countNum');
-  const COUNT_BEAT = 650, COUNT_GO = 450;
-  const COUNT_TOTAL = COUNT_BEAT * 3 + COUNT_GO;
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let countClock = 0, countBeat = -1;
-
-  function syncCountdown() {
-    if (state !== 'countdown') {
-      if (countBeat !== -1) { countdownEl.hidden = true; countBeat = -1; }
-      return;
-    }
-    const b = Math.min(3, (countClock / COUNT_BEAT) | 0);   // 0,1,2 are 3,2,1; 3 is START!
-    if (b === countBeat) return;
-    countBeat = b;
-    countNumEl.textContent = b === 3 ? 'START!' : String(3 - b);
-    countNumEl.classList.toggle('go', b === 3);
-    countdownEl.hidden = false;
-    if (!reduceMotion && countNumEl.animate) {   // each beat punches in
-      countNumEl.animate(
-        [{ transform: 'scale(1.55)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
-        { duration: 240, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' }
-      );
-    }
-  }
-
-  // the hazard is a Minecraft-style TNT block: a sharp-edged red block with a
-  // light-grey "TNT" band and a darker strip beneath it. The face (block, glow,
-  // band, text) is pre-rendered once to a sprite: the old loop re-set a
-  // shadowBlur and a font and re-rasterized the text for every block on every
-  // frame, exactly the per-frame cost the walls and ghosts already avoid. Per
-  // frame each block is one scaled drawImage; the wave still breathes and
-  // flashes exactly as before.
+  // the TNT face is pre-rendered once; per frame each block is one drawImage
   const tntCanvas = document.createElement('canvas');
   const tntCtx = tntCanvas.getContext('2d');
   let tntS = 0;
@@ -1397,13 +768,11 @@
     tntS = B + PAD * 2;
     tntCanvas.width = tntS; tntCanvas.height = tntS;
     const c = tntCtx;
-    // solid red block with a soft danger glow (sharp square, like a MC block)
     c.shadowColor = 'rgba(216,70,31,0.55)';
     c.shadowBlur = 9;
     c.fillStyle = '#d8461f';
     c.fillRect(PAD, PAD, B, B);
     c.shadowBlur = 0;
-    // the grey "TNT" band with a darker strip along its bottom edge
     const band = (a, b, col) => {
       const ya = PAD + Math.round(B * a), yb = PAD + Math.round(B * b);
       c.fillStyle = col;
@@ -1411,7 +780,6 @@
     };
     band(0.32, 0.58, '#dadad8');   // light grey band
     band(0.58, 0.66, '#a9a9a7');   // darker strip
-    // "TNT" in bold black across the band
     c.fillStyle = '#111';
     c.font = `700 ${Math.round(B * 0.32)}px Barlow, "Arial Black", Arial, sans-serif`;
     c.textAlign = 'center';
@@ -1420,13 +788,14 @@
   }
 
   function drawBombs() {
-    if (!bombs.length) return;
+    if (!g.bombs.length) return;
+    const now = g.renderNow();
     const pulse = 1 + Math.sin(foodPulse * 1.15) * 0.09;   // breathe, like the emojis
-    const near = bombPhase === 'active' && bombClock > bombExpireAt - 1200;  // about to vanish
-    const blink = near ? (((bombClock / 120) | 0) % 2 === 0) : true;
+    const near = g.bombPhase === 'active' && now > g.bombExpireAt - 1200;  // about to vanish
+    const blink = near ? (((now / 120) | 0) % 2 === 0) : true;
     ctx.globalAlpha = blink ? 1 : 0.4;                      // the whole wave flashes before it goes
     const dw = Math.round(tntS * pulse);
-    for (const b of bombs) {
+    for (const b of g.bombs) {
       const x0 = Math.round(b.x * cell + (cell - dw) / 2);
       const y0 = Math.round(b.y * cell + (cell - dw) / 2);
       ctx.drawImage(tntCanvas, x0, y0, dw, dw);
@@ -1434,12 +803,16 @@
     ctx.globalAlpha = 1;
   }
 
-  // pac-man style ghost, drawn to match the classic sprites. The body (domed
-  // top, straight sides, zig-zag skirt, outline) is pre-rendered once per
-  // colour, so per frame each ghost is one drawImage plus two live eyes (the
-  // pupils track the travel direction). It glides smoothly between cells; while
-  // sliding across a tunnel a second copy is drawn so it leaves one edge and
-  // enters the opposite edge at the same time.
+  // pac-man style ghosts, pre-rendered per colour; per frame one drawImage
+  // plus two live pupils tracking the travel direction
+  const GHOST_COLORS = [
+    { body: '#ec1f27', edge: '#a5121a' },  // 1st ghost: red
+    { body: '#2f8ef0', edge: '#1a57ab' },  // 2nd ghost: blue
+    { body: '#f5901e', edge: '#b3641a' },  // 3rd ghost: orange
+    { body: '#f57ec3', edge: '#c74e97' },  // 4th ghost: pink
+    { body: '#25c7d9', edge: '#1592a0' },  // 5th ghost: cyan
+  ];
+  const GHOST_EYE = '#12379e';
   let ghostSprites = [], ghostSprW = 0, ghostSprOY = 0;
   function buildGhostSprites() {
     const r = cell * 0.4;
@@ -1470,8 +843,6 @@
       c.lineWidth = lw;
       c.strokeStyle = col.edge;
       c.stroke();
-      // eye whites are direction-independent, so they bake into the sprite
-      // too; only the pupils are drawn live
       const eyeDX = r * 0.42, eyeY = domeY - r * 0.03;
       const ewx = r * 0.28, ewy = r * 0.36;
       c.fillStyle = '#fff';
@@ -1482,18 +853,20 @@
     });
   }
 
+  const _gr = { cx: 0, cy: 0 };   // shared scratch: no allocation per ghost per frame
   function drawGhosts() {
-    const bob = Math.sin(foodPulse * 1.1) * cell * 0.03;   // shared this frame by every body copy
-    for (let i = 0; i < ghosts.length; i++) {
-      const g = ghosts[i];
+    const now = g.renderNow();
+    const bob = Math.sin(foodPulse * 1.1) * cell * 0.03;
+    for (let i = 0; i < g.ghosts.length; i++) {
+      const gh = g.ghosts[i];
       const ci = i % GHOST_COLORS.length;
-      const { cx, cy } = ghostRender(g);
+      const { cx, cy } = ghostRenderPos(gh, now, _gr);
       const wx = cx < 0 ? cx + GRID : cx > GRID - 1 ? cx - GRID : null;
       const wy = cy < 0 ? cy + GRID : cy > GRID - 1 ? cy - GRID : null;
-      drawGhostBody(cx, cy, g.dir, ci, bob);
-      if (wx !== null) drawGhostBody(wx, cy, g.dir, ci, bob);
-      if (wy !== null) drawGhostBody(cx, wy, g.dir, ci, bob);
-      if (wx !== null && wy !== null) drawGhostBody(wx, wy, g.dir, ci, bob);
+      drawGhostBody(cx, cy, gh.dir, ci, bob);
+      if (wx !== null) drawGhostBody(wx, cy, gh.dir, ci, bob);
+      if (wy !== null) drawGhostBody(cx, wy, gh.dir, ci, bob);
+      if (wx !== null && wy !== null) drawGhostBody(wx, wy, gh.dir, ci, bob);
     }
   }
 
@@ -1502,7 +875,6 @@
     const gx = cxCell * cell + cell / 2;
     const gy = cyCell * cell + cell / 2 + bob;
     ctx.drawImage(ghostSprites[ci], gx - ghostSprW / 2, gy - ghostSprOY);
-    // live pupils over the baked whites, tracking the travel direction
     const eyeDX = r * 0.42, eyeY = gy - r * 0.16 - r * 0.03;
     const ewx = r * 0.28, ewy = r * 0.36;
     ctx.fillStyle = GHOST_EYE;
@@ -1515,12 +887,11 @@
   }
 
   // ---- teleport window art ----
-  // The two ends are the same shape in two colours, because either one takes
-  // you to the other: a dark well, a bright segmented rim, an inner ring, and a
-  // core in the PARTNER's colour, which is the whole trick. Standing at the
-  // blue window you can see the violet pip in it and know where you will
-  // surface. Baked once per size and spun live with a rotate, which is why the
-  // rings are segmented: plain circles would show no motion.
+  // Both ends are the same shape in two colours, because either one takes you
+  // to the other: a dark well, a bright segmented rim, an inner ring, and a
+  // core in the PARTNER's colour, so the blue window shows the violet pip you
+  // will surface at. Baked once per size and spun live with a rotate.
+  const PORTAL_A = '#2ad4ff', PORTAL_B = '#c561ff';   // the blue end, the violet end
   const portalSprites = [];
   let portalS = 0;
   function buildPortalSprites() {
@@ -1545,12 +916,11 @@
       h.addColorStop(1, s.halo + '0)');
       c.fillStyle = h;
       c.fillRect(0, 0, portalS, portalS);
-      // the well: dark at the middle so the bright rim reads as a way through
-      const g = c.createRadialGradient(m, m, R * 0.06, m, m, R);
-      g.addColorStop(0, s.deep);
-      g.addColorStop(0.58, s.mid);
-      g.addColorStop(1, s.hot);
-      c.fillStyle = g;
+      const grd = c.createRadialGradient(m, m, R * 0.06, m, m, R);
+      grd.addColorStop(0, s.deep);
+      grd.addColorStop(0.58, s.mid);
+      grd.addColorStop(1, s.hot);
+      c.fillStyle = grd;
       c.beginPath(); c.arc(m, m, R, 0, Math.PI * 2); c.fill();
       c.strokeStyle = s.rim;
       c.lineWidth = Math.max(2, cell * 0.12);
@@ -1578,8 +948,8 @@
     }
   }
 
-  // one blit per end: the pair scales open, breathes, spins (the ends counter-
-  // rotate) and blinks out on the same "about to go" cue the TNT wave uses
+  // one blit per end: the pair scales open, breathes, spins (the ends
+  // counter-rotate), dims once spent, and blinks before timing out
   function drawPortalAt(spr, gx, gy, sc, ang) {
     const d = portalS * sc;
     ctx.translate(gx * cell + cell / 2, gy * cell + cell / 2);
@@ -1589,25 +959,23 @@
   }
 
   function drawPortals() {
-    if (portal === null || !portalSprites.length) return;
-    const age = portalClock - portalOpenedAt;
+    if (g.portal === null || !portalSprites.length) return;
+    const now = g.renderNow();
+    const age = now - g.portalOpenedAt;
     const t = age < PORTAL_OPEN_MS ? age / PORTAL_OPEN_MS : 1;
     const open = 1 - (1 - t) * (1 - t) * (1 - t);          // ease out: the windows punch open
-    const near = portalClock > portalExpireAt - PORTAL_WARN_MS;
-    ctx.globalAlpha = portal.used ? 0.42                                  // spent, just letting the body out
-                    : (near && ((portalClock / 130) | 0) % 2 !== 0) ? 0.3 // about to time out
+    const near = now > g.portalExpireAt - PORTAL_WARN_MS;
+    ctx.globalAlpha = g.portal.used ? 0.42                            // spent, just letting the body out
+                    : (near && ((now / 130) | 0) % 2 !== 0) ? 0.3     // about to time out
                     : 1;
     const sc = open * (1 + Math.sin(foodPulse * 1.3) * 0.05);
     const spin = foodPulse * 0.5;
-    drawPortalAt(portalSprites[0], portal.ax, portal.ay, sc, spin);
-    drawPortalAt(portalSprites[1], portal.bx, portal.by, sc, -spin);
+    drawPortalAt(portalSprites[0], g.portal.ax, g.portal.ay, sc, spin);
+    drawPortalAt(portalSprites[1], g.portal.bx, g.portal.by, sc, -spin);
     ctx.globalAlpha = 1;
   }
 
-  // ---- arena background ----
-  // The arena (fill, vignette, grid) is identical between resizes, so render it
-  // once to an offscreen canvas and blit that each frame instead of rebuilding a
-  // gradient and 38 grid strokes 60 times a second. A big saving on mobile.
+  // ---- arena background: rendered once, blitted every frame ----
   const arenaCanvas = document.createElement('canvas');
   const arenaCtx = arenaCanvas.getContext('2d');
   function buildArena() {
@@ -1616,10 +984,10 @@
     const c = arenaCtx;
     c.fillStyle = getCss('--arena');
     c.fillRect(0, 0, W, H);
-    const g = c.createRadialGradient(W/2, H/2, Math.min(W,H)*0.1, W/2, H/2, Math.max(W,H)*0.72);
-    g.addColorStop(0, 'rgba(90,70,44,0.38)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    c.fillStyle = g;
+    const grd = c.createRadialGradient(W/2, H/2, Math.min(W,H)*0.1, W/2, H/2, Math.max(W,H)*0.72);
+    grd.addColorStop(0, 'rgba(90,70,44,0.38)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = grd;
     c.fillRect(0, 0, W, H);
     c.strokeStyle = getCss('--line');
     c.lineWidth = 1;
@@ -1629,24 +997,22 @@
     }
   }
 
-  // ---- rendering ----
+  // ---- the frame ----
   function draw(dt) {
     ctx.drawImage(arenaCanvas, 0, 0);   // opaque and full-surface: doubles as the clear
     drawWalls();
     drawPortals();                      // field furniture: the snake rides over the windows
 
     // food: the pre-rendered emoji sprite, scaled each frame for the pulse.
-    // foodPulse is the shared animation clock; it advances by real time so a
-    // 120Hz screen shows the same speed as a 60Hz one (0.08 per 60Hz frame).
+    // foodPulse advances by real time so every refresh rate shows the same speed.
     foodPulse += dt * 0.0048;
     const pulse = 1 + Math.sin(foodPulse) * 0.12;
-    const fx = food.x * cell + cell / 2;
-    const fy = food.y * cell + cell / 2;
-    // in its final moment the bonus blinks, so you know to grab it before it goes
-    const foodDim = food.bonus && foodAge > FOOD_TTL - 1500 && ((foodAge / 130) | 0) % 2 !== 0;
+    const fx = g.food.x * cell + cell / 2;
+    const fy = g.food.y * cell + cell / 2;
+    // in its final moment the bonus blinks, so you know to grab it
+    const foodDim = g.food.bonus && g.foodAge > FOOD_TTL - 1500 && ((g.foodAge / 130) | 0) % 2 !== 0;
     if (foodDim) ctx.globalAlpha = 0.28;
-    // bonus ring: a plain gold stroke (strokes are unaffected by the emoji bug)
-    if (food.bonus) {
+    if (g.food.bonus) {
       const ringR = cell * 0.5 * pulse;
       ctx.strokeStyle = getCss('--gold-bright');
       ctx.lineWidth = Math.max(2, cell * 0.08);
@@ -1658,17 +1024,14 @@
 
     drawBombs();
 
-    // snake: glides smoothly between grid cells. Each segment is interpolated
-    // toward its current cell over the tick (p = 0..1); a second copy is drawn
-    // while a segment slides through a tunnel. Fill shades come from a fixed
-    // lookup table and are only re-set when the shade changes (no rgb() string
-    // built per segment), no per-segment save/restore, nothing allocated.
-    const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, snake.length - 1);
-    const p = state === 'playing' ? Math.min(1, prog) : 1;
+    // snake: glides smoothly between grid cells; fills come from a fixed
+    // lookup table, nothing allocated, wrapped copies drawn through tunnels
+    const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, g.snake.length - 1);
+    const p = state === 'playing' ? g.renderProg() : 1;
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = 'rgba(194,162,90,0.65)';
     let lastShade = -1;
-    for (let i = snake.length - 1; i >= 0; i--) {
+    for (let i = g.snake.length - 1; i >= 0; i--) {
       const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
       if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
       const rp = segRenderPos(i, p);
@@ -1676,11 +1039,11 @@
     }
 
     // eyes on the head, at its interpolated position
-    if (snake.length) {
+    if (g.snake.length) {
       const { cx, cy } = segRenderPos(0, p);
-      const hx = wrap(cx) * cell + cell / 2;
-      const hy = wrap(cy) * cell + cell / 2;
-      const off = cell * 0.16, ex = dir.x, ey = dir.y, px = ey, py = ex;
+      const hx = wrapf(cx) * cell + cell / 2;
+      const hy = wrapf(cy) * cell + cell / 2;
+      const off = cell * 0.16, ex = g.dir.x, ey = g.dir.y, px = ey, py = ex;
       ctx.fillStyle = '#211e1a';
       ctx.beginPath();
       ctx.arc(hx + ex*off + px*off, hy + ey*off + py*off, cell*0.08, 0, Math.PI*2);
@@ -1690,10 +1053,9 @@
 
     drawGhosts();
 
-    // particles, integrated over real time so bursts look the same at any Hz;
-    // dead ones are swap-removed instead of splicing the array per particle
-    const f = dt / 16.667;                 // 1 at 60Hz, 0.5 at 120Hz
-    const damp = Math.pow(0.92, f);        // per-frame damping, hoisted: same for every particle
+    // particles, integrated over real time; dead ones are swap-removed
+    const f = dt / 16.667;
+    const damp = Math.pow(0.92, f);
     for (let i = particles.length - 1; i >= 0; i--) {
       const pt = particles[i];
       pt.x += pt.vx * f; pt.y += pt.vy * f;
@@ -1732,24 +1094,21 @@
     c.closePath();
   }
   function roundRect(x, y, w, h, rad) { roundRectOn(ctx, x, y, w, h, rad); }
+  const wrapf = v => ((v % GRID) + GRID) % GRID;   // wrap for fractional render coords
 
   // Interpolated (wrap-aware) continuous cell position of snake segment i at
-  // tick-progress p (0..1), for smooth motion. Each segment glides toward its
-  // current cell from where the segment behind it is (the tail from tailFrom).
-  // A shared object avoids per-segment allocation each frame.
+  // tick-progress p. A segment whose two cells are non-adjacent is mid-hop
+  // (the pair is at least PORTAL_MIN_GAP apart), and there is nothing sensible
+  // to interpolate across a hole in the pitch: it snaps ends at the half-way
+  // point of the step, which is also when the segment ahead has cleared half a
+  // cell, so the body pours out of the far window without a gap (rule 18).
   const _rp = { cx: 0, cy: 0 };
   function segRenderPos(i, p) {
-    const s = snake[i];
-    const prev = i < snake.length - 1 ? snake[i + 1] : (tailFrom || s);
+    const s = g.snake[i];
+    const prev = i < g.snake.length - 1 ? g.snake[i + 1] : (g.tailFrom || s);
     let dx = s.x - prev.x, dy = s.y - prev.y;
     if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;   // shortest path across tunnels
     if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
-    // A teleport leaves the two cells non-adjacent, and there is nothing
-    // sensible to interpolate across a hole in the pitch: the segment shows in
-    // the window it left until half way through the step and in the far one
-    // after that, which is also the moment the segment ahead of it has cleared
-    // half a cell, so the body pours out of the exit without a gap. The pace is
-    // untouched either way, one cell of body per step, in or out of a window.
     if (dx > 1 || dx < -1 || dy > 1 || dy < -1) {
       const at = p < 0.5 ? prev : s;
       _rp.cx = at.x; _rp.cy = at.y;
@@ -1759,9 +1118,7 @@
     return _rp;
   }
 
-  // draw one snake segment (current fill/stroke) at continuous cell coords, plus
-  // a wrapped copy when it slides through a tunnel. Allocation-free (no arrays
-  // per segment per frame) to keep the render light on high-refresh screens.
+  // one snake segment at continuous cell coords, plus a wrapped copy in tunnels
   function fillRoundCell(cx, cy, r, rad) {
     const x = cx * cell + cell / 2, y = cy * cell + cell / 2;
     roundRect(x - r, y - r, r * 2, r * 2, rad);
@@ -1777,30 +1134,70 @@
     if (wx !== null && wy !== null) fillRoundCell(wx, wy, r, rad);
   }
 
-  // The CSS custom properties never change at runtime, so memoize them instead
-  // of hitting getComputedStyle (a slow, synchronous DOM read) every frame.
+  // CSS custom properties never change at runtime; memoize instead of
+  // hitting getComputedStyle every frame
   const cssCache = {};
   function getCss(v) {
     return cssCache[v] ?? (cssCache[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim());
   }
 
-  // body shades from head (t=0) to tail (t=1), precomputed once: the old code
-  // built an rgb() string for every segment on every frame
+  // body shades from head to tail, precomputed once
   const SNAKE_SHADES = 64;
   const SNAKE_LUT = Array.from({ length: SNAKE_SHADES }, (_, i) => {
     const t = i / (SNAKE_SHADES - 1);
     return `rgb(${(244 - t * 30) | 0}, ${(236 - t * 40) | 0}, ${(216 - t * 58) | 0})`;
   });
 
-  // optional on-screen FPS meter: load the page with ?fps=1 to measure on-device
+  // wall status banner: DOM only on phase change; the blink is CSS
+  let wallBannerState = '';
+  function syncWallBanner() {
+    const live = state === 'playing' || state === 'countdown';
+    const shown = live ? g.wallState : 'off';
+    if (shown === wallBannerState) return;
+    wallBannerState = shown;
+    if (shown === 'off') { wallBanner.hidden = true; return; }
+    wallBanner.textContent = shown === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
+    wallBanner.classList.toggle('forming', shown === 'warning');
+    wallBanner.hidden = false;
+  }
+
+  // ---- pre-round countdown: page-owned; the engine does not advance ----
+  const countdownEl = document.getElementById('countdown');
+  const countNumEl = document.getElementById('countNum');
+  const COUNT_BEAT = 650, COUNT_GO = 450;
+  const COUNT_TOTAL = COUNT_BEAT * 3 + COUNT_GO;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let countClock = 0, countBeat = -1;
+
+  function syncCountdown() {
+    if (state !== 'countdown') {
+      if (countBeat !== -1) { countdownEl.hidden = true; countBeat = -1; }
+      return;
+    }
+    const b = Math.min(3, (countClock / COUNT_BEAT) | 0);   // 0,1,2 are 3,2,1; 3 is START!
+    if (b === countBeat) return;
+    countBeat = b;
+    countNumEl.textContent = b === 3 ? 'START!' : String(3 - b);
+    countNumEl.classList.toggle('go', b === 3);
+    countdownEl.hidden = false;
+    if (!reduceMotion && countNumEl.animate) {
+      countNumEl.animate(
+        [{ transform: 'scale(1.55)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
+        { duration: 240, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' }
+      );
+    }
+  }
+
+  // optional on-screen FPS meter: ?fps=1
   const fpsFlag = new URLSearchParams(location.search).get('fps');
   const showFps = fpsFlag !== null && fpsFlag !== '0';
   let fpsCount = 0, fpsSince = 0, fpsValue = 0, fpsWork = 0, workMs = 0;
 
   // ---- loop ----
   // rAF stops in a hidden tab; MAX_DT caps how much wall time one frame may
-  // inject so waking up never fast-forwards the snake or the hazard clocks.
+  // inject so waking up never fast-forwards the round.
   const MAX_DT = 100;
+  let lastTick = 0;
   function loop(now) {
     const t0 = showFps ? performance.now() : 0;
     if (resizeQueued) { resizeQueued = false; resize(); }
@@ -1808,38 +1205,24 @@
     let dt = now - lastTick;
     lastTick = now;
     if (dt > MAX_DT) dt = MAX_DT;
-    else if (dt < 0) dt = 0;     // a clock that ever hands back time must not rewind the glide
+    else if (dt < 0) dt = 0;
     if (state === 'countdown') {
       countClock += dt;
-      if (countClock >= COUNT_TOTAL) { state = 'playing'; prog = 0; }   // kick off
+      if (countClock >= COUNT_TOTAL) state = 'playing';   // kick off
     }
     if (state === 'playing') {
-      prog += dt / tickMs;
-      wallClock += dt;
-      updateWalls();
-      bombClock += dt;
-      updateBombs();
-      ghostClock += dt;
-      updateGhosts();
-      portalClock += dt;
-      updatePortals();
-      foodAge += dt;
-      if (foodAge >= FOOD_TTL) {
-        if (food.bonus) regularEaten = 0;   // missed the bonus in time: lose the streak
-        placeFood();
-      }
-      // the state guard stops the drain the moment a step dies, so no zombie
-      // steps run (and the score can't change) after FULL TIME is already up
-      while (state === 'playing' && prog >= 1) { step(); prog -= 1; }
+      g.advance(dt);
+      handleEvents(g.drainEvents());
+      syncScoreDom();
     }
     draw(dt);
     if (showFps) {
       fpsCount++;
-      fpsWork += performance.now() - t0;      // JS + canvas work this frame
+      fpsWork += performance.now() - t0;
       if (now - fpsSince >= 500) {
         fpsValue = Math.round(fpsCount * 1000 / (now - fpsSince));
-        workMs = fpsWork / fpsCount;          // avg; if this is far below the frame
-        fpsCount = 0; fpsWork = 0; fpsSince = now;   // budget, a 60 reading is Safari capping
+        workMs = fpsWork / fpsCount;
+        fpsCount = 0; fpsWork = 0; fpsSince = now;
       }
     }
     requestAnimationFrame(loop);
@@ -2010,7 +1393,7 @@
     nameInput.disabled = true;
     saveNote.hidden = true;
     try {
-      const key = await saveScore(name, score);
+      const key = await saveScore(name, g.score);
       await renderStandings(key);
       entry.style.display = 'none';
     } catch (e) {
@@ -2029,13 +1412,14 @@
     if (e.key === 'Enter') { e.preventDefault(); submitScore(); }
   });
 
-  // ---- input ----
+
+  // ---- round flow ----
   function play() {
-    if (state === 'dead' || state === 'ready') reset();
+    if (state === 'dead' || state === 'ready') newRound();
+    else g.clearQueue();          // a turn queued before the pause must not fire on resume
     state = 'countdown';          // the round opens on 3, 2, 1, START!
     countClock = 0; countBeat = -1;
-    dirQueue = [];                // a turn queued before the pause must not fire on resume
-    lastTick = 0; prog = 0;
+    lastTick = 0;
     overlayTitle.className = '';
     entry.style.display = 'none';
     saveNote.hidden = true;
@@ -2045,7 +1429,7 @@
     overlay.classList.add('hidden');
     settingsModal.hidden = true;
     refreshSettingsUI();          // hide the gear, lock the settings for this round
-    startBtn.blur();              // else Space mid-round clicks the hidden button instead of pausing
+    startBtn.blur();              // else Space mid-round clicks the hidden button
   }
 
   function togglePause() {
@@ -2069,15 +1453,14 @@
     if (e.target && e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
     if (!GAME_KEYS.has(k)) return;
-    // Space on a focused action button (START / REMATCH / SAVE) must stay a
-    // click, not a swallowed pause. D-pad wedges are excluded: they have no
-    // click behavior, so Space there should still pause (and never scroll).
+    // Space on a focused action button must stay a click; d-pad wedges are
+    // excluded (no click behavior), so Space there still pauses
     if (k === ' ' && e.target && e.target.tagName === 'BUTTON' && !e.target.dataset.dir) return;
     e.preventDefault();
-    if (k === 'arrowup' || k === 'w') setDir(0, -1);
-    else if (k === 'arrowdown' || k === 's') setDir(0, 1);
-    else if (k === 'arrowleft' || k === 'a') setDir(-1, 0);
-    else if (k === 'arrowright' || k === 'd') setDir(1, 0);
+    if (k === 'arrowup' || k === 'w') dirInput(0, -1);
+    else if (k === 'arrowdown' || k === 's') dirInput(0, 1);
+    else if (k === 'arrowleft' || k === 'a') dirInput(-1, 0);
+    else if (k === 'arrowright' || k === 'd') dirInput(1, 0);
     else togglePause();
   });
 
@@ -2090,25 +1473,17 @@
     const dx = e.touches[0].clientX - touchStart.x;
     const dy = e.touches[0].clientY - touchStart.y;
     if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
-    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
-    else setDir(0, dy > 0 ? 1 : -1);
+    if (Math.abs(dx) > Math.abs(dy)) dirInput(dx > 0 ? 1 : -1, 0);
+    else dirInput(0, dy > 0 ? 1 : -1);
     touchStart = null;
     e.preventDefault();
   }, {passive: false});
 
   // ---- on-screen directional pad ----
-  // Four big tap zones tile the whole pad (see CSS): no dead gaps, no small
-  // targets to miss. The zone under a finger is resolved with the same diagonal
-  // math the CSS paints (|u| versus |v| in pad coordinates), on pointerdown AND
-  // pointermove, so a finger that SLIDES from one zone to another (a quick
-  // up-then-left) fires each zone it crosses; no forced hit-test per move.
-  // Every finger is tracked on its own and a press is always a turn request,
-  // even while another finger is still down: that overlap is exactly how a fast
-  // two-thumb combo (up, then right milliseconds later) is played, and the
-  // keyboard has always accepted it. setDir filters what is genuinely invalid
-  // (reversals and repeats). Pointers are captured so a release away from the
-  // pad still ends that press; mice get no implicit capture, and without it a
-  // release outside left the gesture stuck and bare hovering steered the snake.
+  // Four big tap zones tile the whole pad. Every finger is tracked on its own
+  // and a press is always a turn request, even while another finger is down:
+  // overlapping presses are how fast two-thumb combos are played (rule 13).
+  // The engine's setDir filters what is genuinely invalid.
   const dpad = document.getElementById('dpad');
   const dirButtons = [...document.querySelectorAll('.dpad [data-dir]')];
   const padDirOf = new Map();   // button element to its {x, y}, parsed once
@@ -2127,7 +1502,6 @@
     return Math.abs(u) > Math.abs(v) ? (u > 0 ? padBtn.right : padBtn.left)
                                      : (v > 0 ? padBtn.down : padBtn.up);
   }
-  // light every wedge that currently has a finger on it
   function paintPad() {
     const held = new Set(padPointers.values());
     for (const b of dirButtons) b.classList.toggle('pressed', held.has(b));
@@ -2138,10 +1512,10 @@
     padPointers.set(id, btn);
     paintPad();
     const d = padDirOf.get(btn);
-    setDir(d.x, d.y);
+    dirInput(d.x, d.y);
   }
   function padEnd(e) {
-    if (!padPointers.delete(e.pointerId)) return;   // not a finger we were tracking
+    if (!padPointers.delete(e.pointerId)) return;
     paintPad();
   }
 
@@ -2152,52 +1526,48 @@
     firePad(e.pointerId, padZone(e));
   });
   dpad.addEventListener('pointermove', (e) => {
-    if (!padPointers.has(e.pointerId)) return;   // only fingers that pressed the pad
+    if (!padPointers.has(e.pointerId)) return;
     firePad(e.pointerId, padZone(e));
   });
   dpad.addEventListener('pointerup', padEnd);
   dpad.addEventListener('pointercancel', padEnd);
-  dpad.addEventListener('lostpointercapture', padEnd);   // safety net if a press ends unseen
+  dpad.addEventListener('lostpointercapture', padEnd);
   dpad.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  // speed and walls apply to the NEXT round; the controls are locked in-round,
+  // so from the player's view nothing ever changes mid-game
   document.querySelectorAll('.speed-row button').forEach(b => {
     b.addEventListener('click', () => {
       document.querySelectorAll('.speed-row button').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
-      tickMs = parseInt(b.dataset.speed, 10);
+      pageTickMs = parseInt(b.dataset.speed, 10);
     });
   });
 
   const wallToggle = document.getElementById('wallToggle');
   const wallStatus = document.getElementById('wallStatus');
   wallToggle.addEventListener('click', () => {
-    wallsEnabled = !wallsEnabled;
-    wallToggle.classList.toggle('on', wallsEnabled);
-    wallToggle.setAttribute('aria-checked', String(wallsEnabled));
-    wallStatus.textContent = wallsEnabled ? 'ON' : 'OFF';
-    wallState = 'off';
-    clearWalls();
-    if (wallsEnabled) wallPhaseEnd = wallClock + rand(4000, 9000);
+    pageWalls = !pageWalls;
+    wallToggle.classList.toggle('on', pageWalls);
+    wallToggle.setAttribute('aria-checked', String(pageWalls));
+    wallStatus.textContent = pageWalls ? 'ON' : 'OFF';
   });
 
-  // resize events arrive in bursts while a window drags; coalesce them so the
-  // arena and sprites rebuild at most once per frame, at the top of the loop
+  // resize events arrive in bursts; coalesce to once per frame
   let resizeQueued = false;
   window.addEventListener('resize', () => { resizeQueued = true; });
 
-  // a hidden tab stops rAF; pause the round so coming back never means finding
-  // the aftermath (MAX_DT already caps the sim jump as the second line of defense)
+  // a hidden tab stops rAF; pause so coming back never means finding the aftermath
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === 'playing') togglePause();
   });
 
-  // ---- settings modal (opened by the gear; the controls lock during a round) ----
+  // ---- settings modal (locked during a round) ----
   const gearBtn = document.getElementById('gearBtn');
   const settingsModal = document.getElementById('settingsModal');
   const settingsClose = document.getElementById('settingsClose');
   const lockHint = document.getElementById('lockHint');
 
-  // settings are editable only between rounds (ready / dead), never mid-round
   function refreshSettingsUI() {
     const inRound = (state === 'playing' || state === 'paused' || state === 'countdown');
     gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
@@ -2254,15 +1624,15 @@ $ `;
   termClose.addEventListener('click', closeTerminal);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !terminal.hidden) closeTerminal(); });
 
+
   resize();
-  reset();
+  newRound();
   refreshSettingsUI();
   loadPersonalBest();
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
   requestAnimationFrame(loop);
-})();
 </script>
 </body>
 </html>
