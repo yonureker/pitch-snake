@@ -125,6 +125,7 @@ export default function Index() {
   const [submittedName, setSubmittedName] = useState<string | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>('classic');
   const [showModes, setShowModes] = useState(false);
+  const [tScreen, setTScreen] = useState(false);
   const [tourney, setTourney] = useState<TournamentRow | null>(null);
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
   const [tCreating, setTCreating] = useState(false);
@@ -222,10 +223,12 @@ export default function Index() {
   };
 
   // picking a plain ruleset is a complete decision, so the chooser closes on
-  // it; picking TOURNAMENT opens the join/create business instead
+  // it; picking TOURNAMENT navigates to its own step, where the join/create
+  // business fits without stretching the overlay past the board
   const pickFromList = (m: UiMode): void => {
     pickMode(m);
-    if (m !== 'tourney') setShowModes(false);
+    if (m === 'tourney') setTScreen(true);
+    else setShowModes(false);
   };
 
   const saveScore = (): void => {
@@ -325,26 +328,9 @@ export default function Index() {
           {showOverlay && (
             <View style={styles.overlay}>
               {showModes && menuPhase ?
-                <>
-                  <Text style={styles.overlayTitle}>MODES</Text>
-                  <Text style={styles.overlayText}>Choose your game.</Text>
-                  <View style={styles.modeList}>
-                    {MODE_LABELS.map((m) => (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={m.mode}
-                        onPress={() => {
-                          pickFromList(m.mode);
-                        }}
-                        style={[styles.modeBtn, uiMode === m.mode && styles.modeBtnOn]}
-                      >
-                        <Text style={[styles.modeBtnText, uiMode === m.mode && styles.modeBtnTextOn]}>
-                          {m.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  {uiMode === 'tourney' && (
+                tScreen ?
+                  <>
+                    <Text style={styles.overlayTitle}>TOURNAMENT</Text>
                     <View style={styles.tPanel}>
                       {tourney !== null ?
                         <>
@@ -472,17 +458,58 @@ export default function Index() {
                         </>
                       }
                     </View>
-                  )}
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setShowModes(false);
-                    }}
-                    style={styles.tGhostBtn}
-                  >
-                    <Text style={styles.tGhostText}>DONE</Text>
-                  </Pressable>
-                </>
+                    <View style={styles.btnRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setTScreen(false);
+                        }}
+                        style={styles.tGhostBtn}
+                      >
+                        <Text style={styles.tGhostText}>BACK</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setTScreen(false);
+                          setShowModes(false);
+                        }}
+                        style={styles.tGhostBtn}
+                      >
+                        <Text style={styles.tGhostText}>DONE</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                : <>
+                    <Text style={styles.overlayTitle}>MODES</Text>
+                    <Text style={styles.overlayText}>Choose your game.</Text>
+                    <View style={styles.modeList}>
+                      {MODE_LABELS.map((m) => (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={m.mode}
+                          onPress={() => {
+                            pickFromList(m.mode);
+                          }}
+                          style={[styles.modeBtn, uiMode === m.mode && styles.modeBtnOn]}
+                        >
+                          <Text style={[styles.modeBtnText, uiMode === m.mode && styles.modeBtnTextOn]}>
+                            {m.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setShowModes(false);
+                      }}
+                      style={styles.tGhostBtn}
+                    >
+                      <Text style={styles.tGhostText}>DONE</Text>
+                    </Pressable>
+                  </>
+
               : <>
                   <Text style={[styles.overlayTitle, dead && styles.overlayTitleDead]}>
                     {dead ?
@@ -694,6 +721,7 @@ export default function Index() {
                       <Pressable
                         accessibilityRole="button"
                         onPress={() => {
+                          setTScreen(false);
                           setShowModes(true);
                         }}
                         style={styles.modesBtn}

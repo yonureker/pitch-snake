@@ -224,6 +224,7 @@
     z-index: 5;
     overflow-y: auto;
   }
+  .overlay { overflow-y: auto; }
   .overlay.hidden { opacity: 0; pointer-events: none; }
 
   .overlay h2 {
@@ -556,6 +557,7 @@
             <button class="btn small ghostbtn" id="tLeave">LEAVE</button>
           </div>
           <div class="save-note" id="tNote" hidden></div>
+          <button class="btn small ghostbtn" id="tBackBtn">BACK</button>
         </div>
         <div class="legend" id="legend">
           <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
@@ -1595,6 +1597,7 @@
   const tCreateCancel = document.getElementById('tCreateCancel');
   const tLeave = document.getElementById('tLeave');
   const tNote = document.getElementById('tNote');
+  const tBackBtn = document.getElementById('tBackBtn');
   const tCardTitle = document.getElementById('tCardTitle');
   const tCardCode = document.getElementById('tCardCode');
   const tCardMeta = document.getElementById('tCardMeta');
@@ -1605,6 +1608,7 @@
   let tCreating = false;
   let tBusy = false;
   let showModes = false;
+  let tScreen = false;       // inside the chooser: the tournament step instead of the list
   let entryWanted = false;   // the death screen decided an entry belongs; refreshModeUI applies it
 
   function persistModeState() {
@@ -1626,8 +1630,9 @@
     const onMenu = state === 'ready' || state === 'dead';
     const modesOpen = showModes && onMenu;
     for (const b of modeRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === mode);
-    modeRow.style.display = modesOpen ? 'flex' : 'none';
-    tourneyPanel.hidden = !(modesOpen && mode === 'tourney');
+    modeRow.style.display = (modesOpen && !tScreen) ? 'flex' : 'none';
+    tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
+    tBackBtn.style.display = tCreating ? 'none' : '';
     tJoin.style.display = (!tourney && !tCreating) ? 'flex' : 'none';
     tCreate.hidden = !(tCreating && !tourney);
     tCard.hidden = !tourney;
@@ -1669,6 +1674,7 @@
   modesBtn.addEventListener('click', () => {
     if (state !== 'ready' && state !== 'dead') return;
     showModes = !showModes;
+    tScreen = false;
     refreshModeUI();
   });
 
@@ -1678,7 +1684,8 @@
     if (mode === b.dataset.mode) return;
     mode = b.dataset.mode;
     persistModeState();
-    if (mode !== 'tourney') showModes = false;   // a plain ruleset is a complete choice
+    if (mode === 'tourney') tScreen = true;      // the join/create business gets its own step
+    else showModes = false;                      // a plain ruleset is a complete choice
     if (state === 'ready') newRound();   // the clock preview and the next round follow the mode
     else {
       // the finished round belongs to the mode it was played under: switching
@@ -1753,6 +1760,10 @@
   tCreateCancel.addEventListener('click', () => { tCreating = false; tSetNote(''); refreshModeUI(); });
   tCreateBtn.addEventListener('click', tCreateGo);
   tTitle.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tCreateGo(); } });
+  tBackBtn.addEventListener('click', () => {
+    tScreen = false;
+    refreshModeUI();
+  });
   tLeave.addEventListener('click', () => {
     tourney = null;
     tCreating = false;
