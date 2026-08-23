@@ -8,7 +8,8 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.onureker.pitchsnake"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.onureker.pitchsnake"
     },
     "web": {
       "output": "static",
@@ -38,6 +40,10 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "supabaseUrl": "https://hzgsvlernnufogdpfnot.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6Z3N2bGVybm51Zm9nZHBmbm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwOTgwNjYsImV4cCI6MjA2NDY3NDA2Nn0.eQkgc04KaYPkA9EYLPPETFqD8IaMGpFQR4VUYy-xFPE"
     }
   }
 }

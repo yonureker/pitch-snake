@@ -1,8 +1,11 @@
 import { Anton_400Regular, useFonts } from '@expo-google-fonts/anton';
 import { Barlow_500Medium, Barlow_600SemiBold, Barlow_700Bold } from '@expo-google-fonts/barlow';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+
+import { queryClient } from '@/lib/query-client';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -24,5 +27,9 @@ export default function RootLayout() {
   }, [loaded]);
 
   if (!loaded) return null;
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Stack screenOptions={{ headerShown: false }} />
+    </QueryClientProvider>
+  );
 }

@@ -1,5 +1,6 @@
 import { Canvas, Picture, useImage } from '@shopify/react-native-skia';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SPEEDS } from '@pitch-snake/engine';
@@ -13,6 +14,9 @@ import starIcon from '@/assets/icon-star.png';
 import { Dpad } from '@/components/dpad';
 import { GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
+import { useSubmitScore } from '@/hooks/queries/use-submit-score';
+import { useTopScores } from '@/hooks/queries/use-top-scores';
+import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
 const SPEED_LABELS: { label: string; ms: number }[] = [
   { label: 'SLOW', ms: SPEEDS.slow },
@@ -68,6 +72,44 @@ export default function Index() {
   const loop = useGameLoop(boardPx, atlas);
 
   const dead = loop.phase === 'dead';
+  const [entryName, setEntryName] = useState('');
+  const [submittedId, setSubmittedId] = useState<number | null>(null);
+  const topScores = useTopScores(dead && SUPABASE_CONFIGURED);
+  const submit = useSubmitScore();
+  const tapTimes = useRef<number[]>([]);
+
+  const startRound = (): void => {
+    setEntryName('');
+    setSubmittedId(null);
+    submit.reset();
+    loop.start();
+  };
+
+  const saveScore = (): void => {
+    if (submit.isPending || submittedId !== null) return;
+    const name = entryName.trim() === '' ? 'YOU' : entryName;
+    submit.mutate(
+      { name, score: loop.score },
+      {
+        onSuccess: (id) => {
+          setSubmittedId(id);
+        },
+      },
+    );
+  };
+
+  // DEV-only: triple-tap the score block to end the round and reach the
+  // FULL TIME screen without having to die honestly
+  const onScoreTap = (): void => {
+    if (!__DEV__) return;
+    const now = performance.now();
+    tapTimes.current = tapTimes.current.filter((t) => now - t < 1200);
+    tapTimes.current.push(now);
+    if (tapTimes.current.length >= 3) {
+      tapTimes.current = [];
+      loop.debugDie();
+    }
+  };
   const showOverlay = loop.phase === 'ready' || loop.phase === 'paused' || dead;
   const deadLine =
     loop.deadReason === 'wall' ? 'The walls got you. '
@@ -86,11 +128,11 @@ export default function Index() {
           <Text style={styles.title}>PITCH</Text>
           <Text style={styles.title}>SNAKE</Text>
         </View>
-        <View style={styles.scores}>
+        <Pressable accessibilityRole="button" onPress={onScoreTap} style={styles.scores}>
           <Text style={styles.scoreLabel}>SCORE</Text>
           <Text style={styles.scoreValue}>{loop.score}</Text>
           <Text style={styles.bestValue}>BEST {loop.best}</Text>
-        </View>
+        </Pressable>
       </View>
 
       <View style={styles.boardWrap}>
@@ -126,6 +168,72 @@ export default function Index() {
               : loop.phase === 'paused' ?
                 <Text style={styles.overlayText}>Take a breather.</Text>
               : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
+              {dead && loop.score > 0 && submittedId === null && (
+                <View style={styles.entryRow}>
+                  <TextInput
+                    style={styles.nameInput}
+                    value={entryName}
+                    onChangeText={(t) => {
+                      setEntryName(
+                        t
+                          .replace(/[^a-z0-9]/gi, '')
+                          .toUpperCase()
+                          .slice(0, 5),
+                      );
+                    }}
+                    placeholder="NAME"
+                    placeholderTextColor="#9a917c"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={5}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={saveScore}
+                    disabled={submit.isPending}
+                    style={[styles.saveBtn, submit.isPending && styles.saveBtnBusy]}
+                  >
+                    <Text style={styles.saveText}>SAVE</Text>
+                  </Pressable>
+                </View>
+              )}
+              {dead && submit.isError && (
+                <Text style={styles.saveNote}>Could not reach the leaderboard. Try again.</Text>
+              )}
+              {dead && SUPABASE_CONFIGURED && (
+                <View style={styles.standings}>
+                  <Text style={styles.boardHead}>TOP 10 WORLDWIDE</Text>
+                  {topScores.isPending ?
+                    <Text style={styles.boardEmpty}>Loading…</Text>
+                  : topScores.isError ?
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        void topScores.refetch();
+                      }}
+                    >
+                      <Text style={styles.boardEmpty}>Could not reach the board. Tap to retry.</Text>
+                    </Pressable>
+                  : topScores.data.length === 0 ?
+                    <Text style={styles.boardEmpty}>No scores yet</Text>
+                  : <ScrollView style={styles.boardList}>
+                      {topScores.data.map((row, i) => (
+                        <View key={row.id} style={styles.boardRow}>
+                          <Text style={[styles.boardRank, row.id === submittedId && styles.boardMine]}>
+                            {i + 1}
+                          </Text>
+                          <Text style={[styles.boardName, row.id === submittedId && styles.boardMine]}>
+                            {row.name}
+                          </Text>
+                          <Text style={[styles.boardScore, row.id === submittedId && styles.boardMine]}>
+                            {row.score}
+                          </Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  }
+                </View>
+              )}
               {loop.phase === 'ready' && (
                 <View style={styles.legend}>
                   <LegendRow
@@ -172,7 +280,7 @@ export default function Index() {
                   />
                 </View>
               )}
-              {loop.phase !== 'paused' && (
+              {loop.phase === 'ready' && (
                 <View style={styles.speedRow}>
                   {SPEED_LABELS.map((s) => (
                     <Pressable
@@ -188,7 +296,7 @@ export default function Index() {
                   ))}
                 </View>
               )}
-              <Pressable accessibilityRole="button" onPress={loop.start} style={styles.startBtn}>
+              <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
                 <Text style={styles.startText}>
                   {dead ?
                     'REMATCH'
@@ -383,4 +491,53 @@ const styles = StyleSheet.create({
   },
   pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
   padWrap: { flex: 1, marginTop: 2 },
+  entryRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  nameInput: {
+    width: 120,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: GameColors.gold,
+    backgroundColor: 'rgba(246,239,222,0.96)',
+    color: GameColors.ink,
+    fontFamily: ANTON,
+    fontSize: 16,
+    letterSpacing: 3,
+    textAlign: 'center',
+  },
+  saveBtn: {
+    backgroundColor: GameColors.food,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 4,
+  },
+  saveBtnBusy: { opacity: 0.5 },
+  saveText: { fontFamily: ANTON, color: '#ffffff', fontSize: 14, letterSpacing: 1.5 },
+  saveNote: { fontFamily: BARLOW, fontSize: 12, color: GameColors.food },
+  standings: {
+    width: '72%',
+    maxWidth: 250,
+    backgroundColor: 'rgba(33,30,26,0.5)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(194,162,90,0.4)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  boardHead: {
+    fontFamily: BARLOW_BOLD,
+    fontSize: 10,
+    letterSpacing: 2,
+    color: GameColors.gold,
+    textAlign: 'center',
+  },
+  boardEmpty: { fontFamily: BARLOW, fontSize: 12, color: '#b9b09c', textAlign: 'center', paddingVertical: 4 },
+  boardList: { maxHeight: 150 },
+  boardRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 1 },
+  boardRank: { fontFamily: BARLOW, fontSize: 12, color: GameColors.gold, width: 16, textAlign: 'right' },
+  boardName: { flex: 1, fontFamily: BARLOW, fontSize: 13, color: '#e9e0cd', letterSpacing: 1 },
+  boardScore: { fontFamily: ANTON, fontSize: 13, color: '#e9e0cd' },
+  boardMine: { color: GameColors.goldBright },
 });

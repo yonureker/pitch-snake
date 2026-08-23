@@ -17,6 +17,8 @@ import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 import { createGame, GRID, SPEEDS, type Game, type GameEvent } from '@pitch-snake/engine';
 
+import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';
+
 import { GameColors } from './theme';
 import { buildPicture, clearParticles, spawnBurst, stepParticles } from './renderer';
 
@@ -43,6 +45,8 @@ export interface GameLoop {
   setTickMs: (ms: number) => void;
   /** Start a round from ready/dead, or resume from pause. */
   start: () => void;
+  /** DEV-only: end the current round immediately (drives the FULL TIME UI). */
+  debugDie: () => void;
   pause: () => void;
   /** Direction input from any source; gated on phase like the web page. */
   steer: (x: number, y: number) => void;
@@ -116,6 +120,13 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     boxRef.current.boardPx = boardPx;
   }, [atlas, boardPx]);
 
+  // the stored personal best arrives once, async, and only ever raises
+  useEffect(() => {
+    void loadPersonalBest().then((stored) => {
+      setBest((current) => (stored > current ? stored : current));
+    });
+  }, []);
+
   useEffect(() => {
     const box = boxRef.current;
     game.current ??= createGame({ seed: freshSeed(), tickMs: SPEEDS.normal });
@@ -155,6 +166,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             setDeadReason(e.reason);
             box.phase = 'dead';
             setPhase('dead');
+            const finalScore = game.current?.score ?? 0;
+            setBest((current) => {
+              if (finalScore > current) {
+                void savePersonalBest(finalScore);
+                return finalScore;
+              }
+              return current;
+            });
             break;
           }
           default:
@@ -267,6 +286,26 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     game.current?.setDir(x, y);
   };
 
+  const debugDie = (): void => {
+    const g = game.current;
+    if (g === null || boxRef.current.phase !== 'playing') return;
+    // steer the head into its own body deterministically: the engine decides
+    // the death, so even the debug path exercises the real die flow
+    g.snake.length = 0;
+    g.snakeSet.clear();
+    for (const [x, y] of [
+      [5, 5],
+      [4, 5],
+      [5, 6],
+      [5, 7],
+    ] as const) {
+      g.snake.push({ x, y });
+      g.snakeSet.add(x * GRID + y);
+    }
+    g.dir = { x: 0, y: 1 };
+    g.dirQueue.length = 0;
+  };
+
   const setTickMs = (ms: number): void => {
     boxRef.current.tickMs = ms;
     setTickMsState(ms);
@@ -286,5 +325,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     start,
     pause,
     steer,
+    debugDie,
   };
 }

@@ -16,6 +16,7 @@ const noSecretsPlugin = require('eslint-plugin-no-secrets');
 const tseslint = require('typescript-eslint');
 const unicornPlugin = require('eslint-plugin-unicorn').default;
 const prettierConfig = require('eslint-config-prettier');
+const tanstackQueryPlugin = require('@tanstack/eslint-plugin-query');
 const globals = require('globals');
 
 // React Compiler (app.json experiments.reactCompiler) auto-memoizes
@@ -187,9 +188,22 @@ module.exports = defineConfig([
   // rules (immutability, refs, set-state-in-render, purity, ...). All at the
   // preset's levels; no downgrades - we have no pre-existing hits.
   reactHooksPlugin.configs.flat['recommended-latest'],
-  // TODO when @tanstack/react-query lands: add @tanstack/eslint-plugin-query
-  // with False9's tiering (exhaustive-deps, no-unstable-deps, no-void-query-fn,
-  // stable-query-client at error).
+  // @tanstack/eslint-plugin-query, False9's tiering: real-bug catchers at
+  // error, ordering rules at warn.
+  {
+    plugins: {
+      '@tanstack/query': tanstackQueryPlugin,
+    },
+    rules: {
+      '@tanstack/query/exhaustive-deps': 'error',
+      '@tanstack/query/no-rest-destructuring': 'error',
+      '@tanstack/query/no-unstable-deps': 'error',
+      '@tanstack/query/no-void-query-fn': 'error',
+      '@tanstack/query/stable-query-client': 'error',
+      '@tanstack/query/infinite-query-property-order': 'warn',
+      '@tanstack/query/mutation-property-order': 'warn',
+    },
+  },
   // TODO when a test runner lands here: add eslint-plugin-jest per False9.
   {
     plugins: {
