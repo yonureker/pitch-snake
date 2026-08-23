@@ -118,6 +118,15 @@
   .t-meta { font-size: 13px; color: #b7ac93; letter-spacing: 1px; }
   .btn.ghostbtn { background: transparent; box-shadow: none; border: 1.5px solid rgba(244,236,216,0.35); }
   .btn.ghostbtn:active { transform: none; }
+  .btn-row { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .btn.modes {
+    background: transparent; color: var(--gold-bright);
+    border: 2px solid var(--gold); box-shadow: none;
+  }
+  .btn.modes:active { transform: none; }
+  .mode-caption {
+    font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #b7ac93;
+  }
 
   .board-frame {
     position: relative;
@@ -556,7 +565,11 @@
         <div class="save-note" id="saveNote" hidden></div>
         <div class="board-head" id="boardHead" style="display:none">Top 10</div>
         <ol class="standings" id="standings" style="display:none"></ol>
-        <button class="btn" id="startBtn">START</button>
+        <div class="mode-caption" id="modeCaption"></div>
+        <div class="btn-row">
+          <button class="btn" id="startBtn">START</button>
+          <button class="btn modes" id="modesBtn">MODES</button>
+        </div>
       </div>
     </div>
 
@@ -760,17 +773,15 @@
     nameInput.value = '';
     // a tournament board only takes entries while its window is open
     const canEnter = mode !== 'tourney' || tourneyState() === 'open';
-    entry.style.display = (g.score > 0 && canEnter) ? 'flex' : 'none';
+    entryWanted = g.score > 0 && canEnter;
     saveNote.hidden = true;
-    standingsEl.style.display = 'block';
-    boardHead.style.display = 'block';
-    modeRow.style.display = 'flex';
+    showModes = false;
     savePersonalBest();          // the round is over; that best is worth keeping
     renderStandings();
     refreshModeUI();
     overlay.classList.remove('hidden');
     refreshSettingsUI();
-    if (g.score > 0 && canEnter) setTimeout(() => nameInput.focus(), 60);
+    if (entryWanted) setTimeout(() => nameInput.focus(), 60);
   }
 
   // ---- rendering: sprites, layers, particles (all page-side) ----
@@ -1545,7 +1556,8 @@
     try {
       const key = await saveScore(name, g.score);
       await renderStandings(key);
-      entry.style.display = 'none';
+      entryWanted = false;
+      refreshModeUI();
     } catch (e) {
       // a failed save must not lock the entry for the round; let them retry, and
       // say why rather than leaving a button that silently did nothing
@@ -1580,8 +1592,12 @@
   const tCardTitle = document.getElementById('tCardTitle');
   const tCardCode = document.getElementById('tCardCode');
   const tCardMeta = document.getElementById('tCardMeta');
+  const modeCaption = document.getElementById('modeCaption');
+  const modesBtn = document.getElementById('modesBtn');
   let tCreating = false;
   let tBusy = false;
+  let showModes = false;
+  let entryWanted = false;   // the death screen decided an entry belongs; refreshModeUI applies it
 
   function persistModeState() {
     try {
@@ -1594,11 +1610,16 @@
   const fmtWhen = (iso) =>
     new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-  // one function owns everything the mode choice shows or hides, so the
-  // ready and dead screens can both just call it after any change
+  // One function owns every surface the menus show or hide: the chooser (the
+  // MODES view), the ready screen's legend, the death screen's board and
+  // entry, the caption, and both buttons. Everything else just flips state
+  // and calls this.
   function refreshModeUI() {
+    const onMenu = state === 'ready' || state === 'dead';
+    const modesOpen = showModes && onMenu;
     for (const b of modeRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === mode);
-    tourneyPanel.hidden = mode !== 'tourney';
+    modeRow.style.display = modesOpen ? 'flex' : 'none';
+    tourneyPanel.hidden = !(modesOpen && mode === 'tourney');
     tJoin.style.display = (!tourney && !tCreating) ? 'flex' : 'none';
     tCreate.hidden = !(tCreating && !tourney);
     tCard.hidden = !tourney;
@@ -1610,11 +1631,32 @@
                             : st === 'open' ? 'ENDS ' + fmtWhen(tourney.ends_at)
                             : 'ENDED ' + fmtWhen(tourney.ends_at);
     }
+    legend.style.display = (state === 'ready' && !modesOpen) ? '' : 'none';
+    const deadPanels = state === 'dead' && !modesOpen;
+    standingsEl.style.display = deadPanels ? 'block' : 'none';
+    boardHead.style.display = deadPanels ? 'block' : 'none';
+    entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
+    modeCaption.style.display = (onMenu && !modesOpen) ? '' : 'none';
+    modeCaption.textContent =
+      mode === 'tourney' ?
+        (tourney ?
+          tourney.title + ' \u00b7 ' + tourney.code +
+            (tourneyState() === 'open' ? '' : tourneyState() === 'upcoming' ? ' \u00b7 NOT STARTED' : ' \u00b7 ENDED')
+        : 'TOURNAMENT \u00b7 NONE JOINED')
+      : ruleMode() === 'speedrun' ? 'SPEED RUN' : 'HIGH SCORE';
     const playable = mode !== 'tourney' || tourneyState() === 'open';
-    startBtn.style.display = playable ? '' : 'none';
+    startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
+    modesBtn.style.display = onMenu ? '' : 'none';
+    modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     best = bestByMode[ruleMode()];
     bestEl.textContent = best;
   }
+
+  modesBtn.addEventListener('click', () => {
+    if (state !== 'ready' && state !== 'dead') return;
+    showModes = !showModes;
+    refreshModeUI();
+  });
 
   modeRow.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -1622,11 +1664,12 @@
     if (mode === b.dataset.mode) return;
     mode = b.dataset.mode;
     persistModeState();
+    if (mode !== 'tourney') showModes = false;   // a plain ruleset is a complete choice
     if (state === 'ready') newRound();   // the clock preview and the next round follow the mode
     else {
       // the finished round belongs to the mode it was played under: switching
       // now retires its entry form and shows the new mode's board instead
-      entry.style.display = 'none';
+      entryWanted = false;
       renderStandings();
     }
     refreshModeUI();
@@ -1700,8 +1743,8 @@
     tourney = null;
     tCreating = false;
     persistModeState();
+    if (state === 'dead') { entryWanted = false; renderStandings(); }
     refreshModeUI();
-    if (state === 'dead') { entry.style.display = 'none'; renderStandings(); }
   });
 
   // ---- round flow ----
@@ -1713,13 +1756,9 @@
     countClock = 0; countBeat = -1;
     lastTick = 0;
     overlayTitle.className = '';
-    entry.style.display = 'none';
     saveNote.hidden = true;
-    standingsEl.style.display = 'none';
-    boardHead.style.display = 'none';
-    legend.style.display = 'none';
-    modeRow.style.display = 'none';
-    tourneyPanel.hidden = true;
+    showModes = false;
+    refreshModeUI();              // countdown state hides every menu surface
     overlay.classList.add('hidden');
     settingsModal.hidden = true;
     refreshSettingsUI();          // hide the gear, lock the settings for this round

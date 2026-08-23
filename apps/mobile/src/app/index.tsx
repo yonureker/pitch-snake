@@ -124,6 +124,7 @@ export default function Index() {
   const [submittedId, setSubmittedId] = useState<number | null>(null);
   const [submittedName, setSubmittedName] = useState<string | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>('classic');
+  const [showModes, setShowModes] = useState(false);
   const [tourney, setTourney] = useState<TournamentRow | null>(null);
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
   const [tCreating, setTCreating] = useState(false);
@@ -211,12 +212,20 @@ export default function Index() {
   };
 
   const startRound = (): void => {
+    setShowModes(false);
     setEntryName('');
     setSubmittedId(null);
     setSubmittedName(null);
     submit.reset();
     tSubmit.reset();
     loop.start();
+  };
+
+  // picking a plain ruleset is a complete decision, so the chooser closes on
+  // it; picking TOURNAMENT opens the join/create business instead
+  const pickFromList = (m: UiMode): void => {
+    pickMode(m);
+    if (m !== 'tourney') setShowModes(false);
   };
 
   const saveScore = (): void => {
@@ -263,6 +272,17 @@ export default function Index() {
     : '';
   const canEnterBoard = uiMode !== 'tourney' || tStatus === 'open';
   const saving = submit.isPending || tSubmit.isPending;
+  const menuPhase = loop.phase === 'ready' || dead;
+  const modeCaption =
+    uiMode === 'tourney' ?
+      tourney === null ?
+        'TOURNAMENT \u00b7 NONE JOINED'
+      : `${tourney.title} \u00b7 ${tourney.code}${
+          tStatus === 'open' ? ''
+          : tStatus === 'upcoming' ? ' \u00b7 NOT STARTED'
+          : ' \u00b7 ENDED'
+        }`
+    : RULE_LABEL[ruleMode];
   // dynamic dimensions live in variables, not literals, so the inline-style
   // rule keeps its teeth for everything that CAN be a StyleSheet entry
   const screenPad = { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 6 };
@@ -304,342 +324,383 @@ export default function Index() {
           )}
           {showOverlay && (
             <View style={styles.overlay}>
-              <Text style={[styles.overlayTitle, dead && styles.overlayTitleDead]}>
-                {dead ?
-                  'FULL TIME'
-                : loop.phase === 'paused' ?
-                  'HALF TIME'
-                : 'KICK OFF'}
-              </Text>
-              {dead ?
-                <Text style={styles.overlayText}>
-                  {deadLine}You scored {loop.score}.
-                </Text>
-              : loop.phase === 'paused' ?
-                <Text style={styles.overlayText}>Take a breather.</Text>
-              : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
-              {dead && loop.score > 0 && submittedId === null && submittedName === null && canEnterBoard && (
-                <View style={styles.entryRow}>
-                  <TextInput
-                    style={styles.nameInput}
-                    value={entryName}
-                    onChangeText={(t) => {
-                      setEntryName(
-                        t
-                          .replace(/[^a-z0-9]/gi, '')
-                          .toUpperCase()
-                          .slice(0, 5),
-                      );
-                    }}
-                    placeholder="NAME"
-                    placeholderTextColor="#9a917c"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    maxLength={5}
-                  />
+              {showModes && menuPhase ?
+                <>
+                  <Text style={styles.overlayTitle}>MODES</Text>
+                  <Text style={styles.overlayText}>Choose your game.</Text>
+                  <View style={styles.modeList}>
+                    {MODE_LABELS.map((m) => (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={m.mode}
+                        onPress={() => {
+                          pickFromList(m.mode);
+                        }}
+                        style={[styles.modeBtn, uiMode === m.mode && styles.modeBtnOn]}
+                      >
+                        <Text style={[styles.modeBtnText, uiMode === m.mode && styles.modeBtnTextOn]}>
+                          {m.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {uiMode === 'tourney' && (
+                    <View style={styles.tPanel}>
+                      {tourney !== null ?
+                        <>
+                          <Text style={styles.tTitle}>
+                            {tourney.title} {'\u00b7'} {RULE_LABEL[tourney.mode]}
+                          </Text>
+                          <Text style={styles.tCode}>{tourney.code}</Text>
+                          <Text style={styles.tMeta}>
+                            {tStatus === 'upcoming' ?
+                              `STARTS ${fmtWhen(tourney.startsAt)}`
+                            : tStatus === 'open' ?
+                              `ENDS ${fmtWhen(tourney.endsAt)}`
+                            : `ENDED ${fmtWhen(tourney.endsAt)}`}
+                          </Text>
+                          <Pressable accessibilityRole="button" onPress={leaveGo} style={styles.tGhostBtn}>
+                            <Text style={styles.tGhostText}>LEAVE</Text>
+                          </Pressable>
+                        </>
+                      : tCreating ?
+                        <>
+                          <TextInput
+                            style={styles.tTitleInput}
+                            value={createTitle}
+                            onChangeText={setCreateTitle}
+                            placeholder="PITCH CUP"
+                            placeholderTextColor="#9a917c"
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                            maxLength={24}
+                          />
+                          <View style={styles.speedRow}>
+                            {(['classic', 'speedrun'] as const).map((m) => (
+                              <Pressable
+                                accessibilityRole="button"
+                                key={m}
+                                onPress={() => {
+                                  setCreateMode(m);
+                                }}
+                                style={[styles.speedBtn, createMode === m && styles.speedBtnOn]}
+                              >
+                                <Text style={styles.speedText}>{RULE_LABEL[m]}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                          <View style={styles.speedRow}>
+                            {DURATION_LABELS.map((d) => (
+                              <Pressable
+                                accessibilityRole="button"
+                                key={d.minutes}
+                                onPress={() => {
+                                  setCreateMinutes(d.minutes);
+                                }}
+                                style={[styles.speedBtn, createMinutes === d.minutes && styles.speedBtnOn]}
+                              >
+                                <Text style={styles.speedText}>{d.label}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                          <View style={styles.entryRow}>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={createGo}
+                              disabled={create.isPending}
+                              style={[styles.saveBtn, create.isPending && styles.saveBtnBusy]}
+                            >
+                              <Text style={styles.saveText}>CREATE</Text>
+                            </Pressable>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => {
+                                setTCreating(false);
+                              }}
+                              style={styles.tGhostBtn}
+                            >
+                              <Text style={styles.tGhostText}>BACK</Text>
+                            </Pressable>
+                          </View>
+                          {create.isError && (
+                            <Text style={styles.saveNote}>Could not create the tournament. Try again.</Text>
+                          )}
+                        </>
+                      : <>
+                          <View style={styles.entryRow}>
+                            <TextInput
+                              style={styles.tCodeInput}
+                              value={joinCode}
+                              onChangeText={(t) => {
+                                setJoinCode(
+                                  t
+                                    .replace(/[^a-z0-9]/gi, '')
+                                    .toUpperCase()
+                                    .slice(0, 6),
+                                );
+                              }}
+                              placeholder="CODE"
+                              placeholderTextColor="#9a917c"
+                              autoCapitalize="characters"
+                              autoCorrect={false}
+                              maxLength={6}
+                            />
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={joinGo}
+                              disabled={join.isPending}
+                              style={[styles.saveBtn, join.isPending && styles.saveBtnBusy]}
+                            >
+                              <Text style={styles.saveText}>JOIN</Text>
+                            </Pressable>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => {
+                                setTCreating(true);
+                              }}
+                              style={styles.tGhostBtn}
+                            >
+                              <Text style={styles.tGhostText}>CREATE</Text>
+                            </Pressable>
+                          </View>
+                          {join.isError && (
+                            <Text style={styles.saveNote}>Could not reach the tournament. Try again.</Text>
+                          )}
+                          {join.isSuccess && join.data === null && (
+                            <Text style={styles.saveNote}>No tournament with that code.</Text>
+                          )}
+                        </>
+                      }
+                    </View>
+                  )}
                   <Pressable
                     accessibilityRole="button"
-                    onPress={saveScore}
-                    disabled={saving}
-                    style={[styles.saveBtn, saving && styles.saveBtnBusy]}
+                    onPress={() => {
+                      setShowModes(false);
+                    }}
+                    style={styles.tGhostBtn}
                   >
-                    <Text style={styles.saveText}>SAVE</Text>
+                    <Text style={styles.tGhostText}>DONE</Text>
                   </Pressable>
-                </View>
-              )}
-              {dead && (submit.isError || tSubmit.isError) && (
-                <Text style={styles.saveNote}>Could not reach the leaderboard. Try again.</Text>
-              )}
-              {dead && SUPABASE_CONFIGURED && uiMode === 'tourney' && tourney !== null && (
-                <View style={styles.standings}>
-                  <Text style={styles.boardHead}>
-                    {tourney.title} {'\u00b7'} {tourney.code}
+                </>
+              : <>
+                  <Text style={[styles.overlayTitle, dead && styles.overlayTitleDead]}>
+                    {dead ?
+                      'FULL TIME'
+                    : loop.phase === 'paused' ?
+                      'HALF TIME'
+                    : 'KICK OFF'}
                   </Text>
-                  {tourneyTop.isPending ?
-                    <Text style={styles.boardEmpty}>Loading…</Text>
-                  : tourneyTop.isError ?
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        void tourneyTop.refetch();
-                      }}
-                    >
-                      <Text style={styles.boardEmpty}>Could not reach the board. Tap to retry.</Text>
-                    </Pressable>
-                  : tourneyTop.data.length === 0 ?
-                    <Text style={styles.boardEmpty}>No scores yet</Text>
-                  : <ScrollView style={styles.boardList}>
-                      {tourneyTop.data.map((row, i) => (
-                        <View key={row.name} style={styles.boardRow}>
-                          <Text style={[styles.boardRank, row.name === submittedName && styles.boardMine]}>
-                            {i + 1}
-                          </Text>
-                          <Text style={[styles.boardName, row.name === submittedName && styles.boardMine]}>
-                            {row.name}
-                          </Text>
-                          <Text style={[styles.boardScore, row.name === submittedName && styles.boardMine]}>
-                            {row.score}
-                          </Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  }
-                </View>
-              )}
-              {dead && SUPABASE_CONFIGURED && uiMode !== 'tourney' && (
-                <View style={styles.standings}>
-                  <Text style={styles.boardHead}>
-                    TOP 10 WORLDWIDE{ruleMode === 'speedrun' ? ' \u00b7 SPEED RUN' : ''}
-                  </Text>
-                  {topScores.isPending ?
-                    <Text style={styles.boardEmpty}>Loading…</Text>
-                  : topScores.isError ?
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        void topScores.refetch();
-                      }}
-                    >
-                      <Text style={styles.boardEmpty}>Could not reach the board. Tap to retry.</Text>
-                    </Pressable>
-                  : topScores.data.length === 0 ?
-                    <Text style={styles.boardEmpty}>No scores yet</Text>
-                  : <ScrollView style={styles.boardList}>
-                      {topScores.data.map((row, i) => (
-                        <View key={row.id} style={styles.boardRow}>
-                          <Text style={[styles.boardRank, row.id === submittedId && styles.boardMine]}>
-                            {i + 1}
-                          </Text>
-                          <Text style={[styles.boardName, row.id === submittedId && styles.boardMine]}>
-                            {row.name}
-                          </Text>
-                          <Text style={[styles.boardScore, row.id === submittedId && styles.boardMine]}>
-                            {row.score}
-                          </Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  }
-                </View>
-              )}
-              {(loop.phase === 'ready' || dead) && (
-                <View style={styles.speedRow}>
-                  {MODE_LABELS.map((m) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={m.mode}
-                      onPress={() => {
-                        pickMode(m.mode);
-                      }}
-                      style={[styles.speedBtn, uiMode === m.mode && styles.speedBtnOn]}
-                    >
-                      <Text style={styles.speedText}>{m.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-              {(loop.phase === 'ready' || (dead && tourney === null)) && uiMode === 'tourney' && (
-                <View style={styles.tPanel}>
-                  {tourney !== null ?
-                    <>
-                      <Text style={styles.tTitle}>
-                        {tourney.title} {'\u00b7'} {RULE_LABEL[tourney.mode]}
-                      </Text>
-                      <Text style={styles.tCode}>{tourney.code}</Text>
-                      <Text style={styles.tMeta}>
-                        {tStatus === 'upcoming' ?
-                          `STARTS ${fmtWhen(tourney.startsAt)}`
-                        : tStatus === 'open' ?
-                          `ENDS ${fmtWhen(tourney.endsAt)}`
-                        : `ENDED ${fmtWhen(tourney.endsAt)}`}
-                      </Text>
-                      <Pressable accessibilityRole="button" onPress={leaveGo} style={styles.tGhostBtn}>
-                        <Text style={styles.tGhostText}>LEAVE</Text>
-                      </Pressable>
-                    </>
-                  : tCreating ?
-                    <>
-                      <TextInput
-                        style={styles.tTitleInput}
-                        value={createTitle}
-                        onChangeText={setCreateTitle}
-                        placeholder="PITCH CUP"
-                        placeholderTextColor="#9a917c"
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        maxLength={24}
-                      />
-                      <View style={styles.speedRow}>
-                        {(['classic', 'speedrun'] as const).map((m) => (
-                          <Pressable
-                            accessibilityRole="button"
-                            key={m}
-                            onPress={() => {
-                              setCreateMode(m);
-                            }}
-                            style={[styles.speedBtn, createMode === m && styles.speedBtnOn]}
-                          >
-                            <Text style={styles.speedText}>{RULE_LABEL[m]}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      <View style={styles.speedRow}>
-                        {DURATION_LABELS.map((d) => (
-                          <Pressable
-                            accessibilityRole="button"
-                            key={d.minutes}
-                            onPress={() => {
-                              setCreateMinutes(d.minutes);
-                            }}
-                            style={[styles.speedBtn, createMinutes === d.minutes && styles.speedBtnOn]}
-                          >
-                            <Text style={styles.speedText}>{d.label}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      <View style={styles.entryRow}>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={createGo}
-                          disabled={create.isPending}
-                          style={[styles.saveBtn, create.isPending && styles.saveBtnBusy]}
-                        >
-                          <Text style={styles.saveText}>CREATE</Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => {
-                            setTCreating(false);
-                          }}
-                          style={styles.tGhostBtn}
-                        >
-                          <Text style={styles.tGhostText}>BACK</Text>
-                        </Pressable>
-                      </View>
-                      {create.isError && (
-                        <Text style={styles.saveNote}>Could not create the tournament. Try again.</Text>
-                      )}
-                    </>
-                  : <>
+                  {dead ?
+                    <Text style={styles.overlayText}>
+                      {deadLine}You scored {loop.score}.
+                    </Text>
+                  : loop.phase === 'paused' ?
+                    <Text style={styles.overlayText}>Take a breather.</Text>
+                  : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
+                  {dead &&
+                    loop.score > 0 &&
+                    submittedId === null &&
+                    submittedName === null &&
+                    canEnterBoard && (
                       <View style={styles.entryRow}>
                         <TextInput
-                          style={styles.tCodeInput}
-                          value={joinCode}
+                          style={styles.nameInput}
+                          value={entryName}
                           onChangeText={(t) => {
-                            setJoinCode(
+                            setEntryName(
                               t
                                 .replace(/[^a-z0-9]/gi, '')
                                 .toUpperCase()
-                                .slice(0, 6),
+                                .slice(0, 5),
                             );
                           }}
-                          placeholder="CODE"
+                          placeholder="NAME"
                           placeholderTextColor="#9a917c"
                           autoCapitalize="characters"
                           autoCorrect={false}
-                          maxLength={6}
+                          maxLength={5}
                         />
                         <Pressable
                           accessibilityRole="button"
-                          onPress={joinGo}
-                          disabled={join.isPending}
-                          style={[styles.saveBtn, join.isPending && styles.saveBtnBusy]}
+                          onPress={saveScore}
+                          disabled={saving}
+                          style={[styles.saveBtn, saving && styles.saveBtnBusy]}
                         >
-                          <Text style={styles.saveText}>JOIN</Text>
+                          <Text style={styles.saveText}>SAVE</Text>
                         </Pressable>
+                      </View>
+                    )}
+                  {dead && (submit.isError || tSubmit.isError) && (
+                    <Text style={styles.saveNote}>Could not reach the leaderboard. Try again.</Text>
+                  )}
+                  {dead && SUPABASE_CONFIGURED && uiMode === 'tourney' && tourney !== null && (
+                    <View style={styles.standings}>
+                      <Text style={styles.boardHead}>
+                        {tourney.title} {'\u00b7'} {tourney.code}
+                      </Text>
+                      {tourneyTop.isPending ?
+                        <Text style={styles.boardEmpty}>Loading…</Text>
+                      : tourneyTop.isError ?
                         <Pressable
                           accessibilityRole="button"
                           onPress={() => {
-                            setTCreating(true);
+                            void tourneyTop.refetch();
                           }}
-                          style={styles.tGhostBtn}
                         >
-                          <Text style={styles.tGhostText}>CREATE</Text>
+                          <Text style={styles.boardEmpty}>Could not reach the board. Tap to retry.</Text>
                         </Pressable>
-                      </View>
-                      {join.isError && (
-                        <Text style={styles.saveNote}>Could not reach the tournament. Try again.</Text>
-                      )}
-                      {join.isSuccess && join.data === null && (
-                        <Text style={styles.saveNote}>No tournament with that code.</Text>
-                      )}
-                    </>
-                  }
-                </View>
-              )}
-              {loop.phase === 'ready' && uiMode !== 'tourney' && (
-                <View style={styles.legend}>
-                  <LegendRow
-                    icon={<Image source={appleIcon} style={styles.lgImage} />}
-                    text="Emoji"
-                    value="+1"
-                    valueTone="pos"
-                  />
-                  <LegendRow
-                    icon={
-                      <View style={styles.lgRing}>
-                        <Image source={starIcon} style={styles.lgRingImage} />
-                      </View>
-                    }
-                    text="Emoji with a ring"
-                    value="+5"
-                    valueTone="pos"
-                  />
-                  <LegendRow
-                    icon={
-                      <View style={styles.lgTnt}>
-                        <View style={styles.lgTntBand} />
-                      </View>
-                    }
-                    text="TNT block, 5 shorter"
-                    value="-5"
-                    valueTone="neg"
-                  />
-                  <LegendRow
-                    icon={
-                      <View style={styles.lgPortal}>
-                        <View style={styles.lgPortalCore} />
-                      </View>
-                    }
-                    text="Teleport, one trip"
-                    value="+5"
-                    valueTone="pos"
-                  />
-                  <LegendRow
-                    icon={<Image source={skullIcon} style={styles.lgImage} />}
-                    text="Walls, ghosts or yourself"
-                    value="DIE"
-                    valueTone="die"
-                  />
-                </View>
-              )}
-              {loop.phase === 'ready' && (
-                <View style={styles.speedRow}>
-                  {SPEED_LABELS.map((s) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={s.label}
-                      onPress={() => {
-                        loop.setTickMs(s.ms);
-                      }}
-                      style={[styles.speedBtn, loop.tickMs === s.ms && styles.speedBtnOn]}
-                    >
-                      <Text style={styles.speedText}>{s.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-              {(loop.phase === 'paused' || uiMode !== 'tourney' || tStatus === 'open') && (
-                <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
-                  <Text style={styles.startText}>
-                    {dead ?
-                      'REMATCH'
-                    : loop.phase === 'paused' ?
-                      'RESUME'
-                    : 'START'}
-                  </Text>
-                </Pressable>
-              )}
+                      : tourneyTop.data.length === 0 ?
+                        <Text style={styles.boardEmpty}>No scores yet</Text>
+                      : <ScrollView style={styles.boardList}>
+                          {tourneyTop.data.map((row, i) => (
+                            <View key={row.name} style={styles.boardRow}>
+                              <Text
+                                style={[styles.boardRank, row.name === submittedName && styles.boardMine]}
+                              >
+                                {i + 1}
+                              </Text>
+                              <Text
+                                style={[styles.boardName, row.name === submittedName && styles.boardMine]}
+                              >
+                                {row.name}
+                              </Text>
+                              <Text
+                                style={[styles.boardScore, row.name === submittedName && styles.boardMine]}
+                              >
+                                {row.score}
+                              </Text>
+                            </View>
+                          ))}
+                        </ScrollView>
+                      }
+                    </View>
+                  )}
+                  {dead && SUPABASE_CONFIGURED && uiMode !== 'tourney' && (
+                    <View style={styles.standings}>
+                      <Text style={styles.boardHead}>
+                        TOP 10 WORLDWIDE{ruleMode === 'speedrun' ? ' \u00b7 SPEED RUN' : ''}
+                      </Text>
+                      {topScores.isPending ?
+                        <Text style={styles.boardEmpty}>Loading…</Text>
+                      : topScores.isError ?
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => {
+                            void topScores.refetch();
+                          }}
+                        >
+                          <Text style={styles.boardEmpty}>Could not reach the board. Tap to retry.</Text>
+                        </Pressable>
+                      : topScores.data.length === 0 ?
+                        <Text style={styles.boardEmpty}>No scores yet</Text>
+                      : <ScrollView style={styles.boardList}>
+                          {topScores.data.map((row, i) => (
+                            <View key={row.id} style={styles.boardRow}>
+                              <Text style={[styles.boardRank, row.id === submittedId && styles.boardMine]}>
+                                {i + 1}
+                              </Text>
+                              <Text style={[styles.boardName, row.id === submittedId && styles.boardMine]}>
+                                {row.name}
+                              </Text>
+                              <Text style={[styles.boardScore, row.id === submittedId && styles.boardMine]}>
+                                {row.score}
+                              </Text>
+                            </View>
+                          ))}
+                        </ScrollView>
+                      }
+                    </View>
+                  )}
+                  {loop.phase === 'ready' && (
+                    <View style={styles.legend}>
+                      <LegendRow
+                        icon={<Image source={appleIcon} style={styles.lgImage} />}
+                        text="Emoji"
+                        value="+1"
+                        valueTone="pos"
+                      />
+                      <LegendRow
+                        icon={
+                          <View style={styles.lgRing}>
+                            <Image source={starIcon} style={styles.lgRingImage} />
+                          </View>
+                        }
+                        text="Emoji with a ring"
+                        value="+5"
+                        valueTone="pos"
+                      />
+                      <LegendRow
+                        icon={
+                          <View style={styles.lgTnt}>
+                            <View style={styles.lgTntBand} />
+                          </View>
+                        }
+                        text="TNT block, 5 shorter"
+                        value="-5"
+                        valueTone="neg"
+                      />
+                      <LegendRow
+                        icon={
+                          <View style={styles.lgPortal}>
+                            <View style={styles.lgPortalCore} />
+                          </View>
+                        }
+                        text="Teleport, one trip"
+                        value="+5"
+                        valueTone="pos"
+                      />
+                      <LegendRow
+                        icon={<Image source={skullIcon} style={styles.lgImage} />}
+                        text="Walls, ghosts or yourself"
+                        value="DIE"
+                        valueTone="die"
+                      />
+                    </View>
+                  )}
+                  {loop.phase === 'ready' && (
+                    <View style={styles.speedRow}>
+                      {SPEED_LABELS.map((s) => (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={s.label}
+                          onPress={() => {
+                            loop.setTickMs(s.ms);
+                          }}
+                          style={[styles.speedBtn, loop.tickMs === s.ms && styles.speedBtnOn]}
+                        >
+                          <Text style={styles.speedText}>{s.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                  {menuPhase && <Text style={styles.modeCaption}>{modeCaption}</Text>}
+                  <View style={styles.btnRow}>
+                    {(loop.phase === 'paused' || uiMode !== 'tourney' || tStatus === 'open') && (
+                      <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
+                        <Text style={styles.startText}>
+                          {dead ?
+                            'REMATCH'
+                          : loop.phase === 'paused' ?
+                            'RESUME'
+                          : 'START'}
+                        </Text>
+                      </Pressable>
+                    )}
+                    {menuPhase && (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setShowModes(true);
+                        }}
+                        style={styles.modesBtn}
+                      >
+                        <Text style={styles.modesText}>MODES</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </>
+              }
             </View>
           )}
           {loop.phase === 'playing' && (
@@ -837,6 +898,30 @@ const styles = StyleSheet.create({
   },
   pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
   clockText: { fontFamily: ANTON, fontSize: 18, color: GameColors.ink, letterSpacing: 1 },
+  modeList: { gap: 8, alignSelf: 'stretch', alignItems: 'center' },
+  modeBtn: {
+    minWidth: 220,
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(244,236,216,0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(244,236,216,0.25)',
+  },
+  modeBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
+  modeBtnText: { fontFamily: BARLOW_BOLD, fontSize: 14, letterSpacing: 1.5, color: '#e9e0cd' },
+  modeBtnTextOn: { color: GameColors.ink },
+  btnRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  modeCaption: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 2, color: '#b7ac93' },
+  modesBtn: {
+    borderWidth: 2,
+    borderColor: GameColors.gold,
+    borderRadius: 4,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  modesText: { fontFamily: ANTON, fontSize: 17, letterSpacing: 2, color: GameColors.goldBright },
   tPanel: { gap: 8, alignItems: 'center' },
   tTitle: { fontFamily: BARLOW_BOLD, fontSize: 14, letterSpacing: 2, color: '#e9e0cd' },
   tCode: { fontFamily: ANTON, fontSize: 32, letterSpacing: 6, color: GameColors.goldBright },
