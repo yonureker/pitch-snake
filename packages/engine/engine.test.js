@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
-  createGame, replay, ghostRenderPos,
+  createGame, replay, ghostRenderPos, ENGINE_VERSION,
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
   TNT_SCORES, GHOST_SCORES, GHOST_MS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
@@ -33,6 +33,8 @@ function setSnake(g, cells, dx, dy) {
   g.pendingGrowth = 0;
   g.progMs = 0;
   g.dir = { x: dx, y: dy };
+  g.headFrom.x = cells[0][0]; g.headFrom.y = cells[0][1];
+  g.headMajX = cells[0][0]; g.headMajY = cells[0][1];
 }
 
 const cellEq = (c, x, y) => !!c && c.x === x && c.y === y;
@@ -567,9 +569,9 @@ test('the chaser closes distance and reaches lethal range, deterministically', (
   assert.ok(endDist < startDist - 4, `it closes hard on a still head (from ${String(startDist)} to ${String(endDist)})`);
 });
 
-test('personalities survive the replay contract (version 2)', () => {
+test('personalities and contact survive the replay contract', () => {
   const g = createGame({ seed: 424242, tickMs: 130 });
-  assert.equal(g.log.v, 3, 'rounds record as the current engine version');
+  assert.equal(g.log.v, ENGINE_VERSION, 'rounds record as the current engine version');
   const script = [[40, 0, 1], [90, 1, 0], [200, 0, -1], [700, -1, 0]];
   let s = 0;
   for (let q = 0; q < 60000 && g.alive; q++) {
@@ -580,6 +582,54 @@ test('personalities survive the replay contract (version 2)', () => {
   const r = replay(g.log);
   assert.equal(r.score, g.score, 'ghost decisions replay identically under seeded targeting');
   assert.deepEqual(r.snake, g.snake);
+});
+
+test('contact: a ghost sliding majority-onto the head kills between snake steps', () => {
+  // SLOW tick (200): head at (5,5) heading right steps at 200ms. A ghost is
+  // mid-glide from (5,4) into (5,5); its majority cell flips there at 250ms,
+  // when the head has ALREADY stepped to (6,5) in state but is still drawn
+  // majority-in (5,5) (its trailing half). The old cell-entry check saw
+  // nothing; the majority rule is a hit at exactly that quantum.
+  const g = quietGame({ tickMs: 200 });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.ghosts.push({ x: 5, y: 5, px: 5, py: 4, dir: { x: 0, y: 1 }, warped: false, role: 0,
+                  moveAt: g.clockMs + 500 });
+  g.advanceQuanta(24);
+  assert.equal(g.alive, true, 'at 240ms the ghost is still minority in the cell: no contact');
+  g.advanceQuanta(1);
+  assert.equal(g.alive, false, 'at 250ms both majorities sit in (5,5)');
+  assert.equal(g.deadReason, 'ghost');
+});
+
+test('contact: brushing past ahead of the flip is a survivable near miss', () => {
+  // NORMAL-ish tick (100): the same encroaching ghost, but the head clears
+  // the contested cell (majority moves on at 150ms) before the ghost's
+  // majority arrives at 250ms. Their sprites brushed; majorities never met.
+  const g = quietGame({ tickMs: 100 });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.ghosts.push({ x: 5, y: 5, px: 5, py: 4, dir: { x: 0, y: 1 }, warped: false, role: 0,
+                  moveAt: g.clockMs + 500 });
+  g.advanceQuanta(40);
+  assert.equal(g.alive, true, 'the head outran the flip: no contact at any quantum');
+});
+
+test('contact: exchanging cells inside one quantum is a crossing, and lethal', () => {
+  // Head (6,5) heading left; ghost gliding (5,5) -> (6,5). Tick 100 puts the
+  // head majority flip into (5,5) at 150ms; moveAt 400 puts the ghost flip
+  // into (6,5) at the same 150ms quantum. Neither majority ever equals the
+  // other AT a quantum boundary: they swap. The crossing clause catches it.
+  const g = quietGame({ tickMs: 100 });
+  foodFar(g);
+  setSnake(g, [[6, 5], [7, 5], [8, 5]], -1, 0);
+  g.ghosts.push({ x: 6, y: 5, px: 5, py: 5, dir: { x: 1, y: 0 }, warped: false, role: 0,
+                  moveAt: g.clockMs + 400 });
+  g.advanceQuanta(14);
+  assert.equal(g.alive, true, 'at 140ms they are approaching, not touching');
+  g.advanceQuanta(1);
+  assert.equal(g.alive, false, 'at 150ms the two majorities swap cells: paths crossed');
+  assert.equal(g.deadReason, 'ghost');
 });
 
 test('ghosts route through portals on purpose, and never through spent ones', () => {

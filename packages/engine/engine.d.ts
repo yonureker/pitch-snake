@@ -38,6 +38,7 @@ export interface Ghost extends Cell {
   warped: boolean;
   /** Personality by spawn order: 0 chaser, 1 ambusher, 2 flanker, 3 cutoff, 4 warden. */
   role?: number;
+  majX?: number; majY?: number;
   moveAt: number;
 }
 export interface Portal { ax: number; ay: number; bx: number; by: number; used: boolean }
@@ -61,6 +62,7 @@ export interface Game {
   quanta: number; clockMs: number; progMs: number; accMs: number;
   snake: Cell[]; snakeSet: Set<number>; tailFrom: Cell | null;
   dir: Cell; dirQueue: Cell[];
+  headFrom: Cell; headMajX: number; headMajY: number;
   score: number; pendingGrowth: number;
   food: Food; foodAge: number; regularEaten: number;
   wallState: 'off' | 'warning' | 'solid'; wallPhaseEnd: number;

@@ -74,6 +74,10 @@ const COUNT_GO = 450;
 const COUNT_TOTAL = COUNT_BEAT * 3 + COUNT_GO;
 const MAX_DT = 100;
 
+// module scope: the compiler's purity rule refuses impure calls in component
+// bodies; event handlers reach the clock through this instead
+const nowMs = (): number => performance.now();
+
 function freshSeed(): number {
   const a = new Uint32Array(1);
   Crypto.getRandomValues(a);
@@ -88,6 +92,8 @@ interface LoopBox {
   frameWindowStart: number;
   phase: RoundPhase;
   tickMs: number;
+  /** performance.now() of the last sim advance (frame loop or input), 0 before the first frame. */
+  lastFrameTs: number;
   countClock: number;
   pulseMs: number;
   atlas: SkImage | null;
@@ -121,6 +127,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     tickMs: SPEEDS.normal,
     countClock: 0,
     pulseMs: 0,
+    lastFrameTs: 0,
     atlas: null,
     boardPx: 1,
     lastScore: -1,
@@ -212,12 +219,12 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     };
 
     let raf = 0;
-    let last = 0;
+    box.lastFrameTs = 0;
     const loop = (now: number): void => {
       raf = requestAnimationFrame(loop);
-      if (last === 0) last = now;
-      let dt = now - last;
-      last = now;
+      if (box.lastFrameTs === 0) box.lastFrameTs = now;
+      let dt = now - box.lastFrameTs;
+      box.lastFrameTs = now;
       if (dt > MAX_DT) dt = MAX_DT;
       else if (dt < 0) dt = 0;
       box.pulseMs += dt;
@@ -326,7 +333,23 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const steer = (x: number, y: number): void => {
     const box = boxRef.current;
     if (box.phase !== 'playing' && box.phase !== 'countdown') return;
-    game.current?.setDir(x, y);
+    const g = game.current;
+    if (g === null) return;
+    // Stamp the press at the moment it happened, not at the last frame tick:
+    // advance the sim to now before recording the input, so a turn can catch
+    // a cell boundary that falls between frames. advance() quantizes, so this
+    // is deterministic; events raised here queue for the frame loop's drain,
+    // and the loop's own dt shrinks by the same amount (shared lastFrameTs).
+    if (box.phase === 'playing' && box.lastFrameTs > 0) {
+      const now = nowMs();
+      let dt = now - box.lastFrameTs;
+      if (dt > MAX_DT) dt = MAX_DT;
+      if (dt > 0) {
+        g.advance(dt);
+        box.lastFrameTs = now;
+      }
+    }
+    g.setDir(x, y);
   };
 
   const effectiveHeading = (): { x: number; y: number } | null => {

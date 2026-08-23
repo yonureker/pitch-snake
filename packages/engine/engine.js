@@ -20,7 +20,7 @@
 // interpolation) live with the renderers; the engine reports what happened
 // through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 3;
+export const ENGINE_VERSION = 4;
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -181,6 +181,8 @@ export function createGame(cfg = {}) {
     accMs: 0,           // dt not yet turned into quanta (always < SIM_DT after advance)
 
     snake: [], snakeSet: new Set(), tailFrom: null,
+    headFrom: { x: 8, y: 10 },   // the cell the head last left; its majority cell until mid-glide (rule 24)
+    headMajX: 8, headMajY: 10,   // the head's majority cell one quantum ago, for the crossing test
     dir: { x: 1, y: 0 }, dirQueue: [],
     score: 0, pendingGrowth: 0,
 
@@ -347,6 +349,7 @@ export function createGame(cfg = {}) {
       dir: { x: 0, y: 0 }, warped: false,
       role: S.ghosts.length,
       moveAt: S.clockMs + GHOST_MS,
+      majX: c.x, majY: c.y,        // majority cell one quantum ago (rule 24)
     });
   }
 
@@ -459,12 +462,16 @@ export function createGame(cfg = {}) {
     }
   }
 
-  // the cell a ghost visually occupies right now, used for collision so you
-  // only die when you actually touch the ghost you can see
+  // The cell a ghost visually occupies right now: its render position
+  // rounded, which flips at the halfway point of a glide, the same halfway a
+  // hop snaps at. This is the ghost's one lethal cell (rule 24). Called every
+  // quantum, so it returns a shared scratch; read it before the next call.
   const _ga = { cx: 0, cy: 0 };
+  const _gb = { x: 0, y: 0 };
   function ghostAt(g) {
     const r = ghostRenderPos(g, S.clockMs, _ga);
-    return { x: wrap(Math.round(r.cx)), y: wrap(Math.round(r.cy)) };
+    _gb.x = wrap(Math.round(r.cx)); _gb.y = wrap(Math.round(r.cy));
+    return _gb;
   }
 
   // ---- teleport windows ----
@@ -565,10 +572,11 @@ export function createGame(cfg = {}) {
     const tail = S.snake[S.snake.length - 1];
     if (S.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return die('self');
 
-    // running into any ghost ends the run (the cell each visually occupies)
-    for (const gh of S.ghosts) { const g = ghostAt(gh); if (nx === g.x && ny === g.y) return die('ghost'); }
+    // ghosts are NOT tested here: contact with a mover is decided by the
+    // majority-cell rule in quantum() (rule 24), never by cell entry
 
     // move: pop the vacated tail first so the set stays exact, then add the head
+    S.headFrom.x = S.snake[0].x; S.headFrom.y = S.snake[0].y;
     if (grows) S.tailFrom = null;
     else { S.tailFrom = S.snake.pop(); S.snakeSet.delete(K(S.tailFrom.x, S.tailFrom.y)); }
     S.snake.unshift({ x: nx, y: ny });
@@ -637,6 +645,27 @@ export function createGame(cfg = {}) {
     }
     // the alive guard stops the drain the moment a step dies: no zombie steps
     while (S.alive && S.progMs >= S.tickMs) { S.progMs -= S.tickMs; step(); }
+    // ---- contact (rule 24) ----
+    // Every mover is exactly where it is drawn. The head's one cell is the
+    // cell it left until its glide passes half, then the cell it is entering;
+    // a ghost's is ghostAt (render position rounded, hops snap at the same
+    // half). Contact is those cells coinciding, tested every quantum, so a
+    // ghost sliding majority-onto a head kills between snake steps and a
+    // near-miss that never overlaps majorities is survivable. Two movers
+    // exchanging cells inside one quantum crossed paths: that is contact too.
+    if (S.alive) {
+      const half = S.progMs * 2 >= S.tickMs;
+      const hx = half ? S.snake[0].x : S.headFrom.x;
+      const hy = half ? S.snake[0].y : S.headFrom.y;
+      for (const gh of S.ghosts) {
+        const g = ghostAt(gh);
+        const met = g.x === hx && g.y === hy;
+        const crossed = g.x === S.headMajX && g.y === S.headMajY && gh.majX === hx && gh.majY === hy;
+        gh.majX = g.x; gh.majY = g.y;
+        if (met || crossed) { die('ghost'); break; }
+      }
+      S.headMajX = hx; S.headMajY = hy;
+    }
   }
 
   // ---- the public surface ----
