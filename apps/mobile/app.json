@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.onureker.pitchsnake"
+      "bundleIdentifier": "com.onureker.pitchsnake",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -43,7 +46,11 @@
     },
     "extra": {
       "supabaseUrl": "https://hzgsvlernnufogdpfnot.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6Z3N2bGVybm51Zm9nZHBmbm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwOTgwNjYsImV4cCI6MjA2NDY3NDA2Nn0.eQkgc04KaYPkA9EYLPPETFqD8IaMGpFQR4VUYy-xFPE"
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6Z3N2bGVybm51Zm9nZHBmbm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwOTgwNjYsImV4cCI6MjA2NDY3NDA2Nn0.eQkgc04KaYPkA9EYLPPETFqD8IaMGpFQR4VUYy-xFPE",
+      "router": {},
+      "eas": {
+        "projectId": "d42de3f1-2e2b-4536-b52e-f5e9ecd58de3"
+      }
     }
   }
 }
