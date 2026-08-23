@@ -119,6 +119,12 @@
   .btn.ghostbtn { background: transparent; box-shadow: none; border: 1.5px solid rgba(244,236,216,0.35); }
   .btn.ghostbtn:active { transform: none; }
   .btn-row { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  #startBtn { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .start-sub {
+    font-family: 'Barlow', sans-serif; font-size: 11px; font-weight: 700;
+    letter-spacing: 1.5px; opacity: 0.85;
+  }
+  .start-sub[hidden] { display: none; }
   .btn.modes {
     background: transparent; color: var(--gold-bright);
     border: 2px solid var(--gold); box-shadow: none;
@@ -515,7 +521,7 @@
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
         <p id="overlayText">Eat to grow. Survive the pitch.</p>
         <div class="mode-row" id="modeRow">
-          <button data-mode="classic" class="active">HIGH SCORE</button>
+          <button data-mode="classic" class="active">NO TIME LIMIT</button>
           <button data-mode="speedrun">SPEED RUN</button>
           <button data-mode="tourney">TOURNAMENT</button>
         </div>
@@ -530,7 +536,7 @@
               <input id="tTitle" maxlength="24" placeholder="PITCH CUP" autocomplete="off" spellcheck="false">
             </div>
             <div class="t-chips" id="tModeChips">
-              <button data-tmode="classic" class="active">HIGH SCORE</button>
+              <button data-tmode="classic" class="active">NO TIME LIMIT</button>
               <button data-tmode="speedrun">SPEED RUN</button>
             </div>
             <div class="t-chips" id="tDurChips">
@@ -567,7 +573,7 @@
         <ol class="standings" id="standings" style="display:none"></ol>
         <div class="mode-caption" id="modeCaption"></div>
         <div class="btn-row">
-          <button class="btn" id="startBtn">START</button>
+          <button class="btn" id="startBtn"><span id="startMain">START</span><span class="start-sub" id="startSub"></span></button>
           <button class="btn modes" id="modesBtn">MODES</button>
         </div>
       </div>
@@ -766,7 +772,7 @@
               : reason === 'time' ? 'The final whistle. '
               : '';
     overlayText.textContent = `${how}You scored ${g.score}.`;
-    startBtn.textContent = 'REMATCH';
+    startMain.textContent = 'REMATCH';
     savedThisRound = false;
     saveBtn.disabled = false;
     nameInput.disabled = false;
@@ -1594,6 +1600,8 @@
   const tCardMeta = document.getElementById('tCardMeta');
   const modeCaption = document.getElementById('modeCaption');
   const modesBtn = document.getElementById('modesBtn');
+  const startMain = document.getElementById('startMain');
+  const startSub = document.getElementById('startSub');
   let tCreating = false;
   let tBusy = false;
   let showModes = false;
@@ -1625,7 +1633,7 @@
     tCard.hidden = !tourney;
     if (tourney) {
       const st = tourneyState();
-      tCardTitle.textContent = tourney.title + ' \u00b7 ' + (tourney.mode === 'speedrun' ? 'SPEED RUN' : 'HIGH SCORE');
+      tCardTitle.textContent = tourney.title + ' \u00b7 ' + (tourney.mode === 'speedrun' ? 'SPEED RUN' : 'NO TIME LIMIT');
       tCardCode.textContent = tourney.code;
       tCardMeta.textContent = st === 'upcoming' ? 'STARTS ' + fmtWhen(tourney.starts_at)
                             : st === 'open' ? 'ENDS ' + fmtWhen(tourney.ends_at)
@@ -1636,14 +1644,20 @@
     standingsEl.style.display = deadPanels ? 'block' : 'none';
     boardHead.style.display = deadPanels ? 'block' : 'none';
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
-    modeCaption.style.display = (onMenu && !modesOpen) ? '' : 'none';
-    modeCaption.textContent =
-      mode === 'tourney' ?
-        (tourney ?
+    // the caption carries only what the START button cannot: which
+    // tournament, and whether its window is open
+    const showCaption = onMenu && !modesOpen && mode === 'tourney';
+    modeCaption.style.display = showCaption ? '' : 'none';
+    if (showCaption) {
+      modeCaption.textContent =
+        tourney ?
           tourney.title + ' \u00b7 ' + tourney.code +
             (tourneyState() === 'open' ? '' : tourneyState() === 'upcoming' ? ' \u00b7 NOT STARTED' : ' \u00b7 ENDED')
-        : 'TOURNAMENT \u00b7 NONE JOINED')
-      : ruleMode() === 'speedrun' ? 'SPEED RUN' : 'HIGH SCORE';
+        : 'TOURNAMENT \u00b7 NONE JOINED';
+    }
+    // START names the ruleset it is about to run; a pause needs no reminder
+    startSub.textContent = ruleMode() === 'speedrun' ? 'SPEED RUN' : 'NO TIME LIMIT';
+    startSub.hidden = state === 'paused';
     const playable = mode !== 'tourney' || tourneyState() === 'open';
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
     modesBtn.style.display = onMenu ? '' : 'none';
@@ -1771,8 +1785,9 @@
       overlayTitle.textContent = 'HALF TIME';
       overlayTitle.className = '';
       overlayText.textContent = 'Take a breather.';
-      startBtn.textContent = 'RESUME';
+      startMain.textContent = 'RESUME';
       overlay.classList.remove('hidden');
+      refreshModeUI();
       refreshSettingsUI();
     } else if (state === 'paused') {
       play();

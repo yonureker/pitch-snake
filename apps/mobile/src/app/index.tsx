@@ -32,11 +32,11 @@ const SPEED_LABELS: { label: string; ms: number }[] = [
 ];
 
 const MODE_LABELS: { mode: UiMode; label: string }[] = [
-  { mode: 'classic', label: 'HIGH SCORE' },
+  { mode: 'classic', label: 'NO TIME LIMIT' },
   { mode: 'speedrun', label: 'SPEED RUN' },
   { mode: 'tourney', label: 'TOURNAMENT' },
 ];
-const RULE_LABEL: Record<RuleMode, string> = { classic: 'HIGH SCORE', speedrun: 'SPEED RUN' };
+const RULE_LABEL: Record<RuleMode, string> = { classic: 'NO TIME LIMIT', speedrun: 'SPEED RUN' };
 const DURATION_LABELS: { label: string; minutes: number }[] = [
   { label: '1 HOUR', minutes: 60 },
   { label: '24 HOURS', minutes: 1440 },
@@ -674,7 +674,7 @@ export default function Index() {
                       ))}
                     </View>
                   )}
-                  {menuPhase && <Text style={styles.modeCaption}>{modeCaption}</Text>}
+                  {menuPhase && uiMode === 'tourney' && <Text style={styles.modeCaption}>{modeCaption}</Text>}
                   <View style={styles.btnRow}>
                     {(loop.phase === 'paused' || uiMode !== 'tourney' || tStatus === 'open') && (
                       <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
@@ -685,6 +685,9 @@ export default function Index() {
                             'RESUME'
                           : 'START'}
                         </Text>
+                        {loop.phase !== 'paused' && (
+                          <Text style={styles.startSub}>{RULE_LABEL[ruleMode]}</Text>
+                        )}
                       </Pressable>
                     )}
                     {menuPhase && (
@@ -873,9 +876,10 @@ const styles = StyleSheet.create({
   speedBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
   speedText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
   startBtn: {
+    alignItems: 'center',
     backgroundColor: GameColors.food,
     paddingHorizontal: 38,
-    paddingVertical: 12,
+    paddingVertical: 9,
     borderRadius: 4,
     shadowColor: '#b32f1c',
     shadowOffset: { width: 0, height: 5 },
@@ -883,6 +887,7 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
   },
   startText: { fontFamily: ANTON, color: '#ffffff', fontSize: 17, letterSpacing: 2 },
+  startSub: { fontFamily: BARLOW_BOLD, color: 'rgba(255,255,255,0.85)', fontSize: 10, letterSpacing: 1.5 },
   pauseBtn: {
     position: 'absolute',
     top: 10,
