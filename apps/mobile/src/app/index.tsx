@@ -100,7 +100,7 @@ export default function Index() {
           </View>
         )}
         <View style={[styles.boardFrame, frameSize]}>
-          <Canvas style={canvasSize}>
+          <Canvas style={canvasSize} opaque>
             <Picture picture={loop.picture} />
           </Canvas>
           {loop.countText !== '' && (

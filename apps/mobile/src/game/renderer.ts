@@ -128,23 +128,54 @@ export function stepParticles(dtMs: number): void {
 
 const wrapf = (v: number): number => ((v % GRID) + GRID) % GRID;
 
-// paints and fonts are module-level and reused; recording shares them safely
-// because recording is single-threaded on the JS side
+// Paints, colors and fonts are module-level and reused: recording is
+// single-threaded on the JS side, and precomputing every SkColor once means
+// the steady-state frame allocates no color objects at all.
 const fillPaint = Skia.Paint();
-const layerPaint = Skia.Paint();
-function saveLayerAlpha(canvas: SkCanvas, alpha: number): void {
-  layerPaint.setAlphaf(alpha);
-  canvas.saveLayer(layerPaint);
-}
 const strokePaint = Skia.Paint();
 strokePaint.setStyle(PaintStyle.Stroke);
 
 const snakeColors: SkColor[] = [];
 for (let i = 0; i < SNAKE_SHADES; i++) snakeColors.push(Skia.Color(snakeShade(i)));
 
+const C = {
+  arena: Skia.Color(GameColors.arena),
+  gridLine: Skia.Color(GameColors.gridLine),
+  wall: Skia.Color(GameColors.wall),
+  wallBevel: Skia.Color(GameColors.wallBevel),
+  goldBright: Skia.Color(GameColors.goldBright),
+  tntBody: Skia.Color(GameColors.tntBody),
+  tntBandLight: Skia.Color(GameColors.tntBandLight),
+  tntBandDark: Skia.Color(GameColors.tntBandDark),
+  tntInk: Skia.Color('#111111'),
+  ink: Skia.Color(GameColors.ink),
+  snakeOutline: Skia.Color(GameColors.snakeOutline),
+  white: Skia.Color('#ffffff'),
+  ghostEye: Skia.Color(GameColors.ghostEye),
+  portalARim: Skia.Color(GameColors.portalARim),
+  portalA: Skia.Color(GameColors.portalA),
+  portalADeep: Skia.Color(GameColors.portalADeep),
+  portalBRim: Skia.Color(GameColors.portalBRim),
+  portalB: Skia.Color(GameColors.portalB),
+  portalBDeep: Skia.Color(GameColors.portalBDeep),
+} as const;
+const ghostBodyColors = GhostColors.map((g) => Skia.Color(g.body));
+const ghostEdgeColors = GhostColors.map((g) => Skia.Color(g.edge));
+// particle colors are strings from the event layer; memoize their SkColors
+const particleColorCache = new Map<string, SkColor>();
+function particleColor(hex: string): SkColor {
+  let c = particleColorCache.get(hex);
+  if (c === undefined) {
+    c = Skia.Color(hex);
+    particleColorCache.set(hex, c);
+  }
+  return c;
+}
+
 const tntFontFamily = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
 let tntFont: SkFont | null = null;
 let tntFontSize = 0;
+let tntLabelWidth = 0;
 
 // segment glide, ported from the web segRenderPos: interpolate from the cell
 // behind, shortest way through tunnels, and snap ends across a teleport hop
@@ -234,7 +265,7 @@ function drawGhostBody(
   bob: number,
   cell: number,
 ): void {
-  const color = GhostColors[colorIndex % GhostColors.length] ?? GhostColors[0];
+  const ci = colorIndex % GhostColors.length;
   const r = cell * 0.4;
   const gx = cxCell * cell + cell / 2;
   const gy = cyCell * cell + cell / 2 + bob;
@@ -244,9 +275,11 @@ function drawGhostBody(
   }
   canvas.save();
   canvas.translate(gx, gy);
-  fillPaint.setColor(Skia.Color(color.body));
+  const body = ghostBodyColors[ci];
+  if (body !== undefined) fillPaint.setColor(body);
   canvas.drawPath(ghostPathCache, fillPaint);
-  strokePaint.setColor(Skia.Color(color.edge));
+  const edge = ghostEdgeColors[ci];
+  if (edge !== undefined) strokePaint.setColor(edge);
   strokePaint.setStrokeWidth(Math.max(1, cell * 0.045));
   canvas.drawPath(ghostPathCache, strokePaint);
   // eyes: whites plus pupils tracking the travel direction
@@ -254,11 +287,11 @@ function drawGhostBody(
   const eyeY = -r * 0.16 - r * 0.03;
   const ewx = r * 0.28;
   const ewy = r * 0.36;
-  fillPaint.setColor(Skia.Color('#ffffff'));
+  fillPaint.setColor(C.white);
   for (let sx = -1; sx <= 1; sx += 2) {
     canvas.drawOval(Skia.XYWHRect(sx * eyeDX - ewx, eyeY - ewy, ewx * 2, ewy * 2), fillPaint);
   }
-  fillPaint.setColor(Skia.Color(GameColors.ghostEye));
+  fillPaint.setColor(C.ghostEye);
   for (let sx = -1; sx <= 1; sx += 2) {
     canvas.drawCircle(sx * eyeDX + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, fillPaint);
   }
@@ -272,10 +305,11 @@ function drawPortalEnd(
   cell: number,
   scale: number,
   angle: number,
-  rim: string,
-  hot: string,
-  deep: string,
-  core: string,
+  dim: number,
+  rim: SkColor,
+  hot: SkColor,
+  deep: SkColor,
+  core: SkColor,
 ): void {
   const R = cell * 0.48 * scale;
   if (R <= 0) return;
@@ -285,15 +319,17 @@ function drawPortalEnd(
   canvas.translate(cx, cy);
   canvas.rotate((angle * 180) / Math.PI, 0, 0);
   // soft halo
-  fillPaint.setColor(Skia.Color(hot));
-  fillPaint.setAlphaf(0.18);
+  fillPaint.setColor(hot);
+  fillPaint.setAlphaf(0.18 * dim);
   canvas.drawCircle(0, 0, R * 1.55, fillPaint);
-  fillPaint.setAlphaf(1);
   // the well
-  fillPaint.setColor(Skia.Color(deep));
+  fillPaint.setColor(deep);
+  fillPaint.setAlphaf(dim);
   canvas.drawCircle(0, 0, R, fillPaint);
+  fillPaint.setAlphaf(1);
   // segmented rim arcs
-  strokePaint.setColor(Skia.Color(rim));
+  strokePaint.setColor(rim);
+  strokePaint.setAlphaf(dim);
   strokePaint.setStrokeWidth(Math.max(2, cell * 0.12));
   strokePaint.setStrokeCap(StrokeCap.Round);
   const box = Skia.XYWHRect(-R, -R, R * 2, R * 2);
@@ -303,7 +339,7 @@ function drawPortalEnd(
   }
   // inner offset ring
   strokePaint.setStrokeWidth(Math.max(1, cell * 0.05));
-  strokePaint.setAlphaf(0.7);
+  strokePaint.setAlphaf(0.7 * dim);
   const box2 = Skia.XYWHRect(-R * 0.66, -R * 0.66, R * 1.32, R * 1.32);
   for (let i = 0; i < 4; i++) {
     const a0 = i * 90 + 62;
@@ -311,10 +347,13 @@ function drawPortalEnd(
   }
   strokePaint.setAlphaf(1);
   // the partner-colored core: where this end lands you
-  fillPaint.setColor(Skia.Color(deep));
+  fillPaint.setColor(deep);
+  fillPaint.setAlphaf(dim);
   canvas.drawCircle(0, 0, R * 0.36, fillPaint);
-  fillPaint.setColor(Skia.Color(core));
+  fillPaint.setColor(core);
+  fillPaint.setAlphaf(dim);
   canvas.drawCircle(0, 0, R * 0.28, fillPaint);
+  fillPaint.setAlphaf(1);
   canvas.restore();
 }
 
@@ -329,9 +368,9 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   const now = game.renderNow();
 
   // arena: flat fill plus the faint grid
-  fillPaint.setColor(Skia.Color(GameColors.arena));
+  fillPaint.setColor(C.arena);
   canvas.drawRect(Skia.XYWHRect(0, 0, rc.boardPx, rc.boardPx), fillPaint);
-  strokePaint.setColor(Skia.Color(GameColors.gridLine));
+  strokePaint.setColor(C.gridLine);
   strokePaint.setStrokeWidth(1);
   strokePaint.setStrokeCap(StrokeCap.Butt);
   for (let i = 1; i < GRID; i++) {
@@ -350,7 +389,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       : 0.94 + Math.sin(now / 120) * 0.06;
     const pad = cell * 0.05;
     const rad = cell * 0.3;
-    fillPaint.setColor(Skia.Color(GameColors.wall));
+    fillPaint.setColor(C.wall);
     fillPaint.setAlphaf(alpha);
     for (const w of game.wallCells) {
       canvas.drawRRect(
@@ -364,7 +403,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     }
     if (!warning) {
       const ip = cell * 0.28;
-      fillPaint.setColor(Skia.Color(GameColors.wallBevel));
+      fillPaint.setColor(C.wallBevel);
       fillPaint.setAlphaf(0.22 * alpha);
       for (const w of game.wallCells) {
         canvas.drawRRect(
@@ -392,7 +431,6 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       : 1;
     const sc = open * (1 + Math.sin(rc.pulseMs * 0.0048 * 1.3) * 0.05);
     const spin = rc.pulseMs * 0.0048 * 0.5;
-    saveLayerAlpha(canvas, dim);
     drawPortalEnd(
       canvas,
       game.portal.ax,
@@ -400,10 +438,11 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       cell,
       sc,
       spin,
-      GameColors.portalARim,
-      GameColors.portalA,
-      GameColors.portalADeep,
-      GameColors.portalB,
+      dim,
+      C.portalARim,
+      C.portalA,
+      C.portalADeep,
+      C.portalB,
     );
     drawPortalEnd(
       canvas,
@@ -412,12 +451,12 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       cell,
       sc,
       -spin,
-      GameColors.portalBRim,
-      GameColors.portalB,
-      GameColors.portalBDeep,
-      GameColors.portalA,
+      dim,
+      C.portalBRim,
+      C.portalB,
+      C.portalBDeep,
+      C.portalA,
     );
-    canvas.restore();
   }
 
   // food: atlas sprite with the breathing pulse; gold ring on a bonus
@@ -426,25 +465,28 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   const fx = food.x * cell + cell / 2;
   const fy = food.y * cell + cell / 2;
   const foodDim = food.bonus && game.foodAge > FOOD_TTL - 1500 && ((game.foodAge / 130) | 0) % 2 !== 0;
-  saveLayerAlpha(canvas, foodDim ? 0.28 : 1);
+  const foodAlpha = foodDim ? 0.28 : 1;
   if (food.bonus) {
-    strokePaint.setColor(Skia.Color(GameColors.goldBright));
+    strokePaint.setColor(C.goldBright);
     strokePaint.setStrokeWidth(Math.max(2, cell * 0.08));
+    strokePaint.setAlphaf(foodAlpha);
     canvas.drawCircle(fx, fy, cell * 0.5 * pulse, strokePaint);
+    strokePaint.setAlphaf(1);
   }
   if (rc.atlas !== null) {
     const kind = food.kind + (food.bonus ? BONUS_KIND_OFFSET : 0);
     const sx = (kind % ATLAS_COLS) * ATLAS_CELL;
     const sy = ((kind / ATLAS_COLS) | 0) * ATLAS_CELL;
     const d = cell * 1.02 * pulse;
+    fillPaint.setAlphaf(foodAlpha);
     canvas.drawImageRect(
       rc.atlas,
       Skia.XYWHRect(sx, sy, ATLAS_CELL, ATLAS_CELL),
       Skia.XYWHRect(fx - d / 2, fy - d / 2, d, d),
       fillPaint,
     );
+    fillPaint.setAlphaf(1);
   }
-  canvas.restore();
 
   // TNT blocks: red block, grey band, label; whole wave blinks before it goes
   if (game.bombs.length > 0) {
@@ -452,26 +494,34 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     const nearGone = game.bombPhase === 'active' && now > game.bombExpireAt - 1200;
     const blinkOn = nearGone ? ((now / 120) | 0) % 2 === 0 : true;
     const B = cell * 0.9 * tntPulse;
-    if (tntFont === null || tntFontSize !== Math.round(B * 0.3)) {
-      tntFontSize = Math.round(B * 0.3);
+    // the font caches by CELL size: deriving it from the pulsing block edge
+    // rebuilt a matchFont every frame, which is exactly the churn that janks
+    if (tntFont === null || tntFontSize !== Math.round(cell * 0.27)) {
+      tntFontSize = Math.round(cell * 0.27);
       tntFont = matchFont({ fontFamily: tntFontFamily, fontSize: tntFontSize, fontWeight: 'bold' });
+      tntLabelWidth = tntFont.measureText('TNT').width;
     }
-    saveLayerAlpha(canvas, blinkOn ? 1 : 0.4);
+    const tntAlpha = blinkOn ? 1 : 0.4;
+    fillPaint.setAlphaf(tntAlpha);
     for (const b of game.bombs) {
       const x0 = b.x * cell + (cell - B) / 2;
       const y0 = b.y * cell + (cell - B) / 2;
-      fillPaint.setColor(Skia.Color(GameColors.tntBody));
+      fillPaint.setColor(C.tntBody);
       canvas.drawRect(Skia.XYWHRect(x0, y0, B, B), fillPaint);
-      fillPaint.setColor(Skia.Color(GameColors.tntBandLight));
+      fillPaint.setColor(C.tntBandLight);
       canvas.drawRect(Skia.XYWHRect(x0, y0 + B * 0.32, B, B * 0.26), fillPaint);
-      fillPaint.setColor(Skia.Color(GameColors.tntBandDark));
+      fillPaint.setColor(C.tntBandDark);
       canvas.drawRect(Skia.XYWHRect(x0, y0 + B * 0.58, B, B * 0.08), fillPaint);
-      fillPaint.setColor(Skia.Color('#111111'));
-      const label = 'TNT';
-      const w = tntFont.measureText(label).width;
-      canvas.drawText(label, x0 + (B - w) / 2, y0 + B * 0.45 + tntFontSize * 0.36, fillPaint, tntFont);
+      fillPaint.setColor(C.tntInk);
+      canvas.drawText(
+        'TNT',
+        x0 + (B - tntLabelWidth) / 2,
+        y0 + B * 0.45 + tntFontSize * 0.36,
+        fillPaint,
+        tntFont,
+      );
     }
-    canvas.restore();
+    fillPaint.setAlphaf(1);
   }
 
   // the snake: shaded RRects gliding by renderProg, wrapped copies in tunnels
@@ -479,7 +529,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   const rad = cell * 0.32;
   const denom = Math.max(1, game.snake.length - 1);
   const p = rc.playing ? game.renderProg() : 1;
-  strokePaint.setColor(Skia.Color(GameColors.snakeOutline));
+  strokePaint.setColor(C.snakeOutline);
   strokePaint.setStrokeWidth(Math.max(1, cell * 0.05));
   let lastShade = -1;
   for (let i = game.snake.length - 1; i >= 0; i--) {
@@ -503,7 +553,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     const ey = game.dir.y;
     const px = ey;
     const py = ex;
-    fillPaint.setColor(Skia.Color(GameColors.ink));
+    fillPaint.setColor(C.ink);
     canvas.drawCircle(hx + ex * off + px * off, hy + ey * off + py * off, cell * 0.08, fillPaint);
     canvas.drawCircle(hx + ex * off - px * off, hy + ey * off - py * off, cell * 0.08, fillPaint);
   }
@@ -532,7 +582,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
 
   // particles, already stepped by the loop
   for (const pt of particles) {
-    fillPaint.setColor(Skia.Color(pt.color));
+    fillPaint.setColor(particleColor(pt.color));
     fillPaint.setAlphaf(Math.max(0, pt.life));
     canvas.drawCircle(pt.x, pt.y, cell * 0.1 * pt.life, fillPaint);
   }

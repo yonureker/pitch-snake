@@ -60,6 +60,8 @@ function freshSeed(): number {
 }
 
 interface LoopBox {
+  /** Pictures from the last two frames; [0] may still be replaying natively. */
+  retired: (SkPicture | null)[];
   phase: RoundPhase;
   tickMs: number;
   countClock: number;
@@ -87,6 +89,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // are written only from effects and handlers, never during render.
   const game = useRef<Game | null>(null);
   const boxRef = useRef<LoopBox>({
+    retired: [null, null],
     phase: 'ready',
     tickMs: SPEEDS.normal,
     countClock: 0,
@@ -208,12 +211,21 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         }
       }
       stepParticles(dt);
+      const previous = picture.value;
       picture.value = buildPicture(g, {
         boardPx: box.boardPx,
         atlas: box.atlas,
         pulseMs: box.pulseMs,
         playing: box.phase === 'playing',
       });
+      // Dispose pictures deterministically, two frames late: the newest
+      // retired one may still be mid-replay on the render thread, and leaving
+      // them to the GC is exactly what flickers - a finalizer can release the
+      // native picture while the canvas is drawing it.
+      const stale = box.retired[1];
+      if (stale !== null && stale !== undefined) stale.dispose();
+      box.retired[1] = box.retired[0] ?? null;
+      box.retired[0] = previous;
     };
     raf = requestAnimationFrame(loop);
     return () => {
