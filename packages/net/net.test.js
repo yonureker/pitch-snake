@@ -62,13 +62,42 @@ test('two sessions over 120ms latency converge on one timeline, rollbacks and al
   assert.ok(sessions.every(s => s.stats.rollbacks > 0), 'latency actually forced rollbacks on both sides');
 });
 
-test('20% loss with heavy reorder still converges: the gap protocol repairs the wire', () => {
+test('20% loss with heavy reorder still converges, healed mostly by input ballast', () => {
   const { sessions, results } = runRoom(2, { latency: 90, jitter: 140, drop: 0.2, seed: 11 }, 30000,
     QUIET, i => denseTaps(i, 25000));
   for (const r of results) assert.equal(r.desync, null, 'no desync despite the lossy wire');
   assert.equal(logOf(results[0]), logOf(results[1]));
-  assert.ok(sessions.some(s => s.stats.needsSent > 0), 'losses actually triggered resend requests');
+  assert.ok(sessions.some(s => s.stats.patched > 0),
+    'dropped inputs were healed by the next packet\'s ballast, no round trip');
+});
+
+test('a loss burst deeper than the ballast still converges via the resend path', () => {
+  // 40% sustained loss sits past the ballast (three in a row all lost) but
+  // inside the repair envelope; beyond ~50% the beat/need/resend chain itself
+  // drowns and the session is DESIGNED to fail loudly instead of forking
+  const { sessions, results } = runRoom(2, { latency: 80, jitter: 60, drop: 0.4, seed: 7 }, 40000,
+    QUIET, i => denseTaps(i, 32000));
+  for (const r of results) assert.equal(r.desync, null, 'no desync at 40% loss');
+  assert.equal(logOf(results[0]), logOf(results[1]));
+  assert.ok(sessions.some(s => s.stats.needsSent > 0), 'deep gaps actually triggered resend requests');
   assert.ok(sessions.some(s => s.stats.resends > 0), 'and the other side actually resent');
+});
+
+test('a press between frames advances the sim and stamps the true instant', () => {
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  for (let now = 0; now <= 1000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  assert.equal(g0.quanta, 100);
+  s0.localDir(0, -1, 1015);                    // pressed 15ms after the last frame
+  assert.equal(g0.quanta, 101, 'the sim caught up to the press before stamping');
+  const mine = s0._debug.table[0];
+  assert.equal(mine[mine.length - 1].q, 102, 'stamped for the quantum after the press instant');
+  // and the room still converges to one timeline afterward
+  for (let now = 1020; now <= 8000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  assert.equal(JSON.stringify(g0.log), JSON.stringify(g1.log));
 });
 
 test('a full five-snake survival room over a mediocre wire ends identically everywhere', () => {

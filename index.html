@@ -793,7 +793,9 @@
   // broadcasts it, and feeds it to the engine on the shared timeline.
   function dirInput(x, y) {
     if (state !== 'playing' && state !== 'countdown') return;
-    if (vsInRound()) vs.session.localDir(x, y);
+    // the press's own clock rides along so the session can advance to the
+    // true instant before stamping (rule 12, netcode edition)
+    if (vsInRound()) vs.session.localDir(x, y, performance.now());
     else g.setDir(x, y);
   }
 

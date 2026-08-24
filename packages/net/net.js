@@ -41,6 +41,10 @@ export const END_GRACE_MS = 600;
 export const SETTLED_Q = 600;
 export const CATCHUP_MAX = 3000;  // ms one frame() may simulate before giving up
 export const NEED_COOLDOWN = 300; // ms between repeat resend requests per peer
+// Every input carries the sender's previous few inputs as ballast: one lost
+// packet is then healed by the NEXT turn, no resend round trip. Bytes are
+// free on this wire (billing counts messages), so redundancy costs nothing.
+export const REDUNDANCY = 3;
 
 // FNV-1a over a string: cheap, stable, good enough to catch divergence
 export function foldHash(str) {
@@ -80,7 +84,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   let deadSince = -1;                                  // when the board first went still
   let ended = false, dead = false;                     // dead = desynced/aborted
   let stalled = false;
-  const stats = { rollbacks: 0, resimmed: 0, needsSent: 0, resends: 0 };
+  const stats = { rollbacks: 0, resimmed: 0, needsSent: 0, resends: 0, patched: 0 };
 
   const rbTrace = [];
   const fail = (why) => {
@@ -185,12 +189,64 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     });
   }
 
+  // Advance the machine toward an absolute clock. Shared by frame() and by a
+  // press that arrives between frames; lastNow keeps the two from ever
+  // double-counting the same wall time.
+  function pump(nowMs) {
+    if (lastNow < 0) { lastNow = nowMs; lastBeat = nowMs; }
+    let dt = nowMs - lastNow;
+    lastNow = nowMs;
+    if (dt < 0) dt = 0;
+    if (dt > CATCHUP_MAX) return fail('behind');
+
+    // the slowest peer still in the room sets the leash; the fastest sets a
+    // gentle slew so everyone converges on one clock without a server
+    let minPeer = Infinity, maxPeer = -Infinity;
+    for (let p = 0; p < N; p++) {
+      if (p === myIdx || gone[p]) continue;
+      if (lastHeard[p] < -1e14) continue;   // never heard from: no clock signal yet
+      if (peerQ[p] > maxPeer) maxPeer = peerQ[p];
+      // Only a snake that can still act may leash the room: a dead one has
+      // no legal inputs left, so its client going quiet (a spectator
+      // backgrounding the tab) must never freeze the survivors. A LIVE
+      // peer's silence holds the room only while it is fresh; past the
+      // give-up window the room plays on and their snake rides the rails.
+      if (!game.players[p].alive) continue;
+      if (nowMs - lastHeard[p] > STALL_GIVEUP_MS) continue;
+      if (peerQ[p] < minPeer) minPeer = peerQ[p];
+    }
+    stalled = minPeer !== Infinity && minPeer < game.quanta - STALL_AT;
+    if (!stalled) {
+      const lead = maxPeer === -Infinity ? 0 : maxPeer - game.quanta;
+      const rate = lead > 15 ? 1.05 : lead < -15 ? 0.95 : 1;
+      acc += dt * rate;
+      let guard = (CATCHUP_MAX / SIM_DT) | 0;
+      while (acc >= SIM_DT && game.alive && !dead && guard-- > 0) {
+        stepOne();
+        acc -= SIM_DT;
+      }
+      game.accMs = game.alive ? acc : 0;
+    }
+  }
+
   transport.onMessage((msg) => {
     if (!msg || msg.v !== NET_PROTO || dead || ended) return;
     const nowMs = lastNow < 0 ? 0 : lastNow;
-    if (typeof msg.p === 'number' && msg.p >= 0 && msg.p < N && msg.p !== myIdx) lastHeard[msg.p] = nowMs;
+    const pOk = typeof msg.p === 'number' && msg.p >= 0 && msg.p < N && msg.p !== myIdx;
+    if (pOk) lastHeard[msg.p] = nowMs;
     if (msg.t === 'i') {
-      const back = acceptInput(msg, nowMs);
+      let back = Infinity;
+      // the ballast first: earlier inputs this packet carried as insurance
+      // against a lost predecessor; duplicates fall out harmlessly
+      if (pOk && Array.isArray(msg.r)) {
+        for (let k = 0; k < msg.r.length && k <= REDUNDANCY; k++) {
+          const a = msg.r[k];
+          const before = lastSeq[msg.p];
+          back = Math.min(back, acceptInput({ p: msg.p, s: a[0], q: a[1], x: a[2], y: a[3] }, nowMs));
+          if (lastSeq[msg.p] > before) stats.patched += lastSeq[msg.p] - before;
+        }
+      }
+      back = Math.min(back, acceptInput(msg, nowMs));
       if (back !== Infinity) rollback(back);
     } else if (msg.t === 'ri') {                 // a resend batch: same as inputs
       let back = Infinity;
@@ -230,21 +286,31 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     get failed() { return dead; },
 
     /**
-     * My turn, from any input source. It is stamped for the NEXT quantum and
+     * My turn, from any input source. When the caller passes the press's own
+     * clock, the sim first advances to that instant (rule 12's press-instant
+     * trick, netcode edition), so the stamp is the true moment rather than
+     * the last frame's. The input is then stamped for the NEXT quantum and
      * fed through the same table-and-apply path as every remote input: one
      * application path means every machine puts the press on the same side
      * of the same keyframe, which is what keeps the settled hashes equal.
-     * (A press mid-quantum costs at most SIM_DT of extra latency, and a turn
-     * only ever lands at the next cell boundary anyway.) The engine's
-     * reversal/repeat filter runs at apply time, identically everywhere.
+     * The engine's reversal/repeat filter runs at apply time, identically
+     * everywhere. The packet carries the previous few inputs as ballast: one
+     * lost packet heals on the next turn, no resend round trip.
      */
-    localDir(x, y) {
+    localDir(x, y, nowMs) {
+      if (dead || ended || !game.players[myIdx].alive) return;
+      if (typeof nowMs === 'number' && lastNow >= 0 && nowMs > lastNow) pump(nowMs);
       if (dead || ended || !game.players[myIdx].alive) return;
       const e = { s: ++mySeq, q: game.quanta + 1, x, y };
       myHist.push(e);
       table[myIdx].push(e);
       lastSeq[myIdx] = mySeq;
-      transport.send({ t: 'i', v: NET_PROTO, p: myIdx, s: e.s, q: e.q, x, y });
+      const r = [];
+      for (let k = Math.max(0, myHist.length - 1 - REDUNDANCY); k < myHist.length - 1; k++) {
+        const h = myHist[k];
+        r.push([h.s, h.q, h.x, h.y]);
+      }
+      transport.send({ t: 'i', v: NET_PROTO, p: myIdx, s: e.s, q: e.q, x, y, r });
     },
 
     /** A peer left for good (presence said so): their snake runs straight. */
@@ -257,39 +323,8 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     frame(nowMs) {
       if (dead) return 'failed';
       if (ended) return 'over';
-      if (lastNow < 0) { lastNow = nowMs; lastBeat = nowMs; }
-      let dt = nowMs - lastNow;
-      lastNow = nowMs;
-      if (dt < 0) dt = 0;
-      if (dt > CATCHUP_MAX) { fail('behind'); return 'failed'; }
-
-      // the slowest peer still in the room sets the leash; the fastest sets a
-      // gentle slew so everyone converges on one clock without a server
-      let minPeer = Infinity, maxPeer = -Infinity;
-      for (let p = 0; p < N; p++) {
-        if (p === myIdx || gone[p]) continue;
-        if (peerQ[p] > maxPeer) maxPeer = peerQ[p];
-        // Only a snake that can still act may leash the room: a dead one has
-        // no legal inputs left, so its client going quiet (a spectator
-        // backgrounding the tab) must never freeze the survivors. A LIVE
-        // peer's silence holds the room only while it is fresh; past the
-        // give-up window the room plays on and their snake rides the rails.
-        if (!game.players[p].alive) continue;
-        if (nowMs - lastHeard[p] > STALL_GIVEUP_MS) continue;
-        if (peerQ[p] < minPeer) minPeer = peerQ[p];
-      }
-      stalled = minPeer !== Infinity && minPeer < game.quanta - STALL_AT;
-      if (!stalled) {
-        const lead = maxPeer === -Infinity ? 0 : maxPeer - game.quanta;
-        const rate = lead > 15 ? 1.05 : lead < -15 ? 0.95 : 1;
-        acc += dt * rate;
-        let guard = (CATCHUP_MAX / SIM_DT) | 0;
-        while (acc >= SIM_DT && game.alive && !dead && guard-- > 0) {
-          stepOne();
-          acc -= SIM_DT;
-        }
-        game.accMs = game.alive ? acc : 0;
-      }
+      pump(nowMs);
+      if (dead) return 'failed';
       if (nowMs - lastBeat >= BEAT_MS) { lastBeat = nowMs; sendBeat(); }
       // the ending is provisional for one grace window: a late remote turn
       // can still roll the last quanta back and un-still the board
