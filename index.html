@@ -14,6 +14,7 @@
     --muted: #6b6553;
     --gold: #c2a25a;
     --gold-bright: #d8b35e;
+    --gold-deep: #8a6f33;
     --gold-glow: rgba(194,162,90,0.85);
     --snake-glow: rgba(216,179,94,0.75);
     --food: #e6402a;
@@ -140,16 +141,27 @@
   .t-meta { font-size: 13px; color: #b7ac93; letter-spacing: 1px; }
   .btn.ghostbtn { background: transparent; box-shadow: none; border: 1.5px solid rgba(244,236,216,0.35); }
   .btn.ghostbtn:active { transform: none; }
+  /* every button on the pitch stands on the same kind of ledge: START on a
+     dark red one, the gold ones on a dark gold one */
+  .btn.modes { box-shadow: 0 5px 0 var(--gold-deep); }
+  .btn.modes:hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--gold-deep); }
+  .btn.modes:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--gold-deep); }
+  /* a step that opens a setup screen, never a whistle: gold, not red */
+  .btn.configure {
+    background: var(--gold); color: #211e1a; border: none;
+    box-shadow: 0 5px 0 var(--gold-deep);
+  }
+  .btn.configure:hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--gold-deep); }
+  .btn.configure:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--gold-deep); }
+  /* a primary that names its mode underneath, like START has always done */
+  .btn.stacked { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   /* wrap rather than clip: a long pair of labels on a narrow phone stacks */
   .btn-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
   /* the versus footer is BACK plus one primary, sized to the panel above it:
      BACK stays compact on the left and the primary takes what is left */
-  #vsFooter, #modeFooter { width: min(360px, 94%); gap: 8px; flex-wrap: nowrap; }
-  #vsFooter .btn, #modeFooter .btn {
-    font-size: 14px; letter-spacing: 0.8px; padding: 13px 8px; white-space: nowrap;
-  }
-  #vsBackBtn, #modeBackBtn { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
-  #vsGoBtn, #modeGoBtn { flex: 1 1 auto; min-width: 0; }
+  /* the chooser's pair wears exactly what the pitch wears, only narrower in
+     the margins so a long mode name still fits beside BACK */
+  #vsFooter .btn, #modeFooter .btn { padding: 13px 24px; }
   /* what a mode actually is, while it is highlighted. Specific enough to
      beat `.overlay p`, which owns the strapline's size and colour. */
   .overlay p.mode-desc {
@@ -161,6 +173,7 @@
     min-height: 2.7em;
   }
   #startBtn { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .btn.stacked .start-sub { display: block; }
   .start-sub {
     font-family: 'Barlow', sans-serif; font-size: 11px; font-weight: 700;
     letter-spacing: 1.5px; opacity: 0.85;
@@ -168,9 +181,8 @@
   .start-sub[hidden] { display: none; }
   .btn.modes {
     background: transparent; color: var(--gold-bright);
-    border: 2px solid var(--gold); box-shadow: none;
+    border: 2px solid var(--gold);
   }
-  .btn.modes:active { transform: none; }
   .mode-caption {
     font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #b7ac93;
   }
@@ -644,6 +656,7 @@
         <div class="ov-head">
           <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
           <p id="overlayText">Eat to grow. Survive the pitch.</p>
+          <p class="mode-desc" id="modeDesc" hidden></p>
         </div>
         <div class="ov-body">
         <div class="mode-row stack-choice" id="modeRow">
@@ -653,7 +666,6 @@
           <button data-mode="versus">MULTIPLAYER</button>
           <button data-mode="tourney">TOURNAMENTS</button>
         </div>
-        <p class="mode-desc" id="modeDesc" hidden></p>
         <div class="tourney" id="vsPanel" hidden>
           <div class="vs-setup" id="vsSetup">
             <div class="entry wide">
@@ -738,11 +750,15 @@
           </div>
           <div class="btn-row" id="modeFooter" hidden>
             <button class="btn modes" id="modeBackBtn">BACK</button>
-            <button class="btn" id="modeGoBtn">START CLASSIC</button>
+            <button class="btn stacked" id="modeGoBtn">
+              <span id="modeGoMain">START</span><span class="start-sub" id="modeGoSub">CLASSIC</span>
+            </button>
           </div>
           <div class="btn-row" id="vsFooter" hidden>
             <button class="btn modes" id="vsBackBtn">BACK</button>
-            <button class="btn" id="vsGoBtn">START QUICK MATCH</button>
+            <button class="btn stacked" id="vsGoBtn">
+              <span>START</span><span class="start-sub" id="vsGoSub">QUICK MATCH</span>
+            </button>
           </div>
         </div>
       </div>
@@ -872,6 +888,13 @@
   // REMATCH is only a rematch when this matches the round just played;
   // anything else is STARTing something new.
   const runKey = () => (mode === 'tourney' && tourney ? 'T:' + tourney.code + ':' : '') + ruleMode();
+  // Multiplayer always needs its room step first; a tournament needs its own
+  // only until one is joined and open, after which there is nothing left to
+  // configure and the button becomes a whistle.
+  function modeNeedsStep() {
+    return mode === 'versus' || (mode === 'tourney' && !(tourney && tourneyState() === 'open'));
+  }
+
   function tourneyState() {
     if (!tourney) return 'none';
     const now = Date.now();
@@ -1926,6 +1949,8 @@
   const modeDesc = document.getElementById('modeDesc');
   const modeFooter = document.getElementById('modeFooter');
   const modeGoBtn = document.getElementById('modeGoBtn');
+  const modeGoMain = document.getElementById('modeGoMain');
+  const modeGoSub = document.getElementById('modeGoSub');
   const modeBackBtn = document.getElementById('modeBackBtn');
   const startMain = document.getElementById('startMain');
   const startSub = document.getElementById('startSub');
@@ -1962,7 +1987,12 @@
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     modeFooter.hidden = !listScreen;
-    modeGoBtn.textContent = 'START ' + (MODE_LABELS[mode] || '');
+    // a mode that needs a room or a code says so, in its own colour: gold
+    // opens a setup screen, red is the whistle
+    const step = modeNeedsStep();
+    modeGoMain.textContent = step ? 'CONFIGURE' : 'START';
+    modeGoSub.textContent = MODE_LABELS[mode] || '';
+    modeGoBtn.classList.toggle('configure', step);
     tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
     vsPanel.hidden = !(modesOpen && tScreen && mode === 'versus');
     vsRefreshPanel();      // also the one place the pinned versus footer hides
@@ -2062,11 +2092,7 @@
   });
 
   modeGoBtn.addEventListener('click', () => {
-    // multiplayer always needs its room step; a tournament needs its own
-    // only until one is joined and open, after which START just plays it
-    const needsStep = mode === 'versus' ||
-      (mode === 'tourney' && !(tourney && tourneyState() === 'open'));
-    if (needsStep) {
+    if (modeNeedsStep()) {
       tScreen = true;
       refreshModeUI();
       return;
@@ -2168,6 +2194,7 @@
   const vsKindRow = document.getElementById('vsKindRow');
   const vsFooter = document.getElementById('vsFooter');
   const vsGoBtn = document.getElementById('vsGoBtn');
+  const vsGoSub = document.getElementById('vsGoSub');
   const vsCodeRow = document.getElementById('vsCodeRow');
   const vsRoom = document.getElementById('vsRoom');
   const vsRoomCode = document.getElementById('vsRoomCode');
@@ -2684,7 +2711,7 @@
       vsCodeRow.hidden = !priv;
       const named = !!vsTypedName();
       const code = vsTypedCode();
-      vsGoBtn.textContent = priv ? 'START PRIVATE' : 'START QUICK MATCH';
+      vsGoSub.textContent = priv ? 'PRIVATE' : 'QUICK MATCH';
       vsGoBtn.disabled = vsBusy || !named || (priv && code.length !== 5);
       vsCreateBtn.disabled = vsBusy || !named;
       // while a join is in flight the note belongs to the join
