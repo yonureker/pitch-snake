@@ -421,6 +421,7 @@
   .standings li .rk { color: var(--gold); width: 20px; text-align: right; }
   .standings li .nm { flex: 1; text-align: left; }
   .standings li .sc { font-family: 'Anton', sans-serif; }
+  .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 42px; text-align: right; }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
 
@@ -2138,6 +2139,13 @@
         });
       }
       const ref = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
+      // the room's running series survives a reload on this device; kickoffs
+      // and (with the rooms tier) the server keep everyone else in step
+      let storedWins = {};
+      try {
+        const v = JSON.parse(localStorage.getItem('snakeVsWins.' + code));
+        if (v && typeof v === 'object') storedWins = v;
+      } catch (e) {}
       const channel = vsClient.channel('ps-' + code, {
         config: { broadcast: { self: false, ack: false }, presence: { key: ref } },
       });
@@ -2149,6 +2157,7 @@
         over: false, spectating: false, stalled: false, up: false,
         starting: false, touchTimer: null,
         ready: false, lastTrackAt: 0, trackDirty: false,
+        wins: storedWins,
       };
       // The room's ticker: flushes a paced presence update when one is owed,
       // and (for the acting host) pings the row so QUICK MATCH can see the
@@ -2242,6 +2251,26 @@
     refreshModeUI();
   }
 
+  // ---- the series tally ----
+  // Round wins per NAME for this room code. Every client counts the same
+  // winner from the same deterministic round; the count is kept locally,
+  // carried in every kickoff, and (with the rooms tier) accumulated on the
+  // room row, so reloads and late joiners inherit the series. Merges take
+  // the max per name, so no path ever lowers a count. Two players sharing a
+  // name share a tally; a fresh code is a fresh series.
+  const vsWinsOf = name => (vs && vs.wins[name]) | 0;
+  function vsPersistWins() {
+    try { localStorage.setItem('snakeVsWins.' + vs.code, JSON.stringify(vs.wins)); } catch (e) {}
+  }
+  function vsMergeWins(incoming) {
+    if (!incoming || typeof incoming !== 'object') return;
+    for (const k of Object.keys(incoming)) {
+      const n = parseInt(incoming[k], 10) || 0;
+      if (n > (vs.wins[k] | 0)) vs.wins[k] = n;
+    }
+    vsPersistWins();
+  }
+
   // ---- the ready check ----
   // Everyone, host included, declares ready before a kickoff; presence
   // carries the flag so every roster shows the same ticks. Presence updates
@@ -2302,7 +2331,7 @@
         const m = {
           t: 'start', n: room.startN + 1, ev: ENGINE_VERSION,
           seed: crypto.getRandomValues(new Uint32Array(1))[0],
-          roster,
+          roster, wins: room.wins,
         };
         void room.channel.send({ type: 'broadcast', event: 'lobby', payload: m });
         room.startN = m.n;
@@ -2320,6 +2349,7 @@
       vsRefreshPanel();
       return;
     }
+    if (m.wins) vsMergeWins(m.wins);               // the kickoff carries the series
     const idx = m.roster.findIndex(r => r.ref === vs.ref);
     if (idx < 0) {                                  // five filled up before me
       vsSetNote('This round is full; you are in the next one.');
@@ -2384,18 +2414,23 @@
     syncMpHud();
     const rows = vsStandingsRows();
     const clinched = g.players[rows[0].idx].deadReason === 'won';
+    // the round goes on the series before anything renders; every client
+    // credits the same winner, so the tallies agree without a word
+    vs.wins[rows[0].name] = (vs.wins[rows[0].name] | 0) + 1;
+    vsPersistWins();
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
     overlayText.textContent = rows[0].me
       ? (clinched ? 'You clinched it.' : 'You take the room.')
       : (clinched ? `${rows[0].name} clinched it.` : `${rows[0].name} takes the room.`);
-    // best-effort: the first report reopens the row for the rematch; a page
-    // without the rooms tier just misses, harmlessly
+    // best-effort: the first report reopens the row for the rematch and
+    // credits the win server-side; a page without the rooms tier just
+    // misses, harmlessly
     void sbRpc('pitch_snake_room_finish', {
       p_code: vs.code,
       p_results: { scores: rows.map(r => ({ n: r.name, s: r.score })), clinched },
     }).catch(() => {});
-    boardHead.textContent = 'ROOM ' + vs.code;
+    boardHead.textContent = 'ROOM ' + vs.code + ' · ROUND ' + vs.startN;
     standingsEl.innerHTML = '';
     rows.forEach((row, i) => {
       const li = document.createElement('li');
@@ -2403,7 +2438,8 @@
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = row.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = row.score;
-      li.append(rk, nm, sc);
+      const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆 ' + vsWinsOf(row.name);
+      li.append(rk, nm, sc, vw);
       standingsEl.appendChild(li);
     });
     savedThisRound = true;      // versus results stay in the room, not on the boards
@@ -2452,6 +2488,7 @@
       : rs.all ? ('ALL READY' + (hosting ? ' · KICK OFF' : ' · THE HOST KICKS OFF'))
       : `READY ${rs.ready}/${rs.seats}`;
     vsRosterEl.innerHTML = '';
+    const seriesOn = Object.keys(vs.wins).length > 0;
     vs.present.slice(0, VS_MAX).forEach((p, i) => {
       const li = document.createElement('li');
       if (p.ref === vs.ref) li.className = 'me';
@@ -2459,6 +2496,10 @@
       const nm = document.createElement('span'); nm.className = 'nm';
       nm.textContent = p.name + (i === 0 ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
       li.append(rk, nm);
+      if (seriesOn) {
+        const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆 ' + vsWinsOf(p.name);
+        li.append(vw);
+      }
       vsRosterEl.appendChild(li);
     });
     vsReadyBtn.hidden = vsInRound();

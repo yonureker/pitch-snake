@@ -31,6 +31,10 @@ create table if not exists public.pitch_snake_rooms (
   created_at    timestamptz not null default now()
 );
 
+-- the room's running series: round wins keyed by player name, kept for the
+-- row's lifetime so a family evening has a score that survives reloads
+alter table public.pitch_snake_rooms add column if not exists wins jsonb not null default '{}'::jsonb;
+
 alter table public.pitch_snake_rooms enable row level security;
 revoke all on table public.pitch_snake_rooms from anon, authenticated;
 
@@ -140,6 +144,7 @@ declare
   clean_roster jsonb;
   n            integer;
   sd           bigint;
+  w            jsonb;
 begin
   clean_code := upper(trim(coalesce(p_code, '')));
   if clean_code !~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$' then
@@ -170,10 +175,14 @@ begin
       started_at = now(), last_seen = now(),
       seed = floor(random() * 4294967296)::bigint
   where id = r.id
-  returning public.pitch_snake_rooms.start_n, public.pitch_snake_rooms.seed into n, sd;
+  returning public.pitch_snake_rooms.start_n, public.pitch_snake_rooms.seed,
+            public.pitch_snake_rooms.wins into n, sd, w;
 
+  -- the kickoff carries the room's running series, so a late joiner or a
+  -- reloaded tab inherits the tally with the same message that seats them
   perform realtime.send(
-    jsonb_build_object('t', 'start', 'n', n, 'seed', sd, 'roster', clean_roster, 'ev', p_ev),
+    jsonb_build_object('t', 'start', 'n', n, 'seed', sd, 'roster', clean_roster, 'ev', p_ev,
+                       'wins', coalesce(w, '{}'::jsonb)),
     'lobby',
     'ps-' || clean_code,
     false);
@@ -182,8 +191,11 @@ end;
 $$;
 
 -- ---------------------------------------------------------------- finish ----
--- Any member reports full time; the first one lands it and reopens the room
--- for the rematch. Results are a small jsonb kept for the row's lifetime.
+-- Any member reports full time; the first one lands it (status guards the
+-- rest out), reopens the room for the rematch, and credits the round to the
+-- winner: the first row of the reported placings. Every client computes the
+-- same placings from the same deterministic round, so first-caller is as
+-- good as consensus.
 drop function if exists public.pitch_snake_room_finish(text, jsonb);
 
 create or replace function public.pitch_snake_room_finish(p_code text, p_results jsonb)
@@ -192,12 +204,21 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  winner text;
 begin
   if p_results is not null and pg_column_size(p_results) > 8192 then
     raise exception 'results too large';
   end if;
+  winner := left(upper(regexp_replace(coalesce(p_results->'scores'->0->>'n', ''), '[^A-Za-z0-9]', '', 'g')), 5);
   update public.pitch_snake_rooms
-  set status = 'waiting', last_results = p_results, last_seen = now()
+  set status = 'waiting',
+      last_results = p_results,
+      last_seen = now(),
+      wins = case when winner <> ''
+                  then jsonb_set(coalesce(wins, '{}'::jsonb), array[winner],
+                                 to_jsonb(coalesce((wins->>winner)::integer, 0) + 1))
+                  else coalesce(wins, '{}'::jsonb) end
   where code = upper(trim(coalesce(p_code, ''))) and status = 'playing';
 end;
 $$;
