@@ -370,7 +370,14 @@
      slid away would rebuild its art mid-round. The title goes to one line
      here; the space before SNAKE only shows once the break is out. */
   html.touch, html.touch body { height: 100%; overflow: hidden; overscroll-behavior: none; }
-  html.touch body { align-items: stretch; }
+  /* A tap that lands beside the pad used to be half of a double tap, and the
+     browser answered by zooming mid-round. `manipulation` keeps the tap and
+     drops the zoom gesture; a game surface has nothing to select or long
+     press either. */
+  html.touch body { align-items: stretch; touch-action: manipulation; }
+  html.touch .wrap {
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
   html.touch .wrap {
     height: 100vh;
     height: 100svh;
@@ -383,17 +390,27 @@
   /* the legend under the pad is desktop's: a phone has the pad in front of
      it and the gear on the board, and the room is worth more than the words */
   html.touch .wrap > .hint { display: none; }
-  html.touch h1 { font-size: clamp(22px, 7.2vw, 34px); line-height: 1; text-shadow: 3px 3px 0 var(--gold); }
+  html.touch h1 { font-size: clamp(17px, 5.4vw, 25px); line-height: 1; text-shadow: 2px 2px 0 var(--gold); }
   html.touch h1 br { display: none; }
-  html.touch .scores .val { font-size: 30px; }
-  html.touch .scores .label, html.touch .scores .best { font-size: 10px; }
+  html.touch .scores .val { font-size: 22px; }
+  html.touch .scores .label, html.touch .scores .best { font-size: 9px; }
+  html.touch .scores .clock { font-size: 15px; }
   html.touch .board-frame {
-    /* 76px is the rest of the shell: header, the two gaps and the padding.
+    /* 62px is the rest of the shell: header, the two gaps and the padding.
        Anything added to the touch layout has to come out of this number. */
-    width: min(100%, calc(100svh - var(--pad-h) - 76px));
+    width: min(100%, calc(100svh - var(--pad-h) - 62px));
     flex: 0 0 auto;
   }
-  html.touch .dpad { height: var(--pad-h); width: auto; max-width: 94%; aspect-ratio: 4 / 3; }
+  /* the pad runs to both edges: a thumb that misses it sideways would
+     otherwise land on the page, which is where the stray taps were going */
+  html.touch .dpad {
+    height: var(--pad-h);
+    width: calc(100% + 20px);
+    max-width: none;
+    margin-inline: -10px;
+    aspect-ratio: auto;
+    border-radius: 18px;
+  }
   html.touch .hint { font-size: 10.5px; gap: 12px; }
   /* the board is smaller here, so the panels it holds are trimmed to match:
      the scoring legend loses its padding rather than its rows */
