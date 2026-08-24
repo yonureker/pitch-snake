@@ -130,6 +130,7 @@ export default function Index() {
   const [submittedName, setSubmittedName] = useState<string | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>('classic');
   const [showModes, setShowModes] = useState(false);
+  const [lastRunKey, setLastRunKey] = useState<string | null>(null);
   const [tScreen, setTScreen] = useState(false);
   const [tourney, setTourney] = useState<TournamentRow | null>(null);
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
@@ -139,6 +140,8 @@ export default function Index() {
   const [createMode, setCreateMode] = useState<RuleMode>('classic');
   const [createMinutes, setCreateMinutes] = useState(1440);
   const ruleMode: RuleMode = uiMode === 'tourney' ? (tourney?.mode ?? 'classic') : uiMode;
+  // the fixture identity: a REMATCH is only a rematch of this exact thing
+  const runKey = (uiMode === 'tourney' && tourney !== null ? `T:${tourney.code}:` : '') + ruleMode;
   const topScores = useTopScores(dead && uiMode !== 'tourney' && SUPABASE_CONFIGURED, ruleMode);
   const tourneyTop = useTournamentTop(tourney?.code ?? null, dead && uiMode === 'tourney');
   const submit = useSubmitScore();
@@ -218,6 +221,7 @@ export default function Index() {
   };
 
   const startRound = (): void => {
+    setLastRunKey(runKey);
     setShowModes(false);
     setEntryName('');
     setSubmittedId(null);
@@ -714,7 +718,9 @@ export default function Index() {
                       <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
                         <Text style={styles.startText}>
                           {dead ?
-                            'REMATCH'
+                            runKey === lastRunKey ?
+                              'REMATCH'
+                            : 'START'
                           : loop.phase === 'paused' ?
                             'RESUME'
                           : 'START'}

@@ -702,6 +702,10 @@
     return mode === 'tourney' ? (tourney ? tourney.mode : 'classic') : mode;
   }
   const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL' };
+  // The fixture identity: the ruleset plus, in a tournament, which one. A
+  // REMATCH is only a rematch when this matches the round just played;
+  // anything else is STARTing something new.
+  const runKey = () => (mode === 'tourney' && tourney ? 'T:' + tourney.code + ':' : '') + ruleMode();
   function tourneyState() {
     if (!tourney) return 'none';
     const now = Date.now();
@@ -791,7 +795,6 @@
               : reason === 'time' ? 'The final whistle. '
               : '';
     overlayText.textContent = `${how}You scored ${g.score}.`;
-    startMain.textContent = 'REMATCH';
     savedThisRound = false;
     saveBtn.disabled = false;
     nameInput.disabled = false;
@@ -1627,6 +1630,7 @@
   let tCreating = false;
   let tBusy = false;
   let showModes = false;
+  let lastRunKey = null;     // which fixture the finished round belonged to
   let tScreen = false;       // inside the chooser: the tournament step instead of the list
   let entryWanted = false;   // the death screen decided an entry belongs; refreshModeUI applies it
 
@@ -1680,6 +1684,10 @@
         : 'TOURNAMENT \u00b7 NONE JOINED';
     }
     // START names the ruleset it is about to run; a pause needs no reminder
+    startMain.textContent =
+      state === 'paused' ? 'RESUME'
+      : state === 'dead' && runKey() === lastRunKey ? 'REMATCH'
+      : 'START';
     startSub.textContent = RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
     const playable = mode !== 'tourney' || tourneyState() === 'open';
@@ -1794,7 +1802,7 @@
   // ---- round flow ----
   function play() {
     if (mode === 'tourney' && tourneyState() !== 'open') return;   // the window rules
-    if (state === 'dead' || state === 'ready') newRound();
+    if (state === 'dead' || state === 'ready') { lastRunKey = runKey(); newRound(); }
     else g.clearQueue();          // a turn queued before the pause must not fire on resume
     state = 'countdown';          // the round opens on 3, 2, 1, START!
     countClock = 0; countBeat = -1;
@@ -1815,7 +1823,6 @@
       overlayTitle.textContent = 'HALF TIME';
       overlayTitle.className = '';
       overlayText.textContent = 'Take a breather.';
-      startMain.textContent = 'RESUME';
       overlay.classList.remove('hidden');
       refreshModeUI();
       refreshSettingsUI();
