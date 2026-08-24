@@ -66,7 +66,7 @@ export interface Player {
   diedAt: number;
 }
 
-export type GameEvent =
+export type GameEvent = (
   | { t: 'food' }
   | { t: 'eat'; player: number; bonus: boolean; x: number; y: number }
   | { t: 'hop'; player: number; fromA: boolean; fx: number; fy: number; tx: number; ty: number }
@@ -75,7 +75,10 @@ export type GameEvent =
   | { t: 'portal'; open: boolean }
   /** `segments` is present only when the round continues without this snake
    *  (its body left the board); a round-ending death keeps the body. */
-  | { t: 'die'; player: number; reason: string; segments?: Cell[] };
+  | { t: 'die'; player: number; reason: string; segments?: Cell[] }
+  /** The sim quantum the event happened on: a rollback resim re-emits events
+   *  for quanta a renderer may already have shown. */
+) & { q: number };
 
 export interface RoundLog {
   v: number; seed: number; tickMs: number; wallsEnabled: boolean;

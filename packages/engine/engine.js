@@ -283,7 +283,10 @@ export function createGame(cfg = {}) {
     enumerable: false, configurable: true,
   });
 
-  const emit = e => S.events.push(e);
+  // every event carries the quantum it happened on, so a renderer replaying
+  // re-simulated quanta (rollback netcode) can tell an already-shown effect
+  // from a genuinely new one
+  const emit = e => { e.q = S.quanta; S.events.push(e); };
   const anyAlive = () => { for (const p of players) if (p.alive) return true; return false; };
   // the hazard ladders read the front-runner (rule 22 generalized): the room
   // escalates with the leader, and the unlock counters stay monotonic so a

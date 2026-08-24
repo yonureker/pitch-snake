@@ -817,8 +817,15 @@
   }
 
   // ---- engine events -> effects (bursts, sprites, the death overlay) ----
+  // In a versus round a rollback re-runs recent quanta and re-emits their
+  // events. State mirrors (food sprite, wall layer) must always apply, but a
+  // burst replayed for an already-shown quantum would flicker: those skip.
+  let vsEventQ = -1;
   function handleEvents(events) {
     for (const e of events) {
+      const replayed = vsView() && e.q !== undefined && e.q <= vsEventQ;
+      if (vsView() && e.q !== undefined && e.q > vsEventQ) vsEventQ = e.q;
+      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die')) continue;
       if (e.t === 'food') buildFoodSprite();
       else if (e.t === 'eat') {
         const burstColor = getCss(e.bonus ? '--gold-bright' : '--food');
@@ -847,9 +854,9 @@
             spawnBurst(s.x, s.y, 4, 0.9, () => (Math.random() * 1.2 + 0.4) * (cell / 14), () => '#8d867a');
         }
         if (!vsInRound()) onDeath(e.reason);
-        else if (e.player === vs.myIdx && e.reason !== 'won') { vs.spectating = true; syncMpHud(); }
-        // the versus FULL TIME screen comes from the session's onEnd, which
-        // waits a grace window for any last-instant remote turns
+        // versus deaths need no handling here: the spectator flag is polled
+        // from live state each frame, and FULL TIME comes from the session's
+        // onEnd after its grace window for last-instant remote turns
       }
     }
   }
@@ -1254,8 +1261,11 @@
 
     const p = state === 'playing' ? g.renderProg() : 1;
 
-    // rivals first, ghosted, so my own snake always reads on top of them
-    if (vsView()) drawRivals(p);
+    // rivals first, ghosted, so my own snake always reads on top of them;
+    // the smoothing pass absorbs any rollback teleports into a paint offset
+    if (vsView()) { updateVsSmoothing(p, dt); drawRivals(p); }
+    const meOffX = vsView() ? vsOffX[vs.myIdx] : 0;
+    const meOffY = vsView() ? vsOffY[vs.myIdx] : 0;
 
     // my snake: glides smoothly between grid cells; fills come from a fixed
     // lookup table, nothing allocated, wrapped copies drawn through tunnels
@@ -1268,14 +1278,14 @@
       const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
       if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
       const rp = segRenderPos(me, i, p);
-      drawBodyCell(rp.cx, rp.cy, r, rad);
+      drawBodyCell(rp.cx + meOffX, rp.cy + meOffY, r, rad);
     }
 
     // eyes on the head, at its interpolated position
     if (me.snake.length) {
-      const { cx, cy } = segRenderPos(me, 0, p);
-      const hx = wrapf(cx) * cell + cell / 2;
-      const hy = wrapf(cy) * cell + cell / 2;
+      const rp0 = segRenderPos(me, 0, p);
+      const hx = wrapf(rp0.cx + meOffX) * cell + cell / 2;
+      const hy = wrapf(rp0.cy + meOffY) * cell + cell / 2;
       const off = cell * 0.16, ex = me.dir.x, ey = me.dir.y, px = ey, py = ex;
       ctx.fillStyle = '#211e1a';
       ctx.beginPath();
@@ -1372,6 +1382,48 @@
   // never crowd your own snake off the field.
   const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'];
   let vsTagFont = '';
+
+  // Rollback smoothing. A late remote turn rewinds and re-runs the sim, which
+  // teleports that snake up to a couple of cells between two frames: correct,
+  // but it reads as flicker. The screen absorbs the jump instead: on the
+  // frame a rollback lands, the difference between where a snake WAS drawn
+  // and where it now IS becomes a per-player visual offset that decays to
+  // zero in about a hundred milliseconds. Pure paint: the simulation is
+  // untouched, and a correction too big to glide (over ~2.5 cells) snaps.
+  const vsOffX = new Float64Array(5), vsOffY = new Float64Array(5);
+  const vsLastX = new Float64Array(5), vsLastY = new Float64Array(5);
+  let vsSeenRb = 0;
+  const wrapD = v => ((v % GRID) + GRID * 1.5) % GRID - GRID / 2;
+  function updateVsSmoothing(prog, dt) {
+    const rb = vs.session ? vs.session.stats.rollbacks : vsSeenRb;
+    const caught = rb !== vsSeenRb;
+    vsSeenRb = rb;
+    const decay = Math.exp(-dt / 90);
+    for (let pi = 0; pi < g.players.length; pi++) {
+      const pl = g.players[pi];
+      if (!pl.snake.length) { vsOffX[pi] = 0; vsOffY[pi] = 0; continue; }
+      const rp = segRenderPos(pl, 0, prog);
+      if (caught) {
+        const dx = wrapD(vsLastX[pi] - rp.cx), dy = wrapD(vsLastY[pi] - rp.cy);
+        if (dx * dx + dy * dy <= 6.25) { vsOffX[pi] = dx; vsOffY[pi] = dy; }
+        else { vsOffX[pi] = 0; vsOffY[pi] = 0; }
+      } else {
+        vsOffX[pi] *= decay; vsOffY[pi] *= decay;
+        if (vsOffX[pi] * vsOffX[pi] + vsOffY[pi] * vsOffY[pi] < 0.0001) { vsOffX[pi] = 0; vsOffY[pi] = 0; }
+      }
+      vsLastX[pi] = rp.cx + vsOffX[pi];
+      vsLastY[pi] = rp.cy + vsOffY[pi];
+    }
+  }
+  function resetVsSmoothing() {
+    vsSeenRb = 0;
+    for (let i = 0; i < 5; i++) {
+      vsOffX[i] = 0; vsOffY[i] = 0;
+      const pl = g.players[i];
+      vsLastX[i] = pl && pl.snake.length ? pl.snake[0].x : 0;
+      vsLastY[i] = pl && pl.snake.length ? pl.snake[0].y : 0;
+    }
+  }
   function drawRivals(prog) {
     const r = cell * 0.38, rad = cell * 0.3;
     ctx.lineWidth = 1;
@@ -1384,7 +1436,7 @@
       ctx.fillStyle = VS_COLORS[pi];
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const rp = segRenderPos(pl, i, prog);
-        drawBodyCell(rp.cx, rp.cy, r, rad);
+        drawBodyCell(rp.cx + vsOffX[pi], rp.cy + vsOffY[pi], r, rad);
       }
     }
     // name tags over each living rival's head, one font set for the batch
@@ -1398,7 +1450,9 @@
       if (!pl.snake.length || !vs.roster || !vs.roster[pi]) continue;
       const rp = segRenderPos(pl, 0, prog);
       ctx.fillStyle = VS_COLORS[pi];
-      ctx.fillText(vs.roster[pi].name, wrapf(rp.cx) * cell + cell / 2, wrapf(rp.cy) * cell - cell * 0.18);
+      ctx.fillText(vs.roster[pi].name,
+        wrapf(rp.cx + vsOffX[pi]) * cell + cell / 2,
+        wrapf(rp.cy + vsOffY[pi]) * cell - cell * 0.18);
     }
     ctx.globalAlpha = 1;
   }
@@ -1486,7 +1540,8 @@
         vs.session.frame(now);
         handleEvents(g.drainEvents());
         syncScoreDom();
-        syncMpStall();
+        syncMpFlags();
+        syncMpHud();
       } else {
         g.advance(dt);
         handleEvents(g.drainEvents());
@@ -1997,11 +2052,13 @@
   }
 
   // ---- the live scoreboard over the field ----
-  // Rebuilt only when a cheap change key moves (rule 8: DOM on state change),
-  // leader first, crown on the front, my chip bright, the fallen struck. When
-  // one snake is left chasing the clinch, the chip row says exactly how many
-  // points settle it.
-  let mpHudKey = null;
+  // Polled every frame but rebuilt only when a numeric change-hash moves
+  // (rule 8: DOM on state change, rule 4: no string building until then), so
+  // a spectator watching two rivals trade points sees every score land.
+  // Leader first, crown on the front, my chip bright, the fallen struck.
+  // When one snake is left chasing the clinch, the chip row says exactly how
+  // many points settle it.
+  let mpHudHash = -1;
   function hudNote(t) {
     const s = document.createElement('span');
     s.className = 'note';
@@ -2011,16 +2068,18 @@
   function syncMpHud() {
     const show = vsView() && (state === 'playing' || state === 'countdown' || state === 'dead');
     if (!show) {
-      if (mpHudKey !== null) { mpHudKey = null; mpHud.hidden = true; mpHud.innerHTML = ''; }
+      if (mpHudHash !== -1) { mpHudHash = -1; mpHud.hidden = true; mpHud.innerHTML = ''; }
       return;
     }
-    let key = (vs.spectating && !vs.over ? 's' : '') + (vs.stalled ? 'w' : '');
+    let h = (vs.spectating && !vs.over ? 1 : 0) | (vs.stalled ? 2 : 0) | 4;
     let up = 0, lastIdx = -1;
     for (let i = 0; i < g.players.length; i++) {
       const p = g.players[i];
-      key += '|' + p.score + (p.alive ? 'a' : 'd');
+      h = (Math.imul(h, 131) + p.score * 2 + (p.alive ? 1 : 0)) | 0;
       if (p.alive) { up++; lastIdx = i; }
     }
+    if (h === mpHudHash) return;
+    mpHudHash = h;
     let chase = 0;
     if (up === 1) {
       let bestOther = -Infinity;
@@ -2028,9 +2087,6 @@
         if (i !== lastIdx && g.players[i].score > bestOther) bestOther = g.players[i].score;
       if (g.players[lastIdx].score <= bestOther) chase = bestOther + 1 - g.players[lastIdx].score;
     }
-    key += '|c' + chase + '.' + lastIdx;
-    if (key === mpHudKey) return;
-    mpHudKey = key;
     mpHud.innerHTML = '';
     if (vs.spectating && !vs.over) mpHud.appendChild(hudNote('SPECTATING'));
     if (vs.stalled) mpHud.appendChild(hudNote('WAITING…'));
@@ -2054,11 +2110,15 @@
     }
     mpHud.hidden = false;
   }
-  function syncMpStall() {
-    const s = !!(vs.session && vs.session.stalled);
-    if (s !== vs.stalled) { vs.stalled = s; syncMpHud(); }
-    // a rollback can even repair my own death; drop the spectator badge if so
-    if (vs.spectating && g.players[vs.myIdx].alive) { vs.spectating = false; syncMpHud(); }
+  // Flags are derived from the live state every frame rather than from
+  // events: a rollback can create OR repair a death retroactively, and the
+  // poll always lands on the truth.
+  function syncMpFlags() {
+    vs.stalled = !!(vs.session && vs.session.stalled);
+    let othersAlive = false;
+    for (let i = 0; i < g.players.length; i++)
+      if (i !== vs.myIdx && g.players[i].alive) { othersAlive = true; break; }
+    vs.spectating = !g.players[vs.myIdx].alive && othersAlive;
   }
 
   // ---- room lifecycle ----
@@ -2285,9 +2345,11 @@
       onDesync: vsDesync,
     });
     lastShownScore = null;
+    vsEventQ = -1;
+    resetVsSmoothing();
     handleEvents(g.drainEvents());
     syncScoreDom();
-    mpHudKey = null;
+    mpHudHash = -1;
     syncMpHud();
     // straight into the shared countdown; skew between clients is at most a
     // message flight and the session's pacing walks it off
