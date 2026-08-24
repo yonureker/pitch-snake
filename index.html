@@ -24,6 +24,9 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* a class that sets `display` outranks the hidden attribute, and every
+     panel here is a flex row or column: hidden must win regardless */
+  [hidden] { display: none !important; }
 
   html, body {
     min-height: 100%;
@@ -93,9 +96,28 @@
   .scores .clock.late { color: var(--food); }
   .scores .clock[hidden] { display: none; }
 
-  /* mode chips and the tournament panel live on the dark overlay */
-  .mode-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-  .mode-row button, .t-chips button {
+  /* A choice list: one full-width button per option, stacked, wearing the
+     same clothes as START and DONE. The taken option is filled gold. */
+  .stack-choice {
+    display: flex; flex-direction: column; gap: 6px;
+    align-items: stretch; width: min(290px, 84%);
+    flex: none;
+  }
+  .stack-choice button {
+    font-family: 'Anton', sans-serif; font-weight: 400;
+    letter-spacing: 2px; font-size: 16px; text-transform: uppercase;
+    padding: 9px 18px; border-radius: 4px; cursor: pointer;
+    background: transparent; color: var(--gold-bright);
+    border: 2px solid var(--gold);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .stack-choice button.active {
+    background: var(--gold); border-color: var(--gold); color: #211e1a;
+  }
+  .stack-choice button:disabled { opacity: 0.45; cursor: default; }
+
+  /* the tournament panel's chips stay chips */
+  .t-chips button {
     background: rgba(244,236,216,0.08);
     border: 1.5px solid rgba(244,236,216,0.25);
     color: #e9e0cd;
@@ -104,7 +126,7 @@
     padding: 7px 14px; border-radius: 6px; cursor: pointer;
     transition: all 0.15s ease;
   }
-  .mode-row button.active, .t-chips button.active {
+  .t-chips button.active {
     background: var(--gold); border-color: var(--gold); color: #211e1a;
   }
   .tourney { display: flex; flex-direction: column; gap: 10px; align-items: center; }
@@ -118,7 +140,14 @@
   .t-meta { font-size: 13px; color: #b7ac93; letter-spacing: 1px; }
   .btn.ghostbtn { background: transparent; box-shadow: none; border: 1.5px solid rgba(244,236,216,0.35); }
   .btn.ghostbtn:active { transform: none; }
-  .btn-row { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  /* wrap rather than clip: a long pair of labels on a narrow phone stacks */
+  .btn-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  /* the versus footer is BACK plus one primary, sized to the panel above it:
+     BACK stays compact on the left and the primary takes what is left */
+  #vsFooter { width: min(360px, 94%); gap: 8px; flex-wrap: nowrap; }
+  #vsFooter .btn { font-size: 14px; letter-spacing: 0.8px; padding: 13px 8px; white-space: nowrap; }
+  #vsBackBtn { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
+  #vsGoBtn { flex: 1 1 auto; min-width: 0; }
   #startBtn { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .start-sub {
     font-family: 'Barlow', sans-serif; font-size: 11px; font-weight: 700;
@@ -238,6 +267,9 @@
     text-shadow: 5px 5px 0 var(--food);
   }
 
+  /* The overlay is a fixed head over a centred body: the title and its line
+     sit in the same place on every screen, and only what is underneath
+     changes when a panel opens. */
   .overlay {
     position: absolute;
     inset: 6px;
@@ -245,16 +277,35 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 14px;
+    gap: 10px;
+    padding: 4.5% 10px 12px;
     background: rgba(26,40,30,0.82);
     backdrop-filter: blur(5px);
     text-align: center;
     transition: opacity 0.25s ease;
     z-index: 5;
-    overflow-y: auto;
+    overflow: hidden;
   }
-  .overlay { overflow-y: auto; }
+  .ov-head {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  /* the actions keep their own line at the foot, so nothing the body does
+     can push them off the board or make them jump between screens */
+  .ov-foot { flex: 0 0 auto; display: flex; justify-content: center; }
+  .ov-body {
+    flex: 1 1 auto;
+    width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 10px;
+    overflow-y: auto;
+    /* centred while it fits, top-anchored when it does not: plain `center`
+       clips a too-tall list at BOTH ends and scrolls from the middle */
+    justify-content: center;
+    justify-content: safe center;
+    scrollbar-width: none;
+  }
+  .ov-body::-webkit-scrollbar { display: none; }
 
   /* Pointer dialects: a fine-pointer machine talks keyboard and needs no
      pad; a coarse-pointer one talks touch and needs no key names. The class
@@ -268,7 +319,7 @@
      plus header, hint and gaps, about 200px of chrome), never narrower than
      the phone column, never wider than the window. The header spans the same
      column, so the logo and the scores ride the board's own edges. */
-  html.touchless .wrap { max-width: max(540px, min(94vw, calc(100dvh - 200px))); }
+  html.touchless .wrap { max-width: min(94vw, max(540px, calc(100dvh - 200px))); }
   .overlay.hidden { opacity: 0; pointer-events: none; }
 
   .overlay h2 {
@@ -399,6 +450,10 @@
   .toggle-row .state { font-weight: 700; color: var(--text); width: 28px; }
 
   .entry { display: flex; gap: 8px; align-items: center; }
+  /* the name field is the gate to a versus room, so it gets the full width */
+  .entry.wide { width: min(300px, 84%); }
+  .entry.wide input { width: 100%; }
+  .vs-setup { display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .entry input {
     width: 130px; padding: 10px 12px; border-radius: 6px;
     border: 2px solid var(--gold);
@@ -420,6 +475,8 @@
     max-width: 260px; text-align: center;
   }
   .save-note[hidden] { display: none; }
+  /* guidance is not failure: only a genuine error wears the red */
+  .save-note.hint { color: #b7ac93; font-weight: 600; }
   .standings {
     list-style: none; margin: 2px 0; padding: 10px 14px; width: 230px;
     background: rgba(33,30,26,0.5); border-radius: 8px;
@@ -566,9 +623,12 @@
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
       <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
       <div class="overlay" id="overlay">
-        <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
-        <p id="overlayText">Eat to grow. Survive the pitch.</p>
-        <div class="mode-row" id="modeRow">
+        <div class="ov-head">
+          <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
+          <p id="overlayText">Eat to grow. Survive the pitch.</p>
+        </div>
+        <div class="ov-body">
+        <div class="mode-row stack-choice" id="modeRow">
           <button data-mode="classic" class="active">CLASSIC</button>
           <button data-mode="speedrun">SPEED RUN</button>
           <button data-mode="survival">SURVIVAL</button>
@@ -576,16 +636,18 @@
           <button data-mode="tourney">TOURNAMENT</button>
         </div>
         <div class="tourney" id="vsPanel" hidden>
-          <div class="entry" id="vsJoinRow">
-            <input id="vsName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
-          </div>
-          <div class="entry" id="vsQuickRow">
-            <button class="btn small" id="vsQuickBtn">QUICK MATCH</button>
-          </div>
-          <div class="entry" id="vsCodeRow">
-            <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
-            <button class="btn small" id="vsJoinBtn">JOIN</button>
-            <button class="btn small ghostbtn" id="vsCreateBtn">CREATE</button>
+          <div class="vs-setup" id="vsSetup">
+            <div class="entry wide">
+              <input id="vsName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="stack-choice" id="vsKindRow">
+              <button data-kind="quick">QUICK MATCH</button>
+              <button data-kind="private">PRIVATE</button>
+            </div>
+            <div class="entry" id="vsCodeRow" hidden>
+              <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+              <button class="btn small ghostbtn" id="vsCreateBtn">CREATE</button>
+            </div>
           </div>
           <div class="tourney" id="vsRoom" hidden>
             <div class="t-code" id="vsRoomCode"></div>
@@ -598,7 +660,6 @@
             </div>
           </div>
           <div class="save-note" id="vsNote" hidden></div>
-          <button class="btn small ghostbtn" id="vsBackBtn">BACK</button>
         </div>
         <div class="tourney" id="tourneyPanel" hidden>
           <div class="entry" id="tJoin">
@@ -649,10 +710,17 @@
         <div class="board-head" id="boardHead" style="display:none">Top 10</div>
         <ol class="standings" id="standings" style="display:none"></ol>
         <div class="mode-caption" id="modeCaption"></div>
-        <div class="btn-row">
-          <button class="btn" id="startBtn"><span id="startMain">START</span><span class="start-sub" id="startSub"></span></button>
-          <button class="btn modes" id="vsBailBtn" hidden>LEAVE ROOM</button>
-          <button class="btn modes" id="modesBtn">MODES</button>
+        </div>
+        <div class="ov-foot">
+          <div class="btn-row">
+            <button class="btn" id="startBtn"><span id="startMain">START</span><span class="start-sub" id="startSub"></span></button>
+            <button class="btn modes" id="vsBailBtn" hidden>LEAVE ROOM</button>
+            <button class="btn modes" id="modesBtn">MODES</button>
+          </div>
+          <div class="btn-row" id="vsFooter" hidden>
+            <button class="btn modes" id="vsBackBtn">BACK</button>
+            <button class="btn" id="vsGoBtn">START QUICK MATCH</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1853,7 +1921,7 @@
     modeRow.style.display = (modesOpen && !tScreen) ? 'flex' : 'none';
     tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
     vsPanel.hidden = !(modesOpen && tScreen && mode === 'versus');
-    if (!vsPanel.hidden) vsRefreshPanel();
+    vsRefreshPanel();      // also the one place the pinned versus footer hides
     tBackBtn.style.display = tCreating ? 'none' : '';
     tJoin.style.display = (!tourney && !tCreating) ? 'flex' : 'none';
     tCreate.hidden = !(tCreating && !tourney);
@@ -1866,6 +1934,9 @@
                             : st === 'open' ? 'ENDS ' + fmtWhen(tourney.ends_at)
                             : 'ENDED ' + fmtWhen(tourney.ends_at);
     }
+    // the strapline belongs to the round, not to a chooser: the title holds
+    // its place either way, and the list gets the room back
+    overlayText.style.display = modesOpen ? 'none' : '';
     legend.style.display = (state === 'ready' && !modesOpen) ? '' : 'none';
     const deadPanels = state === 'dead' && !modesOpen;
     standingsEl.style.display = deadPanels ? 'block' : 'none';
@@ -1910,7 +1981,10 @@
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
     // full time in a room offers the way out right there, not behind MODES
     vsBailBtn.hidden = !(vsDead && !modesOpen);
-    modesBtn.style.display = onMenu ? '' : 'none';
+    // the versus screen carries its own BACK and primary, so the shared DONE
+    // stands down there; everywhere else it is the way out of the chooser
+    const vsScreen = modesOpen && tScreen && mode === 'versus';
+    modesBtn.style.display = (onMenu && !vsScreen) ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     best = bestByMode[ruleMode()] || 0;
     bestEl.textContent = best;
@@ -2028,8 +2102,10 @@
   const VS_MIN = 2, VS_MAX = 5;
   const mpHud = document.getElementById('mpHud');
   const vsPanel = document.getElementById('vsPanel');
-  const vsJoinRow = document.getElementById('vsJoinRow');
-  const vsQuickRow = document.getElementById('vsQuickRow');
+  const vsSetup = document.getElementById('vsSetup');
+  const vsKindRow = document.getElementById('vsKindRow');
+  const vsFooter = document.getElementById('vsFooter');
+  const vsGoBtn = document.getElementById('vsGoBtn');
   const vsCodeRow = document.getElementById('vsCodeRow');
   const vsRoom = document.getElementById('vsRoom');
   const vsRoomCode = document.getElementById('vsRoomCode');
@@ -2041,13 +2117,19 @@
   const vsBackBtn = document.getElementById('vsBackBtn');
   const vsNameInput = document.getElementById('vsName');
   const vsCodeInput = document.getElementById('vsCode');
-  const vsJoinBtn = document.getElementById('vsJoinBtn');
   const vsCreateBtn = document.getElementById('vsCreateBtn');
   const vsNote = document.getElementById('vsNote');
 
   let vsClient = null;    // one Realtime socket, reused across rooms
   let vs = null;          // the current room, or null
   let vsBusy = false;
+  // how the next room is found: dropped in with strangers, or a code among
+  // friends. The choice picks what the one primary button does.
+  let vsKind = 'quick';
+  try {
+    const k = localStorage.getItem('snakeVsKind');
+    if (k === 'quick' || k === 'private') vsKind = k;
+  } catch (e) {}
 
   try { vsNameInput.value = localStorage.getItem('snakeVsName') || ''; } catch (e) {}
 
@@ -2060,7 +2142,11 @@
   // brief disagreement between two would-be hosts.
   const vsHostNow = () => !!(vs && vs.present.length && vs.present[0].ref === vs.ref);
 
-  function vsSetNote(msg) { vsNote.textContent = msg || ''; vsNote.hidden = !msg; }
+  function vsSetNote(msg, hint) {
+    vsNote.textContent = msg || '';
+    vsNote.hidden = !msg;
+    vsNote.classList.toggle('hint', !!hint);
+  }
   const vsCleanName = (v) => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';
 
   function vsMakeCode() {
@@ -2145,8 +2231,8 @@
     if (vsBusy || vs) return;
     if (!sbOn()) { vsSetNote('Versus needs the online service.'); return; }
     vsBusy = true;
-    vsJoinBtn.disabled = vsCreateBtn.disabled = true;
-    vsSetNote(host ? 'Opening the room…' : 'Joining…');
+    vsGoBtn.disabled = vsCreateBtn.disabled = true;
+    vsSetNote(host ? 'Opening the room…' : 'Joining…', true);
     const name = vsCleanName(vsNameInput.value);
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
     try {
@@ -2225,7 +2311,7 @@
       vsRefreshPanel();
     } finally {
       vsBusy = false;
-      vsJoinBtn.disabled = vsCreateBtn.disabled = false;
+      vsGoBtn.disabled = vsCreateBtn.disabled = false;
     }
   }
 
@@ -2516,14 +2602,40 @@
     refreshSettingsUI();
   }
 
-  // ---- the waiting room panel ----
+  // ---- the setup panel and the waiting room ----
+  // Two screens in one panel: before a room, the name and how to find one;
+  // inside a room, the roster. The footer is always BACK and one primary
+  // action, and the primary is off until the room can actually be entered.
+  const vsTypedName = () => (vsNameInput.value || '').trim();
+  const vsTypedCode = () => (vsCodeInput.value || '').trim().toUpperCase();
+
   function vsRefreshPanel() {
     const inRoom = !!vs;
-    vsJoinRow.style.display = inRoom ? 'none' : 'flex';
-    vsQuickRow.style.display = inRoom ? 'none' : 'flex';
-    vsCodeRow.style.display = inRoom ? 'none' : 'flex';
+    vsSetup.hidden = inRoom;
     vsRoom.hidden = !inRoom;
-    if (!inRoom) return;
+    // the footer lives in the overlay's pinned foot, so it has to be told
+    // about screens the panel itself never sees
+    vsFooter.hidden = vsPanel.hidden || inRoom;
+    if (!inRoom) {
+      for (const b of vsKindRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.kind === vsKind);
+      const priv = vsKind === 'private';
+      vsCodeRow.hidden = !priv;
+      const named = !!vsTypedName();
+      const code = vsTypedCode();
+      vsGoBtn.textContent = priv ? 'START PRIVATE' : 'START QUICK MATCH';
+      vsGoBtn.disabled = vsBusy || !named || (priv && code.length !== 5);
+      vsCreateBtn.disabled = vsBusy || !named;
+      // while a join is in flight the note belongs to the join
+      if (!vsBusy) {
+        vsSetNote(
+          !named ? 'Pick a name to play versus.'
+          : priv && code.length !== 5 ? 'Type a code to join, or CREATE a room.'
+          : '',
+          true
+        );
+      }
+      return;
+    }
     const hosting = vsHostNow();
     const rs = vsReadyStats();
     vsRoomCode.textContent = vs.code;
@@ -2560,7 +2672,7 @@
   // CREATE asks the server for a code so the room exists for quick match;
   // without the rooms tier the local alphabet serves, exactly as before
   vsCreateBtn.addEventListener('click', async () => {
-    if (vs || vsBusy) return;
+    if (vs || vsBusy || !vsTypedName()) return;
     let code = null;
     try {
       const r = await sbRpc('pitch_snake_room_create', {});
@@ -2568,26 +2680,39 @@
     } catch (e) {}
     void vsEnter(code || vsMakeCode(), true);
   });
-  document.getElementById('vsQuickBtn').addEventListener('click', async () => {
-    if (vs || vsBusy) return;
-    vsSetNote('Looking for a room…');
+
+  // the one primary action: drop me anywhere, or take me to that code
+  vsGoBtn.addEventListener('click', async () => {
+    if (vs || vsBusy || !vsTypedName()) return;
+    if (vsKind === 'private') {
+      const code = vsTypedCode();
+      if (code.length !== 5) return;
+      vsCodeInput.value = '';
+      void vsEnter(code, false);
+      return;
+    }
+    vsSetNote('Looking for a room…', true);
     try {
       const rows = await sbRpc('pitch_snake_room_quickmatch', {});
       const r = Array.isArray(rows) ? rows[0] : null;
-      if (r && typeof r.code === 'string') {
-        void vsEnter(r.code, !!r.created);
-        return;
-      }
+      if (r && typeof r.code === 'string') { void vsEnter(r.code, !!r.created); return; }
     } catch (e) {}
-    vsSetNote('Quick match needs the rooms service; CREATE a room and share its code instead.');
+    vsSetNote('Quick match needs the rooms service. Choose PRIVATE and CREATE a room instead.');
   });
-  vsJoinBtn.addEventListener('click', () => {
-    const code = (vsCodeInput.value || '').trim().toUpperCase();
-    if (code.length !== 5) { vsSetNote('Room codes are 5 characters.'); return; }
-    vsCodeInput.value = '';
-    void vsEnter(code, false);
+
+  vsKindRow.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || vs) return;
+    vsKind = b.dataset.kind;
+    try { localStorage.setItem('snakeVsKind', vsKind); } catch (err) {}
+    vsRefreshPanel();
   });
-  vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsJoinBtn.click(); } });
+  // the primary follows what is typed, so it can never promise what it
+  // cannot do
+  vsNameInput.addEventListener('input', vsRefreshPanel);
+  vsCodeInput.addEventListener('input', vsRefreshPanel);
+  vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsGoBtn.click(); } });
+  vsNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsGoBtn.click(); } });
   vsReadyBtn.addEventListener('click', vsToggleReady);
   vsStartBtn.addEventListener('click', () => { void vsStart(); });
   vsLeaveBtn.addEventListener('click', vsLeave);
