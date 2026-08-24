@@ -578,6 +578,7 @@
             <div class="t-meta" id="vsRoomStatus"></div>
             <ol class="standings" id="vsRoster"></ol>
             <div class="btn-row">
+              <button class="btn small" id="vsReadyBtn">READY UP</button>
               <button class="btn small" id="vsStartBtn" hidden>START ROUND</button>
               <button class="btn small ghostbtn" id="vsLeaveBtn">LEAVE</button>
             </div>
@@ -1815,18 +1816,24 @@
             (tourneyState() === 'open' ? '' : tourneyState() === 'upcoming' ? ' \u00b7 NOT STARTED' : ' \u00b7 ENDED')
         : 'TOURNAMENT \u00b7 NONE JOINED';
     }
-    // START names the ruleset it is about to run; a pause needs no reminder
+    // START names the ruleset it is about to run; a pause needs no reminder.
+    // On a versus results screen the one button is the ready check: READY UP
+    // for everyone, then the acting host's REMATCH once the room has ticked.
+    const vsDead = mode === 'versus' && state === 'dead' && !!(vs && vs.over);
+    const vsReadyStatsNow = vsDead ? vsReadyStats() : null;
     startMain.textContent =
       state === 'paused' ? 'RESUME'
+      : vsDead ? (!vs.ready ? 'READY UP' : vsHostNow() ? 'REMATCH' : 'UNREADY')
       : mode === 'versus' ? 'REMATCH'
       : state === 'dead' && runKey() === lastRunKey ? 'REMATCH'
       : 'START';
-    startSub.textContent = RULE_LABELS[ruleMode()];
+    startSub.textContent = vsDead
+      ? `${vsReadyStatsNow.ready}/${vsReadyStatsNow.seats} READY`
+      : RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
-    // in versus the round starts from the room panel; the host's REMATCH on
-    // the results screen is the one button that shows here
+    startBtn.disabled = vsDead && vs.ready && vsHostNow() && !vsReadyStatsNow.all;
     const playable = mode === 'versus'
-      ? (state === 'dead' && !!(vs && vs.over) && vsHostNow())
+      ? vsDead
       : (mode !== 'tourney' || tourneyState() === 'open');
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
     modesBtn.style.display = onMenu ? '' : 'none';
@@ -1954,6 +1961,7 @@
   const vsRoomCode = document.getElementById('vsRoomCode');
   const vsRoomStatus = document.getElementById('vsRoomStatus');
   const vsRosterEl = document.getElementById('vsRoster');
+  const vsReadyBtn = document.getElementById('vsReadyBtn');
   const vsStartBtn = document.getElementById('vsStartBtn');
   const vsLeaveBtn = document.getElementById('vsLeaveBtn');
   const vsBackBtn = document.getElementById('vsBackBtn');
@@ -2080,11 +2088,15 @@
         game: null, session: null, roster: null, myIdx: -1,
         over: false, spectating: false, stalled: false, up: false,
         starting: false, touchTimer: null,
+        ready: false, lastTrackAt: 0, trackDirty: false,
       };
-      // the acting host pings the row while the room waits, which is what
-      // makes this room visible to QUICK MATCH; a no-op before rooms.sql runs
+      // The room's ticker: flushes a paced presence update when one is owed,
+      // and (for the acting host) pings the row so QUICK MATCH can see the
+      // room is alive; the RPC is a harmless miss before rooms.sql runs.
       room.touchTimer = setInterval(() => {
-        if (vs === room && room.up && vsHostNow() && !vsInRound()) {
+        if (vs !== room || !room.up) return;
+        if (room.trackDirty && Date.now() - room.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
+        if (vsHostNow() && !vsInRound()) {
           void sbRpc('pitch_snake_room_touch', {
             p_code: room.code, p_count: Math.min(room.present.length || 1, VS_MAX),
           }).catch(() => {});
@@ -2110,7 +2122,9 @@
           room.up = true;
           room.transport.setOpen(true);
           // presence dies with the old join on every reconnect: track again
-          void channel.track({ name: room.name, ts: room.joinedTs, host: room.host });
+          room.lastTrackAt = Date.now();
+          room.trackDirty = false;
+          void channel.track({ name: room.name, ts: room.joinedTs, host: room.host, ready: room.ready });
           if (vs === room) { vsSetNote(''); vsRefreshPanel(); }
         } else {
           room.up = false;
@@ -2153,7 +2167,7 @@
     const list = [];
     for (const key of Object.keys(stateMap)) {
       const m = stateMap[key][0];
-      if (m) list.push({ ref: key, name: String(m.name || 'YOU'), ts: m.ts || 0, host: !!m.host });
+      if (m) list.push({ ref: key, name: String(m.name || 'YOU'), ts: m.ts || 0, host: !!m.host, ready: !!m.ready });
     }
     // the host anchors slot one; everyone else queues by arrival
     list.sort((a, b) => (b.host - a.host) || (a.ts - b.ts) || (a.ref < b.ref ? -1 : 1));
@@ -2164,6 +2178,37 @@
         if (i !== vs.myIdx && !list.some(p => p.ref === vs.roster[i].ref)) vs.session.dropPeer(i);
       }
     }
+    vsRefreshPanel();
+    refreshModeUI();
+  }
+
+  // ---- the ready check ----
+  // Everyone, host included, declares ready before a kickoff; presence
+  // carries the flag so every roster shows the same ticks. Presence updates
+  // are hard-limited upstream (5 per client per 30s), so a toggle flips the
+  // local state instantly and the wire write is paced: sent at once when the
+  // budget allows, else marked dirty and flushed by the room's 10s ticker.
+  const VS_TRACK_GAP_MS = 6100;
+  function vsTrack() {
+    vs.lastTrackAt = Date.now();
+    vs.trackDirty = false;
+    void vs.channel.track({ name: vs.name, ts: vs.joinedTs, host: vs.host, ready: vs.ready });
+  }
+  function vsTrackSoon() {
+    if (Date.now() - vs.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
+    else vs.trackDirty = true;
+  }
+  function vsMyReady(p) { return p.ref === vs.ref ? vs.ready : p.ready; }
+  function vsReadyStats() {
+    const seatList = vs.present.slice(0, VS_MAX);
+    let ready = 0;
+    for (const p of seatList) if (vsMyReady(p)) ready++;
+    return { seats: seatList.length, ready, all: seatList.length >= VS_MIN && ready === seatList.length };
+  }
+  function vsToggleReady() {
+    if (!vs || !vs.up || vsInRound()) return;
+    vs.ready = !vs.ready;
+    vsTrackSoon();
     vsRefreshPanel();
     refreshModeUI();
   }
@@ -2184,7 +2229,7 @@
   // flight, and it is about to arrive on the channel.
   async function vsStart() {
     if (!vs || !vsHostNow() || !vs.up || vs.starting) return;
-    if (vsInRound()) return;
+    if (vsInRound() || !vsReadyStats().all) return;    // the whole room says ready first
     const room = vs;
     const roster = room.present.slice(0, VS_MAX).map(p => ({ ref: p.ref, name: p.name }));
     if (roster.length < VS_MIN) return;
@@ -2226,6 +2271,9 @@
     vs.over = false;
     vs.spectating = false;
     vs.stalled = false;
+    // readiness is consent for ONE kickoff; the next round asks again
+    vs.ready = false;
+    vsTrackSoon();
     g = createGame({
       seed: m.seed >>> 0, tickMs: SPEEDS.normal, wallsEnabled: true,
       players: m.roster.length,
@@ -2331,6 +2379,7 @@
     vsRoom.hidden = !inRoom;
     if (!inRoom) return;
     const hosting = vsHostNow();
+    const rs = vsReadyStats();
     vsRoomCode.textContent = vs.code;
     const n = vs.present.length;
     vsRoomStatus.textContent =
@@ -2338,19 +2387,23 @@
       : vsInRound() ? 'ROUND IN PROGRESS'
       : !hosting && n <= 1 ? 'ONLY YOU HERE · CHECK THE CODE OR WAIT'
       : n < VS_MIN ? `WAITING FOR PLAYERS · ${n}/${VS_MAX}`
-      : `READY · ${Math.min(n, VS_MAX)}/${VS_MAX}` + (hosting ? '' : ' · THE HOST KICKS OFF');
+      : rs.all ? ('ALL READY' + (hosting ? ' · KICK OFF' : ' · THE HOST KICKS OFF'))
+      : `READY ${rs.ready}/${rs.seats}`;
     vsRosterEl.innerHTML = '';
     vs.present.slice(0, VS_MAX).forEach((p, i) => {
       const li = document.createElement('li');
       if (p.ref === vs.ref) li.className = 'me';
-      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = vsMyReady(p) ? '✓' : '·';
       const nm = document.createElement('span'); nm.className = 'nm';
       nm.textContent = p.name + (i === 0 ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
       li.append(rk, nm);
       vsRosterEl.appendChild(li);
     });
+    vsReadyBtn.hidden = vsInRound();
+    vsReadyBtn.disabled = !vs.up;
+    vsReadyBtn.textContent = vs.ready ? 'UNREADY' : 'READY UP';
     vsStartBtn.hidden = !(hosting && !vsInRound());
-    vsStartBtn.disabled = !(vs.up && vs.present.length >= VS_MIN) || vs.starting;
+    vsStartBtn.disabled = !(vs.up && rs.all) || vs.starting;
   }
 
   // CREATE asks the server for a code so the room exists for quick match;
@@ -2384,6 +2437,7 @@
     void vsEnter(code, false);
   });
   vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsJoinBtn.click(); } });
+  vsReadyBtn.addEventListener('click', vsToggleReady);
   vsStartBtn.addEventListener('click', () => { void vsStart(); });
   vsLeaveBtn.addEventListener('click', vsLeave);
   vsBackBtn.addEventListener('click', () => { tScreen = false; refreshModeUI(); });
@@ -2391,9 +2445,14 @@
   // ---- round flow ----
   function play() {
     if (mode === 'versus') {
-      // versus rounds start from the room; the acting host's REMATCH on the
-      // results screen is the one shortcut back in
-      if (vs && vs.over && state === 'dead' && vsHostNow()) void vsStart();
+      // versus rounds start from the room. On the results screen the one
+      // button walks everyone through the ready check: READY UP for the
+      // field, and for the acting host READY UP first, then REMATCH once
+      // the whole room has ticked in.
+      if (vs && vs.over && state === 'dead') {
+        if (!vs.ready) vsToggleReady();
+        else if (vsHostNow()) void vsStart();
+      }
       return;
     }
     if (mode === 'tourney' && tourneyState() !== 'open') return;   // the window rules

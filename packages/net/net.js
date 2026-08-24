@@ -26,6 +26,14 @@ export const SNAP_EVERY = 32;     // quanta between keyframes (320ms)
 export const SNAP_KEEP = 96;      // keyframes retained: ~30s of rollback horizon
 export const STALL_AT = 250;      // quanta a live peer may lag before we hold the sim
 export const BEAT_MS = 1000;      // heartbeat cadence
+// A LIVE peer's fresh silence holds the room (their inputs may be in
+// flight); silence older than this is a vanished client, and the room plays
+// on with their snake on the rails. Dead peers never hold the room at all.
+export const STALL_GIVEUP_MS = 10_000;
+// A finished board stays provisional this long before FULL TIME is declared:
+// a rival's final-instant turn still in flight may roll the ending back, so
+// the whistle waits out one comfortable round trip.
+export const END_GRACE_MS = 600;
 // Hash only state old enough that every repair path (a dropped input, then a
 // dropped resend request, then a dropped resend, each caught by a later
 // beat) has had ample time to finish: comfortably several beat cycles, and
@@ -62,12 +70,14 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   const lastSeq = new Array(N).fill(0);
   const buffered = Array.from({ length: N }, () => new Map());  // out-of-order arrivals
   const peerQ = new Array(N).fill(0);                  // last quantum a peer reported
+  const lastHeard = new Array(N).fill(-1e15);          // frame-clock time of their last message
   const gone = new Array(N).fill(false);               // peer left: never stall on them
   const needAt = new Array(N).fill(0);                 // resend-request throttle
   const snaps = [];                                    // {q, s, h?} ascending by q
   const myHist = [];                                   // my own sends, for resend
   let mySeq = 0;
   let lastNow = -1, acc = 0, lastBeat = -1;
+  let deadSince = -1;                                  // when the board first went still
   let ended = false, dead = false;                     // dead = desynced/aborted
   let stalled = false;
   const stats = { rollbacks: 0, resimmed: 0, needsSent: 0, resends: 0 };
@@ -176,8 +186,9 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   }
 
   transport.onMessage((msg) => {
-    if (!msg || msg.v !== NET_PROTO || dead) return;
+    if (!msg || msg.v !== NET_PROTO || dead || ended) return;
     const nowMs = lastNow < 0 ? 0 : lastNow;
+    if (typeof msg.p === 'number' && msg.p >= 0 && msg.p < N && msg.p !== myIdx) lastHeard[msg.p] = nowMs;
     if (msg.t === 'i') {
       const back = acceptInput(msg, nowMs);
       if (back !== Infinity) rollback(back);
@@ -257,8 +268,15 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       let minPeer = Infinity, maxPeer = -Infinity;
       for (let p = 0; p < N; p++) {
         if (p === myIdx || gone[p]) continue;
-        if (peerQ[p] < minPeer) minPeer = peerQ[p];
         if (peerQ[p] > maxPeer) maxPeer = peerQ[p];
+        // Only a snake that can still act may leash the room: a dead one has
+        // no legal inputs left, so its client going quiet (a spectator
+        // backgrounding the tab) must never freeze the survivors. A LIVE
+        // peer's silence holds the room only while it is fresh; past the
+        // give-up window the room plays on and their snake rides the rails.
+        if (!game.players[p].alive) continue;
+        if (nowMs - lastHeard[p] > STALL_GIVEUP_MS) continue;
+        if (peerQ[p] < minPeer) minPeer = peerQ[p];
       }
       stalled = minPeer !== Infinity && minPeer < game.quanta - STALL_AT;
       if (!stalled) {
@@ -273,7 +291,14 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
         game.accMs = game.alive ? acc : 0;
       }
       if (nowMs - lastBeat >= BEAT_MS) { lastBeat = nowMs; sendBeat(); }
-      if (!game.alive && !ended) { ended = true; if (onEnd) onEnd(); }
+      // the ending is provisional for one grace window: a late remote turn
+      // can still roll the last quanta back and un-still the board
+      if (!game.alive) {
+        if (deadSince < 0) deadSince = nowMs;
+        if (!ended && nowMs - deadSince >= END_GRACE_MS) { ended = true; if (onEnd) onEnd(); }
+      } else {
+        deadSince = -1;
+      }
       return ended ? 'over' : stalled ? 'stalled' : 'running';
     },
 

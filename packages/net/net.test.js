@@ -130,6 +130,46 @@ test('a silent peer stalls the sim; dropPeer releases it', () => {
   assert.ok(g0.quanta > qAtSilence + 300, 'the sim runs again, their snake on rails');
 });
 
+test('a dead rival going quiet never leashes the survivor', () => {
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  for (let now = 0; now <= 3000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  // the rival falls on both machines at the same quantum, as the shared sim
+  // would decide, and then their client goes dark, spectator-style
+  for (const g of [g0, g1]) {
+    const p = g.players[1];
+    p.alive = false; p.deadReason = 'wall'; p.diedAt = g.quanta;
+    p.snake.length = 0; p.snakeSet.clear();
+  }
+  const qAt = g0.quanta;
+  let everStalled = false;
+  for (let now = 3010; now <= 12000; now += 10) {
+    bus.pump(now); s0.frame(now);
+    if (s0.stalled) everStalled = true;
+  }
+  assert.equal(everStalled, false, 'a dead snake has no inputs left to wait for');
+  assert.ok(!g0.alive || g0.quanta > qAt + 600, 'the survivor kept playing (or clinched)');
+});
+
+test('a LIVE peer gone silent leashes only until the give-up window', () => {
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  for (let now = 0; now <= 5000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  let now = 5010;
+  for (; now <= 9000; now += 10) { bus.pump(now); s0.frame(now); }
+  assert.equal(s0.stalled, true, 'fresh silence from a live snake holds the room');
+  const qHeld = g0.quanta;
+  for (; now <= 20000; now += 10) { bus.pump(now); s0.frame(now); }
+  assert.equal(s0.stalled, false, 'past the give-up window nobody waits for a vanished client');
+  assert.ok(g0.quanta > qHeld + 400, 'the sim ran on, their snake on the rails');
+});
+
 test('desynced state hashes are caught by the beat exchange', () => {
   const bus = loopbackBus(2, { latency: 10 });
   const g0 = createGame({ ...QUIET, players: 2 });
