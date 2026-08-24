@@ -911,6 +911,48 @@ test('multi-snake: one trip a pair, even with two heads committed', () => {
   assert.ok(g.players[0].alive && g.players[1].alive, 'sharing the landing cell is fine: snakes pass through');
 });
 
+test('multi-snake: the last snake standing clinches by passing the field, not by outliving it', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  const p1 = g.players[1];
+  p1.alive = false; p1.deadReason = 'wall'; p1.diedAt = 10;
+  p1.snake.length = 0; p1.snakeSet.clear();
+  p1.score = 3;
+  g.players[0].score = 3;
+  g.advanceQuanta(1);
+  assert.equal(g.alive, true, 'level on points is not past them: the round goes on');
+  g.food = { x: 8, y: 5, bonus: false, kind: 0 };
+  g.foodAge = 0;
+  let guard = 600;
+  while (g.alive && guard-- > 0) g.advanceQuanta(1);
+  assert.equal(g.alive, false, 'the survivor ate past the field and the round ended');
+  assert.equal(g.players[0].deadReason, 'won', 'the end is a win, not a death');
+  assert.equal(g.players[0].score, 4);
+  assert.equal(g.log.finalScore, 4);
+  assert.ok(g.players[0].snake.length >= START_LEN, 'the champion keeps their body on the field');
+});
+
+test('multi-snake: a leader outliving the last rival clinches on the same quantum', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 15], [4, 15], [3, 15]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.players[0].score = 5;
+  g.players[1].score = 3;
+  g.wallState = 'solid';
+  g.wallLookup = new Set([K(6, 5)]);       // the next cell of snake 1's path
+  g.advanceQuanta(13);                     // one full tick at the default pace
+  assert.equal(g.players[1].deadReason, 'wall', 'the trailing snake hit the wall');
+  assert.equal(g.players[0].deadReason, 'won', 'and the leader clinched instantly');
+  assert.equal(g.players[0].diedAt, g.players[1].diedAt, 'both stamped on the same quantum');
+  assert.equal(g.alive, false);
+  const solo = quietGame();
+  solo.score = 500;
+  solo.advanceQuanta(50);
+  assert.equal(solo.alive, true, 'a solo round never clinches');
+});
+
 // ------------------------------------------------------------- rollback
 test('snapshot/restore: a rollback resim reproduces the straight run exactly', () => {
   const mk = () => createGame({ seed: 777, tickMs: 100, players: 2, ...MODES.survival });

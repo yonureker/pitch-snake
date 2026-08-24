@@ -170,16 +170,23 @@
   .wall-banner.forming { animation: wallBlink 0.32s steps(1, end) infinite; }
   @keyframes wallBlink { 50% { opacity: 0.28; } }
 
-  /* versus: the live room strip over the field: names, scores, who fell */
+  /* versus: the live scoreboard over the field: a chip per player, leader
+     first with the crown, your own chip bright, the fallen struck through */
   .mp-hud {
     position: absolute; top: 10px; left: 10px; z-index: 3;
-    padding: 3px 10px; border-radius: 999px;
-    background: rgba(20, 17, 13, 0.55);
-    color: #e9e0cd; font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;
+    padding: 4px 11px; border-radius: 999px;
+    background: rgba(20, 17, 13, 0.6);
+    color: #d8d0bd; font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px;
     pointer-events: none; white-space: nowrap; max-width: calc(100% - 20px);
-    overflow: hidden; text-overflow: ellipsis;
+    overflow: hidden;
   }
   .mp-hud[hidden] { display: none; }
+  .mp-hud .pl { display: inline-flex; gap: 5px; align-items: center; }
+  .mp-hud .pl i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+  .mp-hud .pl.dead { opacity: 0.5; text-decoration: line-through; }
+  .mp-hud .pl.me { color: #ffffff; font-weight: 800; }
+  .mp-hud .note { color: var(--gold-bright); font-weight: 800; }
 
   canvas {
     display: block;
@@ -558,6 +565,9 @@
           <div class="entry" id="vsJoinRow">
             <input id="vsName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
           </div>
+          <div class="entry" id="vsQuickRow">
+            <button class="btn small" id="vsQuickBtn">QUICK MATCH</button>
+          </div>
           <div class="entry" id="vsCodeRow">
             <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
             <button class="btn small" id="vsJoinBtn">JOIN</button>
@@ -690,6 +700,7 @@
   // whole room and only quantum-stamped turns cross the wire (rollback
   // netcode); the session logic is shared, transport-agnostic code
   import { createSession, channelTransport } from './packages/net/net.js';
+  import { ENGINE_VERSION } from './packages/engine/engine.js';
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -835,7 +846,7 @@
             spawnBurst(s.x, s.y, 4, 0.9, () => (Math.random() * 1.2 + 0.4) * (cell / 14), () => '#8d867a');
         }
         if (!vsInRound()) onDeath(e.reason);
-        else if (e.player === vs.myIdx) { vs.spectating = true; syncMpHud(); }
+        else if (e.player === vs.myIdx && e.reason !== 'won') { vs.spectating = true; syncMpHud(); }
         // the versus FULL TIME screen comes from the session's onEnd, which
         // waits a grace window for any last-instant remote turns
       }
@@ -1795,7 +1806,7 @@
     if (showCaption && mode === 'versus') {
       modeCaption.textContent =
         !vs ? 'VERSUS \u00b7 NO ROOM \u00b7 OPEN MODES'
-        : state === 'dead' && !vs.host ? 'ROOM ' + vs.code + ' \u00b7 THE HOST CALLS THE REMATCH'
+        : state === 'dead' && !vsHostNow() ? 'ROOM ' + vs.code + ' \u00b7 THE HOST CALLS THE REMATCH'
         : 'ROOM ' + vs.code + ' \u00b7 ' + vs.present.length + ' IN';
     } else if (showCaption) {
       modeCaption.textContent =
@@ -1815,7 +1826,7 @@
     // in versus the round starts from the room panel; the host's REMATCH on
     // the results screen is the one button that shows here
     const playable = mode === 'versus'
-      ? (state === 'dead' && !!(vs && vs.host && vs.over))
+      ? (state === 'dead' && !!(vs && vs.over) && vsHostNow())
       : (mode !== 'tourney' || tourneyState() === 'open');
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
     modesBtn.style.display = onMenu ? '' : 'none';
@@ -1937,6 +1948,7 @@
   const mpHud = document.getElementById('mpHud');
   const vsPanel = document.getElementById('vsPanel');
   const vsJoinRow = document.getElementById('vsJoinRow');
+  const vsQuickRow = document.getElementById('vsQuickRow');
   const vsCodeRow = document.getElementById('vsCodeRow');
   const vsRoom = document.getElementById('vsRoom');
   const vsRoomCode = document.getElementById('vsRoomCode');
@@ -1960,6 +1972,11 @@
   const vsView = () => !!(vs && vs.game === g);                 // this g IS the room's round
   const vsInRound = () => vsView() && vs.session && !vs.over;   // and it is still being played
   function mePlayer() { return vsView() ? g.players[vs.myIdx] : g.players[0]; }
+  // The acting host: the original creator while present, else whoever has
+  // waited longest (the presence sort puts them first). The kickoff button
+  // follows this, so a room outlives its creator; the server arbitrates any
+  // brief disagreement between two would-be hosts.
+  const vsHostNow = () => !!(vs && vs.present.length && vs.present[0].ref === vs.ref);
 
   function vsSetNote(msg) { vsNote.textContent = msg || ''; vsNote.hidden = !msg; }
   const vsCleanName = (v) => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';
@@ -1971,26 +1988,62 @@
     return c;
   }
 
-  // ---- the live room strip over the field ----
-  let mpHudText = null;
+  // ---- the live scoreboard over the field ----
+  // Rebuilt only when a cheap change key moves (rule 8: DOM on state change),
+  // leader first, crown on the front, my chip bright, the fallen struck. When
+  // one snake is left chasing the clinch, the chip row says exactly how many
+  // points settle it.
+  let mpHudKey = null;
+  function hudNote(t) {
+    const s = document.createElement('span');
+    s.className = 'note';
+    s.textContent = t;
+    return s;
+  }
   function syncMpHud() {
     const show = vsView() && (state === 'playing' || state === 'countdown' || state === 'dead');
     if (!show) {
-      if (mpHudText !== null) { mpHudText = null; mpHud.hidden = true; }
+      if (mpHudKey !== null) { mpHudKey = null; mpHud.hidden = true; mpHud.innerHTML = ''; }
       return;
     }
-    let text = vs.spectating && !vs.over ? 'SPECTATING · ' : '';
-    if (vs.stalled) text += 'WAITING FOR THE ROOM · ';
-    const order = g.players.map((_, i) => i).sort((a, b) => g.players[b].score - g.players[a].score);
+    let key = (vs.spectating && !vs.over ? 's' : '') + (vs.stalled ? 'w' : '');
+    let up = 0, lastIdx = -1;
+    for (let i = 0; i < g.players.length; i++) {
+      const p = g.players[i];
+      key += '|' + p.score + (p.alive ? 'a' : 'd');
+      if (p.alive) { up++; lastIdx = i; }
+    }
+    let chase = 0;
+    if (up === 1) {
+      let bestOther = -Infinity;
+      for (let i = 0; i < g.players.length; i++)
+        if (i !== lastIdx && g.players[i].score > bestOther) bestOther = g.players[i].score;
+      if (g.players[lastIdx].score <= bestOther) chase = bestOther + 1 - g.players[lastIdx].score;
+    }
+    key += '|c' + chase + '.' + lastIdx;
+    if (key === mpHudKey) return;
+    mpHudKey = key;
+    mpHud.innerHTML = '';
+    if (vs.spectating && !vs.over) mpHud.appendChild(hudNote('SPECTATING'));
+    if (vs.stalled) mpHud.appendChild(hudNote('WAITING…'));
+    const order = g.players.map((_, i) => i).sort((a, b) => g.players[b].score - g.players[a].score || a - b);
     for (let k = 0; k < order.length; k++) {
       const i = order[k];
-      if (k) text += '  ';
-      text += (g.players[i].alive ? '' : '☠ ') + (vs.roster[i] ? vs.roster[i].name : '?') +
-              (i === vs.myIdx ? '★' : '') + ' ' + g.players[i].score;
+      const p = g.players[i];
+      const el = document.createElement('span');
+      el.className = 'pl' + (p.alive ? '' : ' dead') + (i === vs.myIdx ? ' me' : '');
+      const dot = document.createElement('i');
+      dot.style.background = i === vs.myIdx ? getCss('--gold-bright') : VS_COLORS[i];
+      el.appendChild(dot);
+      el.appendChild(document.createTextNode(
+        (k === 0 ? '👑 ' : '') + (vs.roster[i] ? vs.roster[i].name : '?') + ' ' + p.score));
+      mpHud.appendChild(el);
     }
-    if (text === mpHudText) return;
-    mpHudText = text;
-    mpHud.textContent = text;
+    if (chase > 0) {
+      mpHud.appendChild(hudNote(lastIdx === vs.myIdx
+        ? chase + ' TO CLINCH'
+        : (vs.roster[lastIdx] ? vs.roster[lastIdx].name : '?') + ' NEEDS ' + chase));
+    }
     mpHud.hidden = false;
   }
   function syncMpStall() {
@@ -2026,7 +2079,17 @@
         present: [], joinedTs: Date.now(), startN: 0,
         game: null, session: null, roster: null, myIdx: -1,
         over: false, spectating: false, stalled: false, up: false,
+        starting: false, touchTimer: null,
       };
+      // the acting host pings the row while the room waits, which is what
+      // makes this room visible to QUICK MATCH; a no-op before rooms.sql runs
+      room.touchTimer = setInterval(() => {
+        if (vs === room && room.up && vsHostNow() && !vsInRound()) {
+          void sbRpc('pitch_snake_room_touch', {
+            p_code: room.code, p_count: Math.min(room.present.length || 1, VS_MAX),
+          }).catch(() => {});
+        }
+      }, 10000);
       // presence is opt-in: the handler must exist before subscribe()
       channel.on('presence', { event: 'sync' }, () => { if (vs === room) vsRosterSync(); });
       channel.on('broadcast', { event: 'lobby' }, ({ payload }) => { if (vs === room) vsLobbyMsg(payload); });
@@ -2035,6 +2098,7 @@
         if (settled) return;
         settled = true;
         vsSetNote('Could not reach the room service. Try again.');
+        clearInterval(room.touchTimer);
         try { channel.unsubscribe(); } catch (e) {}
         if (vs === room) vs = null;
         vsRefreshPanel();
@@ -2067,6 +2131,7 @@
   function vsLeave() {
     if (!vs) return;
     const wasLive = vsInRound() && (state === 'playing' || state === 'countdown');
+    clearInterval(vs.touchTimer);
     try { vs.channel.unsubscribe(); } catch (e) {}
     vs = null;
     syncMpHud();
@@ -2110,23 +2175,46 @@
     vsBegin(m);
   }
 
-  // the host whistles: seed and roster for everyone, then play it locally too
-  function vsStart() {
-    if (!vs || !vs.host || !vs.up || vsBusy) return;
+  // The acting host whistles. With the rooms tier installed the kickoff goes
+  // through pitch_snake_room_start: the row serializes rival rematch clicks,
+  // the server mints the seed and counter, and realtime.send delivers the
+  // same start to every member, this client included. Without the tier (the
+  // RPC 404s), the phase-2 room lives on: this tab broadcasts the start
+  // itself. Any other refusal means someone else's kickoff is already in
+  // flight, and it is about to arrive on the channel.
+  async function vsStart() {
+    if (!vs || !vsHostNow() || !vs.up || vs.starting) return;
     if (vsInRound()) return;
-    const roster = vs.present.slice(0, VS_MAX).map(p => ({ ref: p.ref, name: p.name }));
+    const room = vs;
+    const roster = room.present.slice(0, VS_MAX).map(p => ({ ref: p.ref, name: p.name }));
     if (roster.length < VS_MIN) return;
-    const m = {
-      t: 'start', n: vs.startN + 1,
-      seed: crypto.getRandomValues(new Uint32Array(1))[0],
-      roster,
-    };
-    void vs.channel.send({ type: 'broadcast', event: 'lobby', payload: m });
-    vs.startN = m.n;
-    vsBegin(m);
+    room.starting = true;
+    vsRefreshPanel();
+    try {
+      await sbRpc('pitch_snake_room_start', { p_code: room.code, p_roster: roster, p_ev: ENGINE_VERSION });
+    } catch (e) {
+      if (vs === room && !vsInRound() && String(e && e.message).includes(': 404')) {
+        const m = {
+          t: 'start', n: room.startN + 1, ev: ENGINE_VERSION,
+          seed: crypto.getRandomValues(new Uint32Array(1))[0],
+          roster,
+        };
+        void room.channel.send({ type: 'broadcast', event: 'lobby', payload: m });
+        room.startN = m.n;
+        vsBegin(m);
+      }
+    } finally {
+      room.starting = false;
+      if (vs === room) vsRefreshPanel();
+    }
   }
 
   function vsBegin(m) {
+    if (m.ev !== undefined && m.ev !== ENGINE_VERSION) {
+      vsSetNote('This room runs a different build of the game. Reload the page to match it.');
+      vsRefreshPanel();
+      return;
+    }
     const idx = m.roster.findIndex(r => r.ref === vs.ref);
     if (idx < 0) {                                  // five filled up before me
       vsSetNote('This round is full; you are in the next one.');
@@ -2151,7 +2239,7 @@
     lastShownScore = null;
     handleEvents(g.drainEvents());
     syncScoreDom();
-    mpHudText = null;
+    mpHudKey = null;
     syncMpHud();
     // straight into the shared countdown; skew between clients is at most a
     // message flight and the session's pacing walks it off
@@ -2171,6 +2259,7 @@
   // final placings: score first, then who lasted longer, then the earlier slot
   function vsStandingsRows() {
     return g.players.map((p, i) => ({
+      idx: i,
       name: vs.roster[i] ? vs.roster[i].name : '?',
       me: i === vs.myIdx,
       score: p.score,
@@ -2184,9 +2273,18 @@
     syncScoreDom();
     syncMpHud();
     const rows = vsStandingsRows();
+    const clinched = g.players[rows[0].idx].deadReason === 'won';
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
-    overlayText.textContent = rows[0].me ? 'You take the room.' : `${rows[0].name} takes the room.`;
+    overlayText.textContent = rows[0].me
+      ? (clinched ? 'You clinched it.' : 'You take the room.')
+      : (clinched ? `${rows[0].name} clinched it.` : `${rows[0].name} takes the room.`);
+    // best-effort: the first report reopens the row for the rematch; a page
+    // without the rooms tier just misses, harmlessly
+    void sbRpc('pitch_snake_room_finish', {
+      p_code: vs.code,
+      p_results: { scores: rows.map(r => ({ n: r.name, s: r.score })), clinched },
+    }).catch(() => {});
     boardHead.textContent = 'ROOM ' + vs.code;
     standingsEl.innerHTML = '';
     rows.forEach((row, i) => {
@@ -2228,32 +2326,57 @@
   function vsRefreshPanel() {
     const inRoom = !!vs;
     vsJoinRow.style.display = inRoom ? 'none' : 'flex';
+    vsQuickRow.style.display = inRoom ? 'none' : 'flex';
     vsCodeRow.style.display = inRoom ? 'none' : 'flex';
     vsRoom.hidden = !inRoom;
     if (!inRoom) return;
+    const hosting = vsHostNow();
     vsRoomCode.textContent = vs.code;
     const n = vs.present.length;
     vsRoomStatus.textContent =
       !vs.up ? 'CONNECTING…'
       : vsInRound() ? 'ROUND IN PROGRESS'
-      : !vs.host && n <= 1 ? 'ONLY YOU HERE · CHECK THE CODE OR WAIT'
+      : !hosting && n <= 1 ? 'ONLY YOU HERE · CHECK THE CODE OR WAIT'
       : n < VS_MIN ? `WAITING FOR PLAYERS · ${n}/${VS_MAX}`
-      : `READY · ${Math.min(n, VS_MAX)}/${VS_MAX}` + (vs.host ? '' : ' · THE HOST KICKS OFF');
+      : `READY · ${Math.min(n, VS_MAX)}/${VS_MAX}` + (hosting ? '' : ' · THE HOST KICKS OFF');
     vsRosterEl.innerHTML = '';
     vs.present.slice(0, VS_MAX).forEach((p, i) => {
       const li = document.createElement('li');
       if (p.ref === vs.ref) li.className = 'me';
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm';
-      nm.textContent = p.name + (p.host ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
+      nm.textContent = p.name + (i === 0 ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
       li.append(rk, nm);
       vsRosterEl.appendChild(li);
     });
-    vsStartBtn.hidden = !(vs.host && !vsInRound());
-    vsStartBtn.disabled = !(vs.up && vs.present.length >= VS_MIN);
+    vsStartBtn.hidden = !(hosting && !vsInRound());
+    vsStartBtn.disabled = !(vs.up && vs.present.length >= VS_MIN) || vs.starting;
   }
 
-  vsCreateBtn.addEventListener('click', () => { void vsEnter(vsMakeCode(), true); });
+  // CREATE asks the server for a code so the room exists for quick match;
+  // without the rooms tier the local alphabet serves, exactly as before
+  vsCreateBtn.addEventListener('click', async () => {
+    if (vs || vsBusy) return;
+    let code = null;
+    try {
+      const r = await sbRpc('pitch_snake_room_create', {});
+      if (typeof r === 'string' && r.length === 5) code = r;
+    } catch (e) {}
+    void vsEnter(code || vsMakeCode(), true);
+  });
+  document.getElementById('vsQuickBtn').addEventListener('click', async () => {
+    if (vs || vsBusy) return;
+    vsSetNote('Looking for a room…');
+    try {
+      const rows = await sbRpc('pitch_snake_room_quickmatch', {});
+      const r = Array.isArray(rows) ? rows[0] : null;
+      if (r && typeof r.code === 'string') {
+        void vsEnter(r.code, !!r.created);
+        return;
+      }
+    } catch (e) {}
+    vsSetNote('Quick match needs the rooms service; CREATE a room and share its code instead.');
+  });
   vsJoinBtn.addEventListener('click', () => {
     const code = (vsCodeInput.value || '').trim().toUpperCase();
     if (code.length !== 5) { vsSetNote('Room codes are 5 characters.'); return; }
@@ -2261,16 +2384,16 @@
     void vsEnter(code, false);
   });
   vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsJoinBtn.click(); } });
-  vsStartBtn.addEventListener('click', vsStart);
+  vsStartBtn.addEventListener('click', () => { void vsStart(); });
   vsLeaveBtn.addEventListener('click', vsLeave);
   vsBackBtn.addEventListener('click', () => { tScreen = false; refreshModeUI(); });
 
   // ---- round flow ----
   function play() {
     if (mode === 'versus') {
-      // versus rounds start from the room; the host's REMATCH on the results
-      // screen is the one shortcut back in
-      if (vs && vs.host && vs.over && state === 'dead') vsStart();
+      // versus rounds start from the room; the acting host's REMATCH on the
+      // results screen is the one shortcut back in
+      if (vs && vs.over && state === 'dead' && vsHostNow()) void vsStart();
       return;
     }
     if (mode === 'tourney' && tourneyState() !== 'open') return;   // the window rules

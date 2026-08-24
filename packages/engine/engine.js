@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 5;
+export const ENGINE_VERSION = 6;
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -836,6 +836,23 @@ export function createGame(cfg = {}) {
       for (const p of players) if (p.diedAt === S.quanta && p.deadReason === 'time')
         emit({ t: 'die', player: p.idx, reason: 'time' });
     }
+    // ---- the clinch ----
+    // With rivals on the board, the last snake standing wins the moment its
+    // score strictly passes every fallen rival's: nothing left on the pitch
+    // can change the order (the dead can no longer score, the survivor can
+    // only grow), so the round ends there instead of making the room watch a
+    // victory lap. Behind on points, the survivor plays on: pass or die. The
+    // test runs the same quantum a rival falls, so a leader outliving the
+    // field clinches on the spot. 'won' is an end, not a death.
+    if (players.length > 1) {
+      let last = null, up = 0;
+      for (const p of players) if (p.alive) { last = p; up++; }
+      if (up === 1) {
+        let bestOther = -Infinity;
+        for (const p of players) if (p !== last && p.score > bestOther) bestOther = p.score;
+        if (last.score > bestOther) die(last, 'won');
+      }
+    }
   }
 
   // ---- the public surface ----
@@ -1002,7 +1019,10 @@ export function createGame(cfg = {}) {
 // is exact by construction. v4 logs (the single-snake era) replay under the
 // same rules: one snake on a board behaves exactly as it always did.
 export function replay(log) {
-  if (!log || (log.v !== 4 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
+  // v4 was the single-snake era, v5 multi-snake before the clinch rule; both
+  // shapes replay here (no v5 log was ever persisted, so the clinch changing
+  // multi-snake endings rewrites nobody's record)
+  if (!log || (log.v !== 4 && log.v !== 5 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,
