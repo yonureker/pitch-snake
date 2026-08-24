@@ -199,6 +199,67 @@ test('a LIVE peer gone silent leashes only until the give-up window', () => {
   assert.ok(g0.quanta > qHeld + 400, 'the sim ran on, their snake on the rails');
 });
 
+test('a peer written off as gone still gets their turns applied when they return', () => {
+  // Presence-driven `gone` is a LOCAL guess reached at different moments by
+  // different clients (a socket blip looks like a departure). If it silenced
+  // a returning player's inputs, the client that wrote them off would run a
+  // different timeline from the one that did not: a fork dressed as a
+  // reconnect. Pacing may differ between peers; WHICH inputs land may not.
+  const bus = loopbackBus(2, { latency: 20 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  let why0 = null, why1 = null;
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0], onDesync: w => { why0 = w; } });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1], onDesync: w => { why1 = w; } });
+  for (let now = 0; now <= 3000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  s0.dropPeer(1);                                   // "they left" (they did not)
+  for (let now = 3010; now <= 6000; now += 10) {
+    bus.pump(now);
+    if (now === 4000) s1.localDir(0, -1, now);      // ...and then they turn
+    if (now === 4700) s1.localDir(-1, 0, now);
+    s0.frame(now); s1.frame(now);
+  }
+  assert.equal(why0, null, 'no desync on the client that wrote them off');
+  assert.equal(why1, null, 'nor on the returning client');
+  assert.equal(JSON.stringify(g0.log), JSON.stringify(g1.log), 'one timeline, not two');
+  assert.equal(g0.log.inputs.filter(e => e[3] === 1).length, 2, 'both of their turns are in the record');
+  // the two sims may sit a few quanta apart (pacing is local), so compare the
+  // heading their turns produced rather than a position
+  assert.deepEqual(g0.players[1].dir, { x: -1, y: 0 }, 'their turns steered their snake here too');
+  assert.deepEqual(g1.players[1].dir, { x: -1, y: 0 });
+  assert.equal(s0.stalled, false, 'and being gone still means nobody waits for them');
+});
+
+test('junk on the wire is refused without taking the session down', () => {
+  // anyone with the room code can broadcast; a malformed slot used to reach
+  // a missing bucket and throw out of the socket handler
+  const bus = loopbackBus(2, { latency: 0 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  let why = null;
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0], onDesync: w => { why = w; } });
+  for (let now = 0; now <= 500; now += 10) { bus.pump(now); s0.frame(now); }
+  const before = JSON.stringify(g0.log);
+  for (const junk of [
+    { t: 'i', v: 1, s: 1, q: 10, x: 0, y: 1 },                       // no slot at all
+    { t: 'i', v: 1, p: 'x', s: 1, q: 10, x: 0, y: 1 },               // slot is a string
+    { t: 'i', v: 1, p: 9, s: 1, q: 10, x: 0, y: 1 },                 // slot out of range
+    { t: 'i', v: 1, p: 1, s: 1, q: 10, x: 7, y: 0 },                 // not a unit step
+    { t: 'i', v: 1, p: 1, s: 1, q: 10, x: 1, y: 1 },                 // diagonal
+    { t: 'i', v: 1, p: 1, s: 1, q: 10 },                             // no direction
+    { t: 'i', v: 1, p: 1, s: 'a', q: 10, x: 0, y: 1 },               // junk sequence
+    { t: 'ri', v: 1, p: 1, list: 'not-a-list' },
+    { t: 'ri', v: 1, p: 1, list: [[1, 10, 'a', 'b']] },
+    { t: 'b', v: 1, p: undefined, q: 5, s: 0, hq: -1, h: 0 },
+  ]) {
+    bus.endpoints[1].send(junk);
+    bus.pump(510);
+    s0.frame(510);
+  }
+  assert.equal(why, null, 'the session survived every one');
+  assert.equal(s0.failed, false);
+  assert.equal(JSON.stringify(g0.log), before, 'and none of it entered the record');
+});
+
 test('desynced state hashes are caught by the beat exchange', () => {
   const bus = loopbackBus(2, { latency: 10 });
   const g0 = createGame({ ...QUIET, players: 2 });

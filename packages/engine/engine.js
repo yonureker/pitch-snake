@@ -217,7 +217,7 @@ export function createGame(cfg = {}) {
       score: 0, pendingGrowth: 0,
       warpedIn: false,
       alive: true, deadReason: null, diedAt: 0,
-      _mx: 0, _my: 0, _m: false,
+      _mx: 0, _my: 0,          // this quantum's majority cell (rule 24 scratch)
     };
     for (let i = 0; i < START_LEN; i++) { p.snake.push({ x: 8 - i, y: laneY }); p.snakeSet.add(K(8 - i, laneY)); }
     return p;
@@ -294,15 +294,20 @@ export function createGame(cfg = {}) {
   const leaderScore = () => { let m = players[0].score; for (const p of players) if (p.score > m) m = p.score; return m; };
 
   // ---- shared placement ----
-  // a cell nothing new may spawn onto: any snake, wall, food, a TNT, a window, a ghost
+  // A cell nothing new may spawn onto: any snake, wall, food, a TNT, a
+  // window, a ghost. Plain loops rather than .some(): a full-board scan asks
+  // this 400 times, and a closure per bomb per cell is 3,600 allocations a
+  // spawn on a full survival board (rule 4).
   function cellOccupied(x, y) {
     const k = K(x, y);
-    for (const p of players) if (p.snakeSet.has(k)) return true;
-    return S.wallLookup.has(k) ||
-           (S.food && S.food.x === x && S.food.y === y) ||
-           (S.portal !== null && ((S.portal.ax === x && S.portal.ay === y) || (S.portal.bx === x && S.portal.by === y))) ||
-           S.bombs.some(b => b.x === x && b.y === y) ||
-           S.ghosts.some(g => g.x === x && g.y === y);
+    for (let i = 0; i < players.length; i++) if (players[i].snakeSet.has(k)) return true;
+    if (S.wallLookup.has(k)) return true;
+    if (S.food !== null && S.food.x === x && S.food.y === y) return true;
+    if (S.portal !== null && ((S.portal.ax === x && S.portal.ay === y) ||
+                              (S.portal.bx === x && S.portal.by === y))) return true;
+    for (let i = 0; i < S.bombs.length; i++) if (S.bombs[i].x === x && S.bombs[i].y === y) return true;
+    for (let i = 0; i < S.ghosts.length; i++) if (S.ghosts[i].x === x && S.ghosts[i].y === y) return true;
+    return false;
   }
 
   // pick a random empty cell, preferring cells at least minDist (toroidal
@@ -339,10 +344,14 @@ export function createGame(cfg = {}) {
   }
 
   // ---- walls ----
+  // one derivation of the drawable cell list from the lookup keys, shared by
+  // the builder and by restore(), so the two can never disagree
+  const wallCellsFrom = keys => keys.map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
+
   function buildWalls() {
     const set = WALL_PATTERNS[(random() * WALL_PATTERNS.length) | 0]();
     S.wallLookup = set;
-    S.wallCells = [...set].map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
+    S.wallCells = wallCellsFrom([...set]);
   }
 
   function clearWalls() { S.wallCells = []; S.wallLookup = new Set(); }
@@ -426,11 +435,15 @@ export function createGame(cfg = {}) {
       }
     }
     const k = K(x, y);
-    for (const p of players) if (p.snakeSet.has(k)) return true;
-    return S.wallLookup.has(k) ||
-           (S.food && S.food.x === x && S.food.y === y) ||
-           S.bombs.some(b => b.x === x && b.y === y) ||
-           S.ghosts.some(g => g !== self && g.x === x && g.y === y);
+    for (let i = 0; i < players.length; i++) if (players[i].snakeSet.has(k)) return true;
+    if (S.wallLookup.has(k)) return true;
+    if (S.food !== null && S.food.x === x && S.food.y === y) return true;
+    for (let i = 0; i < S.bombs.length; i++) if (S.bombs[i].x === x && S.bombs[i].y === y) return true;
+    for (let i = 0; i < S.ghosts.length; i++) {
+      const g = S.ghosts[i];
+      if (g !== self && g.x === x && g.y === y) return true;
+    }
+    return false;
   }
 
   function spawnGhost(minDist = MIN_SPAWN_DIST) {
@@ -468,12 +481,12 @@ export function createGame(cfg = {}) {
   }
 
   // Which snake a ghost is hunting: the nearest living head by its own
-  // wormhole metric, ties to the lower index. One snake means the answer
-  // never changes; five means pressure follows proximity and the last snake
-  // standing collects the whole pack. Pure arithmetic: no PRNG draw, so a
-  // one-snake round rolls exactly the dice it always rolled.
+  // wormhole metric, ties to the lower index. One snake is just the
+  // degenerate case (the loop, or the fallback once it is dead, both name
+  // it); five means pressure follows proximity and the last snake standing
+  // collects the whole pack. Pure arithmetic: no PRNG draw, so a one-snake
+  // round rolls exactly the dice it always rolled.
   function victimOf(g) {
-    if (players.length === 1) return players[0];
     let best = null, bestD = Infinity;
     for (const p of players) {
       if (!p.alive) continue;
@@ -516,6 +529,20 @@ export function createGame(cfg = {}) {
     }
   }
 
+  // One deep copy of a ghost, used by both ends of a rollback. A ghost field
+  // added in one copy and missed in the other would not fail at the edit
+  // site: it would surface much later as a netcode desync, so there is one
+  // copy. The key order here is also the hashed key order, identically on
+  // every peer.
+  const cloneGhost = g => ({
+    x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
+    warped: g.warped, role: g.role, moveAt: g.moveAt, majX: g.majX, majY: g.majY,
+  });
+
+  // one ghost moves at a time, so the step search shares this scratch
+  const _optDir = new Array(4), _optDist = new Int32Array(4);
+  const _optX = new Int32Array(4), _optY = new Int32Array(4);
+
   // if a wall forms on a ghost, slide it to the nearest open cell
   function nudgeGhost(g) {
     for (let r = 1; r < GRID; r++) {
@@ -539,33 +566,48 @@ export function createGame(cfg = {}) {
       if (!ghostBlocked(tx, ty, g)) { g.x = tx; g.y = ty; g.warped = true; return; }
     }
     g.warped = false;
-    const opts = [];
-    for (const d of GHOST_DIRS) {
+    // The open steps go into scratch parallel to GHOST_DIRS rather than an
+    // array of fresh objects: this runs for every ghost twice a second, and
+    // the old form allocated an options array, an object per option and a
+    // filtered array per move. The dice are untouched: one draw for focus,
+    // then one draw over the same tie count, walked in the same order.
+    let n = 0;
+    for (let i = 0; i < GHOST_DIRS.length; i++) {
+      const d = GHOST_DIRS[i];
       if (g.dir.x === -d.x && g.dir.y === -d.y) continue; // no reversing
       const nx = wrap(g.x + d.x), ny = wrap(g.y + d.y);
-      if (!ghostBlocked(nx, ny, g)) opts.push({ d, nx, ny });
+      if (ghostBlocked(nx, ny, g)) continue;
+      _optDir[n] = d; _optX[n] = nx; _optY[n] = ny; n++;
     }
-    let pick;
-    if (opts.length) {
+    let px, py, pd;
+    if (n) {
       if (random() < GHOST_FOCUS) {          // take a step toward the personality's target
         const target = ghostTarget(g);
         let bestDist = Infinity;
-        for (const o of opts) {
-          const d = ghostDist(o.nx, o.ny, target.x, target.y);
+        for (let i = 0; i < n; i++) {
+          const d = ghostDist(_optX[i], _optY[i], target.x, target.y);
+          _optDist[i] = d;
           if (d < bestDist) bestDist = d;
         }
-        const best = opts.filter((o) => ghostDist(o.nx, o.ny, target.x, target.y) === bestDist);
-        pick = best[(random() * best.length) | 0];  // ties break by the seeded PRNG
+        let ties = 0;
+        for (let i = 0; i < n; i++) if (_optDist[i] === bestDist) ties++;
+        const nth = (random() * ties) | 0;   // ties break by the seeded PRNG
+        let seen = 0, at = 0;
+        for (let i = 0; i < n; i++) {
+          if (_optDist[i] !== bestDist) continue;
+          if (seen++ === nth) { at = i; break; }
+        }
+        pd = _optDir[at]; px = _optX[at]; py = _optY[at];
       } else {
-        pick = opts[(random() * opts.length) | 0];
+        const i = (random() * n) | 0;
+        pd = _optDir[i]; px = _optX[i]; py = _optY[i];
       }
     } else {                                 // boxed in: reverse if we can, else wait
       const rx = wrap(g.x - g.dir.x), ry = wrap(g.y - g.dir.y);
-      if ((g.dir.x || g.dir.y) && !ghostBlocked(rx, ry, g)) {
-        pick = { d: { x: -g.dir.x, y: -g.dir.y }, nx: rx, ny: ry };
-      } else return;
+      if (!(g.dir.x || g.dir.y) || ghostBlocked(rx, ry, g)) return;
+      pd = { x: -g.dir.x, y: -g.dir.y }; px = rx; py = ry;
     }
-    g.x = pick.nx; g.y = pick.ny; g.dir = pick.d;
+    g.x = px; g.y = py; g.dir = pd;
   }
 
   function updateGhosts() {
@@ -805,23 +847,23 @@ export function createGame(cfg = {}) {
     if (anyAlive()) {
       const half = S.progMs * 2 >= S.tickMs;
       for (const p of players) {
-        p._m = p.alive;
-        if (p._m) {
-          p._mx = half ? p.snake[0].x : p.headFrom.x;
-          p._my = half ? p.snake[0].y : p.headFrom.y;
-        }
+        if (!p.alive) continue;
+        p._mx = half ? p.snake[0].x : p.headFrom.x;
+        p._my = half ? p.snake[0].y : p.headFrom.y;
       }
       for (const gh of S.ghosts) {
         const g = ghostAt(gh);
         for (const p of players) {
-          if (!p.alive || !p._m) continue;
+          if (!p.alive) continue;     // includes anyone this ghost pass just took
           const met = g.x === p._mx && g.y === p._my;
           const crossed = g.x === p.headMajX && g.y === p.headMajY && gh.majX === p._mx && gh.majY === p._my;
           if (met || crossed) die(p, 'ghost');
         }
         gh.majX = g.x; gh.majY = g.y;
       }
-      for (const p of players) if (p._m) { p.headMajX = p._mx; p.headMajY = p._my; }
+      // the majority cell only matters to the next quantum's crossing test,
+      // which skips the dead, so a snake taken above needs no final write
+      for (const p of players) if (p.alive) { p.headMajX = p._mx; p.headMajY = p._my; }
     }
     // ---- the whistle ----
     // A timed round ends at exactly durationMs, after everything else in the
@@ -834,10 +876,9 @@ export function createGame(cfg = {}) {
         p.alive = false;
         p.deadReason = 'time';
         p.diedAt = S.quanta;
+        emit({ t: 'die', player: p.idx, reason: 'time' });
       }
       stampEnd();
-      for (const p of players) if (p.diedAt === S.quanta && p.deadReason === 'time')
-        emit({ t: 'die', player: p.idx, reason: 'time' });
     }
     // ---- the clinch ----
     // With rivals on the board, the last snake standing wins the moment its
@@ -913,10 +954,7 @@ export function createGame(cfg = {}) {
       bombs: S.bombs.map(b => ({ x: b.x, y: b.y })),
       bombsUnlocked: S.bombsUnlocked, bombPhase: S.bombPhase,
       bombNextAt: S.bombNextAt, bombExpireAt: S.bombExpireAt,
-      ghosts: S.ghosts.map(g => ({
-        x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
-        warped: g.warped, role: g.role, moveAt: g.moveAt, majX: g.majX, majY: g.majY,
-      })),
+      ghosts: S.ghosts.map(cloneGhost),
       portal: S.portal ? { ...S.portal } : null,
       portalsUnlocked: S.portalsUnlocked, portalsOpened: S.portalsOpened,
       portalRetryAt: S.portalRetryAt, portalExpireAt: S.portalExpireAt, portalOpenedAt: S.portalOpenedAt,
@@ -941,14 +979,11 @@ export function createGame(cfg = {}) {
     S.food = s.food ? { x: s.food.x, y: s.food.y, bonus: s.food.bonus, kind: s.food.kind } : null;
     S.wallState = s.wallState; S.wallPhaseEnd = s.wallPhaseEnd;
     S.wallLookup = new Set(s.walls);
-    S.wallCells = s.walls.map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
+    S.wallCells = wallCellsFrom(s.walls);
     S.bombs = s.bombs.map(b => ({ x: b.x, y: b.y }));
     S.bombsUnlocked = s.bombsUnlocked; S.bombPhase = s.bombPhase;
     S.bombNextAt = s.bombNextAt; S.bombExpireAt = s.bombExpireAt;
-    S.ghosts = s.ghosts.map(g => ({
-      x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
-      warped: g.warped, role: g.role, moveAt: g.moveAt, majX: g.majX, majY: g.majY,
-    }));
+    S.ghosts = s.ghosts.map(cloneGhost);
     S.portal = s.portal ? { ...s.portal } : null;
     S.portalsUnlocked = s.portalsUnlocked; S.portalsOpened = s.portalsOpened;
     S.portalRetryAt = s.portalRetryAt; S.portalExpireAt = s.portalExpireAt; S.portalOpenedAt = s.portalOpenedAt;

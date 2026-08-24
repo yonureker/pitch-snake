@@ -86,7 +86,6 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   let stalled = false;
   const stats = { rollbacks: 0, resimmed: 0, needsSent: 0, resends: 0, patched: 0 };
 
-  const rbTrace = [];
   const fail = (why) => {
     if (dead || ended) return;
     dead = true;
@@ -118,6 +117,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   function stepOne() {
     maybeSnap();
     applyDue(game.quanta);
+    if (dead) return;              // applyDue refused this quantum; simulate nothing
     game.advanceQuanta(1);
   }
 
@@ -137,8 +137,6 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     }
     stats.rollbacks++;
     stats.resimmed += target - game.quanta;
-    rbTrace.push([q, game.quanta, target, game.log.inputs.length]);
-    if (rbTrace.length > 64) rbTrace.shift();
     while (game.quanta < target && game.alive && !dead) stepOne();
   }
 
@@ -148,9 +146,28 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     return e.q < game.quanta ? e.q : Infinity;   // how far back this one reaches
   }
 
+  // A departed peer is NOT excluded here. `gone` is a local, presence-driven
+  // guess that two clients can reach at different moments, so letting it
+  // reject inputs would let one machine apply a turn another ignored: a
+  // reconnecting player (a three second socket blip, then their queued turns
+  // arrive) would fork the room instead of being repaired. Pacing may differ
+  // between peers without consequence, because inputs carry their own
+  // quantum; WHICH inputs land is the timeline and must never be local.
   function acceptInput(msg, nowMs) {
     const p = msg.p;
-    if (p === myIdx || p < 0 || p >= N || gone[p]) return Infinity;
+    // The room channel is open to anyone holding the code, so this is the
+    // one gate every input passes through and it trusts nothing: a
+    // non-numeric slot would sail past a naive `p < 0 || p >= N` (both false
+    // for undefined) and crash the socket handler on a missing bucket, and a
+    // direction that is not one of the four units would put NaN coordinates
+    // into every peer's board. Written as positive assertions, which NaN and
+    // undefined fail by construction. Every peer runs this same filter, so
+    // rejecting is as deterministic as accepting.
+    if (!(p >= 0 && p < N) || p === myIdx) return Infinity;
+    if (!(msg.s >= 1) || !(msg.q >= 0)) return Infinity;
+    const ax = msg.x === 1 || msg.x === -1 ? 1 : msg.x === 0 ? 0 : -1;
+    const ay = msg.y === 1 || msg.y === -1 ? 1 : msg.y === 0 ? 0 : -1;
+    if (ax < 0 || ay < 0 || ax + ay !== 1) return Infinity;   // exactly one unit step
     if (msg.s <= lastSeq[p]) return Infinity;              // duplicate
     if (msg.q > peerQ[p]) peerQ[p] = msg.q;
     if (msg.s !== lastSeq[p] + 1) {                        // a gap: hold it, ask again
@@ -180,12 +197,21 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     return i >= 0 ? snaps[i] : null;
   }
 
+  // Memoized fold of one keyframe, and the only place the zero sentinel
+  // lives: 0 means "not hashed yet", so a hash that folds to 0 is stored as
+  // 1 instead. Both the sender and the comparer go through here, because two
+  // copies of that sentinel drifting apart would abort identical rounds.
+  // Stringify rather than a hand-rolled walk: it covers every snapshot field
+  // by construction, so a field added later cannot silently escape the check.
+  function snapHash(sn) {
+    return sn.h || (sn.h = foldHash(JSON.stringify(sn.s)) || 1);
+  }
+
   function sendBeat() {
     const s = settledSnap();
-    if (s && !s.h) s.h = foldHash(JSON.stringify(s.s)) || 1;
     transport.send({
       t: 'b', v: NET_PROTO, p: myIdx, q: game.quanta, s: mySeq,
-      hq: s ? s.q : -1, h: s ? s.h : 0,
+      hq: s ? s.q : -1, h: s ? snapHash(s) : 0,
     });
   }
 
@@ -239,7 +265,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       // the ballast first: earlier inputs this packet carried as insurance
       // against a lost predecessor; duplicates fall out harmlessly
       if (pOk && Array.isArray(msg.r)) {
-        for (let k = 0; k < msg.r.length && k <= REDUNDANCY; k++) {
+        for (let k = 0; k < msg.r.length && k < REDUNDANCY; k++) {
           const a = msg.r[k];
           const before = lastSeq[msg.p];
           back = Math.min(back, acceptInput({ p: msg.p, s: a[0], q: a[1], x: a[2], y: a[3] }, nowMs));
@@ -249,22 +275,20 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       back = Math.min(back, acceptInput(msg, nowMs));
       if (back !== Infinity) rollback(back);
     } else if (msg.t === 'ri') {                 // a resend batch: same as inputs
+      if (!pOk || !Array.isArray(msg.list)) return;
       let back = Infinity;
       for (const e of msg.list) back = Math.min(back, acceptInput({ p: msg.p, s: e[0], q: e[1], x: e[2], y: e[3] }, nowMs));
       if (back !== Infinity) rollback(back);
     } else if (msg.t === 'b') {
+      if (!pOk) return;                          // one validation, not three
       const p = msg.p;
-      if (p === myIdx || p < 0 || p >= N) return;
       if (msg.q > peerQ[p]) peerQ[p] = msg.q;
       if (msg.s > lastSeq[p]) requestResend(p, nowMs);     // they sent things we never saw
       // compare only what is settled on BOTH sides: my copy of that quantum
       // may still be awaiting a repair of my own
       if (msg.hq >= 0 && msg.hq <= game.quanta - SETTLED_Q) {
         const mine = snaps.find(sn => sn.q === msg.hq);
-        if (mine) {
-          if (!mine.h) mine.h = foldHash(JSON.stringify(mine.s)) || 1;
-          if (mine.h !== msg.h) fail('hash');
-        }
+        if (mine && snapHash(mine) !== msg.h) fail('hash');
       }
     } else if (msg.t === 'n') {
       if (msg.of !== myIdx) return;
@@ -280,7 +304,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   return {
     stats,
     // internals for tests and diagnostics; not part of the contract
-    _debug: { snaps, table, applied, lastSeq, peerQ, rbTrace },
+    _debug: { snaps, table, applied, lastSeq, peerQ },
     get stalled() { return stalled; },
     get over() { return ended; },
     get failed() { return dead; },
@@ -313,7 +337,13 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       transport.send({ t: 'i', v: NET_PROTO, p: myIdx, s: e.s, q: e.q, x, y, r });
     },
 
-    /** A peer left for good (presence said so): their snake runs straight. */
+    /**
+     * A peer left (presence said so): stop pacing the room against them,
+     * and their snake runs straight from here. This is a local pacing
+     * decision only; if they turn out to be alive after all, their turns are
+     * still accepted and repaired, because the timeline is everyone's and
+     * pacing is nobody's.
+     */
     dropPeer(p) { if (p !== myIdx && p >= 0 && p < N) gone[p] = true; },
 
     /**
