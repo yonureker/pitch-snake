@@ -43,7 +43,7 @@ export async function loadModePrefs(): Promise<ModePrefs> {
     const [m, t] = await Promise.all([AsyncStorage.getItem(MODE_KEY), AsyncStorage.getItem(TOURNEY_KEY)]);
     const tourney = t === null ? null : asTourney(JSON.parse(t));
     const uiMode: UiMode =
-      m === 'classic' || m === 'speedrun' ? m
+      m === 'classic' || m === 'speedrun' || m === 'survival' ? m
       : m === 'tourney' && tourney !== null ? 'tourney'
       : 'classic';
     return { uiMode, tourney };

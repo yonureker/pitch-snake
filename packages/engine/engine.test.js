@@ -607,6 +607,50 @@ test('speed run: the whistle at exactly durationMs, and the log replays it', () 
   assert.throws(() => createGame({ seed: 1, durationMs: 1234 }), /multiple of SIM_DT/);
 });
 
+test('survival: the full ladder at the kickoff whistle, a clear five away', () => {
+  const g = quietGame({ startGhosts: 5, startBombs: 9 });
+  assert.equal(g.snake.length, START_LEN, 'minimum length');
+  assert.equal(g.score, 0, 'zero points');
+  assert.equal(g.ghosts.length, 5, 'all five personalities present');
+  assert.deepEqual(g.ghosts.map((x) => x.role), [0, 1, 2, 3, 4]);
+  assert.equal(g.bombs.length, 9, 'a full nine-block wave down');
+  assert.equal(g.bombPhase, 'active');
+  const h = g.snake[0];
+  for (const gh of g.ghosts) assert.ok(wrapDist(gh.x, gh.y, h.x, h.y) >= 5, 'every ghost a clear five away');
+  for (const b of g.bombs) assert.ok(wrapDist(b.x, b.y, h.x, h.y) >= 5, 'every TNT a clear five away');
+  assert.equal(g.log.startGhosts, 5, 'the opening rides in the log');
+  assert.equal(g.log.startBombs, 9);
+  g.score = 200;                            // the ladder never grows a sixth ghost
+  g._updateGhosts();
+  assert.equal(g.ghosts.length, 5);
+  assert.throws(() => createGame({ seed: 1, startBombs: 99 }), /out of range/);
+});
+
+test('survival: waves stay at nine for ever, even at zero points', () => {
+  const g = quietGame({ startBombs: 9 });
+  g.bombs.length = 0;                       // the opening wave expires
+  g.bombPhase = 'gap';
+  g.bombNextAt = g.clockMs;
+  g._updateBombs();
+  assert.equal(g.bombs.length, 9, 'the next wave is nine blocks at score 0');
+  assert.equal(g.bombPhase, 'active');
+});
+
+test('survival: a full round replays exactly', () => {
+  const g = createGame({ seed: 909, tickMs: 100, ...MODES.survival });
+  const script = [[30, 0, 1], [80, -1, 0], [140, 0, -1], [200, 1, 0]];
+  let i = 0;
+  for (let q = 0; q < 60000 && g.alive; q++) {
+    while (i < script.length && script[i][0] === q) { g.setDir(script[i][1], script[i][2]); i++; }
+    g.advanceQuanta(1);
+  }
+  assert.equal(g.alive, false, 'five hunters from the whistle end the round inside a minute');
+  const r = replay(g.log);
+  assert.equal(r.score, g.score);
+  assert.equal(r.deadReason, g.deadReason);
+  assert.deepEqual(r.snake, g.snake);
+});
+
 test('contact: a ghost sliding majority-onto the head kills between snake steps', () => {
   // SLOW tick (200): head at (5,5) heading right steps at 200ms. A ghost is
   // mid-glide from (5,4) into (5,5); its majority cell flips there at 250ms,

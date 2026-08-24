@@ -17,7 +17,7 @@
 
 -- ------------------------------------------------------------- scores ----
 -- One row per submitted run. mode partitions the boards ('classic',
--- 'speedrun'); seed and user_id are recorded now so that server-side replay
+-- 'speedrun', 'survival'); seed and user_id are recorded now so that server-side replay
 -- validation and accounts arrive later without a migration. Ties go to
 -- whoever got there first, which is why created_at is part of every order.
 
@@ -109,12 +109,14 @@ declare
   clean_name text;
   new_id     bigint;
 begin
-  if p_mode is null or p_mode not in ('classic', 'speedrun') then
+  if p_mode is null or p_mode not in ('classic', 'speedrun', 'survival') then
     raise exception 'unknown mode';
   end if;
+  -- speed run is the one mode a minute physically bounds; everything else
+  -- shares the endless range
   if p_score is null or p_score < -999
-     or (p_mode = 'classic'  and p_score > 9999)
-     or (p_mode = 'speedrun' and p_score > 300) then
+     or (p_mode = 'speedrun' and p_score > 300)
+     or (p_mode <> 'speedrun' and p_score > 9999) then
     raise exception 'score out of range';
   end if;
 
@@ -157,7 +159,7 @@ declare
   t_end       timestamptz;
   i           integer;
 begin
-  if p_mode is null or p_mode not in ('classic', 'speedrun') then
+  if p_mode is null or p_mode not in ('classic', 'speedrun', 'survival') then
     raise exception 'unknown mode';
   end if;
   if p_starts_in_minutes is null or p_starts_in_minutes < 0 or p_starts_in_minutes > 43200 then
@@ -258,8 +260,8 @@ begin
     raise exception 'tournament is not open';
   end if;
   if p_score is null or p_score < -999
-     or (t.mode = 'classic'  and p_score > 9999)
-     or (t.mode = 'speedrun' and p_score > 300) then
+     or (t.mode = 'speedrun' and p_score > 300)
+     or (t.mode <> 'speedrun' and p_score > 9999) then
     raise exception 'score out of range';
   end if;
 

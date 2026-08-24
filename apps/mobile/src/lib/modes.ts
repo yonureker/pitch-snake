@@ -7,12 +7,12 @@
  */
 
 /** A ruleset the engine can run. */
-export type RuleMode = 'classic' | 'speedrun';
+export type RuleMode = 'classic' | 'speedrun' | 'survival';
 
 /** What the mode picker shows; 'tourney' resolves to the tournament's own rule mode. */
 export type UiMode = RuleMode | 'tourney';
 
 /** Type guard for values arriving from storage or the network. */
 export function isRuleMode(v: unknown): v is RuleMode {
-  return v === 'classic' || v === 'speedrun';
+  return v === 'classic' || v === 'speedrun' || v === 'survival';
 }

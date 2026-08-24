@@ -12,6 +12,7 @@ import type { RuleMode } from './modes';
 const KEYS: Record<RuleMode, string> = {
   classic: 'pitchSnakeBest',
   speedrun: 'pitchSnakeBest.speedrun',
+  survival: 'pitchSnakeBest.survival',
 };
 
 /** Read the stored best for one rule mode; 0 when unset or unreadable. */

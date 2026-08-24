@@ -2,7 +2,7 @@
 // web page can import it raw). Extend as the mobile app consumes more.
 export declare const ENGINE_VERSION: number;
 /** Round presets: a mode is a config. Spread MODES[name] into createGame. */
-export declare const MODES: { classic: GameConfig; speedrun: GameConfig };
+export declare const MODES: { classic: GameConfig; speedrun: GameConfig; survival: GameConfig };
 export declare const GRID: number;
 export declare const START_LEN: number;
 export declare const SIM_DT: number;
@@ -91,6 +91,9 @@ export interface Game {
   portalBusy(): boolean;
 }
 
-export interface GameConfig { seed?: number; tickMs?: number; wallsEnabled?: boolean; durationMs?: number }
+export interface GameConfig {
+  seed?: number; tickMs?: number; wallsEnabled?: boolean; durationMs?: number;
+  startGhosts?: number; startBombs?: number;
+}
 export declare function createGame(cfg?: GameConfig): Game;
 export declare function replay(log: RoundLog): Game;

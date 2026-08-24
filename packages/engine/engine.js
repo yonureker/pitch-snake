@@ -52,7 +52,12 @@ export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed se
 export const MODES = {
   classic: {},                              // endless: the run ends when you do
   speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
+  survival: { startGhosts: 5, startBombs: 9 },   // the full ladder from the kickoff whistle
 };
+
+// how much room the opening hazards of a survival round leave the head,
+// in the game's own wrapped-walk metric (wrapDist)
+export const SURVIVAL_CLEAR = 5;
 const GHOST_DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
 // How often a ghost takes the step that closes on its target rather than a
 // random open one. The noise that remains keeps five ghosts from collapsing
@@ -174,8 +179,12 @@ export function createGame(cfg = {}) {
   const tickMs = cfg.tickMs ?? SPEEDS.normal;
   const wallsEnabled = cfg.wallsEnabled ?? true;
   const durationMs = cfg.durationMs ?? 0;   // 0 = endless
+  const startGhosts = cfg.startGhosts ?? 0; // survival: personalities present at kickoff
+  const startBombs = cfg.startBombs ?? 0;   // survival: TNT wave size floored here for ever
   if (tickMs % SIM_DT !== 0) throw new Error('tickMs must be a multiple of SIM_DT');
   if (durationMs % SIM_DT !== 0 || durationMs < 0) throw new Error('durationMs must be a non-negative multiple of SIM_DT');
+  if (!Number.isInteger(startGhosts) || startGhosts < 0 || startGhosts > GHOST_SCORES.length) throw new Error('startGhosts out of range');
+  if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > TNT_SCORES.length) throw new Error('startBombs out of range');
 
   const random = mulberry32(seed);
   const rand = (a, b) => a + random() * (b - a);
@@ -183,7 +192,7 @@ export function createGame(cfg = {}) {
   // S is both the internal state and the public surface: renderers read these
   // fields every frame, tests may poke them. Methods below close over S.
   const S = {
-    seed, tickMs, wallsEnabled, durationMs,
+    seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs,
     alive: true,
     deadReason: null,
     quanta: 0,          // sim quanta elapsed; the replay clock
@@ -215,7 +224,7 @@ export function createGame(cfg = {}) {
     // bursts, sprites and DOM updates. Sim state never depends on it.
     events: [],
     // the round's replayable record. end/finalScore are stamped on death.
-    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, inputs: [], end: 0, finalScore: 0 },
+    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, inputs: [], end: 0, finalScore: 0 },
   };
 
   const emit = e => S.events.push(e);
@@ -306,8 +315,8 @@ export function createGame(cfg = {}) {
   }
 
   // ---- TNT ----
-  function spawnBomb() {
-    const c = spawnCell(MIN_SPAWN_DIST);
+  function spawnBomb(minDist = MIN_SPAWN_DIST) {
+    const c = spawnCell(minDist);
     if (c) S.bombs.push(c);
   }
 
@@ -349,8 +358,8 @@ export function createGame(cfg = {}) {
            S.ghosts.some(g => g !== self && g.x === x && g.y === y);
   }
 
-  function spawnGhost() {
-    const c = spawnCell(MIN_SPAWN_DIST);
+  function spawnGhost(minDist = MIN_SPAWN_DIST) {
+    const c = spawnCell(minDist);
     if (!c) return;                          // board too full; try again later
     // the personality is the spawn position in the ladder, and since ghosts
     // never leave, it is also the color: red chases, blue ambushes, orange
@@ -735,6 +744,18 @@ export function createGame(cfg = {}) {
   for (let i = 0; i < START_LEN; i++) { S.snake.push({ x: 8 - i, y: 10 }); S.snakeSet.add(K(8 - i, 10)); }
   S.wallPhaseEnd = rand(4000, 9000);
   placeFood();
+  // Survival: the whole hazard ladder is present at the kickoff whistle, and
+  // the opening spawns keep SURVIVAL_CLEAR of walking room from the head.
+  // bombsUnlocked doubles as the wave size and is monotonic (rule 22), so
+  // seeding it here floors every future wave at startBombs with no new
+  // machinery; the ghost ladder never spawns past what already exists.
+  for (let i = 0; i < startGhosts; i++) spawnGhost(SURVIVAL_CLEAR);
+  if (startBombs > 0) {
+    S.bombsUnlocked = startBombs;
+    for (let i = 0; i < startBombs; i++) spawnBomb(SURVIVAL_CLEAR);
+    S.bombPhase = 'active';
+    S.bombExpireAt = rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX);
+  }
 
   return Object.assign(S, {
     setDir, clearQueue, advance, advanceQuanta,
@@ -754,7 +775,10 @@ export function createGame(cfg = {}) {
 // exact by construction.
 export function replay(log) {
   if (!log || log.v !== ENGINE_VERSION) throw new Error('unsupported log version');
-  const game = createGame({ seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled, durationMs: log.durationMs ?? 0 });
+  const game = createGame({
+    seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
+    durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,
+  });
   const inputs = log.inputs;
   let i = 0;
   for (let q = 0; q < log.end && game.alive; q++) {

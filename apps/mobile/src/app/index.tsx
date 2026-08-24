@@ -34,9 +34,14 @@ const SPEED_LABELS: { label: string; ms: number }[] = [
 const MODE_LABELS: { mode: UiMode; label: string }[] = [
   { mode: 'classic', label: 'CLASSIC' },
   { mode: 'speedrun', label: 'SPEED RUN' },
+  { mode: 'survival', label: 'SURVIVAL' },
   { mode: 'tourney', label: 'TOURNAMENT' },
 ];
-const RULE_LABEL: Record<RuleMode, string> = { classic: 'CLASSIC', speedrun: 'SPEED RUN' };
+const RULE_LABEL: Record<RuleMode, string> = {
+  classic: 'CLASSIC',
+  speedrun: 'SPEED RUN',
+  survival: 'SURVIVAL',
+};
 const DURATION_LABELS: { label: string; minutes: number }[] = [
   { label: '1 HOUR', minutes: 60 },
   { label: '24 HOURS', minutes: 1440 },
@@ -362,7 +367,7 @@ export default function Index() {
                             maxLength={24}
                           />
                           <View style={styles.speedRow}>
-                            {(['classic', 'speedrun'] as const).map((m) => (
+                            {(['classic', 'speedrun', 'survival'] as const).map((m) => (
                               <Pressable
                                 accessibilityRole="button"
                                 key={m}

@@ -538,6 +538,7 @@
         <div class="mode-row" id="modeRow">
           <button data-mode="classic" class="active">CLASSIC</button>
           <button data-mode="speedrun">SPEED RUN</button>
+          <button data-mode="survival">SURVIVAL</button>
           <button data-mode="tourney">TOURNAMENT</button>
         </div>
         <div class="tourney" id="tourneyPanel" hidden>
@@ -553,6 +554,7 @@
             <div class="t-chips" id="tModeChips">
               <button data-tmode="classic" class="active">CLASSIC</button>
               <button data-tmode="speedrun">SPEED RUN</button>
+              <button data-tmode="survival">SURVIVAL</button>
             </div>
             <div class="t-chips" id="tDurChips">
               <button data-mins="60">1 HOUR</button>
@@ -689,16 +691,17 @@
   let tourney = null;                      // { code, title, mode, starts_at, ends_at }
   try {
     const m = localStorage.getItem('snakeMode');
-    if (m === 'classic' || m === 'speedrun' || m === 'tourney') mode = m;
+    if (m === 'classic' || m === 'speedrun' || m === 'survival' || m === 'tourney') mode = m;
     const t = JSON.parse(localStorage.getItem('snakeTourney'));
-    if (t && typeof t.code === 'string' && (t.mode === 'classic' || t.mode === 'speedrun')) tourney = t;
+    if (t && typeof t.code === 'string' && (t.mode === 'classic' || t.mode === 'speedrun' || t.mode === 'survival')) tourney = t;
   } catch (e) {}
   if (mode === 'tourney' && !tourney) mode = 'classic';
 
-  // the ruleset the next round runs under
+  // the ruleset the next round runs under, and how a player reads its name
   function ruleMode() {
     return mode === 'tourney' ? (tourney ? tourney.mode : 'classic') : mode;
   }
+  const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL' };
   function tourneyState() {
     if (!tourney) return 'none';
     const now = Date.now();
@@ -1523,7 +1526,8 @@
     if (gen !== standingsGen) return;
     boardHead.textContent =
       mode === 'tourney' && tourney ? (boardIsLocal ? tourney.title + ' (unreachable)' : tourney.title + ' \u00b7 ' + tourney.code)
-      : (boardIsLocal ? 'Top 10 on this device' : 'Top 10 worldwide') + (ruleMode() === 'speedrun' ? ' \u00b7 SPEED RUN' : '');
+      : (boardIsLocal ? 'Top 10 on this device' : 'Top 10 worldwide') +
+        (ruleMode() === 'classic' ? '' : ' \u00b7 ' + RULE_LABELS[ruleMode()]);
     standingsEl.innerHTML = '';
     if (!list.length) {
       const li = document.createElement('li');
@@ -1549,13 +1553,14 @@
   // one best per RULESET (a classic tournament run counts toward classic).
   // The pre-modes value migrates into classic the first time this loads.
   const BEST_KEY = 'snakeBestModes';
-  let bestByMode = { classic: 0, speedrun: 0 };
+  let bestByMode = { classic: 0, speedrun: 0, survival: 0 };
   function loadPersonalBest() {
     try {
       const v = JSON.parse(localStorage.getItem(BEST_KEY));
       if (v && typeof v === 'object') {
         bestByMode.classic = parseInt(v.classic, 10) || 0;
         bestByMode.speedrun = parseInt(v.speedrun, 10) || 0;
+        bestByMode.survival = parseInt(v.survival, 10) || 0;
       } else {
         bestByMode.classic = parseInt(localStorage.getItem('snakeBest'), 10) || 0;
       }
@@ -1652,7 +1657,7 @@
     tCard.hidden = !tourney;
     if (tourney) {
       const st = tourneyState();
-      tCardTitle.textContent = tourney.title + ' \u00b7 ' + (tourney.mode === 'speedrun' ? 'SPEED RUN' : 'CLASSIC');
+      tCardTitle.textContent = tourney.title + ' \u00b7 ' + RULE_LABELS[tourney.mode];
       tCardCode.textContent = tourney.code;
       tCardMeta.textContent = st === 'upcoming' ? 'STARTS ' + fmtWhen(tourney.starts_at)
                             : st === 'open' ? 'ENDS ' + fmtWhen(tourney.ends_at)
@@ -1675,7 +1680,7 @@
         : 'TOURNAMENT \u00b7 NONE JOINED';
     }
     // START names the ruleset it is about to run; a pause needs no reminder
-    startSub.textContent = ruleMode() === 'speedrun' ? 'SPEED RUN' : 'CLASSIC';
+    startSub.textContent = RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
     const playable = mode !== 'tourney' || tourneyState() === 'open';
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
