@@ -182,6 +182,18 @@
     overflow: hidden;
   }
   .mp-hud[hidden] { display: none; }
+  /* the mid-round exit: sits where the gear lives outside a round, and arms
+     on the first tap so a stray thumb cannot dump you out of a match */
+  .mp-quit {
+    position: absolute; top: 8px; right: 8px; z-index: 6;
+    border: 1.5px solid rgba(244,236,216,0.35); border-radius: 999px;
+    background: rgba(20,17,13,0.55); color: #e9e0cd;
+    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
+    padding: 8px 13px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(2px);
+  }
+  .mp-quit[hidden] { display: none; }
+  .mp-quit.armed { background: var(--food); border-color: var(--food); color: #fff; }
   .mp-hud .pl { display: inline-flex; gap: 5px; align-items: center; }
   .mp-hud .pl i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
   .mp-hud .pl.dead { opacity: 0.5; text-decoration: line-through; }
@@ -552,6 +564,7 @@
       <div class="wall-banner" id="wallBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
+      <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
       <div class="overlay" id="overlay">
         <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
         <p id="overlayText">Eat to grow. Survive the pitch.</p>
@@ -638,6 +651,7 @@
         <div class="mode-caption" id="modeCaption"></div>
         <div class="btn-row">
           <button class="btn" id="startBtn"><span id="startMain">START</span><span class="start-sub" id="startSub"></span></button>
+          <button class="btn modes" id="vsBailBtn" hidden>LEAVE ROOM</button>
           <button class="btn modes" id="modesBtn">MODES</button>
         </div>
       </div>
@@ -1892,6 +1906,8 @@
       ? vsDead
       : (mode !== 'tourney' || tourneyState() === 'open');
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
+    // full time in a room offers the way out right there, not behind MODES
+    vsBailBtn.hidden = !(vsDead && !modesOpen);
     modesBtn.style.display = onMenu ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     best = bestByMode[ruleMode()] || 0;
@@ -2214,22 +2230,52 @@
   function vsLeave() {
     if (!vs) return;
     const wasLive = vsInRound() && (state === 'playing' || state === 'countdown');
+    const wasVsGame = vsView();          // read BEFORE vs drops: this g was the room's round
     clearInterval(vs.touchTimer);
     try { vs.channel.unsubscribe(); } catch (e) {}
     vs = null;
     syncMpHud();
-    if (wasLive || vsView()) {
+    if (wasLive || wasVsGame) {
       state = 'ready';
       overlayTitle.textContent = 'KICK OFF';
       overlayTitle.className = '';
       overlayText.textContent = 'Eat to grow. Survive the pitch.';
       newRound();
       overlay.classList.remove('hidden');
-      refreshSettingsUI();
     }
+    // leaving lands on the join/create panel: the next room is one tap away
+    if (mode === 'versus') { showModes = true; tScreen = true; }
     vsRefreshPanel();
     refreshModeUI();
+    refreshSettingsUI();
   }
+
+  // ---- the mid-round exit ----
+  // Visible whenever a versus round is on screen (spectators most of all).
+  // First tap arms it, second tap within the window leaves; the arm decays
+  // so a stray thumb never dumps anyone out of a match.
+  const mpQuitBtn = document.getElementById('mpQuitBtn');
+  const vsBailBtn = document.getElementById('vsBailBtn');
+  let mpQuitArmTs = 0;
+  function disarmMpQuit() {
+    mpQuitArmTs = 0;
+    mpQuitBtn.classList.remove('armed');
+    mpQuitBtn.innerHTML = '&#10005; LEAVE';
+  }
+  function syncMpQuit() {
+    const show = !!vs && vsView() && (state === 'playing' || state === 'countdown');
+    if (mpQuitBtn.hidden === !show) return;
+    mpQuitBtn.hidden = !show;
+    disarmMpQuit();
+  }
+  mpQuitBtn.addEventListener('click', () => {
+    if (Date.now() - mpQuitArmTs < 2600) { vsLeave(); return; }
+    mpQuitArmTs = Date.now();
+    mpQuitBtn.classList.add('armed');
+    mpQuitBtn.textContent = 'SURE?';
+    setTimeout(() => { if (mpQuitArmTs && Date.now() - mpQuitArmTs >= 2500) disarmMpQuit(); }, 2700);
+  });
+  vsBailBtn.addEventListener('click', vsLeave);
 
   function vsRosterSync() {
     const stateMap = vs.channel.presenceState();
@@ -2718,6 +2764,7 @@
     gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
     settingsModal.querySelectorAll('.speed-row button, #wallToggle').forEach(el => { el.disabled = inRound; });
     lockHint.style.display = inRound ? 'block' : 'none';
+    syncMpQuit();
   }
   gearBtn.addEventListener('click', () => { refreshSettingsUI(); settingsModal.hidden = false; });
   settingsClose.addEventListener('click', () => { settingsModal.hidden = true; });
