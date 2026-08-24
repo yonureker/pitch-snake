@@ -361,6 +361,33 @@
      the phone column, never wider than the window. The header spans the same
      column, so the logo and the scores ride the board's own edges. */
   html.touchless .wrap { max-width: min(94vw, max(540px, calc(100dvh - 200px))); }
+
+  /* A phone has no room to spare. The game claims exactly one screen and
+     never scrolls: the pad takes a slice of the height, the header and hint
+     take what they need, and the board is sized from whatever is left, so
+     nothing can hide under the browser's bars. Small viewport units (svh)
+     rather than dvh, because a board that resized every time the address bar
+     slid away would rebuild its art mid-round. The title goes to one line
+     here; the space before SNAKE only shows once the break is out. */
+  html.touch, html.touch body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  html.touch body { align-items: stretch; }
+  html.touch .wrap {
+    height: 100vh;
+    height: 100svh;
+    padding: 6px 10px 8px;
+    gap: 8px;
+    --pad-h: clamp(104px, 24svh, 200px);
+  }
+  html.touch h1 { font-size: clamp(22px, 7.2vw, 34px); line-height: 1; text-shadow: 3px 3px 0 var(--gold); }
+  html.touch h1 br { display: none; }
+  html.touch .scores .val { font-size: 30px; }
+  html.touch .scores .label, html.touch .scores .best { font-size: 10px; }
+  html.touch .board-frame {
+    width: min(100%, calc(100svh - var(--pad-h) - 104px));
+    flex: 0 0 auto;
+  }
+  html.touch .dpad { height: var(--pad-h); width: auto; max-width: 94%; aspect-ratio: 4 / 3; }
+  html.touch .hint { font-size: 10.5px; gap: 12px; }
   .overlay.hidden { opacity: 0; pointer-events: none; }
 
   .overlay h2 {
@@ -545,8 +572,10 @@
     max-width: 260px; text-align: center;
   }
   .save-note[hidden] { display: none; }
-  /* guidance is not failure: only a genuine error wears the red */
-  .save-note.hint { color: #b7ac93; font-weight: 600; }
+  /* guidance is not failure: only a genuine error wears the red. Named
+     `soft` rather than `hint`, which is already the control legend's class
+     under the board and would drag its flex layout in here. */
+  .save-note.soft { color: #b7ac93; font-weight: 600; }
   .standings {
     list-style: none; margin: 2px 0; padding: 10px 14px; width: 230px;
     background: rgba(33,30,26,0.5); border-radius: 8px;
@@ -676,7 +705,7 @@
 <body>
   <div class="wrap">
     <header>
-      <h1><span class="p-egg" id="pEgg">P</span>ITCH<br>SNAKE</h1>
+      <h1><span class="p-egg" id="pEgg">P</span>ITCH<br> SNAKE</h1>
       <div class="scores">
         <div class="label">Score</div>
         <div class="val" id="score">0</div>
@@ -2285,7 +2314,7 @@
   function vsSetNote(msg, hint) {
     vsNote.textContent = msg || '';
     vsNote.hidden = !msg;
-    vsNote.classList.toggle('hint', !!hint);
+    vsNote.classList.toggle('soft', !!hint);
   }
   const vsCleanName = (v) => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';
 
