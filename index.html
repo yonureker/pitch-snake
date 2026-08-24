@@ -170,6 +170,17 @@
   .wall-banner.forming { animation: wallBlink 0.32s steps(1, end) infinite; }
   @keyframes wallBlink { 50% { opacity: 0.28; } }
 
+  /* versus: the live room strip over the field: names, scores, who fell */
+  .mp-hud {
+    position: absolute; top: 10px; left: 10px; z-index: 3;
+    padding: 3px 10px; border-radius: 999px;
+    background: rgba(20, 17, 13, 0.55);
+    color: #e9e0cd; font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px;
+    pointer-events: none; white-space: nowrap; max-width: calc(100% - 20px);
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .mp-hud[hidden] { display: none; }
+
   canvas {
     display: block;
     width: 100%;
@@ -529,6 +540,7 @@
 
     <div class="board-frame">
       <canvas id="game"></canvas>
+      <div class="mp-hud" id="mpHud" hidden></div>
       <div class="wall-banner" id="wallBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
@@ -539,7 +551,29 @@
           <button data-mode="classic" class="active">CLASSIC</button>
           <button data-mode="speedrun">SPEED RUN</button>
           <button data-mode="survival">SURVIVAL</button>
+          <button data-mode="versus">VERSUS</button>
           <button data-mode="tourney">TOURNAMENT</button>
+        </div>
+        <div class="tourney" id="vsPanel" hidden>
+          <div class="entry" id="vsJoinRow">
+            <input id="vsName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="entry" id="vsCodeRow">
+            <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+            <button class="btn small" id="vsJoinBtn">JOIN</button>
+            <button class="btn small ghostbtn" id="vsCreateBtn">CREATE</button>
+          </div>
+          <div class="tourney" id="vsRoom" hidden>
+            <div class="t-code" id="vsRoomCode"></div>
+            <div class="t-meta" id="vsRoomStatus"></div>
+            <ol class="standings" id="vsRoster"></ol>
+            <div class="btn-row">
+              <button class="btn small" id="vsStartBtn" hidden>START ROUND</button>
+              <button class="btn small ghostbtn" id="vsLeaveBtn">LEAVE</button>
+            </div>
+          </div>
+          <div class="save-note" id="vsNote" hidden></div>
+          <button class="btn small ghostbtn" id="vsBackBtn">BACK</button>
         </div>
         <div class="tourney" id="tourneyPanel" hidden>
           <div class="entry" id="tJoin">
@@ -652,6 +686,10 @@
     GRID, SPEEDS, FOOD_TTL,
     PORTAL_OPEN_MS, PORTAL_WARN_MS,
   } from './packages/engine/engine.js';
+  // versus rides the same deterministic engine: every client simulates the
+  // whole room and only quantum-stamped turns cross the wire (rollback
+  // netcode); the session logic is shared, transport-agnostic code
+  import { createSession, channelTransport } from './packages/net/net.js';
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -701,7 +739,7 @@
   function ruleMode() {
     return mode === 'tourney' ? (tourney ? tourney.mode : 'classic') : mode;
   }
-  const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL' };
+  const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL', versus: 'VERSUS' };
   // The fixture identity: the ruleset plus, in a tournament, which one. A
   // REMATCH is only a rematch when this matches the round just played;
   // anything else is STARTing something new.
@@ -723,18 +761,29 @@
   }
 
   // every input source funnels here; the page owns the round-state gate
-  // (buffering during the countdown is allowed and lands on the first step)
+  // (buffering during the countdown is allowed and lands on the first step).
+  // In a versus round the turn goes through the session, which stamps it,
+  // broadcasts it, and feeds it to the engine on the shared timeline.
   function dirInput(x, y) {
     if (state !== 'playing' && state !== 'countdown') return;
-    g.setDir(x, y);
+    if (vsInRound()) vs.session.localDir(x, y);
+    else g.setDir(x, y);
   }
 
   function syncScoreDom() {
-    if (g.score === lastShownScore) return;
-    lastShownScore = g.score;
-    scoreEl.textContent = g.score;
-    if (g.score > best) { best = g.score; bestByMode[ruleMode()] = best; }
-    bestEl.textContent = best;
+    const inVs = vsView();
+    const sc = inVs ? g.players[vs.myIdx].score : g.score;
+    if (sc === lastShownScore) return;
+    lastShownScore = sc;
+    scoreEl.textContent = sc;
+    // BEST is a solo statistic; a versus score rides a shared, leader-driven
+    // board and would not mean the same thing
+    if (!inVs) {
+      if (sc > best) { best = sc; bestByMode[ruleMode()] = best; }
+      bestEl.textContent = best;
+    } else {
+      syncMpHud();
+    }
   }
 
   // the speed-run clock: DOM only when the printed second changes (rule 8)
@@ -780,7 +829,15 @@
         if (e.phase === 'warning') rebuildWallLayer(false);
         else if (e.phase === 'solid') rebuildWallLayer(true);
       } else if (e.t === 'die') {
-        onDeath(e.reason);
+        // a fallen rival leaves the board mid-round; give the body a send-off
+        if (e.segments) {
+          for (const s of e.segments)
+            spawnBurst(s.x, s.y, 4, 0.9, () => (Math.random() * 1.2 + 0.4) * (cell / 14), () => '#8d867a');
+        }
+        if (!vsInRound()) onDeath(e.reason);
+        else if (e.player === vs.myIdx) { vs.spectating = true; syncMpHud(); }
+        // the versus FULL TIME screen comes from the session's onEnd, which
+        // waits a grace window for any last-instant remote turns
       }
     }
   }
@@ -846,6 +903,7 @@
     buildGhostSprites();
     buildPortalSprites();
     buildFoodSprite();
+    vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
   }
 
@@ -1182,26 +1240,31 @@
 
     drawBombs();
 
-    // snake: glides smoothly between grid cells; fills come from a fixed
-    // lookup table, nothing allocated, wrapped copies drawn through tunnels
-    const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, g.snake.length - 1);
     const p = state === 'playing' ? g.renderProg() : 1;
+
+    // rivals first, ghosted, so my own snake always reads on top of them
+    if (vsView()) drawRivals(p);
+
+    // my snake: glides smoothly between grid cells; fills come from a fixed
+    // lookup table, nothing allocated, wrapped copies drawn through tunnels
+    const me = mePlayer();
+    const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, me.snake.length - 1);
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = 'rgba(194,162,90,0.65)';
     let lastShade = -1;
-    for (let i = g.snake.length - 1; i >= 0; i--) {
+    for (let i = me.snake.length - 1; i >= 0; i--) {
       const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
       if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
-      const rp = segRenderPos(i, p);
+      const rp = segRenderPos(me, i, p);
       drawBodyCell(rp.cx, rp.cy, r, rad);
     }
 
     // eyes on the head, at its interpolated position
-    if (g.snake.length) {
-      const { cx, cy } = segRenderPos(0, p);
+    if (me.snake.length) {
+      const { cx, cy } = segRenderPos(me, 0, p);
       const hx = wrapf(cx) * cell + cell / 2;
       const hy = wrapf(cy) * cell + cell / 2;
-      const off = cell * 0.16, ex = g.dir.x, ey = g.dir.y, px = ey, py = ex;
+      const off = cell * 0.16, ex = me.dir.x, ey = me.dir.y, px = ey, py = ex;
       ctx.fillStyle = '#211e1a';
       ctx.beginPath();
       ctx.arc(hx + ex*off + px*off, hy + ey*off + py*off, cell*0.08, 0, Math.PI*2);
@@ -1261,9 +1324,9 @@
   // point of the step, which is also when the segment ahead has cleared half a
   // cell, so the body pours out of the far window without a gap (rule 18).
   const _rp = { cx: 0, cy: 0 };
-  function segRenderPos(i, p) {
-    const s = g.snake[i];
-    const prev = i < g.snake.length - 1 ? g.snake[i + 1] : (g.tailFrom || s);
+  function segRenderPos(pl, i, p) {
+    const s = pl.snake[i];
+    const prev = i < pl.snake.length - 1 ? pl.snake[i + 1] : (pl.tailFrom || s);
     let dx = s.x - prev.x, dy = s.y - prev.y;
     if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;   // shortest path across tunnels
     if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
@@ -1290,6 +1353,42 @@
     if (wx !== null) fillRoundCell(wx, cy, r, rad);
     if (wy !== null) fillRoundCell(cx, wy, r, rad);
     if (wx !== null && wy !== null) fillRoundCell(wx, wy, r, rad);
+  }
+
+  // ---- versus rendering: the rivals, ghosted, with small name tags ----
+  // One flat colour per player index, drawn well under full alpha so they
+  // never crowd your own snake off the field.
+  const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'];
+  let vsTagFont = '';
+  function drawRivals(prog) {
+    const r = cell * 0.38, rad = cell * 0.3;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,0)';
+    for (let pi = 0; pi < g.players.length; pi++) {
+      if (pi === vs.myIdx) continue;
+      const pl = g.players[pi];
+      if (!pl.snake.length) continue;
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = VS_COLORS[pi];
+      for (let i = pl.snake.length - 1; i >= 0; i--) {
+        const rp = segRenderPos(pl, i, prog);
+        drawBodyCell(rp.cx, rp.cy, r, rad);
+      }
+    }
+    // name tags over each living rival's head, one font set for the batch
+    ctx.globalAlpha = 0.85;
+    if (ctx.font !== vsTagFont) ctx.font = vsTagFont;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    for (let pi = 0; pi < g.players.length; pi++) {
+      if (pi === vs.myIdx) continue;
+      const pl = g.players[pi];
+      if (!pl.snake.length || !vs.roster || !vs.roster[pi]) continue;
+      const rp = segRenderPos(pl, 0, prog);
+      ctx.fillStyle = VS_COLORS[pi];
+      ctx.fillText(vs.roster[pi].name, wrapf(rp.cx) * cell + cell / 2, wrapf(rp.cy) * cell - cell * 0.18);
+    }
+    ctx.globalAlpha = 1;
   }
 
   // CSS custom properties never change at runtime; memoize instead of
@@ -1369,9 +1468,18 @@
       if (countClock >= COUNT_TOTAL) state = 'playing';   // kick off
     }
     if (state === 'playing') {
-      g.advance(dt);
-      handleEvents(g.drainEvents());
-      syncScoreDom();
+      if (vsInRound()) {
+        // the session owns pacing against the room: absolute clock in, and
+        // it leaves the sub-quantum remainder on accMs for renderProg
+        vs.session.frame(now);
+        handleEvents(g.drainEvents());
+        syncScoreDom();
+        syncMpStall();
+      } else {
+        g.advance(dt);
+        handleEvents(g.drainEvents());
+        syncScoreDom();
+      }
     }
     syncClockDom();
     draw(dt);
@@ -1524,6 +1632,11 @@
   // render win, so a stale list can't overwrite the saved one
   let standingsGen = 0;
   async function renderStandings(highlightKey) {
+    if (mode === 'versus') {          // room results are rendered by the room
+      standingsEl.innerHTML = '';
+      boardHead.textContent = 'VERSUS';
+      return;
+    }
     const gen = ++standingsGen;
     const list = await loadStandings();
     if (gen !== standingsGen) return;
@@ -1568,7 +1681,7 @@
         bestByMode.classic = parseInt(localStorage.getItem('snakeBest'), 10) || 0;
       }
     } catch (e) {}
-    best = bestByMode[ruleMode()];
+    best = bestByMode[ruleMode()] || 0;
     bestEl.textContent = best;
   }
   function savePersonalBest() {
@@ -1655,6 +1768,8 @@
     for (const b of modeRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === mode);
     modeRow.style.display = (modesOpen && !tScreen) ? 'flex' : 'none';
     tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
+    vsPanel.hidden = !(modesOpen && tScreen && mode === 'versus');
+    if (!vsPanel.hidden) vsRefreshPanel();
     tBackBtn.style.display = tCreating ? 'none' : '';
     tJoin.style.display = (!tourney && !tCreating) ? 'flex' : 'none';
     tCreate.hidden = !(tCreating && !tourney);
@@ -1673,10 +1788,16 @@
     boardHead.style.display = deadPanels ? 'block' : 'none';
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     // the caption carries only what the START button cannot: which
-    // tournament, and whether its window is open
-    const showCaption = onMenu && !modesOpen && mode === 'tourney' && !(state === 'dead' && tourney);
+    // tournament or room, and whether it is open
+    const showCaption = onMenu && !modesOpen &&
+      ((mode === 'tourney' && !(state === 'dead' && tourney)) || mode === 'versus');
     modeCaption.style.display = showCaption ? '' : 'none';
-    if (showCaption) {
+    if (showCaption && mode === 'versus') {
+      modeCaption.textContent =
+        !vs ? 'VERSUS \u00b7 NO ROOM \u00b7 OPEN MODES'
+        : state === 'dead' && !vs.host ? 'ROOM ' + vs.code + ' \u00b7 THE HOST CALLS THE REMATCH'
+        : 'ROOM ' + vs.code + ' \u00b7 ' + vs.present.length + ' IN';
+    } else if (showCaption) {
       modeCaption.textContent =
         tourney ?
           tourney.title + ' \u00b7 ' + tourney.code +
@@ -1686,15 +1807,20 @@
     // START names the ruleset it is about to run; a pause needs no reminder
     startMain.textContent =
       state === 'paused' ? 'RESUME'
+      : mode === 'versus' ? 'REMATCH'
       : state === 'dead' && runKey() === lastRunKey ? 'REMATCH'
       : 'START';
     startSub.textContent = RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
-    const playable = mode !== 'tourney' || tourneyState() === 'open';
+    // in versus the round starts from the room panel; the host's REMATCH on
+    // the results screen is the one button that shows here
+    const playable = mode === 'versus'
+      ? (state === 'dead' && !!(vs && vs.host && vs.over))
+      : (mode !== 'tourney' || tourneyState() === 'open');
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
     modesBtn.style.display = onMenu ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
-    best = bestByMode[ruleMode()];
+    best = bestByMode[ruleMode()] || 0;
     bestEl.textContent = best;
   }
 
@@ -1709,9 +1835,10 @@
     const b = e.target.closest('button');
     if (!b || (state !== 'ready' && state !== 'dead')) return;
     if (mode === b.dataset.mode) return;
+    if (vs && b.dataset.mode !== 'versus') vsLeave();   // walking away leaves the room
     mode = b.dataset.mode;
     persistModeState();
-    if (mode === 'tourney') tScreen = true;      // the join/create business gets its own step
+    if (mode === 'tourney' || mode === 'versus') tScreen = true;  // both get their own step
     else showModes = false;                      // a plain ruleset is a complete choice
     if (state === 'ready') newRound();   // the clock preview and the next round follow the mode
     else {
@@ -1799,8 +1926,353 @@
     refreshModeUI();
   });
 
+  // ---- versus: rooms over Supabase Realtime Broadcast ----
+  // A room is a channel named by a 5-character code. Presence is the waiting
+  // room; the host's START broadcasts (seed, roster) and from there every
+  // client runs the same deterministic engine, exchanging only inputs through
+  // the shared session (packages/net). No database row exists yet: this is
+  // the prototype tier, and codes are the only door.
+  const VS_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const VS_MIN = 2, VS_MAX = 5;
+  const mpHud = document.getElementById('mpHud');
+  const vsPanel = document.getElementById('vsPanel');
+  const vsJoinRow = document.getElementById('vsJoinRow');
+  const vsCodeRow = document.getElementById('vsCodeRow');
+  const vsRoom = document.getElementById('vsRoom');
+  const vsRoomCode = document.getElementById('vsRoomCode');
+  const vsRoomStatus = document.getElementById('vsRoomStatus');
+  const vsRosterEl = document.getElementById('vsRoster');
+  const vsStartBtn = document.getElementById('vsStartBtn');
+  const vsLeaveBtn = document.getElementById('vsLeaveBtn');
+  const vsBackBtn = document.getElementById('vsBackBtn');
+  const vsNameInput = document.getElementById('vsName');
+  const vsCodeInput = document.getElementById('vsCode');
+  const vsJoinBtn = document.getElementById('vsJoinBtn');
+  const vsCreateBtn = document.getElementById('vsCreateBtn');
+  const vsNote = document.getElementById('vsNote');
+
+  let vsClient = null;    // one Realtime socket, reused across rooms
+  let vs = null;          // the current room, or null
+  let vsBusy = false;
+
+  try { vsNameInput.value = localStorage.getItem('snakeVsName') || ''; } catch (e) {}
+
+  const vsView = () => !!(vs && vs.game === g);                 // this g IS the room's round
+  const vsInRound = () => vsView() && vs.session && !vs.over;   // and it is still being played
+  function mePlayer() { return vsView() ? g.players[vs.myIdx] : g.players[0]; }
+
+  function vsSetNote(msg) { vsNote.textContent = msg || ''; vsNote.hidden = !msg; }
+  const vsCleanName = (v) => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';
+
+  function vsMakeCode() {
+    const a = crypto.getRandomValues(new Uint8Array(5));
+    let c = '';
+    for (const b of a) c += VS_ALPHABET[b % 32];
+    return c;
+  }
+
+  // ---- the live room strip over the field ----
+  let mpHudText = null;
+  function syncMpHud() {
+    const show = vsView() && (state === 'playing' || state === 'countdown' || state === 'dead');
+    if (!show) {
+      if (mpHudText !== null) { mpHudText = null; mpHud.hidden = true; }
+      return;
+    }
+    let text = vs.spectating && !vs.over ? 'SPECTATING · ' : '';
+    if (vs.stalled) text += 'WAITING FOR THE ROOM · ';
+    const order = g.players.map((_, i) => i).sort((a, b) => g.players[b].score - g.players[a].score);
+    for (let k = 0; k < order.length; k++) {
+      const i = order[k];
+      if (k) text += '  ';
+      text += (g.players[i].alive ? '' : '☠ ') + (vs.roster[i] ? vs.roster[i].name : '?') +
+              (i === vs.myIdx ? '★' : '') + ' ' + g.players[i].score;
+    }
+    if (text === mpHudText) return;
+    mpHudText = text;
+    mpHud.textContent = text;
+    mpHud.hidden = false;
+  }
+  function syncMpStall() {
+    const s = !!(vs.session && vs.session.stalled);
+    if (s !== vs.stalled) { vs.stalled = s; syncMpHud(); }
+    // a rollback can even repair my own death; drop the spectator badge if so
+    if (vs.spectating && g.players[vs.myIdx].alive) { vs.spectating = false; syncMpHud(); }
+  }
+
+  // ---- room lifecycle ----
+  async function vsEnter(code, host) {
+    if (vsBusy || vs) return;
+    if (!sbOn()) { vsSetNote('Versus needs the online service.'); return; }
+    vsBusy = true;
+    vsJoinBtn.disabled = vsCreateBtn.disabled = true;
+    vsSetNote(host ? 'Opening the room…' : 'Joining…');
+    const name = vsCleanName(vsNameInput.value);
+    try { localStorage.setItem('snakeVsName', name); } catch (e) {}
+    try {
+      if (!vsClient) {
+        const { RealtimeClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/realtime-js@2.112.3/+esm');
+        vsClient = new RealtimeClient(SB_URL.replace(/^https/, 'wss') + '/realtime/v1', {
+          params: { apikey: SB_KEY },
+        });
+      }
+      const ref = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
+      const channel = vsClient.channel('ps-' + code, {
+        config: { broadcast: { self: false, ack: false }, presence: { key: ref } },
+      });
+      const room = {
+        code, host, ref, name, channel,
+        transport: channelTransport(channel),
+        present: [], joinedTs: Date.now(), startN: 0,
+        game: null, session: null, roster: null, myIdx: -1,
+        over: false, spectating: false, stalled: false, up: false,
+      };
+      // presence is opt-in: the handler must exist before subscribe()
+      channel.on('presence', { event: 'sync' }, () => { if (vs === room) vsRosterSync(); });
+      channel.on('broadcast', { event: 'lobby' }, ({ payload }) => { if (vs === room) vsLobbyMsg(payload); });
+      let settled = false;
+      const guard = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        vsSetNote('Could not reach the room service. Try again.');
+        try { channel.unsubscribe(); } catch (e) {}
+        if (vs === room) vs = null;
+        vsRefreshPanel();
+      }, 8000);
+      vs = room;
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (!settled) { settled = true; clearTimeout(guard); }
+          room.up = true;
+          room.transport.setOpen(true);
+          // presence dies with the old join on every reconnect: track again
+          void channel.track({ name: room.name, ts: room.joinedTs, host: room.host });
+          if (vs === room) { vsSetNote(''); vsRefreshPanel(); }
+        } else {
+          room.up = false;
+          room.transport.setOpen(false);
+        }
+      });
+      vsRefreshPanel();
+    } catch (e) {
+      vsSetNote('Versus could not load. Check the connection and retry.');
+      vs = null;
+      vsRefreshPanel();
+    } finally {
+      vsBusy = false;
+      vsJoinBtn.disabled = vsCreateBtn.disabled = false;
+    }
+  }
+
+  function vsLeave() {
+    if (!vs) return;
+    const wasLive = vsInRound() && (state === 'playing' || state === 'countdown');
+    try { vs.channel.unsubscribe(); } catch (e) {}
+    vs = null;
+    syncMpHud();
+    if (wasLive || vsView()) {
+      state = 'ready';
+      overlayTitle.textContent = 'KICK OFF';
+      overlayTitle.className = '';
+      overlayText.textContent = 'Eat to grow. Survive the pitch.';
+      newRound();
+      overlay.classList.remove('hidden');
+      refreshSettingsUI();
+    }
+    vsRefreshPanel();
+    refreshModeUI();
+  }
+
+  function vsRosterSync() {
+    const stateMap = vs.channel.presenceState();
+    const list = [];
+    for (const key of Object.keys(stateMap)) {
+      const m = stateMap[key][0];
+      if (m) list.push({ ref: key, name: String(m.name || 'YOU'), ts: m.ts || 0, host: !!m.host });
+    }
+    // the host anchors slot one; everyone else queues by arrival
+    list.sort((a, b) => (b.host - a.host) || (a.ts - b.ts) || (a.ref < b.ref ? -1 : 1));
+    vs.present = list;
+    // a mid-round vanisher's snake goes on rails, deterministically everywhere
+    if (vs.session && vs.roster) {
+      for (let i = 0; i < vs.roster.length; i++) {
+        if (i !== vs.myIdx && !list.some(p => p.ref === vs.roster[i].ref)) vs.session.dropPeer(i);
+      }
+    }
+    vsRefreshPanel();
+    refreshModeUI();
+  }
+
+  function vsLobbyMsg(m) {
+    if (!m || m.t !== 'start' || typeof m.n !== 'number') return;
+    if (m.n <= vs.startN) return;                  // an echo of an old kickoff
+    vs.startN = m.n;
+    vsBegin(m);
+  }
+
+  // the host whistles: seed and roster for everyone, then play it locally too
+  function vsStart() {
+    if (!vs || !vs.host || !vs.up || vsBusy) return;
+    if (vsInRound()) return;
+    const roster = vs.present.slice(0, VS_MAX).map(p => ({ ref: p.ref, name: p.name }));
+    if (roster.length < VS_MIN) return;
+    const m = {
+      t: 'start', n: vs.startN + 1,
+      seed: crypto.getRandomValues(new Uint32Array(1))[0],
+      roster,
+    };
+    void vs.channel.send({ type: 'broadcast', event: 'lobby', payload: m });
+    vs.startN = m.n;
+    vsBegin(m);
+  }
+
+  function vsBegin(m) {
+    const idx = m.roster.findIndex(r => r.ref === vs.ref);
+    if (idx < 0) {                                  // five filled up before me
+      vsSetNote('This round is full; you are in the next one.');
+      vsRefreshPanel();
+      return;
+    }
+    vs.roster = m.roster;
+    vs.myIdx = idx;
+    vs.over = false;
+    vs.spectating = false;
+    vs.stalled = false;
+    g = createGame({
+      seed: m.seed >>> 0, tickMs: SPEEDS.normal, wallsEnabled: true,
+      players: m.roster.length,
+    });
+    vs.game = g;
+    vs.session = createSession({
+      game: g, myIdx: idx, transport: vs.transport,
+      onEnd: vsRoundOver,
+      onDesync: vsDesync,
+    });
+    lastShownScore = null;
+    handleEvents(g.drainEvents());
+    syncScoreDom();
+    mpHudText = null;
+    syncMpHud();
+    // straight into the shared countdown; skew between clients is at most a
+    // message flight and the session's pacing walks it off
+    state = 'countdown';
+    countClock = 0; countBeat = -1;
+    lastTick = 0;
+    overlayTitle.className = '';
+    saveNote.hidden = true;
+    showModes = false;
+    refreshModeUI();
+    overlay.classList.add('hidden');
+    settingsModal.hidden = true;
+    refreshSettingsUI();
+    startBtn.blur();
+  }
+
+  // final placings: score first, then who lasted longer, then the earlier slot
+  function vsStandingsRows() {
+    return g.players.map((p, i) => ({
+      name: vs.roster[i] ? vs.roster[i].name : '?',
+      me: i === vs.myIdx,
+      score: p.score,
+      diedAt: p.diedAt,
+    })).sort((a, b) => b.score - a.score || b.diedAt - a.diedAt || (a.me ? -1 : 1));
+  }
+
+  function vsRoundOver() {
+    vs.over = true;
+    state = 'dead';
+    syncScoreDom();
+    syncMpHud();
+    const rows = vsStandingsRows();
+    overlayTitle.textContent = 'FULL TIME';
+    overlayTitle.className = 'dead';
+    overlayText.textContent = rows[0].me ? 'You take the room.' : `${rows[0].name} takes the room.`;
+    boardHead.textContent = 'ROOM ' + vs.code;
+    standingsEl.innerHTML = '';
+    rows.forEach((row, i) => {
+      const li = document.createElement('li');
+      if (row.me) li.className = 'me';
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = row.name;
+      const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = row.score;
+      li.append(rk, nm, sc);
+      standingsEl.appendChild(li);
+    });
+    savedThisRound = true;      // versus results stay in the room, not on the boards
+    entryWanted = false;
+    showModes = false;
+    refreshModeUI();
+    overlay.classList.remove('hidden');
+    refreshSettingsUI();
+  }
+
+  function vsDesync(why) {
+    vs.session = null;
+    vs.game = null;
+    vs.over = true;
+    state = 'ready';
+    overlayTitle.textContent = 'CONNECTION LOST';
+    overlayTitle.className = 'dead';
+    overlayText.textContent =
+      why === 'behind' ? 'This tab fell behind the room. The round went on without you.'
+      : 'The room and this tab stopped agreeing, so the round ended here.';
+    newRound();
+    syncMpHud();
+    showModes = true; tScreen = true;
+    refreshModeUI();
+    overlay.classList.remove('hidden');
+    refreshSettingsUI();
+  }
+
+  // ---- the waiting room panel ----
+  function vsRefreshPanel() {
+    const inRoom = !!vs;
+    vsJoinRow.style.display = inRoom ? 'none' : 'flex';
+    vsCodeRow.style.display = inRoom ? 'none' : 'flex';
+    vsRoom.hidden = !inRoom;
+    if (!inRoom) return;
+    vsRoomCode.textContent = vs.code;
+    const n = vs.present.length;
+    vsRoomStatus.textContent =
+      !vs.up ? 'CONNECTING…'
+      : vsInRound() ? 'ROUND IN PROGRESS'
+      : !vs.host && n <= 1 ? 'ONLY YOU HERE · CHECK THE CODE OR WAIT'
+      : n < VS_MIN ? `WAITING FOR PLAYERS · ${n}/${VS_MAX}`
+      : `READY · ${Math.min(n, VS_MAX)}/${VS_MAX}` + (vs.host ? '' : ' · THE HOST KICKS OFF');
+    vsRosterEl.innerHTML = '';
+    vs.present.slice(0, VS_MAX).forEach((p, i) => {
+      const li = document.createElement('li');
+      if (p.ref === vs.ref) li.className = 'me';
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const nm = document.createElement('span'); nm.className = 'nm';
+      nm.textContent = p.name + (p.host ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
+      li.append(rk, nm);
+      vsRosterEl.appendChild(li);
+    });
+    vsStartBtn.hidden = !(vs.host && !vsInRound());
+    vsStartBtn.disabled = !(vs.up && vs.present.length >= VS_MIN);
+  }
+
+  vsCreateBtn.addEventListener('click', () => { void vsEnter(vsMakeCode(), true); });
+  vsJoinBtn.addEventListener('click', () => {
+    const code = (vsCodeInput.value || '').trim().toUpperCase();
+    if (code.length !== 5) { vsSetNote('Room codes are 5 characters.'); return; }
+    vsCodeInput.value = '';
+    void vsEnter(code, false);
+  });
+  vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsJoinBtn.click(); } });
+  vsStartBtn.addEventListener('click', vsStart);
+  vsLeaveBtn.addEventListener('click', vsLeave);
+  vsBackBtn.addEventListener('click', () => { tScreen = false; refreshModeUI(); });
+
   // ---- round flow ----
   function play() {
+    if (mode === 'versus') {
+      // versus rounds start from the room; the host's REMATCH on the results
+      // screen is the one shortcut back in
+      if (vs && vs.host && vs.over && state === 'dead') vsStart();
+      return;
+    }
     if (mode === 'tourney' && tourneyState() !== 'open') return;   // the window rules
     if (state === 'dead' || state === 'ready') { lastRunKey = runKey(); newRound(); }
     else g.clearQueue();          // a turn queued before the pause must not fire on resume
@@ -1818,6 +2290,7 @@
   }
 
   function togglePause() {
+    if (vsInRound()) return;      // a shared room has no half time
     if (state === 'playing') {
       state = 'paused';
       overlayTitle.textContent = 'HALF TIME';
@@ -1942,9 +2415,11 @@
   let resizeQueued = false;
   window.addEventListener('resize', () => { resizeQueued = true; });
 
-  // a hidden tab stops rAF; pause so coming back never means finding the aftermath
+  // a hidden tab stops rAF; pause so coming back never means finding the
+  // aftermath. A versus round cannot pause: the session catches up briefly or
+  // declares this tab fallen behind, and the room plays on either way.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && state === 'playing') togglePause();
+    if (document.hidden && state === 'playing' && !vsInRound()) togglePause();
   });
 
   // ---- settings modal (locked during a round) ----

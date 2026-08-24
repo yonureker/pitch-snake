@@ -6,7 +6,7 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "node --test packages/engine/engine.test.js",
+    "test": "node --test packages/engine/engine.test.js packages/net/net.test.js",
     "mobile": "npm --workspace apps/mobile run start",
     "install-hooks": "sh scripts/install-hooks.sh",
     "lint": "npm --workspace apps/mobile run lint",
@@ -14,5 +14,8 @@
   },
   "overrides": {
     "eslint-plugin-react-hooks": "^7.1.1"
+  },
+  "devDependencies": {
+    "@supabase/realtime-js": "^2.112.3"
   }
 }
