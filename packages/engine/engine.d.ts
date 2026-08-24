@@ -6,6 +6,8 @@ export declare const MODES: { classic: GameConfig; speedrun: GameConfig; surviva
 export declare const GRID: number;
 export declare const START_LEN: number;
 export declare const SIM_DT: number;
+/** One board holds at most this many snakes. */
+export declare const MAX_PLAYERS: number;
 export declare const SPEEDS: { slow: number; normal: number; fast: number };
 export declare const FOOD_TTL: number;
 export declare const BONUS_EVERY: number;
@@ -25,6 +27,7 @@ export declare const PORTAL_OPEN_MS: number;
 export declare const PORTAL_WARN_MS: number;
 export declare const PORTAL_MIN_GAP: number;
 export declare const MIN_SPAWN_DIST: number;
+export declare const SURVIVAL_CLEAR: number;
 export declare function portalMark(n: number): number;
 export declare function K(x: number, y: number): number;
 export declare function wrap(v: number): number;
@@ -45,25 +48,62 @@ export interface Ghost extends Cell {
 }
 export interface Portal { ax: number; ay: number; bx: number; by: number; used: boolean }
 export interface Food extends Cell { bonus: boolean; kind: number }
+
+/**
+ * One snake on the board. A one-snake game exposes players[0] under the
+ * classic singular names on Game as well; new code should read players[i].
+ */
+export interface Player {
+  /** Index in the players array; also the input log's player column. */
+  idx: number;
+  snake: Cell[]; snakeSet: Set<number>; tailFrom: Cell | null;
+  headFrom: Cell; headMajX: number; headMajY: number;
+  dir: Cell; dirQueue: Cell[];
+  score: number; pendingGrowth: number;
+  warpedIn: boolean;
+  alive: boolean; deadReason: string | null;
+  /** Quantum this snake went down on; 0 while alive. */
+  diedAt: number;
+}
+
 export type GameEvent =
   | { t: 'food' }
-  | { t: 'eat'; bonus: boolean; x: number; y: number }
-  | { t: 'hop'; fromA: boolean; fx: number; fy: number; tx: number; ty: number }
-  | { t: 'tnt'; x: number; y: number; lost: Cell[] }
+  | { t: 'eat'; player: number; bonus: boolean; x: number; y: number }
+  | { t: 'hop'; player: number; fromA: boolean; fx: number; fy: number; tx: number; ty: number }
+  | { t: 'tnt'; player: number; x: number; y: number; lost: Cell[] }
   | { t: 'wall'; phase: 'off' | 'warning' | 'solid' }
   | { t: 'portal'; open: boolean }
-  | { t: 'die'; reason: string };
+  /** `segments` is present only when the round continues without this snake
+   *  (its body left the board); a round-ending death keeps the body. */
+  | { t: 'die'; player: number; reason: string; segments?: Cell[] };
+
 export interface RoundLog {
   v: number; seed: number; tickMs: number; wallsEnabled: boolean;
-  inputs: [number, number, number][]; end: number; finalScore: number;
+  durationMs?: number; startGhosts?: number; startBombs?: number;
+  /** Snakes on the board; absent in v4 (single-snake era) logs. */
+  players?: number;
+  /** [quantum, x, y] triples; a fourth column names the player when players > 1. */
+  inputs: ([number, number, number] | [number, number, number, number])[];
+  end: number; finalScore: number;
+  /** Stamped on multi-snake rounds only. */
+  finalScores?: number[]; diedAt?: number[];
 }
+
+/** Opaque full-simulation snapshot for rollback; feed it back to restore(). */
+export interface GameSnapshot { readonly quanta: number }
 
 export interface Game {
   seed: number; tickMs: number; wallsEnabled: boolean;
-  alive: boolean; deadReason: string | null;
+  /** Round liveness: any snake still up. Writing it revives player 0 (test hook). */
+  alive: boolean;
+  /** Player 0's cause of death, under the classic name. */
+  deadReason: string | null;
   /** 0 = endless; a timed round ends with deadReason 'time' at exactly this clock. */
   durationMs: number;
   quanta: number; clockMs: number; progMs: number; accMs: number;
+  /** Every snake on the board; a solo round has exactly one. */
+  players: Player[];
+  // The classic singular surface: live aliases of players[0], reads and writes.
   snake: Cell[]; snakeSet: Set<number>; tailFrom: Cell | null;
   dir: Cell; dirQueue: Cell[];
   headFrom: Cell; headMajX: number; headMajY: number;
@@ -78,10 +118,15 @@ export interface Game {
   portalsUnlocked: number; portalsOpened: number; portalRetryAt: number;
   portalExpireAt: number; portalOpenedAt: number;
   events: GameEvent[]; log: RoundLog;
-  setDir(x: number, y: number): void;
+  /** Steer a snake; the shells that know one snake omit the player index. */
+  setDir(x: number, y: number, player?: number): void;
   clearQueue(): void;
   advance(dtMs: number): void;
   advanceQuanta(n: number): void;
+  /** Copy the full sim state (rollback netcode); allocation is fine here. */
+  snapshot(): GameSnapshot;
+  /** Reinstate a snapshot taken from THIS game; the log rewinds with it. */
+  restore(s: GameSnapshot): void;
   renderProg(): number;
   renderNow(): number;
   drainEvents(): GameEvent[];
@@ -94,6 +139,8 @@ export interface Game {
 export interface GameConfig {
   seed?: number; tickMs?: number; wallsEnabled?: boolean; durationMs?: number;
   startGhosts?: number; startBombs?: number;
+  /** Snakes on one shared board, 1..MAX_PLAYERS (default 1). */
+  players?: number;
 }
 export declare function createGame(cfg?: GameConfig): Game;
 export declare function replay(log: RoundLog): Game;

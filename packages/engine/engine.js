@@ -15,16 +15,31 @@
 // Every tick length (200 / 130 / 100) and every timing constant is a multiple
 // of SIM_DT, so steps land exactly on quanta and nothing drifts.
 //
+// Multi-snake worlds are the same machine: `players: N` in the config puts N
+// snakes on one board, sharing the food, the walls, the TNT, the ghosts and
+// the windows. Snakes pass through each other (no snake-vs-snake contact of
+// any kind); everything else treats each snake exactly as it treated the one.
+// The hazard ladders read the LEADER's score, so the room escalates with the
+// front-runner. All the singular fields (snake, dir, score, ...) remain as
+// live aliases of player 0, which is what keeps every existing shell and test
+// working untouched; new code should read game.players[i].
+//
+// snapshot()/restore() capture and reinstate the full simulation state,
+// including the PRNG. They exist for rollback netcode: restore to an earlier
+// quantum, apply a late remote input, re-advance. A rollback is a live replay.
+//
 // The engine never blocks and never allocates in steady state beyond what the
-// old inline version did. Rendering concerns (particles, sprites, colours,
-// interpolation) live with the renderers; the engine reports what happened
-// through an events array the caller drains once per frame.
+// old inline version did (snapshot/restore allocate, but they run on network
+// events, never in the frame loop). Rendering concerns (particles, sprites,
+// colours, interpolation) live with the renderers; the engine reports what
+// happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 4;
+export const ENGINE_VERSION = 5;
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
 export const SIM_DT = 10;      // ms per simulation quantum; everything is a multiple of it
+export const MAX_PLAYERS = 5;  // one board holds at most five snakes
 
 // speeds, ms per grid cell: the snake never changes pace mid-round (rule 14).
 // The tick length IS the reaction budget: a turn can only land at the next
@@ -48,7 +63,8 @@ export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed se
 // Round presets. A mode IS a config: the shells pass MODES[name] into
 // createGame and decide nothing of their own, so a tournament, a replay and a
 // local round all mean the same thing by construction. Every duration is a
-// multiple of SIM_DT like any other timing constant.
+// multiple of SIM_DT like any other timing constant. Multiplayer is not a
+// mode: `players` is an orthogonal knob a room config sets alongside one.
 export const MODES = {
   classic: {},                              // endless: the run ends when you do
   speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
@@ -138,18 +154,6 @@ const WALL_PATTERNS = [
   },
 ];
 
-// mulberry32: small, fast, good-enough PRNG with a 32-bit seed. Not for
-// crypto; for making a round reproducible.
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // 0..1 progress through a ghost's current glide between cells, at sim time now
 export function ghostProgress(g, nowMs) {
   return Math.max(0, Math.min(1, 1 - (g.moveAt - nowMs) / GHOST_MS));
@@ -181,33 +185,65 @@ export function createGame(cfg = {}) {
   const durationMs = cfg.durationMs ?? 0;   // 0 = endless
   const startGhosts = cfg.startGhosts ?? 0; // survival: personalities present at kickoff
   const startBombs = cfg.startBombs ?? 0;   // survival: TNT wave size floored here for ever
+  const playerCount = cfg.players ?? 1;
   if (tickMs % SIM_DT !== 0) throw new Error('tickMs must be a multiple of SIM_DT');
   if (durationMs % SIM_DT !== 0 || durationMs < 0) throw new Error('durationMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(startGhosts) || startGhosts < 0 || startGhosts > GHOST_SCORES.length) throw new Error('startGhosts out of range');
   if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > TNT_SCORES.length) throw new Error('startBombs out of range');
+  if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > MAX_PLAYERS) throw new Error('players out of range');
 
-  const random = mulberry32(seed);
+  // mulberry32: small, fast, good-enough PRNG with a 32-bit seed. Not for
+  // crypto; for making a round reproducible. The state lives in rngA so
+  // snapshot()/restore() can carry it: a rollback must re-roll the same dice.
+  let rngA = seed >>> 0;
+  function random() {
+    rngA |= 0; rngA = (rngA + 0x6d2b79f5) | 0;
+    let t = Math.imul(rngA ^ (rngA >>> 15), 1 | rngA);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
   const rand = (a, b) => a + random() * (b - a);
+
+  // One snake. Everything singular the old engine kept at the top level now
+  // lives here once per player; the world stays shared. _mx/_my/_m are
+  // per-quantum contact scratch (rule 24), never persisted.
+  function makePlayer(idx, laneY) {
+    const p = {
+      idx,
+      snake: [], snakeSet: new Set(), tailFrom: null,
+      headFrom: { x: 8, y: laneY },
+      headMajX: 8, headMajY: laneY,
+      dir: { x: 1, y: 0 }, dirQueue: [],
+      score: 0, pendingGrowth: 0,
+      warpedIn: false,
+      alive: true, deadReason: null, diedAt: 0,
+      _mx: 0, _my: 0, _m: false,
+    };
+    for (let i = 0; i < START_LEN; i++) { p.snake.push({ x: 8 - i, y: laneY }); p.snakeSet.add(K(8 - i, laneY)); }
+    return p;
+  }
+
+  // Start lanes: evenly spaced rows, everyone heading right from x=8. One
+  // player lands on the classic row 10, so a solo round starts where it
+  // always did.
+  const players = [];
+  for (let i = 0; i < playerCount; i++)
+    players.push(makePlayer(i, Math.floor(GRID * (2 * i + 1) / (2 * playerCount))));
 
   // S is both the internal state and the public surface: renderers read these
   // fields every frame, tests may poke them. Methods below close over S.
+  // The singular fields (snake, dir, score, ...) are defined further down as
+  // live aliases of players[0], so one-snake callers never notice the array.
   const S = {
     seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs,
-    alive: true,
-    deadReason: null,
+    players,
     quanta: 0,          // sim quanta elapsed; the replay clock
     clockMs: 0,         // one hazard clock (the old wall/bomb/ghost/portal clocks were identical)
     progMs: 0,          // ms into the current cell; renderProg() adds the sub-quantum remainder
     accMs: 0,           // dt not yet turned into quanta (always < SIM_DT after advance)
 
-    snake: [], snakeSet: new Set(), tailFrom: null,
-    headFrom: { x: 8, y: 10 },   // the cell the head last left; its majority cell until mid-glide (rule 24)
-    headMajX: 8, headMajY: 10,   // the head's majority cell one quantum ago, for the crossing test
-    dir: { x: 1, y: 0 }, dirQueue: [],
-    score: 0, pendingGrowth: 0,
-
     food: null,         // {x, y, bonus, kind} - kind indexes the renderer's emoji list
-    foodAge: 0, regularEaten: 0,
+    foodAge: 0, regularEaten: 0,   // the bonus streak is the board's, not a snake's
 
     wallState: 'off', wallPhaseEnd: 0, wallCells: [], wallLookup: new Set(),
 
@@ -216,24 +252,50 @@ export function createGame(cfg = {}) {
     ghosts: [],         // {x, y, px, py, dir, warped, moveAt}
 
     portal: null,       // {ax, ay, bx, by, used}: the blue end, then the violet end
-    warpedIn: false,
     portalsUnlocked: 0, portalsOpened: 0, portalRetryAt: 0,
     portalExpireAt: 0, portalOpenedAt: 0,
 
     // what happened since the caller last drained; renderers turn these into
     // bursts, sprites and DOM updates. Sim state never depends on it.
     events: [],
-    // the round's replayable record. end/finalScore are stamped on death.
-    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, inputs: [], end: 0, finalScore: 0 },
+    // the round's replayable record. end/finalScore are stamped when the last
+    // snake goes down; a multi-snake log carries every score and death time.
+    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs,
+           players: playerCount, inputs: [], end: 0, finalScore: 0 },
   };
 
+  // The singular surface: player 0 under the old names, reads AND writes, so
+  // the web page, the mobile shell and the whole one-snake test suite work
+  // unchanged. Engine code below never goes through these.
+  for (const f of ['snake', 'snakeSet', 'tailFrom', 'headFrom', 'headMajX', 'headMajY',
+                   'dir', 'dirQueue', 'score', 'pendingGrowth', 'warpedIn', 'deadReason']) {
+    Object.defineProperty(S, f, {
+      get() { return players[0][f]; },
+      set(v) { players[0][f] = v; },
+      enumerable: false, configurable: true,
+    });
+  }
+  // `alive` is the round: any snake still up. Writing it revives player 0,
+  // which is what the soak test's resurrection hook has always meant.
+  Object.defineProperty(S, 'alive', {
+    get() { for (const p of players) if (p.alive) return true; return false; },
+    set(v) { players[0].alive = v; },
+    enumerable: false, configurable: true,
+  });
+
   const emit = e => S.events.push(e);
+  const anyAlive = () => { for (const p of players) if (p.alive) return true; return false; };
+  // the hazard ladders read the front-runner (rule 22 generalized): the room
+  // escalates with the leader, and the unlock counters stay monotonic so a
+  // TNT knocking the leader down never de-escalates anything
+  const leaderScore = () => { let m = players[0].score; for (const p of players) if (p.score > m) m = p.score; return m; };
 
   // ---- shared placement ----
-  // a cell nothing new may spawn onto: snake, wall, food, a TNT, a window, a ghost
+  // a cell nothing new may spawn onto: any snake, wall, food, a TNT, a window, a ghost
   function cellOccupied(x, y) {
     const k = K(x, y);
-    return S.snakeSet.has(k) || S.wallLookup.has(k) ||
+    for (const p of players) if (p.snakeSet.has(k)) return true;
+    return S.wallLookup.has(k) ||
            (S.food && S.food.x === x && S.food.y === y) ||
            (S.portal !== null && ((S.portal.ax === x && S.portal.ay === y) || (S.portal.bx === x && S.portal.by === y))) ||
            S.bombs.some(b => b.x === x && b.y === y) ||
@@ -241,15 +303,20 @@ export function createGame(cfg = {}) {
   }
 
   // pick a random empty cell, preferring cells at least minDist (toroidal
-  // Manhattan) from the head. One bounded scan, never rejection sampling.
+  // Manhattan) from every living head. One bounded scan, never rejection
+  // sampling.
   function spawnCell(minDist) {
-    const head = S.snake[0];
     const far = [], any = [];
     for (let x = 0; x < GRID; x++) {
       for (let y = 0; y < GRID; y++) {
         if (cellOccupied(x, y)) continue;
         any.push(x, y);
-        if (wrapDist(x, y, head.x, head.y) >= minDist) far.push(x, y);
+        let clear = true;
+        for (const p of players) {
+          if (!p.alive) continue;
+          if (wrapDist(x, y, p.snake[0].x, p.snake[0].y) < minDist) { clear = false; break; }
+        }
+        if (clear) far.push(x, y);
       }
     }
     const pool = far.length ? far : any;
@@ -321,12 +388,13 @@ export function createGame(cfg = {}) {
   }
 
   function updateBombs() {
-    // The score only ever sets the SIZE of a wave, never whether one comes
-    // (rule 22). Past the last mark the size pins at TNT_SCORES.length and the
-    // cycle carries on for ever. Do not add a score check below this line:
-    // that is what would make waves stop. Monotonic, so the five points a TNT
-    // takes can never shrink the wave.
-    while (S.bombsUnlocked < TNT_SCORES.length && S.score >= TNT_SCORES[S.bombsUnlocked]) S.bombsUnlocked++;
+    // The leader's score only ever sets the SIZE of a wave, never whether one
+    // comes (rule 22). Past the last mark the size pins at TNT_SCORES.length
+    // and the cycle carries on for ever. Do not add a score check below this
+    // line: that is what would make waves stop. Monotonic, so the five points
+    // a TNT takes can never shrink the wave.
+    const lead = leaderScore();
+    while (S.bombsUnlocked < TNT_SCORES.length && lead >= TNT_SCORES[S.bombsUnlocked]) S.bombsUnlocked++;
     if (S.bombsUnlocked === 0) return;
     if (S.bombPhase === 'active') {
       if (S.clockMs >= S.bombExpireAt) {         // the whole wave vanishes together
@@ -346,13 +414,17 @@ export function createGame(cfg = {}) {
   function ghostBlocked(x, y, self) {
     // while a head is committed in a window the far end is spoken for: a ghost
     // there would be a death the player could not have seen coming (rule 21)
-    if (!S.warpedIn && S.portal !== null && !S.portal.used) {
-      const hw = portalEndAt(S.snake[0].x, S.snake[0].y);
-      if (hw === 1 && x === S.portal.bx && y === S.portal.by) return true;
-      if (hw === 2 && x === S.portal.ax && y === S.portal.ay) return true;
+    if (S.portal !== null && !S.portal.used) {
+      for (const p of players) {
+        if (!p.alive || p.warpedIn) continue;
+        const hw = portalEndAt(p.snake[0].x, p.snake[0].y);
+        if (hw === 1 && x === S.portal.bx && y === S.portal.by) return true;
+        if (hw === 2 && x === S.portal.ax && y === S.portal.ay) return true;
+      }
     }
     const k = K(x, y);
-    return S.snakeSet.has(k) || S.wallLookup.has(k) ||
+    for (const p of players) if (p.snakeSet.has(k)) return true;
+    return S.wallLookup.has(k) ||
            (S.food && S.food.x === x && S.food.y === y) ||
            S.bombs.some(b => b.x === x && b.y === y) ||
            S.ghosts.some(g => g !== self && g.x === x && g.y === y);
@@ -392,21 +464,39 @@ export function createGame(cfg = {}) {
     return d;
   }
 
-  // Where a ghost is trying to be, by personality. Pure targeting: the legs
-  // (GHOST_MS, the no-reverse rule, blocked cells) are identical for all five.
+  // Which snake a ghost is hunting: the nearest living head by its own
+  // wormhole metric, ties to the lower index. One snake means the answer
+  // never changes; five means pressure follows proximity and the last snake
+  // standing collects the whole pack. Pure arithmetic: no PRNG draw, so a
+  // one-snake round rolls exactly the dice it always rolled.
+  function victimOf(g) {
+    if (players.length === 1) return players[0];
+    let best = null, bestD = Infinity;
+    for (const p of players) {
+      if (!p.alive) continue;
+      const d = ghostDist(g.x, g.y, p.snake[0].x, p.snake[0].y);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best ?? players[0];
+  }
+
+  // Where a ghost is trying to be, by personality, relative to its victim.
+  // Pure targeting: the legs (GHOST_MS, the no-reverse rule, blocked cells)
+  // are identical for all five.
   function ghostTarget(g) {
-    const head = S.snake[0];
+    const v = victimOf(g);
+    const head = v.snake[0];
     switch (g.role ?? 0) {
-      case 1: {  // the Ambusher: four cells ahead of the heading
-        return { x: wrap(head.x + S.dir.x * 4), y: wrap(head.y + S.dir.y * 4) };
+      case 1: {  // the Ambusher: four cells ahead of the victim's heading
+        return { x: wrap(head.x + v.dir.x * 4), y: wrap(head.y + v.dir.y * 4) };
       }
       case 2: {  // the Flanker: chase from afar, swing to the post up close
         return wrapDist(g.x, g.y, head.x, head.y) > FLANKER_RANGE ? head : FLANKER_POST;
       }
       case 3: {  // the Cutoff: double the vector from the Chaser through the
-                 // point two ahead, arriving on your far side
-        const px = wrap(head.x + S.dir.x * 2);
-        const py = wrap(head.y + S.dir.y * 2);
+                 // point two ahead, arriving on the victim's far side
+        const px = wrap(head.x + v.dir.x * 2);
+        const py = wrap(head.y + v.dir.y * 2);
         const chaser = S.ghosts[0];
         if (!chaser) return { x: px, y: py };
         return {
@@ -418,7 +508,7 @@ export function createGame(cfg = {}) {
                  // blocks ghosts), so it orbits the thing you must approach.
         return S.food ?? head;
       }
-      default:   // the Chaser: your head, plainly
+      default:   // the Chaser: the victim's head, plainly
         return head;
     }
   }
@@ -476,7 +566,7 @@ export function createGame(cfg = {}) {
   }
 
   function updateGhosts() {
-    if (S.ghosts.length < GHOST_SCORES.length && S.score >= GHOST_SCORES[S.ghosts.length]) spawnGhost();
+    if (S.ghosts.length < GHOST_SCORES.length && leaderScore() >= GHOST_SCORES[S.ghosts.length]) spawnGhost();
     for (const g of S.ghosts) {
       if (S.clockMs >= g.moveAt) { moveGhost(g); g.moveAt = S.clockMs + GHOST_MS; }
     }
@@ -526,8 +616,11 @@ export function createGame(cfg = {}) {
   // the windows never close on someone still coming through (rule 20)
   function portalBusy() {
     if (S.portal === null) return false;
-    if (S.snakeSet.has(K(S.portal.ax, S.portal.ay)) || S.snakeSet.has(K(S.portal.bx, S.portal.by))) return true;
-    if (S.tailFrom && portalEndAt(S.tailFrom.x, S.tailFrom.y)) return true;
+    const ka = K(S.portal.ax, S.portal.ay), kb = K(S.portal.bx, S.portal.by);
+    for (const p of players) {
+      if (p.snakeSet.has(ka) || p.snakeSet.has(kb)) return true;
+      if (p.tailFrom && portalEndAt(p.tailFrom.x, p.tailFrom.y)) return true;
+    }
     for (const g of S.ghosts) if (portalEndAt(g.x, g.y)) return true;
     return false;
   }
@@ -541,10 +634,11 @@ export function createGame(cfg = {}) {
   }
 
   function updatePortals() {
-    // How many marks the score has ever passed: closed form so a big jump
+    // How many marks the leader has ever passed: closed form so a big jump
     // cannot spin, raised only so falling under a mark and climbing back over
     // it never buys a second pair (that would be farming windows, rule 18).
-    const due = S.score >= PORTAL_FIRST ? ((S.score - PORTAL_FIRST) / PORTAL_EVERY | 0) + 1 : 0;
+    const lead = leaderScore();
+    const due = lead >= PORTAL_FIRST ? ((lead - PORTAL_FIRST) / PORTAL_EVERY | 0) + 1 : 0;
     if (due > S.portalsUnlocked) S.portalsUnlocked = due;
     if (S.portal !== null) {
       // a used pair is finished but cannot vanish mid-body: portalBusy holds
@@ -562,52 +656,75 @@ export function createGame(cfg = {}) {
   }
 
   // ---- the step ----
-  function die(reason) {
-    S.alive = false;
-    S.deadReason = reason || 'self';
+  // The round's record is stamped once, when the last snake goes down.
+  function stampEnd() {
     S.log.end = S.quanta;
-    S.log.finalScore = S.score;
-    emit({ t: 'die', reason: S.deadReason });
+    S.log.finalScore = leaderScore();
+    if (players.length > 1) {
+      S.log.finalScores = players.map(p => p.score);
+      S.log.diedAt = players.map(p => p.diedAt);
+    }
   }
 
-  function step() {
-    if (S.dirQueue.length) S.dir = S.dirQueue.shift();
+  function die(p, reason) {
+    p.alive = false;
+    p.deadReason = reason || 'self';
+    p.diedAt = S.quanta;
+    if (anyAlive()) {
+      // the round goes on: the fallen snake leaves the board (snakes never
+      // block each other, so only spawns and ghosts ever noticed it), and the
+      // renderer gets the segments for whatever farewell it wants to draw
+      emit({ t: 'die', player: p.idx, reason: p.deadReason, segments: p.snake.map(c => ({ x: c.x, y: c.y })) });
+      p.snake.length = 0;
+      p.snakeSet.clear();
+      p.tailFrom = null;
+    } else {
+      stampEnd();
+      emit({ t: 'die', player: p.idx, reason: p.deadReason });
+    }
+  }
+
+  function stepPlayer(p) {
+    if (p.dirQueue.length) p.dir = p.dirQueue.shift();
     // A head standing in a window spends this step coming out of the far one:
     // still exactly one step, heading untouched, pace unchanged (rules 16/17).
     // Only a head that walked in is carried, never one a window just put down.
-    const win = (S.warpedIn || S.portal === null || S.portal.used) ? 0
-              : portalEndAt(S.snake[0].x, S.snake[0].y);
-    const nx = win === 1 ? S.portal.bx : win === 2 ? S.portal.ax : wrap(S.snake[0].x + S.dir.x);
-    const ny = win === 1 ? S.portal.by : win === 2 ? S.portal.ay : wrap(S.snake[0].y + S.dir.y);
+    const win = (p.warpedIn || S.portal === null || S.portal.used) ? 0
+              : portalEndAt(p.snake[0].x, p.snake[0].y);
+    const nx = win === 1 ? S.portal.bx : win === 2 ? S.portal.ax : wrap(p.snake[0].x + p.dir.x);
+    const ny = win === 1 ? S.portal.by : win === 2 ? S.portal.ay : wrap(p.snake[0].y + p.dir.y);
     const nk = K(nx, ny);
 
     // interior walls are lethal only once they're live
-    if (S.wallState === 'solid' && S.wallLookup.has(nk)) return die('wall');
+    if (S.wallState === 'solid' && S.wallLookup.has(nk)) return die(p, 'wall');
 
     // whether this tick grows decides the tail rule below, so settle it first
     const ate = nx === S.food.x && ny === S.food.y;
-    const grows = S.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
+    const grows = p.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
 
-    // self collision, O(1); the tail cell is exempt when it glides out this tick
-    const tail = S.snake[S.snake.length - 1];
-    if (S.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return die('self');
+    // SELF collision only, O(1): another snake's body is thin air (snakes
+    // race, they never fence). The tail cell is exempt when it glides out
+    // this tick.
+    const tail = p.snake[p.snake.length - 1];
+    if (p.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return die(p, 'self');
 
     // ghosts are NOT tested here: contact with a mover is decided by the
     // majority-cell rule in quantum() (rule 24), never by cell entry
 
     // move: pop the vacated tail first so the set stays exact, then add the head
-    S.headFrom.x = S.snake[0].x; S.headFrom.y = S.snake[0].y;
-    if (grows) S.tailFrom = null;
-    else { S.tailFrom = S.snake.pop(); S.snakeSet.delete(K(S.tailFrom.x, S.tailFrom.y)); }
-    S.snake.unshift({ x: nx, y: ny });
-    S.snakeSet.add(nk);
-    S.warpedIn = win !== 0;
+    p.headFrom.x = p.snake[0].x; p.headFrom.y = p.snake[0].y;
+    if (grows) p.tailFrom = null;
+    else { p.tailFrom = p.snake.pop(); p.snakeSet.delete(K(p.tailFrom.x, p.tailFrom.y)); }
+    p.snake.unshift({ x: nx, y: ny });
+    p.snakeSet.add(nk);
+    p.warpedIn = win !== 0;
     if (win) {
-      // one trip a pair, paid on surfacing, after every fatal test above
+      // one trip a pair, paid on surfacing, after every fatal test above;
+      // with several snakes racing, the first head through takes the prize
       const fromA = win === 1;
       S.portal.used = true;
-      S.score += PORTAL_BONUS;
-      emit({ t: 'hop', fromA,
+      p.score += PORTAL_BONUS;
+      emit({ t: 'hop', player: p.idx, fromA,
              fx: fromA ? S.portal.ax : S.portal.bx, fy: fromA ? S.portal.ay : S.portal.by,
              tx: nx, ty: ny });
     }
@@ -615,33 +732,33 @@ export function createGame(cfg = {}) {
     if (ate) {
       const bonus = S.food.bonus;
       if (bonus) {
-        S.score += 5; S.pendingGrowth += 5;
-        S.regularEaten = 0;          // bonus taken: restart the streak
+        p.score += 5; p.pendingGrowth += 5;
+        S.regularEaten = 0;          // bonus taken: restart the board's streak
       } else {
-        S.score += 1; S.pendingGrowth += 1;
+        p.score += 1; p.pendingGrowth += 1;
         S.regularEaten++;
       }
-      emit({ t: 'eat', bonus, x: nx, y: ny });
+      emit({ t: 'eat', player: p.idx, bonus, x: nx, y: ny });
       placeFood();
     }
-    if (grows) S.pendingGrowth--;
+    if (grows) p.pendingGrowth--;
 
     // TNT never kills: -5 points (may go negative), up to 5 segments off,
     // floored at START_LEN. Queued growth is cancelled so the shrink sticks.
     const hitBomb = S.bombs.findIndex(b => nx === b.x && ny === b.y);
     if (hitBomb !== -1) {
-      S.score -= 5;
-      S.pendingGrowth = 0;
+      p.score -= 5;
+      p.pendingGrowth = 0;
       const lost = [];
-      const target = Math.max(START_LEN, S.snake.length - 5);
-      while (S.snake.length > target) {
-        const t = S.snake.pop();
-        S.snakeSet.delete(K(t.x, t.y));
+      const target = Math.max(START_LEN, p.snake.length - 5);
+      while (p.snake.length > target) {
+        const t = p.snake.pop();
+        p.snakeSet.delete(K(t.x, t.y));
         lost.push(t);
       }
-      S.tailFrom = null;   // the old glide anchor is far from the new tail; snap
+      p.tailFrom = null;   // the old glide anchor is far from the new tail; snap
       S.bombs.splice(hitBomb, 1);
-      emit({ t: 'tnt', x: nx, y: ny, lost });
+      emit({ t: 'tnt', player: p.idx, x: nx, y: ny, lost });
       if (!S.bombs.length) {
         S.bombPhase = 'gap';
         S.bombNextAt = S.clockMs + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
@@ -663,34 +780,62 @@ export function createGame(cfg = {}) {
       if (S.food.bonus) S.regularEaten = 0;   // missed the bonus in time: lose the streak
       placeFood();
     }
-    // the alive guard stops the drain the moment a step dies: no zombie steps
-    while (S.alive && S.progMs >= S.tickMs) { S.progMs -= S.tickMs; step(); }
+    // every living snake steps in the same drain, in index order: one shared
+    // tickMs means they all cross cell boundaries together, and index order
+    // is the deterministic tie-break when two heads want the same food. The
+    // alive guard stops the drain the moment the LAST snake dies: no zombie
+    // steps.
+    while (anyAlive() && S.progMs >= S.tickMs) {
+      S.progMs -= S.tickMs;
+      for (const p of players) if (p.alive) stepPlayer(p);
+    }
     // ---- contact (rule 24) ----
-    // Every mover is exactly where it is drawn. The head's one cell is the
+    // Every mover is exactly where it is drawn. A head's one cell is the
     // cell it left until its glide passes half, then the cell it is entering;
     // a ghost's is ghostAt (render position rounded, hops snap at the same
     // half). Contact is those cells coinciding, tested every quantum, so a
     // ghost sliding majority-onto a head kills between snake steps and a
     // near-miss that never overlaps majorities is survivable. Two movers
     // exchanging cells inside one quantum crossed paths: that is contact too.
-    if (S.alive) {
+    // Snakes are tested against ghosts only: two heads sharing a cell is a
+    // race, not a wreck.
+    if (anyAlive()) {
       const half = S.progMs * 2 >= S.tickMs;
-      const hx = half ? S.snake[0].x : S.headFrom.x;
-      const hy = half ? S.snake[0].y : S.headFrom.y;
+      for (const p of players) {
+        p._m = p.alive;
+        if (p._m) {
+          p._mx = half ? p.snake[0].x : p.headFrom.x;
+          p._my = half ? p.snake[0].y : p.headFrom.y;
+        }
+      }
       for (const gh of S.ghosts) {
         const g = ghostAt(gh);
-        const met = g.x === hx && g.y === hy;
-        const crossed = g.x === S.headMajX && g.y === S.headMajY && gh.majX === hx && gh.majY === hy;
+        for (const p of players) {
+          if (!p.alive || !p._m) continue;
+          const met = g.x === p._mx && g.y === p._my;
+          const crossed = g.x === p.headMajX && g.y === p.headMajY && gh.majX === p._mx && gh.majY === p._my;
+          if (met || crossed) die(p, 'ghost');
+        }
         gh.majX = g.x; gh.majY = g.y;
-        if (met || crossed) { die('ghost'); break; }
       }
-      S.headMajX = hx; S.headMajY = hy;
+      for (const p of players) if (p._m) { p.headMajX = p._mx; p.headMajY = p._my; }
     }
     // ---- the whistle ----
     // A timed round ends at exactly durationMs, after everything else in the
     // quantum, so a point scored on the final tick counts. 'time' is an end,
-    // not a death: the shells show FULL TIME rather than a cause.
-    if (S.alive && S.durationMs && S.clockMs >= S.durationMs) die('time');
+    // not a death: the shells show FULL TIME rather than a cause. Every snake
+    // still up goes down together, bodies left where they stood.
+    if (S.durationMs && S.clockMs >= S.durationMs && anyAlive()) {
+      for (const p of players) {
+        if (!p.alive) continue;
+        p.alive = false;
+        p.deadReason = 'time';
+        p.diedAt = S.quanta;
+      }
+      stampEnd();
+      for (const p of players) if (p.diedAt === S.quanta && p.deadReason === 'time')
+        emit({ t: 'die', player: p.idx, reason: 'time' });
+    }
   }
 
   // ---- the public surface ----
@@ -698,33 +843,113 @@ export function createGame(cfg = {}) {
   // Queue turns instead of overwriting one slot, so two quick taps both land.
   // Reversals and repeats are filtered against the last queued/active
   // direction. Callers gate on their own round state (countdown buffering is
-  // the caller's choice); the engine only refuses input after death.
-  function setDir(x, y) {
-    if (!S.alive) return;
-    const ref = S.dirQueue.length ? S.dirQueue[S.dirQueue.length - 1] : S.dir;
+  // the caller's choice); the engine only refuses input after death. The
+  // third argument names the snake; the shells that know one snake never pass
+  // it.
+  function setDir(x, y, player = 0) {
+    const p = players[player];
+    if (!p || !p.alive) return;
+    const ref = p.dirQueue.length ? p.dirQueue[p.dirQueue.length - 1] : p.dir;
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
-    if (S.dirQueue.length < 3) {
-      S.dirQueue.push({ x, y });
-      S.log.inputs.push([S.quanta, x, y]);
+    if (p.dirQueue.length < 3) {
+      p.dirQueue.push({ x, y });
+      // a one-snake log keeps the classic triple shape; more snakes append
+      // the player index as a fourth column
+      S.log.inputs.push(players.length === 1 ? [S.quanta, x, y] : [S.quanta, x, y, player]);
     }
   }
 
   // a turn queued before a pause must not fire on resume
-  function clearQueue() { S.dirQueue.length = 0; }
+  function clearQueue() { for (const p of players) p.dirQueue.length = 0; }
 
   // Advance by real milliseconds. Whole quanta simulate; the remainder stays
   // in accMs for the renderers' interpolation. Clamp dt at the call site
   // (MAX_DT) so a woken tab never fast-forwards the round.
   function advance(dtMs) {
     S.accMs += dtMs;
-    while (S.alive && S.accMs >= SIM_DT) { S.accMs -= SIM_DT; quantum(); }
-    if (!S.alive) S.accMs = 0;
+    while (anyAlive() && S.accMs >= SIM_DT) { S.accMs -= SIM_DT; quantum(); }
+    if (!anyAlive()) S.accMs = 0;
   }
 
   // exact replay clock, for the validator: run whole quanta with no remainder
   function advanceQuanta(n) {
-    for (let i = 0; i < n && S.alive; i++) quantum();
+    for (let i = 0; i < n && anyAlive(); i++) quantum();
+  }
+
+  // ---- rollback (netcode) ----
+  // A full copy of the simulation at this instant: every snake, the shared
+  // world, the PRNG, and how much of the log existed. Restoring one rewinds
+  // the machine so late remote inputs can be applied and the quanta re-run;
+  // determinism does the rest. Allocation is fine here: snapshots happen on
+  // network cadence, never per frame. The events array is transient render
+  // fodder and deliberately not part of a snapshot.
+  function snapshot() {
+    return {
+      quanta: S.quanta, clockMs: S.clockMs, progMs: S.progMs, rng: rngA,
+      foodAge: S.foodAge, regularEaten: S.regularEaten,
+      food: S.food ? { x: S.food.x, y: S.food.y, bonus: S.food.bonus, kind: S.food.kind } : null,
+      wallState: S.wallState, wallPhaseEnd: S.wallPhaseEnd, walls: [...S.wallLookup],
+      bombs: S.bombs.map(b => ({ x: b.x, y: b.y })),
+      bombsUnlocked: S.bombsUnlocked, bombPhase: S.bombPhase,
+      bombNextAt: S.bombNextAt, bombExpireAt: S.bombExpireAt,
+      ghosts: S.ghosts.map(g => ({
+        x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
+        warped: g.warped, role: g.role, moveAt: g.moveAt, majX: g.majX, majY: g.majY,
+      })),
+      portal: S.portal ? { ...S.portal } : null,
+      portalsUnlocked: S.portalsUnlocked, portalsOpened: S.portalsOpened,
+      portalRetryAt: S.portalRetryAt, portalExpireAt: S.portalExpireAt, portalOpenedAt: S.portalOpenedAt,
+      players: players.map(p => ({
+        snake: p.snake.map(c => ({ x: c.x, y: c.y })),
+        tailFrom: p.tailFrom ? { x: p.tailFrom.x, y: p.tailFrom.y } : null,
+        headFrom: { x: p.headFrom.x, y: p.headFrom.y },
+        headMajX: p.headMajX, headMajY: p.headMajY,
+        dir: { x: p.dir.x, y: p.dir.y },
+        dirQueue: p.dirQueue.map(d => ({ x: d.x, y: d.y })),
+        score: p.score, pendingGrowth: p.pendingGrowth, warpedIn: p.warpedIn,
+        alive: p.alive, deadReason: p.deadReason, diedAt: p.diedAt,
+      })),
+      logLen: S.log.inputs.length, logEnd: S.log.end, logFinal: S.log.finalScore,
+    };
+  }
+
+  function restore(s) {
+    S.quanta = s.quanta; S.clockMs = s.clockMs; S.progMs = s.progMs; rngA = s.rng | 0;
+    S.accMs = 0;
+    S.foodAge = s.foodAge; S.regularEaten = s.regularEaten;
+    S.food = s.food ? { x: s.food.x, y: s.food.y, bonus: s.food.bonus, kind: s.food.kind } : null;
+    S.wallState = s.wallState; S.wallPhaseEnd = s.wallPhaseEnd;
+    S.wallLookup = new Set(s.walls);
+    S.wallCells = s.walls.map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
+    S.bombs = s.bombs.map(b => ({ x: b.x, y: b.y }));
+    S.bombsUnlocked = s.bombsUnlocked; S.bombPhase = s.bombPhase;
+    S.bombNextAt = s.bombNextAt; S.bombExpireAt = s.bombExpireAt;
+    S.ghosts = s.ghosts.map(g => ({
+      x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
+      warped: g.warped, role: g.role, moveAt: g.moveAt, majX: g.majX, majY: g.majY,
+    }));
+    S.portal = s.portal ? { ...s.portal } : null;
+    S.portalsUnlocked = s.portalsUnlocked; S.portalsOpened = s.portalsOpened;
+    S.portalRetryAt = s.portalRetryAt; S.portalExpireAt = s.portalExpireAt; S.portalOpenedAt = s.portalOpenedAt;
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i], q = s.players[i];
+      p.snake.length = 0;
+      p.snakeSet.clear();
+      for (const c of q.snake) { p.snake.push({ x: c.x, y: c.y }); p.snakeSet.add(K(c.x, c.y)); }
+      p.tailFrom = q.tailFrom ? { x: q.tailFrom.x, y: q.tailFrom.y } : null;
+      p.headFrom.x = q.headFrom.x; p.headFrom.y = q.headFrom.y;
+      p.headMajX = q.headMajX; p.headMajY = q.headMajY;
+      p.dir = { x: q.dir.x, y: q.dir.y };
+      p.dirQueue = q.dirQueue.map(d => ({ x: d.x, y: d.y }));
+      p.score = q.score; p.pendingGrowth = q.pendingGrowth; p.warpedIn = q.warpedIn;
+      p.alive = q.alive; p.deadReason = q.deadReason; p.diedAt = q.diedAt;
+    }
+    // the log is append-only: rewinding forgets the inputs recorded after the
+    // snapshot, and the resim re-records them at the same quanta
+    S.log.inputs.length = s.logLen;
+    S.log.end = s.logEnd; S.log.finalScore = s.logFinal;
+    S.events.length = 0;
   }
 
   // ---- render helpers (pure reads; safe from any thread) ----
@@ -741,11 +966,10 @@ export function createGame(cfg = {}) {
   }
 
   // ---- boot ----
-  for (let i = 0; i < START_LEN; i++) { S.snake.push({ x: 8 - i, y: 10 }); S.snakeSet.add(K(8 - i, 10)); }
   S.wallPhaseEnd = rand(4000, 9000);
   placeFood();
   // Survival: the whole hazard ladder is present at the kickoff whistle, and
-  // the opening spawns keep SURVIVAL_CLEAR of walking room from the head.
+  // the opening spawns keep SURVIVAL_CLEAR of walking room from every head.
   // bombsUnlocked doubles as the wave size and is monotonic (rule 22), so
   // seeding it here floors every future wave at startBombs with no new
   // machinery; the ghost ladder never spawns past what already exists.
@@ -759,10 +983,12 @@ export function createGame(cfg = {}) {
 
   return Object.assign(S, {
     setDir, clearQueue, advance, advanceQuanta,
+    snapshot, restore,
     renderProg, renderNow, drainEvents,
     ghostAt, portalEndAt, cellOccupied, portalBusy,
     // exposed for tests and the validator; not for renderers
-    _step: step, _updateWalls: updateWalls, _updateBombs: updateBombs,
+    _step: () => stepPlayer(players[0]), _stepPlayer: i => stepPlayer(players[i]),
+    _updateWalls: updateWalls, _updateBombs: updateBombs,
     _updateGhosts: updateGhosts, _updatePortals: updatePortals,
     _moveGhost: moveGhost, _ghostTarget: ghostTarget, _ghostDist: ghostDist, _spawnPortal: spawnPortal, _closePortal: closePortal,
     _placeFood: placeFood, _spawnCell: spawnCell,
@@ -771,18 +997,21 @@ export function createGame(cfg = {}) {
 
 // Re-run a finished round from its log. Returns the game in its final state;
 // the validator compares game.score against the submitted score. The inputs
-// are (quantum, x, y) triples recorded by setDir, so the reproduction is
-// exact by construction.
+// are (quantum, x, y) triples recorded by setDir, with a player index as the
+// fourth column once a board holds more than one snake, so the reproduction
+// is exact by construction. v4 logs (the single-snake era) replay under the
+// same rules: one snake on a board behaves exactly as it always did.
 export function replay(log) {
-  if (!log || log.v !== ENGINE_VERSION) throw new Error('unsupported log version');
+  if (!log || (log.v !== 4 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,
+    players: log.players ?? 1,
   });
   const inputs = log.inputs;
   let i = 0;
   for (let q = 0; q < log.end && game.alive; q++) {
-    while (i < inputs.length && inputs[i][0] === q) { game.setDir(inputs[i][1], inputs[i][2]); i++; }
+    while (i < inputs.length && inputs[i][0] === q) { game.setDir(inputs[i][1], inputs[i][2], inputs[i][3] ?? 0); i++; }
     game.advanceQuanta(1);
   }
   return game;

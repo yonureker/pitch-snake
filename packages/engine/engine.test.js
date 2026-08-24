@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import {
   createGame, replay, ghostRenderPos, ENGINE_VERSION, MODES,
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
-  TNT_SCORES, GHOST_SCORES, GHOST_MS,
+  TNT_SCORES, GHOST_SCORES, GHOST_MS, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrapDist,
 } from './engine.js';
@@ -728,4 +728,227 @@ test('ghosts route through portals on purpose, and never through spent ones', ()
     if (gh.x === h.portal.bx && gh.y === h.portal.by) hopped = true;
   }
   assert.ok(hopped, 'the chaser walked into the window and surfaced beside the head');
+});
+
+// ------------------------------------------------------------ golden fixtures
+// Rounds recorded by the v4 (single-snake) engine, committed as JSON. The
+// multi-snake refactor must replay them to the identical final state: this is
+// the proof that one snake on the new machine IS the old machine.
+test('v4 golden rounds replay bit-identically on the multi-snake engine', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
+  const names = Object.keys(fx);
+  assert.deepEqual(names, ['classic', 'survival', 'speedrun'], 'all three modes are pinned');
+  for (const name of names) {
+    const f = fx[name];
+    assert.equal(f.log.v, 4, `${name}: the fixture really is a v4 log`);
+    const r = replay(f.log);
+    assert.equal(r.score, f.score, `${name}: same final score`);
+    assert.equal(r.deadReason, f.deadReason, `${name}: same end`);
+    assert.equal(r.quanta, f.quanta, `${name}: same length`);
+    assert.deepEqual(r.snake, f.snake, `${name}: same final body`);
+  }
+});
+
+// ------------------------------------------------------------- multi-snake
+function setPlayerSnake(g, i, cells, dx, dy) {
+  const p = g.players[i];
+  p.snake.length = 0;
+  p.snakeSet.clear();
+  for (const [x, y] of cells) { p.snake.push({ x, y }); p.snakeSet.add(K(x, y)); }
+  p.tailFrom = null;
+  p.dirQueue.length = 0;
+  p.pendingGrowth = 0;
+  p.dir = { x: dx, y: dy };
+  p.headFrom.x = cells[0][0]; p.headFrom.y = cells[0][1];
+  p.headMajX = cells[0][0]; p.headMajY = cells[0][1];
+}
+
+test('multi-snake: lanes, validation, and the solo row unchanged', () => {
+  assert.equal(MAX_PLAYERS, 5);
+  const g = createGame({ seed: 5, players: 5 });
+  assert.equal(g.players.length, 5);
+  assert.deepEqual(g.players.map(p => p.snake[0].y), [2, 6, 10, 14, 18], 'five evenly spaced lanes');
+  for (const p of g.players) {
+    assert.equal(p.snake.length, START_LEN);
+    assert.equal(p.snake[0].x, 8, 'everyone starts at the classic column');
+    assert.deepEqual(p.dir, { x: 1, y: 0 });
+  }
+  assert.equal(createGame({ seed: 5 }).players[0].snake[0].y, 10, 'one snake starts on the classic row');
+  assert.throws(() => createGame({ seed: 1, players: 0 }), /players out of range/);
+  assert.throws(() => createGame({ seed: 1, players: 6 }), /players out of range/);
+  assert.throws(() => createGame({ seed: 1, players: 2.5 }), /players out of range/);
+});
+
+test('a one-snake log keeps the classic triple shape', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[8, 10], [7, 10], [6, 10]], 1, 0);
+  g.setDir(0, 1);
+  assert.deepEqual(g.log.inputs[0], [0, 0, 1], 'no player column on a solo log');
+  assert.equal(g.log.players, 1);
+});
+
+test('multi-snake: same seed and inputs give the identical round, and the log replays it', () => {
+  const script = [[40, 0, -1, 0], [45, 0, 1, 1], [90, -1, 0, 2], [140, 0, 1, 3],
+                  [200, 1, 0, 4], [400, 0, -1, 2], [900, -1, 0, 0]];
+  const run = () => {
+    const g = createGame({ seed: 4242, tickMs: 100, players: 5, ...MODES.survival });
+    let s = 0;
+    for (let q = 0; q < 120000 && g.alive; q++) {
+      while (s < script.length && script[s][0] === q) { g.setDir(script[s][1], script[s][2], script[s][3]); s++; }
+      g.advanceQuanta(1);
+    }
+    return g;
+  };
+  const a = run(), b = run();
+  assert.equal(a.alive, false, 'five unattended snakes among five hunters all fall');
+  assert.deepEqual(a.players.map(p => p.score), b.players.map(p => p.score));
+  assert.deepEqual(a.players.map(p => p.diedAt), b.players.map(p => p.diedAt));
+  assert.equal(a.quanta, b.quanta);
+  assert.equal(a.log.players, 5);
+  assert.ok(a.log.inputs.every(e => e.length === 4), 'a multi-snake log carries the player column');
+  assert.deepEqual(a.log.finalScores, a.players.map(p => p.score), 'the record carries every score');
+  assert.deepEqual(a.log.diedAt, a.players.map(p => p.diedAt), 'and every death time');
+  const r = replay(a.log);
+  assert.deepEqual(r.players.map(p => p.score), a.players.map(p => p.score));
+  assert.deepEqual(r.players.map(p => p.deadReason), a.players.map(p => p.deadReason));
+  assert.equal(r.quanta, a.quanta);
+});
+
+test('multi-snake: one food, first index wins the same-quantum race', () => {
+  const g = quietGame({ players: 2 });
+  g.food = { x: 6, y: 5, bonus: false, kind: 0 };
+  g.foodAge = 0;
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[7, 5], [8, 5], [9, 5]], -1, 0);
+  g._stepPlayer(0); g._stepPlayer(1);
+  assert.equal(g.players[0].score, 1, 'the lower index takes the contested bite');
+  assert.equal(g.players[1].score, 0, 'the other head goes hungry');
+  assert.ok(!(g.food.x === 6 && g.food.y === 5), 'the food moved the instant it was eaten');
+  assert.ok(g.players[0].alive && g.players[1].alive, 'two heads on one cell is a race, not a wreck');
+});
+
+test('multi-snake: snakes pass through each other; ghosts still kill their own', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[7, 5], [8, 5], [9, 5]], -1, 0);
+  for (let n = 0; n < 6; n++) { g._stepPlayer(0); g._stepPlayer(1); }
+  assert.ok(g.players[0].alive && g.players[1].alive, 'straight through each other, both alive');
+
+  const h = quietGame({ players: 2, tickMs: 200 });
+  foodFar(h);
+  setPlayerSnake(h, 0, [[2, 15], [1, 15], [0, 15]], 1, 0);
+  setPlayerSnake(h, 1, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  h.ghosts.push({ x: 5, y: 5, px: 5, py: 4, dir: { x: 0, y: 1 }, warped: false, role: 0,
+                  moveAt: h.clockMs + 500 });
+  h.advanceQuanta(25);
+  assert.equal(h.players[1].alive, false, 'the ghost took the snake it was on');
+  assert.equal(h.players[1].deadReason, 'ghost');
+  assert.equal(h.players[0].alive, true, 'and nobody else');
+  assert.equal(h.alive, true, 'the round goes on without the fallen');
+  assert.equal(h.players[1].snake.length, 0, 'the fallen snake left the board');
+  assert.ok(!h.cellOccupied(4, 5) || h.players[0].snakeSet.has(K(4, 5)),
+    'its cells are free ground again');
+});
+
+test('multi-snake: the hazard ladder follows the leader, not you', () => {
+  const g = quietGame({ players: 3 });
+  foodFar(g);
+  g.players[2].score = 15;                       // the leader is another snake
+  g.clockMs = 1000; g.bombs = []; g.bombPhase = 'gap'; g.bombNextAt = 0;
+  g._updateBombs();
+  assert.equal(g.bombs.length, 1, "TNT arrives on the leader's 15, player 0 still at zero");
+  g.players[1].score = 20;
+  for (let i = 0; i < 8; i++) g._updateGhosts();
+  assert.equal(g.ghosts.length, 2, 'two ghosts at a leader score of 20');
+  g.players[1].score = 25;                       // a new leader crosses the next mark
+  g._updateBombs();
+  assert.equal(g.bombsUnlocked, 2, 'the wave size follows whoever is ahead');
+  g.players[1].score = 4;                        // a TNT knocked the leader down
+  g.players[2].score = 3;
+  g._updateBombs();
+  assert.equal(g.bombsUnlocked, 2, 'and nothing de-escalates');
+});
+
+test('multi-snake: the whistle drops everyone at once, bodies in place', () => {
+  const g = quietGame({ players: 3, tickMs: 100, durationMs: 1000 });
+  foodFar(g);
+  g.advanceQuanta(100);
+  assert.equal(g.alive, false, 'the whistle ends the round for the room');
+  for (const p of g.players) {
+    assert.equal(p.deadReason, 'time');
+    assert.equal(p.diedAt, 100);
+    assert.equal(p.snake.length, START_LEN, 'a whistle leaves the bodies on the field');
+  }
+  assert.deepEqual(g.log.diedAt, [100, 100, 100]);
+});
+
+test('multi-snake: a ghost hunts the nearest head, and inherits the survivors', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[2, 2], [1, 2], [0, 2]], 1, 0);
+  setPlayerSnake(g, 1, [[15, 15], [14, 15], [13, 15]], 1, 0);
+  const mk = (role, x, y) => ({ x, y, px: x, py: y, dir: { x: 0, y: 0 }, warped: false, role, moveAt: 0 });
+  assert.deepEqual(g._ghostTarget(mk(0, 14, 14)), { x: 15, y: 15 }, 'the chaser hunts the nearer head');
+  assert.deepEqual(g._ghostTarget(mk(0, 3, 3)), { x: 2, y: 2 }, 'each ghost picks its own victim');
+  g.players[1].alive = false; g.players[1].snake.length = 0; g.players[1].snakeSet.clear();
+  assert.deepEqual(g._ghostTarget(mk(0, 14, 14)), { x: 2, y: 2 }, 'the fallen are no longer hunted');
+});
+
+test('multi-snake: one trip a pair, even with two heads committed', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  g.portal = PAIR();
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);      // committed in the blue end
+  setPlayerSnake(g, 1, [[15, 15], [15, 16], [15, 17]], 0, -1); // committed in the violet end
+  g._stepPlayer(0); g._stepPlayer(1);
+  assert.ok(cellEq(g.players[0].snake[0], 15, 15), 'the first index takes the trip');
+  assert.equal(g.players[0].score, PORTAL_BONUS, 'and the prize');
+  assert.ok(g.portal.used, 'the pair is spent');
+  assert.ok(cellEq(g.players[1].snake[0], 15, 14), 'the other head just walks on');
+  assert.equal(g.players[1].score, 0);
+  assert.ok(g.players[0].alive && g.players[1].alive, 'sharing the landing cell is fine: snakes pass through');
+});
+
+// ------------------------------------------------------------- rollback
+test('snapshot/restore: a rollback resim reproduces the straight run exactly', () => {
+  const mk = () => createGame({ seed: 777, tickMs: 100, players: 2, ...MODES.survival });
+  const inputs = [[120, 0, -1, 0], [180, -1, 0, 1], [260, 0, 1, 0], [400, 1, 0, 1]];
+  const drive = (g, list, from, to) => {
+    for (let q = from; q < to && g.alive; q++) {
+      for (const e of list) if (e[0] === q) g.setDir(e[1], e[2], e[3]);
+      g.advanceQuanta(1);
+    }
+  };
+  // straight run: every input known on time
+  const a = mk();
+  drive(a, inputs, 0, 600);
+  // laggy run: the quantum-260 input arrives late; roll back and repair
+  const late = inputs.filter(e => e[0] !== 260);
+  const b = mk();
+  drive(b, late, 0, 200);
+  const snap = b.snapshot();
+  drive(b, late, 200, 320);                 // sailed past 260 without it
+  b.restore(snap);
+  drive(b, inputs, 200, 600);               // resim with the full record
+  assert.deepEqual(b.snapshot(), a.snapshot(), 'the repaired timeline IS the straight one, PRNG and log included');
+});
+
+test('snapshot/restore round-trips a solo game too', () => {
+  const g = createGame({ seed: 2024 });
+  g.advanceQuanta(500);
+  const snap = g.snapshot();
+  const before = JSON.stringify(snap);
+  g.setDir(0, 1);
+  g.advanceQuanta(700);
+  g.restore(JSON.parse(before));
+  assert.equal(JSON.stringify(g.snapshot()), before, 'restore reinstates the exact machine');
+  g.setDir(0, 1);
+  g.advanceQuanta(700);
+  const h = createGame({ seed: 2024 });
+  h.advanceQuanta(500);
+  h.setDir(0, 1);
+  h.advanceQuanta(700);
+  assert.deepEqual(g.snapshot(), h.snapshot(), 'and the resimulated future matches a straight run');
 });
