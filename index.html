@@ -483,7 +483,17 @@
   /* the name field is the gate to a versus room, so it gets the full width */
   .entry.wide { width: min(300px, 84%); }
   .entry.wide input { width: 100%; }
-  .vs-setup { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .vs-setup { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  /* three ways into a game, each one button, none of them hidden behind a
+     choice you have to make first */
+  .vs-actions {
+    display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+    width: min(300px, 84%);
+  }
+  .vs-actions .btn { width: 100%; padding: 12px 16px; font-size: 17px; }
+  .vs-actions .entry { gap: 8px; }
+  .vs-actions .entry input { flex: 1 1 auto; min-width: 0; width: auto; }
+  .vs-actions .entry .btn { width: auto; flex: 0 0 auto; padding: 12px 22px; }
   .entry input {
     width: 130px; padding: 10px 12px; border-radius: 6px;
     border: 2px solid var(--gold);
@@ -671,13 +681,13 @@
             <div class="entry wide">
               <input id="vsName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
             </div>
-            <div class="stack-choice" id="vsKindRow">
-              <button data-kind="quick">QUICK MATCH</button>
-              <button data-kind="private">PRIVATE</button>
-            </div>
-            <div class="entry" id="vsCodeRow" hidden>
-              <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
-              <button class="btn small ghostbtn" id="vsCreateBtn">CREATE</button>
+            <div class="vs-actions">
+              <button class="btn" id="vsQuickBtn">QUICK MATCH</button>
+              <button class="btn modes" id="vsCreateBtn">CREATE ROOM</button>
+              <div class="entry" id="vsCodeRow">
+                <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+                <button class="btn small" id="vsJoinBtn">JOIN</button>
+              </div>
             </div>
           </div>
           <div class="tourney" id="vsRoom" hidden>
@@ -756,9 +766,6 @@
           </div>
           <div class="btn-row" id="vsFooter" hidden>
             <button class="btn modes" id="vsBackBtn">BACK</button>
-            <button class="btn stacked" id="vsGoBtn">
-              <span>START</span><span class="start-sub" id="vsGoSub">QUICK MATCH</span>
-            </button>
           </div>
         </div>
       </div>
@@ -2191,10 +2198,9 @@
   const mpHud = document.getElementById('mpHud');
   const vsPanel = document.getElementById('vsPanel');
   const vsSetup = document.getElementById('vsSetup');
-  const vsKindRow = document.getElementById('vsKindRow');
   const vsFooter = document.getElementById('vsFooter');
-  const vsGoBtn = document.getElementById('vsGoBtn');
-  const vsGoSub = document.getElementById('vsGoSub');
+  const vsQuickBtn = document.getElementById('vsQuickBtn');
+  const vsJoinBtn = document.getElementById('vsJoinBtn');
   const vsCodeRow = document.getElementById('vsCodeRow');
   const vsRoom = document.getElementById('vsRoom');
   const vsRoomCode = document.getElementById('vsRoomCode');
@@ -2212,13 +2218,6 @@
   let vsClient = null;    // one Realtime socket, reused across rooms
   let vs = null;          // the current room, or null
   let vsBusy = false;
-  // how the next room is found: dropped in with strangers, or a code among
-  // friends. The choice picks what the one primary button does.
-  let vsKind = 'quick';
-  try {
-    const k = localStorage.getItem('snakeVsKind');
-    if (k === 'quick' || k === 'private') vsKind = k;
-  } catch (e) {}
 
   try { vsNameInput.value = localStorage.getItem('snakeVsName') || ''; } catch (e) {}
 
@@ -2320,7 +2319,7 @@
     if (vsBusy || vs) return;
     if (!sbOn()) { vsSetNote('Versus needs the online service.'); return; }
     vsBusy = true;
-    vsGoBtn.disabled = vsCreateBtn.disabled = true;
+    vsQuickBtn.disabled = vsCreateBtn.disabled = vsJoinBtn.disabled = true;
     vsSetNote(host ? 'Opening the room…' : 'Joining…', true);
     const name = vsCleanName(vsNameInput.value);
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
@@ -2400,7 +2399,7 @@
       vsRefreshPanel();
     } finally {
       vsBusy = false;
-      vsGoBtn.disabled = vsCreateBtn.disabled = false;
+      vsQuickBtn.disabled = vsCreateBtn.disabled = vsJoinBtn.disabled = false;
     }
   }
 
@@ -2706,23 +2705,14 @@
     // about screens the panel itself never sees
     vsFooter.hidden = vsPanel.hidden || inRoom;
     if (!inRoom) {
-      for (const b of vsKindRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.kind === vsKind);
-      const priv = vsKind === 'private';
-      vsCodeRow.hidden = !priv;
+      // three doors, all open at once: play with anyone, open a room, or
+      // walk into a friend's. A name is the only thing asked for first.
       const named = !!vsTypedName();
-      const code = vsTypedCode();
-      vsGoSub.textContent = priv ? 'PRIVATE' : 'QUICK MATCH';
-      vsGoBtn.disabled = vsBusy || !named || (priv && code.length !== 5);
+      vsQuickBtn.disabled = vsBusy || !named;
       vsCreateBtn.disabled = vsBusy || !named;
+      vsJoinBtn.disabled = vsBusy || !named || vsTypedCode().length !== 5;
       // while a join is in flight the note belongs to the join
-      if (!vsBusy) {
-        vsSetNote(
-          !named ? 'Pick a name to play multiplayer.'
-          : priv && code.length !== 5 ? 'Type a code to join, or CREATE a room.'
-          : '',
-          true
-        );
-      }
+      if (!vsBusy) vsSetNote(named ? '' : 'Pick a name to play multiplayer.', true);
       return;
     }
     const hosting = vsHostNow();
@@ -2770,38 +2760,31 @@
     void vsEnter(code || vsMakeCode(), true);
   });
 
-  // the one primary action: drop me anywhere, or take me to that code
-  vsGoBtn.addEventListener('click', async () => {
+  // play with whoever is waiting
+  vsQuickBtn.addEventListener('click', async () => {
     if (vs || vsBusy || !vsTypedName()) return;
-    if (vsKind === 'private') {
-      const code = vsTypedCode();
-      if (code.length !== 5) return;
-      vsCodeInput.value = '';
-      void vsEnter(code, false);
-      return;
-    }
     vsSetNote('Looking for a room…', true);
     try {
       const rows = await sbRpc('pitch_snake_room_quickmatch', {});
       const r = Array.isArray(rows) ? rows[0] : null;
       if (r && typeof r.code === 'string') { void vsEnter(r.code, !!r.created); return; }
     } catch (e) {}
-    vsSetNote('Quick match needs the rooms service. Choose PRIVATE and CREATE a room instead.');
+    vsSetNote('Quick match needs the rooms service. CREATE a room and share its code instead.');
   });
 
-  vsKindRow.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b || vs) return;
-    vsKind = b.dataset.kind;
-    try { localStorage.setItem('snakeVsKind', vsKind); } catch (err) {}
-    vsRefreshPanel();
+  // walk into a friend's room
+  vsJoinBtn.addEventListener('click', () => {
+    if (vs || vsBusy || !vsTypedName()) return;
+    const code = vsTypedCode();
+    if (code.length !== 5) return;
+    vsCodeInput.value = '';
+    void vsEnter(code, false);
   });
-  // the primary follows what is typed, so it can never promise what it
-  // cannot do
+
+  // the buttons follow what is typed, so none can promise what it cannot do
   vsNameInput.addEventListener('input', vsRefreshPanel);
   vsCodeInput.addEventListener('input', vsRefreshPanel);
-  vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsGoBtn.click(); } });
-  vsNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsGoBtn.click(); } });
+  vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsJoinBtn.click(); } });
   vsReadyBtn.addEventListener('click', vsToggleReady);
   vsStartBtn.addEventListener('click', () => { void vsStart(); });
   vsLeaveBtn.addEventListener('click', vsLeave);
