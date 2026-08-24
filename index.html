@@ -104,18 +104,28 @@
     align-items: stretch; width: min(290px, 84%);
     flex: none;
   }
+  /* Each mode carries its own colour, so the list reads as five things
+     rather than one long gold ribbon. The accent rides a custom property,
+     which lets the row and its START button agree without duplicating it. */
   .stack-choice button {
     font-family: 'Anton', sans-serif; font-weight: 400;
     letter-spacing: 2px; font-size: 16px; text-transform: uppercase;
     padding: 7px 18px; border-radius: 4px; cursor: pointer;
-    background: transparent; color: var(--gold-bright);
-    border: 2px solid var(--gold);
+    background: transparent; color: var(--accent, var(--gold-bright));
+    border: 2px solid var(--accent, var(--gold));
     transition: background 0.15s ease, color 0.15s ease;
   }
   .stack-choice button.active {
-    background: var(--gold); border-color: var(--gold); color: #211e1a;
+    background: var(--accent, var(--gold));
+    border-color: var(--accent, var(--gold));
+    color: #211e1a;
   }
   .stack-choice button:disabled { opacity: 0.45; cursor: default; }
+  #modeRow button[data-mode="classic"]  { --accent: #c9a961; }
+  #modeRow button[data-mode="speedrun"] { --accent: #4fc3d9; }
+  #modeRow button[data-mode="survival"] { --accent: #e2803a; }
+  #modeRow button[data-mode="versus"]   { --accent: #7dbf5c; }
+  #modeRow button[data-mode="tourney"]  { --accent: #a878d8; }
 
   /* the tournament panel's chips stay chips */
   .t-chips button {
@@ -146,13 +156,14 @@
   .btn.modes { box-shadow: 0 5px 0 var(--gold-deep); }
   .btn.modes:hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--gold-deep); }
   .btn.modes:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--gold-deep); }
-  /* a step that opens a setup screen, never a whistle: gold, not red */
+  /* a step that opens a setup screen, never a whistle: it wears the colour
+     of the mode it is about to configure, never the red that means play */
   .btn.configure {
-    background: var(--gold); color: #211e1a; border: none;
-    box-shadow: 0 5px 0 var(--gold-deep);
+    background: var(--go-fill, var(--gold)); color: #211e1a; border: none;
+    box-shadow: 0 5px 0 var(--go-deep, var(--gold-deep));
   }
-  .btn.configure:hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--gold-deep); }
-  .btn.configure:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--gold-deep); }
+  .btn.configure:hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--go-deep, var(--gold-deep)); }
+  .btn.configure:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--go-deep, var(--gold-deep)); }
   /* a primary that names its mode underneath, like START has always done */
   .btn.stacked { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   /* wrap rather than clip: a long pair of labels on a narrow phone stacks */
@@ -759,10 +770,10 @@
             <button class="btn modes" id="modesBtn">MODES</button>
           </div>
           <div class="btn-row" id="modeFooter" hidden>
-            <button class="btn modes" id="modeBackBtn">BACK</button>
             <button class="btn stacked" id="modeGoBtn">
               <span id="modeGoMain">START</span><span class="start-sub" id="modeGoSub">CLASSIC</span>
             </button>
+            <button class="btn modes" id="modeBackBtn">BACK</button>
           </div>
           <div class="btn-row" id="vsFooter" hidden>
             <button class="btn modes" id="vsBackBtn">BACK</button>
@@ -884,6 +895,11 @@
   // what the chooser calls each entry, and what each one is for. A mode is
   // picked and read about first; nothing starts until the player says so.
   const MODE_LABELS = { ...RULE_LABELS, tourney: 'TOURNAMENTS' };
+  // the colour each mode answers to, and the ledge its CONFIGURE stands on
+  const MODE_ACCENT = {
+    versus: ['#7dbf5c', '#4e7d38'],
+    tourney: ['#a878d8', '#6d4a90'],
+  };
   const MODE_DESC = {
     classic: 'No time limit. Beat your best, take a top ten spot, brag about your snake skills.',
     speedrun: 'One minute on the clock. Do not let the snake skip her meals.',
@@ -2000,6 +2016,11 @@
     modeGoMain.textContent = step ? 'CONFIGURE' : 'START';
     modeGoSub.textContent = MODE_LABELS[mode] || '';
     modeGoBtn.classList.toggle('configure', step);
+    const accent = MODE_ACCENT[mode];
+    if (step && accent) {
+      modeGoBtn.style.setProperty('--go-fill', accent[0]);
+      modeGoBtn.style.setProperty('--go-deep', accent[1]);
+    }
     tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
     vsPanel.hidden = !(modesOpen && tScreen && mode === 'versus');
     vsRefreshPanel();      // also the one place the pinned versus footer hides
