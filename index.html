@@ -505,6 +505,25 @@
   .vs-actions .entry { gap: 8px; }
   .vs-actions .entry input { flex: 1 1 auto; min-width: 0; width: auto; }
   .vs-actions .entry .btn { width: auto; flex: 0 0 auto; padding: 12px 22px; }
+  /* opening a room belongs to multiplayer, so it wears multiplayer's green */
+  #vsCreateBtn { --go-fill: #7dbf5c; --go-deep: #4e7d38; }
+  /* one line saying what the door above it does */
+  .vs-hint {
+    margin: -3px 0 4px; font-size: 11.5px; line-height: 1.3;
+    color: #9a927f; font-weight: 500; letter-spacing: 0.2px;
+  }
+  /* the name, asked once and then just stated */
+  .overlay p.vs-who {
+    margin: 0; font-size: 11.5px; letter-spacing: 1.5px; font-weight: 700;
+    color: #9a927f; text-transform: uppercase; max-width: none;
+  }
+  .vs-who b { color: var(--gold-bright); letter-spacing: 2px; }
+  .vs-who button {
+    margin-left: 6px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    background: transparent; border: 1.5px solid rgba(244,236,216,0.3);
+    color: #d8d0bd; font-family: 'Barlow', sans-serif;
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+  }
   .entry input {
     width: 130px; padding: 10px 12px; border-radius: 6px;
     border: 2px solid var(--gold);
@@ -678,6 +697,7 @@
           <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
           <p id="overlayText">Eat to grow. Survive the pitch.</p>
           <p class="mode-desc" id="modeDesc" hidden></p>
+          <p class="vs-who" id="vsWho" hidden>PLAYING AS <b id="vsWhoName"></b> <button id="vsChangeBtn">CHANGE</button></p>
         </div>
         <div class="ov-body">
         <div class="mode-row stack-choice" id="modeRow">
@@ -689,16 +709,17 @@
         </div>
         <div class="tourney" id="vsPanel" hidden>
           <div class="vs-setup" id="vsSetup">
-            <div class="entry wide">
-              <input id="vsName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
+            <div class="entry wide" id="vsNameRow">
+              <input id="vsName" maxlength="5" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
             </div>
             <div class="vs-actions">
               <button class="btn" id="vsQuickBtn">QUICK MATCH</button>
-              <button class="btn modes" id="vsCreateBtn">CREATE ROOM</button>
+              <p class="vs-hint">Play whoever is waiting.</p>
               <div class="entry" id="vsCodeRow">
                 <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
                 <button class="btn small" id="vsJoinBtn">JOIN</button>
               </div>
+              <p class="vs-hint">Or join a friend with their room code.</p>
             </div>
           </div>
           <div class="tourney" id="vsRoom" hidden>
@@ -776,6 +797,7 @@
             <button class="btn modes" id="modeBackBtn">BACK</button>
           </div>
           <div class="btn-row" id="vsFooter" hidden>
+            <button class="btn configure" id="vsCreateBtn">CREATE ROOM</button>
             <button class="btn modes" id="vsBackBtn">BACK</button>
           </div>
         </div>
@@ -2232,6 +2254,10 @@
   const vsLeaveBtn = document.getElementById('vsLeaveBtn');
   const vsBackBtn = document.getElementById('vsBackBtn');
   const vsNameInput = document.getElementById('vsName');
+  const vsNameRow = document.getElementById('vsNameRow');
+  const vsWho = document.getElementById('vsWho');
+  const vsWhoName = document.getElementById('vsWhoName');
+  const vsChangeBtn = document.getElementById('vsChangeBtn');
   const vsCodeInput = document.getElementById('vsCode');
   const vsCreateBtn = document.getElementById('vsCreateBtn');
   const vsNote = document.getElementById('vsNote');
@@ -2239,6 +2265,11 @@
   let vsClient = null;    // one Realtime socket, reused across rooms
   let vs = null;          // the current room, or null
   let vsBusy = false;
+  // The name is asked once, on the first visit, and after that it is simply
+  // stated under the title with a way to change it. Editing means the field
+  // is out; otherwise the line speaks for it.
+  let vsEditingName = false;
+  try { vsEditingName = !localStorage.getItem('snakeVsName'); } catch (e) { vsEditingName = true; }
 
   try { vsNameInput.value = localStorage.getItem('snakeVsName') || ''; } catch (e) {}
 
@@ -2343,6 +2374,7 @@
     vsQuickBtn.disabled = vsCreateBtn.disabled = vsJoinBtn.disabled = true;
     vsSetNote(host ? 'Opening the room…' : 'Joining…', true);
     const name = vsCleanName(vsNameInput.value);
+    vsEditingName = false;         // acting on it settles it
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
     try {
       if (!vsClient) {
@@ -2726,14 +2758,18 @@
     // about screens the panel itself never sees
     vsFooter.hidden = vsPanel.hidden || inRoom;
     if (!inRoom) {
-      // three doors, all open at once: play with anyone, open a room, or
-      // walk into a friend's. A name is the only thing asked for first.
+      // three doors, all open at once: play with anyone, walk into a
+      // friend's room, or open one of your own
       const named = !!vsTypedName();
+      const editing = vsEditingName || !named;
+      vsNameRow.hidden = !editing;
+      vsWho.hidden = editing;
+      if (!editing) vsWhoName.textContent = vsTypedName();
       vsQuickBtn.disabled = vsBusy || !named;
       vsCreateBtn.disabled = vsBusy || !named;
       vsJoinBtn.disabled = vsBusy || !named || vsTypedCode().length !== 5;
       // while a join is in flight the note belongs to the join
-      if (!vsBusy) vsSetNote(named ? '' : 'Pick a name to play multiplayer.', true);
+      if (!vsBusy) vsSetNote(named ? '' : 'Pick a name first, five letters at most.', true);
       return;
     }
     const hosting = vsHostNow();
@@ -2806,6 +2842,22 @@
   vsNameInput.addEventListener('input', vsRefreshPanel);
   vsCodeInput.addEventListener('input', vsRefreshPanel);
   vsCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); vsJoinBtn.click(); } });
+  // a typed name settles into the line under the title; CHANGE brings the
+  // field back out
+  vsNameInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!vsTypedName()) return;
+    vsEditingName = false;
+    try { localStorage.setItem('snakeVsName', vsCleanName(vsNameInput.value)); } catch (err) {}
+    vsRefreshPanel();
+  });
+  vsChangeBtn.addEventListener('click', () => {
+    vsEditingName = true;
+    vsRefreshPanel();
+    vsNameInput.focus();
+    vsNameInput.select();
+  });
   vsReadyBtn.addEventListener('click', vsToggleReady);
   vsStartBtn.addEventListener('click', () => { void vsStart(); });
   vsLeaveBtn.addEventListener('click', vsLeave);
