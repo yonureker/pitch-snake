@@ -106,7 +106,7 @@
   .stack-choice button {
     font-family: 'Anton', sans-serif; font-weight: 400;
     letter-spacing: 2px; font-size: 16px; text-transform: uppercase;
-    padding: 9px 18px; border-radius: 4px; cursor: pointer;
+    padding: 7px 18px; border-radius: 4px; cursor: pointer;
     background: transparent; color: var(--gold-bright);
     border: 2px solid var(--gold);
     transition: background 0.15s ease, color 0.15s ease;
@@ -144,10 +144,22 @@
   .btn-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
   /* the versus footer is BACK plus one primary, sized to the panel above it:
      BACK stays compact on the left and the primary takes what is left */
-  #vsFooter { width: min(360px, 94%); gap: 8px; flex-wrap: nowrap; }
-  #vsFooter .btn { font-size: 14px; letter-spacing: 0.8px; padding: 13px 8px; white-space: nowrap; }
-  #vsBackBtn { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
-  #vsGoBtn { flex: 1 1 auto; min-width: 0; }
+  #vsFooter, #modeFooter { width: min(360px, 94%); gap: 8px; flex-wrap: nowrap; }
+  #vsFooter .btn, #modeFooter .btn {
+    font-size: 14px; letter-spacing: 0.8px; padding: 13px 8px; white-space: nowrap;
+  }
+  #vsBackBtn, #modeBackBtn { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
+  #vsGoBtn, #modeGoBtn { flex: 1 1 auto; min-width: 0; }
+  /* what a mode actually is, while it is highlighted. Specific enough to
+     beat `.overlay p`, which owns the strapline's size and colour. */
+  .overlay p.mode-desc {
+    width: min(300px, 84%); max-width: none; margin: 0;
+    font-size: 12px; line-height: 1.35; font-weight: 500;
+    color: #b7ac93; letter-spacing: 0.2px;
+    /* two lines are reserved whether or not this one needs them, so the
+       list and the buttons never shift as the highlight moves */
+    min-height: 2.7em;
+  }
   #startBtn { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .start-sub {
     font-family: 'Barlow', sans-serif; font-size: 11px; font-weight: 700;
@@ -277,8 +289,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    padding: 4.5% 10px 12px;
+    gap: 8px;
+    padding: 10px;
+    justify-content: center;
     background: rgba(26,40,30,0.82);
     backdrop-filter: blur(5px);
     text-align: center;
@@ -294,7 +307,12 @@
      can push them off the board or make them jump between screens */
   .ov-foot { flex: 0 0 auto; display: flex; justify-content: center; }
   .ov-body {
-    flex: 1 1 auto;
+    /* hugs the title on a tall board and shrinks (scrolling inside) on a
+       short one, so the block reads as one piece at any size; the min-height
+       keeps the group roughly as tall from screen to screen, which is what
+       stops the title wandering */
+    flex: 0 1 auto;
+    min-height: min(230px, 46%);
     width: 100%;
     display: flex; flex-direction: column; align-items: center;
     gap: 10px;
@@ -632,9 +650,10 @@
           <button data-mode="classic" class="active">CLASSIC</button>
           <button data-mode="speedrun">SPEED RUN</button>
           <button data-mode="survival">SURVIVAL</button>
-          <button data-mode="versus">VERSUS</button>
-          <button data-mode="tourney">TOURNAMENT</button>
+          <button data-mode="versus">MULTIPLAYER</button>
+          <button data-mode="tourney">TOURNAMENTS</button>
         </div>
+        <p class="mode-desc" id="modeDesc" hidden></p>
         <div class="tourney" id="vsPanel" hidden>
           <div class="vs-setup" id="vsSetup">
             <div class="entry wide">
@@ -716,6 +735,10 @@
             <button class="btn" id="startBtn"><span id="startMain">START</span><span class="start-sub" id="startSub"></span></button>
             <button class="btn modes" id="vsBailBtn" hidden>LEAVE ROOM</button>
             <button class="btn modes" id="modesBtn">MODES</button>
+          </div>
+          <div class="btn-row" id="modeFooter" hidden>
+            <button class="btn modes" id="modeBackBtn">BACK</button>
+            <button class="btn" id="modeGoBtn">START CLASSIC</button>
           </div>
           <div class="btn-row" id="vsFooter" hidden>
             <button class="btn modes" id="vsBackBtn">BACK</button>
@@ -834,7 +857,17 @@
   function ruleMode() {
     return mode === 'tourney' ? (tourney ? tourney.mode : 'classic') : mode;
   }
-  const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL', versus: 'VERSUS' };
+  const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL', versus: 'MULTIPLAYER' };
+  // what the chooser calls each entry, and what each one is for. A mode is
+  // picked and read about first; nothing starts until the player says so.
+  const MODE_LABELS = { ...RULE_LABELS, tourney: 'TOURNAMENTS' };
+  const MODE_DESC = {
+    classic: 'No time limit. Beat your best, take a top ten spot, brag about your snake skills.',
+    speedrun: 'One minute on the clock. Do not let the snake skip her meals.',
+    survival: 'Opens with every ghost and a full wave of TNT. Adrenaline from the first step.',
+    versus: 'Settle disputes the friendly way. Hunger Games, snake edition.',
+    tourney: 'A private board among friends, so you can bet all your money and lose it.',
+  };
   // The fixture identity: the ruleset plus, in a tournament, which one. A
   // REMATCH is only a rematch when this matches the round just played;
   // anything else is STARTing something new.
@@ -1786,7 +1819,7 @@
   async function renderStandings(highlightKey) {
     if (mode === 'versus') {          // room results are rendered by the room
       standingsEl.innerHTML = '';
-      boardHead.textContent = 'VERSUS';
+      boardHead.textContent = 'MULTIPLAYER';
       return;
     }
     const gen = ++standingsGen;
@@ -1890,6 +1923,10 @@
   const tCardMeta = document.getElementById('tCardMeta');
   const modeCaption = document.getElementById('modeCaption');
   const modesBtn = document.getElementById('modesBtn');
+  const modeDesc = document.getElementById('modeDesc');
+  const modeFooter = document.getElementById('modeFooter');
+  const modeGoBtn = document.getElementById('modeGoBtn');
+  const modeBackBtn = document.getElementById('modeBackBtn');
   const startMain = document.getElementById('startMain');
   const startSub = document.getElementById('startSub');
   let tCreating = false;
@@ -1918,7 +1955,14 @@
     const onMenu = state === 'ready' || state === 'dead';
     const modesOpen = showModes && onMenu;
     for (const b of modeRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === mode);
-    modeRow.style.display = (modesOpen && !tScreen) ? 'flex' : 'none';
+    // the list screen: every mode, what the highlighted one is, and the two
+    // buttons that either play it or take the choice back to the pitch
+    const listScreen = modesOpen && !tScreen;
+    modeRow.style.display = listScreen ? 'flex' : 'none';
+    modeDesc.hidden = !listScreen;
+    modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
+    modeFooter.hidden = !listScreen;
+    modeGoBtn.textContent = 'START ' + (MODE_LABELS[mode] || '');
     tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
     vsPanel.hidden = !(modesOpen && tScreen && mode === 'versus');
     vsRefreshPanel();      // also the one place the pinned versus footer hides
@@ -1949,7 +1993,7 @@
     modeCaption.style.display = showCaption ? '' : 'none';
     if (showCaption && mode === 'versus') {
       modeCaption.textContent =
-        !vs ? 'VERSUS \u00b7 NO ROOM \u00b7 OPEN MODES'
+        !vs ? 'MULTIPLAYER \u00b7 NO ROOM \u00b7 OPEN MODES'
         : state === 'dead' && !vsHostNow() ? 'ROOM ' + vs.code + ' \u00b7 THE HOST CALLS THE REMATCH'
         : 'ROOM ' + vs.code + ' \u00b7 ' + vs.present.length + ' IN';
     } else if (showCaption) {
@@ -1981,10 +2025,10 @@
     startBtn.style.display = (!modesOpen && (state === 'paused' || playable)) ? '' : 'none';
     // full time in a room offers the way out right there, not behind MODES
     vsBailBtn.hidden = !(vsDead && !modesOpen);
-    // the versus screen carries its own BACK and primary, so the shared DONE
-    // stands down there; everywhere else it is the way out of the chooser
+    // both chooser screens carry their own BACK and primary, so the shared
+    // pair stands down there; on the pitch MODES is the way in
     const vsScreen = modesOpen && tScreen && mode === 'versus';
-    modesBtn.style.display = (onMenu && !vsScreen) ? '' : 'none';
+    modesBtn.style.display = (onMenu && !vsScreen && !listScreen) ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     best = bestByMode[ruleMode()] || 0;
     bestEl.textContent = best;
@@ -1997,6 +2041,9 @@
     refreshModeUI();
   });
 
+  // Picking a mode highlights it and says what it is; it never starts
+  // anything. The two buttons underneath do that: START plays it (or opens
+  // the room and tournament steps), BACK carries the choice to the pitch.
   modeRow.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b || (state !== 'ready' && state !== 'dead')) return;
@@ -2004,8 +2051,6 @@
     if (vs && b.dataset.mode !== 'versus') vsLeave();   // walking away leaves the room
     mode = b.dataset.mode;
     persistModeState();
-    if (mode === 'tourney' || mode === 'versus') tScreen = true;  // both get their own step
-    else showModes = false;                      // a plain ruleset is a complete choice
     if (state === 'ready') newRound();   // the clock preview and the next round follow the mode
     else {
       // the finished round belongs to the mode it was played under: switching
@@ -2013,6 +2058,23 @@
       entryWanted = false;
       renderStandings();
     }
+    refreshModeUI();
+  });
+
+  modeGoBtn.addEventListener('click', () => {
+    // multiplayer always needs its room step; a tournament needs its own
+    // only until one is joined and open, after which START just plays it
+    const needsStep = mode === 'versus' ||
+      (mode === 'tourney' && !(tourney && tourneyState() === 'open'));
+    if (needsStep) {
+      tScreen = true;
+      refreshModeUI();
+      return;
+    }
+    play();
+  });
+  modeBackBtn.addEventListener('click', () => {
+    showModes = false;
     refreshModeUI();
   });
 
@@ -2628,7 +2690,7 @@
       // while a join is in flight the note belongs to the join
       if (!vsBusy) {
         vsSetNote(
-          !named ? 'Pick a name to play versus.'
+          !named ? 'Pick a name to play multiplayer.'
           : priv && code.length !== 5 ? 'Type a code to join, or CREATE a room.'
           : '',
           true
