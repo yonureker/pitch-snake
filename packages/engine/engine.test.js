@@ -409,6 +409,18 @@ test('the ghost ladder: one per mark from 10, five for ever', () => {
   assert.equal(g.ghosts.length, 5, 'a ghost never leaves once it is on');
 });
 
+test('a ghost joining mid-round emits an arrival; the survival kickoff pack is silent', () => {
+  const g = quietGame();
+  foodFar(g);
+  g.score = 10;
+  g._updateGhosts();
+  const arrivals = g.drainEvents().filter(e => e.t === 'ghost');
+  assert.deepEqual(arrivals, [{ t: 'ghost', n: 1, q: 0 }], 'the ladder spawn announces itself');
+  const s = createGame({ seed: 7, ...MODES.survival });
+  assert.equal(s.ghosts.length, 5, 'survival opens with the pack');
+  assert.ok(s.drainEvents().every(e => e.t !== 'ghost'), 'and none of them made a sound');
+});
+
 // ------------------------------------------------------------------- the TNT
 test('eating a TNT: -5 points, -5 segments, floored, never fatal, streak untouched', () => {
   const g = quietGame();

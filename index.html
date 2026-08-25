@@ -906,6 +906,7 @@
     <div class="hint">
       <span class="kb-only"><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
       <span class="kb-only"><b>SPACE</b> pause</span>
+      <span class="kb-only"><b>M</b> mute</span>
       <span class="touch-only"><b>SWIPE</b> or <b>D-PAD</b> move</span>
       <span><b>&#9881;</b> for settings</span>
     </div>
@@ -923,6 +924,11 @@
           <span>WALLS</span>
           <button class="switch on" id="wallToggle" role="switch" aria-checked="true"><span class="knob"></span></button>
           <span class="state" id="wallStatus">ON</span>
+        </div>
+        <div class="toggle-row">
+          <span>SOUND</span>
+          <button class="switch on" id="soundToggle" role="switch" aria-checked="true"><span class="knob"></span></button>
+          <span class="state" id="soundStatus">ON</span>
         </div>
         <p class="lock-hint" id="lockHint">Finish the round to change settings.</p>
         <button class="btn small" id="settingsClose">DONE</button>
@@ -1094,6 +1100,165 @@
     clockEl.classList.toggle('late', left <= 10_000);
   }
 
+  // ---- sound ----
+  // Synthesized at trigger time from oscillators and one shared noise buffer:
+  // no assets, no requests, nothing here touches gameplay. The context wakes
+  // on the first gesture (autoplay policy); until it runs, triggers drop
+  // silently. Everything routes through one master gain (the mute) into a
+  // limiter, so stacked booms never clip.
+  let audio = null, audioMaster = null, audioNoise = null;
+  let pageSound = true;
+  try { pageSound = localStorage.getItem('snakeSound') !== 'off'; } catch (e) {}
+
+  function audioWake() {
+    if (!pageSound) return;
+    if (audio) { if (audio.state === 'suspended') audio.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audio = new AC();
+    const limiter = audio.createDynamicsCompressor();
+    limiter.threshold.value = -16; limiter.knee.value = 10; limiter.ratio.value = 10;
+    limiter.attack.value = 0.002; limiter.release.value = 0.1;
+    limiter.connect(audio.destination);
+    audioMaster = audio.createGain();
+    audioMaster.gain.value = 0.35;
+    audioMaster.connect(limiter);
+    audioNoise = audio.createBuffer(1, audio.sampleRate / 2, audio.sampleRate);
+    const d = audioNoise.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  window.addEventListener('pointerdown', audioWake, { passive: true });
+  window.addEventListener('keydown', audioWake);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && pageSound && audio && audio.state === 'suspended') audio.resume();
+  });
+
+  const sfxOn = () => pageSound && audio !== null && audio.state === 'running';
+
+  // one oscillator under a pluck envelope: the building block of most effects
+  function sfxTone(type, f0, f1, at, dur, peak) {
+    const o = audio.createOscillator(), gn = audio.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, at);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), at + dur);
+    gn.gain.setValueAtTime(0.0001, at);
+    gn.gain.exponentialRampToValueAtTime(peak, at + 0.012);
+    gn.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(gn).connect(audioMaster);
+    o.start(at); o.stop(at + dur + 0.02);
+  }
+
+  // the shared noise buffer through a falling low-pass: booms and crashes
+  function sfxBoom(at, dur, peak, f0, f1) {
+    const src = audio.createBufferSource(), fl = audio.createBiquadFilter(), gn = audio.createGain();
+    src.buffer = audioNoise; src.loop = true;
+    fl.type = 'lowpass';
+    fl.frequency.setValueAtTime(f0, at);
+    fl.frequency.exponentialRampToValueAtTime(Math.max(40, f1), at + dur);
+    gn.gain.setValueAtTime(0.0001, at);
+    gn.gain.exponentialRampToValueAtTime(peak, at + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(fl).connect(gn).connect(audioMaster);
+    src.start(at); src.stop(at + dur + 0.02);
+  }
+
+  // a referee's pea whistle: a piercing note whose loudness flutters fast
+  function sfxPeep(at, dur, vol) {
+    const o = audio.createOscillator(), am = audio.createGain(), env = audio.createGain();
+    const lfo = audio.createOscillator(), lfoG = audio.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(2093, at);
+    o.frequency.linearRampToValueAtTime(2160, at + dur);
+    am.gain.value = 0.55;
+    lfo.type = 'sine'; lfo.frequency.value = 42;
+    lfoG.gain.value = 0.45;
+    lfo.connect(lfoG).connect(am.gain);
+    env.gain.setValueAtTime(0.0001, at);
+    env.gain.exponentialRampToValueAtTime(0.4 * vol, at + 0.02);
+    env.gain.setValueAtTime(0.4 * vol, at + Math.max(0.03, dur - 0.03));
+    env.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(am).connect(env).connect(audioMaster);
+    o.start(at); lfo.start(at);
+    o.stop(at + dur + 0.02); lfo.stop(at + dur + 0.02);
+  }
+
+  // The vocabulary. Rival events in a versus round pass a lower vol, so your
+  // own play sits in front of the room's.
+  const PENTA = [0, 2, 4, 7, 9];   // the eat ladder climbs these, then the bonus
+  function sfxEat(step, vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime, f = 523 * Math.pow(2, PENTA[step] / 12);
+    sfxTone('square', f, f, at, 0.09, 0.4 * vol);
+    sfxTone('triangle', f * 2, f * 2, at, 0.07, 0.22 * vol);
+  }
+  function sfxBonus(vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;
+    [659, 880, 1319].forEach((f, i) => {
+      sfxTone('square', f, f, at + i * 0.06, 0.14, 0.32 * vol);
+      sfxTone('triangle', f * 2, f * 2, at + i * 0.06, 0.12, 0.16 * vol);
+    });
+  }
+  function sfxHop(vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;
+    sfxTone('sawtooth', 1500, 220, at, 0.16, 0.25 * vol);      // dive in
+    sfxTone('sine', 400, 1400, at + 0.1, 0.16, 0.3 * vol);     // surface out
+  }
+  function sfxTnt(lost, vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime, big = Math.min(1.5, 1 + lost * 0.08);
+    sfxBoom(at, 0.3 * big, 0.8 * vol, 1100, 120);
+    sfxTone('sine', 130, 38, at, 0.32 * big, 0.8 * vol);
+  }
+  function sfxWallWarn() {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // two klaxon pulses
+    sfxTone('sawtooth', 170, 150, at, 0.13, 0.3);
+    sfxTone('sawtooth', 170, 150, at + 0.22, 0.13, 0.3);
+  }
+  function sfxWallSolid() {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // the clunk of going live
+    sfxTone('sine', 100, 45, at, 0.16, 0.6);
+    sfxBoom(at, 0.07, 0.25, 2500, 500);
+  }
+  function sfxPortalOpen() {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // a soft shimmer
+    sfxTone('triangle', 1250, 1250, at, 0.3, 0.1);
+    sfxTone('triangle', 1875, 1875, at + 0.05, 0.3, 0.08);
+  }
+  function sfxGhostIn() {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // an eerie riser
+    sfxTone('sine', 170, 540, at, 0.5, 0.22);
+    sfxTone('triangle', 255, 810, at + 0.06, 0.44, 0.1);
+  }
+  function sfxCrash(vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // the fall
+    sfxTone('sawtooth', 240, 50, at, 0.55, 0.5 * vol);
+    sfxBoom(at, 0.4, 0.5 * vol, 900, 100);
+  }
+  function sfxFlourish() {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // the clinch
+    [523, 659, 784, 1047].forEach((f, i) => sfxTone('square', f, f, at + i * 0.07, 0.14, 0.3));
+    sfxTone('square', 1047, 1047, at + 0.28, 0.4, 0.25);
+    sfxTone('square', 1319, 1319, at + 0.28, 0.4, 0.2);
+  }
+  function sfxTick() {
+    if (!sfxOn()) return;
+    sfxTone('square', 1050, 1050, audio.currentTime, 0.05, 0.22);
+  }
+  function sfxKickoff() { if (sfxOn()) sfxPeep(audio.currentTime, 0.3, 1); }
+  function sfxFullTime() {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;
+    sfxPeep(at, 0.15, 1); sfxPeep(at + 0.28, 0.6, 1);
+  }
+
   // ---- engine events -> effects (bursts, sprites, the death overlay) ----
   // In a versus round a rollback re-runs recent quanta and re-emits their
   // events. State mirrors (food sprite, wall layer) must always apply, but a
@@ -1103,14 +1268,19 @@
     for (const e of events) {
       const replayed = vsView() && e.q !== undefined && e.q <= vsEventQ;
       if (vsView() && e.q !== undefined && e.q > vsEventQ) vsEventQ = e.q;
-      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die')) continue;
+      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die' || e.t === 'ghost')) continue;
+      // rival events play quiet; the board-level ones (walls, portals,
+      // ghosts) are everyone's and play full
+      const mineVol = !vsView() || e.player === undefined || e.player === vs.myIdx ? 1 : 0.35;
       if (e.t === 'food') buildFoodSprite();
       else if (e.t === 'eat') {
+        if (e.bonus) sfxBonus(mineVol); else sfxEat((g.regularEaten + 4) % 5, mineVol);
         const burstColor = getCss(e.bonus ? '--gold-bright' : '--food');
         spawnBurst(e.x, e.y, e.bonus ? 30 : 16, 0.5,
           () => (Math.random() * 2 + 1) * (cell / 14) * (e.bonus ? 1.5 : 1),
           () => burstColor);
       } else if (e.t === 'hop') {
+        sfxHop(mineVol);
         const leaveCol = e.fromA ? PORTAL_A : PORTAL_B;
         const arriveCol = e.fromA ? PORTAL_B : PORTAL_A;
         const payCol = getCss('--gold-bright');
@@ -1118,14 +1288,26 @@
         spawnBurst(e.tx, e.ty, 26, 0.7, () => (Math.random() * 2.2 + 1) * (cell / 14),
           i => i % 3 === 0 ? payCol : arriveCol);
       } else if (e.t === 'tnt') {
+        sfxTnt(e.lost.length, mineVol);
         for (const t of e.lost)
           spawnBurst(t.x, t.y, 6, 0.9, () => (Math.random() * 1.2 + 0.5) * (cell / 14), () => '#f4ecd8');
         spawnBurst(e.x, e.y, 26, 0.6, () => (Math.random() * 2.4 + 1) * (cell / 13),
           i => i % 3 === 0 ? '#e6402a' : '#3a3630');
       } else if (e.t === 'wall') {
-        if (e.phase === 'warning') rebuildWallLayer(false);
-        else if (e.phase === 'solid') rebuildWallLayer(true);
+        // the layer mirror must apply even on a rollback replay; the sound only once
+        if (e.phase === 'warning') { rebuildWallLayer(false); if (!replayed) sfxWallWarn(); }
+        else if (e.phase === 'solid') { rebuildWallLayer(true); if (!replayed) sfxWallSolid(); }
+      } else if (e.t === 'portal') {
+        if (e.open && !replayed) sfxPortalOpen();
+      } else if (e.t === 'ghost') {
+        sfxGhostIn();
       } else if (e.t === 'die') {
+        // Solo: the crash, or the full-time whistle on a timed round. Versus:
+        // crashes only; the room's one whistle blows at vsRoundOver, and a
+        // clinch gets its flourish here on top.
+        if (!vsView()) { if (e.reason === 'time') sfxFullTime(); else sfxCrash(1); }
+        else if (e.reason === 'won') { if (e.player === vs.myIdx) sfxFlourish(); }
+        else if (e.reason !== 'time') sfxCrash(mineVol);
         // a fallen rival leaves the board mid-round; give the body a send-off
         if (e.segments) {
           for (const s of e.segments)
@@ -1778,6 +1960,7 @@
     const b = Math.min(3, (countClock / COUNT_BEAT) | 0);   // 0,1,2 are 3,2,1; 3 is START!
     if (b === countBeat) return;
     countBeat = b;
+    if (b === 3) sfxKickoff(); else sfxTick();
     countNumEl.textContent = b === 3 ? 'START!' : String(3 - b);
     countNumEl.classList.toggle('go', b === 3);
     countdownEl.hidden = false;
@@ -2796,6 +2979,7 @@
     // credits the same winner, so the tallies agree without a word
     vs.wins[rows[0].name] = (vs.wins[rows[0].name] | 0) + 1;
     vsPersistWins();
+    sfxFullTime();
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
     overlayText.textContent = rows[0].me
@@ -3012,7 +3196,7 @@
 
   startBtn.addEventListener('click', play);
 
-  const GAME_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'w', 'a', 's', 'd']);
+  const GAME_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'w', 'a', 's', 'd', 'm']);
   document.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
@@ -3025,6 +3209,7 @@
     else if (k === 'arrowdown' || k === 's') dirInput(0, 1);
     else if (k === 'arrowleft' || k === 'a') dirInput(-1, 0);
     else if (k === 'arrowright' || k === 'd') dirInput(1, 0);
+    else if (k === 'm') setSound(!pageSound);
     else togglePause();
   });
 
@@ -3116,6 +3301,21 @@
     wallToggle.setAttribute('aria-checked', String(pageWalls));
     wallStatus.textContent = pageWalls ? 'ON' : 'OFF';
   });
+
+  // sound is the one setting free to change mid-round: it touches nothing
+  // the engine simulates, so it stays out of the in-round lock below
+  const soundToggle = document.getElementById('soundToggle');
+  const soundStatus = document.getElementById('soundStatus');
+  function setSound(on) {
+    pageSound = on;
+    soundToggle.classList.toggle('on', on);
+    soundToggle.setAttribute('aria-checked', String(on));
+    soundStatus.textContent = on ? 'ON' : 'OFF';
+    try { localStorage.setItem('snakeSound', on ? 'on' : 'off'); } catch (e) {}
+    if (on) audioWake();   // a toggle click is a gesture: wake right here
+  }
+  soundToggle.addEventListener('click', () => setSound(!pageSound));
+  if (!pageSound) setSound(false);   // reflect a stored OFF in the switch
 
   // resize events arrive in bursts; coalesce to once per frame
   let resizeQueued = false;

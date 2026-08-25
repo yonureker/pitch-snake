@@ -617,7 +617,14 @@ export function createGame(cfg = {}) {
   }
 
   function updateGhosts() {
-    if (S.ghosts.length < GHOST_SCORES.length && leaderScore() >= GHOST_SCORES[S.ghosts.length]) spawnGhost();
+    // The arrival emit lives here, not in spawnGhost, so the survival
+    // kickoff pack stays silent: standing there at the whistle is scenery,
+    // joining mid-round is a moment. Events are not part of the log.
+    if (S.ghosts.length < GHOST_SCORES.length && leaderScore() >= GHOST_SCORES[S.ghosts.length]) {
+      const before = S.ghosts.length;
+      spawnGhost();
+      if (S.ghosts.length > before) emit({ t: 'ghost', n: S.ghosts.length });
+    }
     for (const g of S.ghosts) {
       if (S.clockMs >= g.moveAt) { moveGhost(g); g.moveAt = S.clockMs + GHOST_MS; }
     }
