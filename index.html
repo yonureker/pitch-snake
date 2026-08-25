@@ -1110,9 +1110,21 @@
   let pageSound = true;
   try { pageSound = localStorage.getItem('snakeSound') !== 'off'; } catch (e) {}
 
-  function audioWake() {
-    if (!pageSound) return;
-    if (audio) { if (audio.state === 'suspended') audio.resume(); return; }
+  // A press must never pay an audio tax: the wake listeners exist only while
+  // the context is not running (removed the moment it runs, re-armed by
+  // statechange if it stops), and a resume is attempted at most once at a
+  // time. touchend and click are in the set because on iOS a pointerdown is
+  // not an unlock gesture, and a context that never unlocks must not turn
+  // every tap into a doomed resume call.
+  let audioResuming = false;
+  function audioResume() {
+    if (audioResuming || !audio || audio.state === 'running') return;
+    audioResuming = true;
+    const done = () => { audioResuming = false; };
+    try { audio.resume().then(done, done); } catch (e) { done(); }
+  }
+
+  function audioBuild() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     audio = new AC();
@@ -1126,11 +1138,31 @@
     audioNoise = audio.createBuffer(1, audio.sampleRate / 2, audio.sampleRate);
     const d = audioNoise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    audio.onstatechange = () => { if (audio.state === 'running') audioUnhook(); else audioHook(); };
+    if (audio.state !== 'running') audioResume();   // some browsers hand it back suspended
+    else audioUnhook();
   }
-  window.addEventListener('pointerdown', audioWake, { passive: true });
-  window.addEventListener('keydown', audioWake);
+
+  const WAKE_EVENTS = ['pointerdown', 'touchend', 'keydown', 'click'];
+  let wakeHooked = false;
+  function audioWake() {
+    if (!pageSound) return;
+    if (!audio) audioBuild();
+    else audioResume();
+  }
+  function audioHook() {
+    if (wakeHooked) return;
+    wakeHooked = true;
+    for (const ev of WAKE_EVENTS) window.addEventListener(ev, audioWake, { passive: true });
+  }
+  function audioUnhook() {
+    if (!wakeHooked) return;
+    wakeHooked = false;
+    for (const ev of WAKE_EVENTS) window.removeEventListener(ev, audioWake);
+  }
+  audioHook();
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && pageSound && audio && audio.state === 'suspended') audio.resume();
+    if (!document.hidden && pageSound) audioResume();
   });
 
   const sfxOn = () => pageSound && audio !== null && audio.state === 'running';
@@ -3312,7 +3344,8 @@
     soundToggle.setAttribute('aria-checked', String(on));
     soundStatus.textContent = on ? 'ON' : 'OFF';
     try { localStorage.setItem('snakeSound', on ? 'on' : 'off'); } catch (e) {}
-    if (on) audioWake();   // a toggle click is a gesture: wake right here
+    if (on) { audioHook(); audioWake(); }   // the toggle itself is a gesture: wake right here
+    else if (audio && audio.state === 'running') audio.suspend();   // park the DSP and the session
   }
   soundToggle.addEventListener('click', () => setSound(!pageSound));
   if (!pageSound) setSound(false);   // reflect a stored OFF in the switch
@@ -3417,6 +3450,7 @@ $ `;
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
   requestAnimationFrame(loop);
+
 </script>
 </body>
 </html>
