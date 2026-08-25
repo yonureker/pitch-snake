@@ -60,6 +60,13 @@ export const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 export const GHOST_SCORES = [10, 20, 30, 40, 50];
 export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed setting
 
+// Survival opens with the ghosts, not with the dynamite: a wave standing on
+// the pitch before the snake has moved reads as scenery, blinks out a few
+// seconds later, and teaches nothing. This is how long the board stays clear
+// before the first full wave lands. A multiple of SIM_DT like every other
+// timing constant.
+export const SURVIVAL_TNT_FIRST = 8000;
+
 // Round presets. A mode IS a config: the shells pass MODES[name] into
 // createGame and decide nothing of their own, so a tournament, a replay and a
 // local round all mean the same thing by construction. Every duration is a
@@ -68,7 +75,9 @@ export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed se
 export const MODES = {
   classic: {},                              // endless: the run ends when you do
   speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
-  survival: { startGhosts: 5, startBombs: 9 },   // the full ladder from the kickoff whistle
+  // the whole ghost pack from the kickoff whistle; the TNT waves are at
+  // full size from the first one, but the first one lets you off the line
+  survival: { startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST },
 };
 
 // how much room the opening hazards of a survival round leave the head,
@@ -185,11 +194,13 @@ export function createGame(cfg = {}) {
   const durationMs = cfg.durationMs ?? 0;   // 0 = endless
   const startGhosts = cfg.startGhosts ?? 0; // survival: personalities present at kickoff
   const startBombs = cfg.startBombs ?? 0;   // survival: TNT wave size floored here for ever
+  const bombFirstMs = cfg.bombFirstMs ?? 0; // how long the board stays clear of that first wave
   const playerCount = cfg.players ?? 1;
   if (tickMs % SIM_DT !== 0) throw new Error('tickMs must be a multiple of SIM_DT');
   if (durationMs % SIM_DT !== 0 || durationMs < 0) throw new Error('durationMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(startGhosts) || startGhosts < 0 || startGhosts > GHOST_SCORES.length) throw new Error('startGhosts out of range');
   if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > TNT_SCORES.length) throw new Error('startBombs out of range');
+  if (bombFirstMs % SIM_DT !== 0 || bombFirstMs < 0) throw new Error('bombFirstMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > MAX_PLAYERS) throw new Error('players out of range');
 
   // mulberry32: small, fast, good-enough PRNG with a 32-bit seed. Not for
@@ -235,7 +246,7 @@ export function createGame(cfg = {}) {
   // The singular fields (snake, dir, score, ...) are defined further down as
   // live aliases of players[0], so one-snake callers never notice the array.
   const S = {
-    seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs,
+    seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
     players,
     quanta: 0,          // sim quanta elapsed; the replay clock
     clockMs: 0,         // one hazard clock (the old wall/bomb/ghost/portal clocks were identical)
@@ -260,7 +271,7 @@ export function createGame(cfg = {}) {
     events: [],
     // the round's replayable record. end/finalScore are stamped when the last
     // snake goes down; a multi-snake log carries every score and death time.
-    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs,
+    log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
            players: playerCount, inputs: [], end: 0, finalScore: 0 },
   };
 
@@ -1031,9 +1042,16 @@ export function createGame(cfg = {}) {
   for (let i = 0; i < startGhosts; i++) spawnGhost(SURVIVAL_CLEAR);
   if (startBombs > 0) {
     S.bombsUnlocked = startBombs;
-    for (let i = 0; i < startBombs; i++) spawnBomb(SURVIVAL_CLEAR);
-    S.bombPhase = 'active';
-    S.bombExpireAt = rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX);
+    if (bombFirstMs > 0) {
+      // the size is seeded, the arrival is not: the board opens clear and
+      // the first full wave lands on the normal cycle from there
+      S.bombPhase = 'gap';
+      S.bombNextAt = bombFirstMs;
+    } else {
+      for (let i = 0; i < startBombs; i++) spawnBomb(SURVIVAL_CLEAR);
+      S.bombPhase = 'active';
+      S.bombExpireAt = rand(BOMB_LIFE_MIN, BOMB_LIFE_MAX);
+    }
   }
 
   return Object.assign(S, {
@@ -1064,6 +1082,7 @@ export function replay(log) {
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,
+    bombFirstMs: log.bombFirstMs ?? 0,
     players: log.players ?? 1,
   });
   const inputs = log.inputs;

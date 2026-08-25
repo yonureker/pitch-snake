@@ -11,7 +11,7 @@ import {
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
   TNT_SCORES, GHOST_SCORES, GHOST_MS, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
-  MIN_SPAWN_DIST, K, wrapDist,
+  MIN_SPAWN_DIST, K, wrapDist, SURVIVAL_TNT_FIRST,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -624,6 +624,31 @@ test('survival: the full ladder at the kickoff whistle, a clear five away', () =
   g._updateGhosts();
   assert.equal(g.ghosts.length, 5);
   assert.throws(() => createGame({ seed: 1, startBombs: 99 }), /out of range/);
+});
+
+test('survival: the pitch opens clear, and the first full wave lands on the mark', () => {
+  // The dynamite used to be standing there before the snake had moved, then
+  // blink out a few seconds later having threatened nobody. The pack still
+  // arrives with the whistle; the TNT gives you the opening.
+  assert.equal(SURVIVAL_TNT_FIRST % SIM_DT, 0, 'the delay is a whole number of quanta');
+  const g = quietGame({ ...MODES.survival });
+  foodFar(g);
+  assert.equal(g.ghosts.length, 5, 'the whole pack is on from the whistle');
+  assert.equal(g.bombs.length, 0, 'and not one stick of dynamite');
+  assert.equal(g.bombsUnlocked, 9, 'while the wave size is seeded all the same');
+  assert.equal(g.log.bombFirstMs, SURVIVAL_TNT_FIRST, 'and the delay rides in the record');
+  g.ghosts.length = 0;                      // let the snake live out the wait
+  g.advanceQuanta(SURVIVAL_TNT_FIRST / SIM_DT - 1);
+  assert.equal(g.bombs.length, 0, 'still clear one quantum short of the mark');
+  g.advanceQuanta(1);
+  assert.equal(g.bombs.length, 9, 'then a full nine, not a first-wave discount');
+  const r = replay(g.log);
+  assert.equal(r.bombFirstMs, SURVIVAL_TNT_FIRST, 'a replay opens on the same clear pitch');
+
+  // a round that asks for the old immediate wave still gets one
+  const h = quietGame({ startGhosts: 5, startBombs: 9 });
+  assert.equal(h.bombs.length, 9, 'no delay asked for, none taken');
+  assert.throws(() => createGame({ seed: 1, startBombs: 9, bombFirstMs: 1234 }), /multiple of SIM_DT/);
 });
 
 test('survival: waves stay at nine for ever, even at zero points', () => {

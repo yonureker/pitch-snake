@@ -28,6 +28,8 @@ export declare const PORTAL_WARN_MS: number;
 export declare const PORTAL_MIN_GAP: number;
 export declare const MIN_SPAWN_DIST: number;
 export declare const SURVIVAL_CLEAR: number;
+/** How long a survival board stays clear before its first full TNT wave. */
+export declare const SURVIVAL_TNT_FIRST: number;
 export declare function portalMark(n: number): number;
 export declare function K(x: number, y: number): number;
 export declare function wrap(v: number): number;
@@ -82,7 +84,7 @@ export type GameEvent = (
 
 export interface RoundLog {
   v: number; seed: number; tickMs: number; wallsEnabled: boolean;
-  durationMs?: number; startGhosts?: number; startBombs?: number;
+  durationMs?: number; startGhosts?: number; startBombs?: number; bombFirstMs?: number;
   /** Snakes on the board; absent in v4 (single-snake era) logs. */
   players?: number;
   /** [quantum, x, y] triples; a fourth column names the player when players > 1. */
@@ -96,7 +98,7 @@ export interface RoundLog {
 export interface GameSnapshot { readonly quanta: number }
 
 export interface Game {
-  seed: number; tickMs: number; wallsEnabled: boolean;
+  seed: number; tickMs: number; wallsEnabled: boolean; bombFirstMs: number;
   /** Round liveness: any snake still up. Writing it revives player 0 (test hook). */
   alive: boolean;
   /** Player 0's cause of death, under the classic name. */
@@ -142,6 +144,11 @@ export interface Game {
 export interface GameConfig {
   seed?: number; tickMs?: number; wallsEnabled?: boolean; durationMs?: number;
   startGhosts?: number; startBombs?: number;
+  /**
+   * Delay before the first TNT wave, in ms (default 0, meaning the seeded
+   * wave stands on the board from the whistle). Must be a multiple of SIM_DT.
+   */
+  bombFirstMs?: number;
   /** Snakes on one shared board, 1..MAX_PLAYERS (default 1). */
   players?: number;
 }
