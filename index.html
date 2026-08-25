@@ -374,14 +374,22 @@
      browser answered by zooming mid-round. `manipulation` keeps the tap and
      drops the zoom gesture; a game surface has nothing to select or long
      press either. */
-  html.touch body { align-items: stretch; touch-action: manipulation; }
+  html.touch body { align-items: stretch; }
+  /* Scoped to the game surface rather than the document: a double tap on the
+     board or the pad must never zoom, but the gesture stays available to a
+     player who has somehow ended up zoomed and wants out. */
   html.touch .wrap {
+    touch-action: manipulation;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
   html.touch .wrap {
     height: 100vh;
     height: 100svh;
-    padding: 6px 10px 8px;
+    /* No side padding here: the pad wants the full width, and giving it that
+       with a negative margin against a padded parent is how a layout ends up
+       wider than the screen. The header and the board carry their own
+       insets instead, so nothing ever exceeds 100%. */
+    padding: 6px 0 8px;
     gap: 8px;
     /* the pad is the thing a thumb has to hit, so it is claimed first and
        the board takes what is left */
@@ -395,21 +403,22 @@
   html.touch .scores .val { font-size: 22px; }
   html.touch .scores .label, html.touch .scores .best { font-size: 9px; }
   html.touch .scores .clock { font-size: 15px; }
+  html.touch header { padding: 0 10px; }
   html.touch .board-frame {
     /* 62px is the rest of the shell: header, the two gaps and the padding.
        Anything added to the touch layout has to come out of this number. */
-    width: min(100%, calc(100svh - var(--pad-h) - 62px));
+    width: min(calc(100% - 16px), calc(100svh - var(--pad-h) - 62px));
     flex: 0 0 auto;
   }
   /* the pad runs to both edges: a thumb that misses it sideways would
      otherwise land on the page, which is where the stray taps were going */
   html.touch .dpad {
     height: var(--pad-h);
-    width: calc(100% + 20px);
+    width: 100%;
     max-width: none;
-    margin-inline: -10px;
+    margin: 0;
     aspect-ratio: auto;
-    border-radius: 18px;
+    border-radius: 16px;
   }
   html.touch .hint { font-size: 10.5px; gap: 12px; }
   /* the board is smaller here, so the panels it holds are trimmed to match:
