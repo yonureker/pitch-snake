@@ -391,9 +391,12 @@
        insets instead, so nothing ever exceeds 100%. */
     padding: 6px 0 8px;
     gap: 8px;
-    /* the pad is the thing a thumb has to hit, so it is claimed first and
-       the board takes what is left */
-    --pad-h: clamp(150px, 38svh, 300px);
+    justify-content: space-between;
+    /* The pitch is square, so a full-width board costs exactly its width in
+       height; the pad takes what is left, with a floor so a short phone
+       still has something to hit and a cap so a tall one does not hand it
+       half the screen. */
+    --pad-h: clamp(190px, calc(100svh - min(100vw, 540px) - 62px), 320px);
   }
   /* the legend under the pad is desktop's: a phone has the pad in front of
      it and the gear on the board, and the room is worth more than the words */
@@ -405,10 +408,13 @@
   html.touch .scores .clock { font-size: 15px; }
   html.touch header { padding: 0 10px; }
   html.touch .board-frame {
-    /* 62px is the rest of the shell: header, the two gaps and the padding.
-       Anything added to the touch layout has to come out of this number. */
-    width: min(calc(100% - 16px), calc(100svh - var(--pad-h) - 62px));
+    /* The pitch takes the full width too, and stays square: the height term
+       is what stops it, so a board that fits sideways can never push the pad
+       off the screen. 62px is the rest of the shell: header, the two gaps
+       and the padding. Anything added to the touch layout comes out of it. */
+    width: min(100%, calc(100svh - var(--pad-h) - 62px));
     flex: 0 0 auto;
+    border-radius: 12px;
   }
   /* the pad runs to both edges: a thumb that misses it sideways would
      otherwise land on the page, which is where the stray taps were going */
