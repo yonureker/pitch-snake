@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 6;
+export const ENGINE_VERSION = 7;   // 7: a wall forming on a ghost buries it; it walks out
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -377,7 +377,7 @@ export function createGame(cfg = {}) {
       buildWalls();                 // shape appears and flashes before it bites
       S.wallState = 'warning';
       S.wallPhaseEnd = S.clockMs + WARN_MS;
-      // never leave food, a TNT, or a ghost buried under a fresh wall
+      // never leave food or a TNT buried under a fresh wall
       if (S.food && S.wallLookup.has(K(S.food.x, S.food.y))) placeFood();
       for (let i = S.bombs.length - 1; i >= 0; i--) {
         const b = S.bombs[i];
@@ -386,7 +386,9 @@ export function createGame(cfg = {}) {
         if (c) { b.x = c.x; b.y = c.y; }
         else S.bombs.splice(i, 1);   // nowhere safe: drop it rather than bury it in a wall
       }
-      for (const g of S.ghosts) if (S.wallLookup.has(K(g.x, g.y))) nudgeGhost(g);
+      // A ghost the shape lands on is NOT moved: relocating it teleported it,
+      // sometimes straight into a player's path. It keeps its feet and walks
+      // out through the shape instead (the ghostBlocked exception).
       // a window under a fresh wall would be a trap the moment the wall goes
       // live, so the pair closes; only a pair never used is owed again (rule 20)
       if (S.portal && (S.wallLookup.has(K(S.portal.ax, S.portal.ay)) || S.wallLookup.has(K(S.portal.bx, S.portal.by))))
@@ -447,7 +449,11 @@ export function createGame(cfg = {}) {
     }
     const k = K(x, y);
     for (let i = 0; i < players.length; i++) if (players[i].snakeSet.has(k)) return true;
-    if (S.wallLookup.has(k)) return true;
+    // The one wall exception: a ghost standing on a wall cell (a shape just
+    // formed on it) may cross walls, phasing out on its own legs instead of
+    // teleporting to open ground. Ghosts never walk INTO a wall otherwise, so
+    // standing clear closes the pass behind it: one way, out.
+    if (S.wallLookup.has(k) && !S.wallLookup.has(K(self.x, self.y))) return true;
     if (S.food !== null && S.food.x === x && S.food.y === y) return true;
     for (let i = 0; i < S.bombs.length; i++) if (S.bombs[i].x === x && S.bombs[i].y === y) return true;
     for (let i = 0; i < S.ghosts.length; i++) {
@@ -553,17 +559,6 @@ export function createGame(cfg = {}) {
   // one ghost moves at a time, so the step search shares this scratch
   const _optDir = new Array(4), _optDist = new Int32Array(4);
   const _optX = new Int32Array(4), _optY = new Int32Array(4);
-
-  // if a wall forms on a ghost, slide it to the nearest open cell
-  function nudgeGhost(g) {
-    for (let r = 1; r < GRID; r++) {
-      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
-        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
-        const nx = wrap(g.x + dx), ny = wrap(g.y + dy);
-        if (!ghostBlocked(nx, ny, g)) { g.x = g.px = nx; g.y = g.py = ny; return; }
-      }
-    }
-  }
 
   function moveGhost(g) {
     g.px = g.x; g.py = g.y;                    // remember where we came from (smooth render)
@@ -1075,10 +1070,12 @@ export function createGame(cfg = {}) {
 // is exact by construction. v4 logs (the single-snake era) replay under the
 // same rules: one snake on a board behaves exactly as it always did.
 export function replay(log) {
-  // v4 was the single-snake era, v5 multi-snake before the clinch rule; both
-  // shapes replay here (no v5 log was ever persisted, so the clinch changing
-  // multi-snake endings rewrites nobody's record)
-  if (!log || (log.v !== 4 && log.v !== 5 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
+  // v4 was the single-snake era, v5 multi-snake before the clinch rule, v6
+  // before a wall forming on a ghost buried it in place. All three shapes
+  // replay here under today's rules; no log of any of them was ever
+  // persisted, so a rule changing an old round's course rewrites nobody's
+  // record.
+  if (!log || (log.v !== 4 && log.v !== 5 && log.v !== 6 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,

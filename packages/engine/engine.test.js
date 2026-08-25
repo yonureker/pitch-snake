@@ -330,6 +330,41 @@ test('a wall refunds only a pair you never used', () => {
   }
 });
 
+test('a wall forming on a ghost buries it in place; it phases out and the walls close behind it', () => {
+  // find a seed whose first wall pattern covers (0,0) - the frame patterns do
+  let g = null;
+  for (let seed = 1; seed < 60; seed++) {
+    const t = createGame({ seed });
+    t.clockMs = 100; t.wallPhaseEnd = 0;
+    t._updateWalls();
+    if (t.wallLookup.has(K(0, 0))) { g = createGame({ seed }); break; }
+  }
+  assert.ok(g, 'found a seed whose first pattern covers the corner');
+  g.ghosts.push({
+    x: 0, y: 0, px: 0, py: 0, dir: { x: 0, y: 0 }, warped: false, role: 0,
+    moveAt: 0, majX: 0, majY: 0,
+  });
+  g.clockMs = 100; g.wallPhaseEnd = 0;
+  g._updateWalls();
+  const gh = g.ghosts[0];
+  assert.ok(g.wallLookup.has(K(0, 0)), 'the shape landed on the ghost');
+  assert.ok(gh.x === 0 && gh.y === 0, 'the ghost was not teleported off the shape');
+  // every neighbour of the corner is frame too: the only way out is through
+  for (const [nx, ny] of [[1, 0], [0, 1], [GRID - 1, 0], [0, GRID - 1]])
+    assert.ok(g.wallLookup.has(K(nx, ny)), 'the corner is fully walled in');
+  g.food = { x: 10, y: 10, bonus: false, kind: 0 }; g.foodAge = 0;
+  let out = -1;
+  for (let n = 0; n < 12 && out < 0; n++) {
+    g._moveGhost(gh);
+    if (!g.wallLookup.has(K(gh.x, gh.y))) out = n;
+  }
+  assert.ok(out >= 0, 'the buried ghost walked itself onto open ground');
+  for (let n = 0; n < 24; n++) {
+    g._moveGhost(gh);
+    assert.ok(!g.wallLookup.has(K(gh.x, gh.y)), 'once clear, the walls block it again');
+  }
+});
+
 test('the TNT ladder grows one block per mark, capped, never demoted, never stopping', () => {
   assert.deepEqual(TNT_SCORES, [15, 25, 35, 45, 55, 65, 75, 85, 95]);
   const g = quietGame();
@@ -756,10 +791,14 @@ test('ghosts route through portals on purpose, and never through spent ones', ()
 });
 
 // ------------------------------------------------------------ golden fixtures
-// Rounds recorded by the v4 (single-snake) engine, committed as JSON. The
-// multi-snake refactor must replay them to the identical final state: this is
-// the proof that one snake on the new machine IS the old machine.
-test('v4 golden rounds replay bit-identically on the multi-snake engine', () => {
+// Rounds recorded by the v4 (single-snake) engine, committed as JSON, pinned
+// to what today's engine deterministically makes of them. They began as the
+// proof that one snake on the multi-snake machine IS the old machine. The v7
+// burial rule (a wall forming on a ghost no longer relocates it) changed the
+// classic round's course, so its finals are re-pinned to the v7 outcome; no
+// log was ever persisted, so no record was rewritten. Survival and speedrun
+// had no burial event and still replay their v4 finals bit-identically.
+test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
   assert.deepEqual(names, ['classic', 'survival', 'speedrun'], 'all three modes are pinned');
