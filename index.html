@@ -2857,6 +2857,7 @@
         over: false, spectating: false, stalled: false, up: false,
         starting: false, touchTimer: null,
         ready: false, lastTrackAt: 0, trackDirty: false,
+        rseq: 0, readyBy: new Map(), knownRefs: new Set(),
         wins: storedWins,
       };
       // The room's ticker: flushes a paced presence update when one is owed,
@@ -2874,6 +2875,7 @@
       // presence is opt-in: the handler must exist before subscribe()
       channel.on('presence', { event: 'sync' }, () => { if (vs === room) vsRosterSync(); });
       channel.on('broadcast', { event: 'lobby' }, ({ payload }) => { if (vs === room) vsLobbyMsg(payload); });
+      channel.on('broadcast', { event: 'ready' }, ({ payload }) => { if (vs === room) vsReadyMsg(payload); });
       let settled = false;
       const guard = setTimeout(() => {
         if (settled) return;
@@ -2965,10 +2967,20 @@
   function vsRosterSync() {
     const stateMap = vs.channel.presenceState();
     const list = [];
+    let fresh = false;
     for (const key of Object.keys(stateMap)) {
       const m = stateMap[key][0];
-      if (m) list.push({ ref: key, name: String(m.name || 'YOU'), ts: m.ts || 0, host: !!m.host, ready: !!m.ready });
+      if (!m) continue;
+      // whichever source spoke last about this seat wins, by its own counter
+      const held = vs.readyBy.get(key);
+      const ready = held && held.rseq > (m.rseq | 0) ? held.ready : !!m.ready;
+      list.push({ ref: key, name: String(m.name || 'YOU'), ts: m.ts || 0, host: !!m.host, ready });
+      if (key !== vs.ref && !vs.knownRefs.has(key)) { vs.knownRefs.add(key); fresh = true; }
     }
+    // A newcomer reads readiness out of presence, which can be up to a pacing
+    // window stale, so everyone already here says their piece again. Cheap at
+    // five seats, and it makes a room that fills up agree at once.
+    if (fresh) vsSay(vs.ready);
     // the host anchors slot one; everyone else queues by arrival
     list.sort((a, b) => (b.host - a.host) || (a.ts - b.ts) || (a.ref < b.ref ? -1 : 1));
     vs.present = list;
@@ -3012,11 +3024,37 @@
   function vsTrack() {
     vs.lastTrackAt = Date.now();
     vs.trackDirty = false;
-    void vs.channel.track({ name: vs.name, ts: vs.joinedTs, host: vs.host, ready: vs.ready });
+    void vs.channel.track({ name: vs.name, ts: vs.joinedTs, host: vs.host, ready: vs.ready, rseq: vs.rseq });
   }
   function vsTrackSoon() {
     if (Date.now() - vs.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
     else vs.trackDirty = true;
+  }
+
+  // A tick has to land on the other screens NOW, and presence cannot do that:
+  // measured against this project it takes anywhere from 18ms to 2.7s to
+  // propagate, on top of our own pacing. So the flag goes out twice: a
+  // broadcast for the 16ms path, and the presence write as before, which
+  // stays the durable truth (broadcast is at-most-once with no history, so a
+  // dropped one has to heal). `rseq` is what lets them disagree safely: it
+  // rises once per toggle, rides both channels, and the higher one wins, so
+  // neither a lost broadcast nor a stale presence entry can flip a tick back.
+  function vsSay(ready) {
+    if (!vs.up) return;      // a send off a live channel silently becomes a POST
+    void vs.channel.send({
+      type: 'broadcast', event: 'ready',
+      payload: { ref: vs.ref, ready, rseq: vs.rseq },
+    });
+  }
+  function vsReadyMsg(m) {
+    if (!m || typeof m.ref !== 'string' || m.ref === vs.ref) return;
+    if (typeof m.ready !== 'boolean' || typeof m.rseq !== 'number') return;
+    const held = vs.readyBy.get(m.ref);
+    if (held && held.rseq >= m.rseq) return;      // an echo, or overtaken already
+    vs.readyBy.set(m.ref, { ready: m.ready, rseq: m.rseq });
+    for (const p of vs.present) if (p.ref === m.ref) p.ready = m.ready;
+    vsRefreshPanel();
+    refreshModeUI();
   }
   function vsMyReady(p) { return p.ref === vs.ref ? vs.ready : p.ready; }
   function vsReadyStats() {
@@ -3028,6 +3066,8 @@
   function vsToggleReady() {
     if (!vs || !vs.up || vsInRound()) return;
     vs.ready = !vs.ready;
+    vs.rseq++;
+    vsSay(vs.ready);      // the fast path first; presence follows at its own pace
     vsTrackSoon();
     vsRefreshPanel();
     refreshModeUI();
@@ -3092,8 +3132,14 @@
     vs.over = false;
     vs.spectating = false;
     vs.stalled = false;
-    // readiness is consent for ONE kickoff; the next round asks again
+    // Readiness is consent for ONE kickoff; the next round asks again. Every
+    // client clears its own tick on the same message, so the held broadcasts
+    // go with it: left standing they would out-rank presence and show a room
+    // that is already ready for a round nobody has agreed to.
     vs.ready = false;
+    vs.readyBy.clear();
+    vs.rseq++;
+    vsSay(false);
     vsTrackSoon();
     g = createGame({
       seed: m.seed >>> 0, tickMs: SPEEDS.normal, wallsEnabled: true,
