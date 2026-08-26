@@ -2428,7 +2428,9 @@
     const vsReadyStatsNow = vsDead ? vsReadyStats() : null;
     startMain.textContent =
       state === 'paused' ? 'RESUME'
-      : vsDead ? (!vs.ready ? 'READY UP' : vsHostNow() ? 'REMATCH' : 'UNREADY')
+      : vsDead ? (!vs.ready ? 'READY UP'
+                 : vsHostNow() && vsReadyStatsNow.all ? 'REMATCH'
+                 : 'UNREADY')
       : mode === 'versus' ? 'REMATCH'
       : state === 'dead' && runKey() === lastRunKey ? 'REMATCH'
       : 'START';
@@ -2436,7 +2438,9 @@
       ? `${vsReadyStatsNow.ready}/${vsReadyStatsNow.seats} READY`
       : RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
-    startBtn.disabled = vsDead && vs.ready && vsHostNow() && !vsReadyStatsNow.all;
+    // no dead ends on a results screen: READY UP, UNREADY and REMATCH are all
+    // live actions, so this button is never a label with nothing behind it
+    startBtn.disabled = false;
     const playable = mode === 'versus'
       ? vsDead
       : (mode !== 'tourney' || tourneyState() === 'open');
@@ -3221,8 +3225,11 @@
       // field, and for the acting host READY UP first, then REMATCH once
       // the whole room has ticked in.
       if (vs && vs.over && state === 'dead') {
-        if (!vs.ready) vsToggleReady();
-        else if (vsHostNow()) void vsStart();
+        // the button does exactly what its label says: the acting host
+        // whistles once the whole room has ticked in, and every other state
+        // toggles this tab's own tick, so READY UP is always reversible
+        if (vs.ready && vsHostNow() && vsReadyStats().all) void vsStart();
+        else vsToggleReady();
       }
       return;
     }
