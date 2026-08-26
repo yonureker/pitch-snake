@@ -428,6 +428,24 @@ const _rp = { cx: 0, cy: 0 };
 function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: number } {
   const s = game.snake[i];
   if (s === undefined) return _rp;
+  // rule 25: while a fatal move hangs, the body waits where it stands and
+  // only the head reaches into the cell that would kill it
+  if (game.doom !== null) {
+    if (i > 0) {
+      _rp.cx = s.x;
+      _rp.cy = s.y;
+      return _rp;
+    }
+    let dx = game.doom.tx - s.x;
+    let dy = game.doom.ty - s.y;
+    if (dx > 1) dx -= GRID;
+    else if (dx < -1) dx += GRID;
+    if (dy > 1) dy -= GRID;
+    else if (dy < -1) dy += GRID;
+    _rp.cx = s.x + dx * p;
+    _rp.cy = s.y + dy * p;
+    return _rp;
+  }
   const behind = game.snake[i + 1];
   const prev = behind ?? game.tailFrom ?? s;
   let dx = s.x - prev.x;

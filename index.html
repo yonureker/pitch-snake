@@ -1284,6 +1284,12 @@
     if (!sfxOn()) return;
     sfxTone('square', 1050, 1050, audio.currentTime, 0.05, 0.22);
   }
+  function sfxSave(vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // the great escape
+    sfxTone('sine', 480, 1040, at, 0.13, 0.35 * vol);
+    sfxTone('triangle', 960, 2080, at + 0.03, 0.11, 0.18 * vol);
+  }
   function sfxKickoff() { if (sfxOn()) sfxPeep(audio.currentTime, 0.3, 1); }
   function sfxFullTime() {
     if (!sfxOn()) return;
@@ -1300,7 +1306,7 @@
     for (const e of events) {
       const replayed = vsView() && e.q !== undefined && e.q <= vsEventQ;
       if (vsView() && e.q !== undefined && e.q > vsEventQ) vsEventQ = e.q;
-      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die' || e.t === 'ghost')) continue;
+      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die' || e.t === 'ghost' || e.t === 'save')) continue;
       // rival events play quiet; the board-level ones (walls, portals,
       // ghosts) are everyone's and play full
       const mineVol = !vsView() || e.player === undefined || e.player === vs.myIdx ? 1 : 0.35;
@@ -1333,6 +1339,9 @@
         if (e.open && !replayed) sfxPortalOpen();
       } else if (e.t === 'ghost') {
         sfxGhostIn();
+      } else if (e.t === 'save') {
+        sfxSave(mineVol);
+        spawnBurst(e.x, e.y, 10, 0.45, () => (Math.random() * 1.6 + 0.7) * (cell / 14), () => '#f4ecd8');
       } else if (e.t === 'die') {
         // Solo: the crash, or the full-time whistle on a timed round. Versus:
         // crashes only; the room's one whistle blows at vsRoundOver, and a
@@ -1839,6 +1848,17 @@
   // cell, so the body pours out of the far window without a gap (rule 18).
   const _rp = { cx: 0, cy: 0 };
   function segRenderPos(pl, i, p) {
+    // rule 25: while a fatal move hangs, the body waits where it stands and
+    // only the head reaches into the cell that would kill it
+    if (pl.doom) {
+      const s = pl.snake[i];
+      if (i > 0) { _rp.cx = s.x; _rp.cy = s.y; return _rp; }
+      let dx = pl.doom.tx - s.x, dy = pl.doom.ty - s.y;
+      if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;
+      if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
+      _rp.cx = s.x + dx * p; _rp.cy = s.y + dy * p;
+      return _rp;
+    }
     const s = pl.snake[i];
     const prev = i < pl.snake.length - 1 ? pl.snake[i + 1] : (pl.tailFrom || s);
     let dx = s.x - prev.x, dy = s.y - prev.y;

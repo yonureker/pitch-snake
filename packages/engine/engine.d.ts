@@ -14,6 +14,7 @@ export declare const BONUS_EVERY: number;
 export declare const REGULAR_KINDS: number;
 export declare const BONUS_KINDS: number;
 export declare const WARN_MS: number;
+export declare const REDIRECT_MS: number;
 export declare const SOLID_MS: number;
 export declare const TNT_SCORES: number[];
 export declare const GHOST_SCORES: number[];
@@ -63,9 +64,16 @@ export interface Player {
   dir: Cell; dirQueue: Cell[];
   score: number; pendingGrowth: number;
   warpedIn: boolean;
+  /** A fatal move hanging in its doom window (rule 25); kept after a doom
+   *  death so renderers can draw the head where it reached. */
+  doom: Doom | null;
   alive: boolean; deadReason: string | null;
   /** Quantum this snake went down on; 0 while alive. */
   diedAt: number;
+}
+
+export interface Doom {
+  tx: number; ty: number; until: number; reason: string;
 }
 
 export type GameEvent = (
@@ -75,6 +83,8 @@ export type GameEvent = (
   | { t: 'tnt'; player: number; x: number; y: number; lost: Cell[] }
   | { t: 'wall'; phase: 'off' | 'warning' | 'solid' }
   | { t: 'portal'; open: boolean }
+  | { t: 'ghost'; n: number }
+  | { t: 'save'; player: number; x: number; y: number }
   /** `segments` is present only when the round continues without this snake
    *  (its body left the board); a round-ending death keeps the body. */
   | { t: 'die'; player: number; reason: string; segments?: Cell[] }
@@ -113,6 +123,7 @@ export interface Game {
   dir: Cell; dirQueue: Cell[];
   headFrom: Cell; headMajX: number; headMajY: number;
   score: number; pendingGrowth: number;
+  doom: Doom | null;
   food: Food; foodAge: number; regularEaten: number;
   wallState: 'off' | 'warning' | 'solid'; wallPhaseEnd: number;
   wallCells: Cell[]; wallLookup: Set<number>;

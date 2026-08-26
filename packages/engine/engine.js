@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 7;   // 7: a wall forming on a ghost buries it; it walks out
+export const ENGINE_VERSION = 8;   // 8: the doom window; 7: a wall forming on a ghost buries it
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -59,6 +59,15 @@ export const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
 export const GHOST_SCORES = [10, 20, 30, 40, 50];
 export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed setting
+
+// The doom window (rule 25): walking into a wall or yourself is not final
+// for this long. The head hangs mid-glide over the fatal cell; one safe
+// perpendicular press inside the window converts the death into the turn
+// that was meant, and silence lands the sentence exactly here. A multiple
+// of SIM_DT, at most half the FASTEST tick (so a doomed head never crosses
+// the rule 24 majority flip) and under every tick (so doom always resolves
+// before the next boundary).
+export const REDIRECT_MS = 50;
 
 // Survival opens with the ghosts, not with the dynamite: a wave standing on
 // the pitch before the snake has moved reads as scenery, blinks out a few
@@ -227,6 +236,7 @@ export function createGame(cfg = {}) {
       dir: { x: 1, y: 0 }, dirQueue: [],
       score: 0, pendingGrowth: 0,
       warpedIn: false,
+      doom: null,              // {tx, ty, until, reason} while a fatal move hangs (rule 25)
       alive: true, deadReason: null, diedAt: 0,
       _mx: 0, _my: 0,          // this quantum's majority cell (rule 24 scratch)
     };
@@ -279,7 +289,7 @@ export function createGame(cfg = {}) {
   // the web page, the mobile shell and the whole one-snake test suite work
   // unchanged. Engine code below never goes through these.
   for (const f of ['snake', 'snakeSet', 'tailFrom', 'headFrom', 'headMajX', 'headMajY',
-                   'dir', 'dirQueue', 'score', 'pendingGrowth', 'warpedIn', 'deadReason']) {
+                   'dir', 'dirQueue', 'score', 'pendingGrowth', 'warpedIn', 'deadReason', 'doom']) {
     Object.defineProperty(S, f, {
       get() { return players[0][f]; },
       set(v) { players[0][f] = v; },
@@ -742,6 +752,25 @@ export function createGame(cfg = {}) {
     }
   }
 
+  // What entering (nx, ny) would cost this snake its life to: 'wall', 'self',
+  // or null. The one shared judgment for the step, the doom save, and the
+  // doom sentence, so all three always agree.
+  function moveDeadly(p, nx, ny) {
+    const nk = K(nx, ny);
+    // interior walls are lethal only once they're live
+    if (S.wallState === 'solid' && S.wallLookup.has(nk)) return 'wall';
+    // SELF collision only, O(1): another snake's body is thin air (snakes
+    // race, they never fence). The tail cell is exempt when it glides out
+    // this tick; whether this tick grows decides that, so settle it first.
+    const ate = nx === S.food.x && ny === S.food.y;
+    const grows = p.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
+    const tail = p.snake[p.snake.length - 1];
+    if (p.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return 'self';
+    // ghosts are NOT tested here: contact with a mover is decided by the
+    // majority-cell rule in quantum() (rule 24), never by cell entry
+    return null;
+  }
+
   function stepPlayer(p) {
     if (p.dirQueue.length) p.dir = p.dirQueue.shift();
     // A head standing in a window spends this step coming out of the far one:
@@ -751,23 +780,31 @@ export function createGame(cfg = {}) {
               : portalEndAt(p.snake[0].x, p.snake[0].y);
     const nx = win === 1 ? S.portal.bx : win === 2 ? S.portal.ax : wrap(p.snake[0].x + p.dir.x);
     const ny = win === 1 ? S.portal.by : win === 2 ? S.portal.ay : wrap(p.snake[0].y + p.dir.y);
+    const reason = moveDeadly(p, nx, ny);
+    if (reason) {
+      // A hop is forced, so its one fatal case (a body on the far end) stays
+      // entry-tested; there was never a choice to un-make.
+      if (win) return die(p, reason);
+      // The doom window (rule 25): the move hangs instead of killing. The
+      // state stays put, the glide anchor snaps to the cell the head owns so
+      // the rule 24 majority holds still, and the renderers draw the head
+      // reaching into the fatal cell while the body waits.
+      p.headFrom.x = p.snake[0].x; p.headFrom.y = p.snake[0].y;
+      p.doom = { tx: nx, ty: ny, until: S.clockMs + REDIRECT_MS, reason };
+      // a combo press already queued is an instant save when it works
+      if (p.dirQueue.length && tryRedirect(p, p.dirQueue[0].x, p.dirQueue[0].y)) p.dirQueue.shift();
+      return;
+    }
+    commitMove(p, nx, ny, win);
+  }
+
+  // The move itself, past every fatal test: state, tail, growth, rewards.
+  // Runs at the boundary normally, mid-glide for a doom save, and at window
+  // end for a pardoned doom (the drawn glide can't tell the difference).
+  function commitMove(p, nx, ny, win) {
     const nk = K(nx, ny);
-
-    // interior walls are lethal only once they're live
-    if (S.wallState === 'solid' && S.wallLookup.has(nk)) return die(p, 'wall');
-
-    // whether this tick grows decides the tail rule below, so settle it first
     const ate = nx === S.food.x && ny === S.food.y;
     const grows = p.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
-
-    // SELF collision only, O(1): another snake's body is thin air (snakes
-    // race, they never fence). The tail cell is exempt when it glides out
-    // this tick.
-    const tail = p.snake[p.snake.length - 1];
-    if (p.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return die(p, 'self');
-
-    // ghosts are NOT tested here: contact with a mover is decided by the
-    // majority-cell rule in quantum() (rule 24), never by cell entry
 
     // move: pop the vacated tail first so the set stays exact, then add the head
     p.headFrom.x = p.snake[0].x; p.headFrom.y = p.snake[0].y;
@@ -824,6 +861,25 @@ export function createGame(cfg = {}) {
     }
   }
 
+  // The doom save (rule 25): one perpendicular press to a survivable cell,
+  // taken mid-glide. The reversal ban holds against the doomed heading, a
+  // press into another fatal cell saves nothing (it falls to the queue as
+  // any press would), and a save consumes the window: the move it makes is
+  // final. The body catches up in the same glide, which reads as the lunge
+  // it is.
+  function tryRedirect(p, x, y) {
+    if (!p.doom) return false;
+    if (x === -p.dir.x && y === -p.dir.y) return false;
+    if (x === p.dir.x && y === p.dir.y) return false;
+    const nx = wrap(p.snake[0].x + x), ny = wrap(p.snake[0].y + y);
+    if (moveDeadly(p, nx, ny)) return false;
+    p.doom = null;
+    p.dir = { x, y };
+    commitMove(p, nx, ny, 0);
+    emit({ t: 'save', player: p.idx, x: nx, y: ny });
+    return true;
+  }
+
   // one fixed quantum of simulation
   function quantum() {
     S.quanta++;
@@ -846,6 +902,23 @@ export function createGame(cfg = {}) {
     while (anyAlive() && S.progMs >= S.tickMs) {
       S.progMs -= S.tickMs;
       for (const p of players) if (p.alive) stepPlayer(p);
+    }
+    // ---- the doom window closes (rule 25) ----
+    // A doomed head not saved by now takes its sentence exactly REDIRECT_MS
+    // after the boundary, re-judged first: a wall phase ending inside the
+    // window is a pardon, and the move then completes as if it had committed
+    // on time (the state lands late; the drawn glide never knows). A death
+    // keeps its doom record so the renderers can draw the head where it
+    // reached. On the whistle's own quantum the whistle outranks the
+    // sentence: 'time' is the end a doomed snake gets there.
+    if (anyAlive() && !(S.durationMs && S.clockMs >= S.durationMs)) {
+      for (const p of players) {
+        if (!p.alive || !p.doom || S.clockMs < p.doom.until) continue;
+        const d = p.doom;
+        const reason = moveDeadly(p, d.tx, d.ty);
+        if (reason) die(p, reason);
+        else { p.doom = null; commitMove(p, d.tx, d.ty, 0); }
+      }
     }
     // ---- contact (rule 24) ----
     // Every mover is exactly where it is drawn. A head's one cell is the
@@ -923,6 +996,12 @@ export function createGame(cfg = {}) {
   function setDir(x, y, player = 0) {
     const p = players[player];
     if (!p || !p.alive) return;
+    // a press during a doom window tries the save first (rule 25); the
+    // saving press is logged like any accepted input, so replays re-save
+    if (p.doom && tryRedirect(p, x, y)) {
+      S.log.inputs.push(players.length === 1 ? [S.quanta, x, y] : [S.quanta, x, y, player]);
+      return;
+    }
     const ref = p.dirQueue.length ? p.dirQueue[p.dirQueue.length - 1] : p.dir;
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
@@ -979,6 +1058,7 @@ export function createGame(cfg = {}) {
         dir: { x: p.dir.x, y: p.dir.y },
         dirQueue: p.dirQueue.map(d => ({ x: d.x, y: d.y })),
         score: p.score, pendingGrowth: p.pendingGrowth, warpedIn: p.warpedIn,
+        doom: p.doom ? { tx: p.doom.tx, ty: p.doom.ty, until: p.doom.until, reason: p.doom.reason } : null,
         alive: p.alive, deadReason: p.deadReason, diedAt: p.diedAt,
       })),
       logLen: S.log.inputs.length, logEnd: S.log.end, logFinal: S.log.finalScore,
@@ -1011,6 +1091,7 @@ export function createGame(cfg = {}) {
       p.dir = { x: q.dir.x, y: q.dir.y };
       p.dirQueue = q.dirQueue.map(d => ({ x: d.x, y: d.y }));
       p.score = q.score; p.pendingGrowth = q.pendingGrowth; p.warpedIn = q.warpedIn;
+      p.doom = q.doom ? { tx: q.doom.tx, ty: q.doom.ty, until: q.doom.until, reason: q.doom.reason } : null;
       p.alive = q.alive; p.deadReason = q.deadReason; p.diedAt = q.diedAt;
     }
     // the log is append-only: rewinding forgets the inputs recorded after the
@@ -1078,11 +1159,11 @@ export function createGame(cfg = {}) {
 // same rules: one snake on a board behaves exactly as it always did.
 export function replay(log) {
   // v4 was the single-snake era, v5 multi-snake before the clinch rule, v6
-  // before a wall forming on a ghost buried it in place. All three shapes
-  // replay here under today's rules; no log of any of them was ever
-  // persisted, so a rule changing an old round's course rewrites nobody's
-  // record.
-  if (!log || (log.v !== 4 && log.v !== 5 && log.v !== 6 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
+  // before a wall forming on a ghost buried it in place, v7 before the doom
+  // window. All these shapes replay here under today's rules; no log of any
+  // of them was ever persisted, so a rule changing an old round's course
+  // rewrites nobody's record.
+  if (!log || (log.v !== 4 && log.v !== 5 && log.v !== 6 && log.v !== 7 && log.v !== ENGINE_VERSION)) throw new Error('unsupported log version');
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,

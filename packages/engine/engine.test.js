@@ -11,7 +11,7 @@ import {
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
   TNT_SCORES, GHOST_SCORES, GHOST_MS, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
-  MIN_SPAWN_DIST, K, wrapDist, SURVIVAL_TNT_FIRST,
+  MIN_SPAWN_DIST, K, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -363,6 +363,158 @@ test('a wall forming on a ghost buries it in place; it phases out and the walls 
     g._moveGhost(gh);
     assert.ok(!g.wallLookup.has(K(gh.x, gh.y)), 'once clear, the walls block it again');
   }
+});
+
+// ------------------------------------------------------------ the doom window
+const DOOM_Q = REDIRECT_MS / SIM_DT;
+
+function walledGame() {
+  const g = quietGame();                       // 13 quanta per tick at NORMAL
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.wallState = 'solid';
+  g.wallLookup = new Set([K(6, 5)]);           // dead ahead
+  return g;
+}
+
+test('doom: a safe press inside the window converts death into the turn that was meant', () => {
+  const g = walledGame();
+  g.advanceQuanta(13);                         // the boundary: the move hangs
+  assert.equal(g.alive, true, 'entering the wall no longer kills on the spot');
+  assert.ok(g.doom && g.doom.tx === 6 && g.doom.ty === 5, 'the move hangs over the wall cell');
+  assert.ok(cellEq(g.snake[0], 5, 5), 'the state never entered it');
+  assert.ok(g.headFrom.x === 5 && g.headFrom.y === 5, 'the glide anchor holds the majority still');
+  g.advanceQuanta(2);                          // 20ms into the window
+  g.setDir(0, -1);                             // the save
+  assert.equal(g.doom, null, 'the window is spent');
+  assert.ok(cellEq(g.snake[0], 5, 4), 'the head took the turn instead');
+  assert.ok(g.drainEvents().some(e => e.t === 'save'), 'and the save announced itself');
+  g.advanceQuanta(11);                         // to the next boundary: quantum 26
+  assert.ok(cellEq(g.snake[0], 5, 3), 'the pace never changed: next cell right on schedule');
+});
+
+test('doom: silence lands the sentence at exactly REDIRECT_MS, pose kept', () => {
+  const g = walledGame();
+  g.advanceQuanta(13 + DOOM_Q - 1);
+  assert.equal(g.alive, true, 'one quantum before the window closes');
+  g.advanceQuanta(1);
+  assert.equal(g.alive, false);
+  assert.equal(g.deadReason, 'wall');
+  assert.equal(g.players[0].diedAt, 13 + DOOM_Q, 'died on the exact closing quantum');
+  assert.ok(g.doom && g.doom.tx === 6, 'the doom record survives death for the renderers');
+  assert.ok(cellEq(g.snake[0], 5, 5), 'the state died where it stood');
+});
+
+test('doom: a press into another fatal cell saves nothing; a later safe one still does', () => {
+  const g = walledGame();
+  g.wallLookup.add(K(5, 4));                   // up is walled too
+  g.advanceQuanta(13);
+  g.setDir(0, -1);                             // into the second wall: no save
+  assert.ok(g.doom, 'still doomed');
+  g.setDir(0, 1);                              // down is open
+  assert.equal(g.doom, null);
+  assert.ok(cellEq(g.snake[0], 5, 6), 'the safe press took it');
+  assert.equal(g.alive, true);
+});
+
+test('doom: a combo press already queued is an instant save at the boundary', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.wallState = 'solid';
+  g.wallLookup = new Set([K(5, 4)]);           // the wall is UP
+  g.setDir(0, -1);                             // the doomed turn
+  g.setDir(1, 0);                              // and the follow-up, both before the boundary
+  g.advanceQuanta(13);
+  assert.equal(g.doom, null, 'the queued follow-up saved it on the spot');
+  assert.ok(cellEq(g.snake[0], 6, 5), 'carried straight through');
+  assert.equal(g.dirQueue.length, 0, 'the saving press was consumed');
+  assert.equal(g.alive, true);
+});
+
+test('doom: the wall phase ending inside the window is a pardon; the move completes', () => {
+  const g = walledGame();
+  g.advanceQuanta(13 + 2);
+  assert.ok(g.doom, 'hanging');
+  g.wallState = 'off'; g.wallLookup = new Set(); g.wallCells = [];
+  g.advanceQuanta(DOOM_Q - 2);
+  assert.equal(g.alive, true, 'pardoned');
+  assert.equal(g.doom, null);
+  assert.ok(cellEq(g.snake[0], 6, 5), 'the deferred move landed');
+  g.advanceQuanta(13 - DOOM_Q);                // the original boundary schedule holds
+  assert.ok(cellEq(g.snake[0], 7, 5), 'next cell right on time');
+});
+
+test('doom: the whistle outranks the sentence on a shared quantum', () => {
+  for (const [durationMs, want] of [[170, 'time'], [180, 'time'], [190, 'wall']]) {
+    const g = createGame({ seed: 7, durationMs });
+    g.wallPhaseEnd = 1e12;
+    foodFar(g);
+    setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+    g.wallState = 'solid';
+    g.wallLookup = new Set([K(6, 5)]);
+    g.advanceQuanta(60);
+    assert.equal(g.deadReason, want, `duration ${durationMs} ends as ${want}`);
+  }
+});
+
+test('doom: a ghost sliding onto the hanging head still kills by contact', () => {
+  const g = walledGame();
+  g.advanceQuanta(13);
+  assert.ok(g.doom);
+  g.ghosts.push({
+    x: 5, y: 5, px: 5, py: 5, dir: { x: 0, y: 0 }, warped: false, role: 0,
+    moveAt: 1e12, majX: 5, majY: 5,
+  });
+  g.advanceQuanta(1);
+  assert.equal(g.deadReason, 'ghost', 'contact beat the sentence');
+});
+
+test('doom: a hop is forced and locks; a body on the far end still kills at entry', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[5, 5], [5, 6], [5, 7], [12, 12], [12, 13], [12, 14]], 1, 0);
+  g.portal = { ax: 5, ay: 5, bx: 12, by: 13, used: false };
+  g._step();
+  assert.equal(g.alive, false);
+  assert.equal(g.deadReason, 'self');
+  assert.equal(g.doom, null, 'no window on a forced hop');
+});
+
+test('doom: snapshot and restore carry the window, and the resim lands the same death', () => {
+  const g = walledGame();
+  g.advanceQuanta(13 + 1);
+  const snap = g.snapshot();
+  g.advanceQuanta(DOOM_Q);
+  assert.equal(g.alive, false);
+  const diedAt = g.players[0].diedAt;
+  g.restore(snap);
+  assert.ok(g.doom && g.doom.tx === 6 && g.doom.ty === 5, 'the window rode the snapshot');
+  assert.equal(g.alive, true);
+  g.advanceQuanta(DOOM_Q);
+  assert.equal(g.alive, false);
+  assert.equal(g.players[0].diedAt, diedAt, 'the resim died on the identical quantum');
+});
+
+test('doom: an organic round with a save replays to the identical end', () => {
+  const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  let done = null;
+  for (let seed = 1; seed < 120 && !done; seed++) {
+    const g = createGame({ seed });
+    let saves = 0, di = seed;
+    for (let q = 0; q < 9000 && g.alive; q++) {
+      if (g.clockMs % 70 === 0) { const d = dirs[di++ % 4]; g.setDir(d[0], d[1]); }
+      g.advanceQuanta(1);
+      for (const e of g.drainEvents()) if (e.t === 'save') saves++;
+    }
+    if (saves > 0 && !g.alive) done = g;
+  }
+  assert.ok(done, 'found a seed whose round contains a doom save and a death');
+  const r = replay(done.log);
+  assert.equal(r.score, done.score, 'same score');
+  assert.equal(r.deadReason, done.deadReason, 'same end');
+  assert.equal(r.quanta, done.quanta, 'same length');
+  assert.deepEqual(r.snake, done.snake, 'same final body');
 });
 
 test('the TNT ladder grows one block per mark, capped, never demoted, never stopping', () => {
@@ -806,10 +958,11 @@ test('ghosts route through portals on purpose, and never through spent ones', ()
 // Rounds recorded by the v4 (single-snake) engine, committed as JSON, pinned
 // to what today's engine deterministically makes of them. They began as the
 // proof that one snake on the multi-snake machine IS the old machine. The v7
-// burial rule (a wall forming on a ghost no longer relocates it) changed the
-// classic round's course, so its finals are re-pinned to the v7 outcome; no
-// log was ever persisted, so no record was rewritten. Survival and speedrun
-// had no burial event and still replay their v4 finals bit-identically.
+// burial rule re-pinned classic (a wall buried a ghost mid-round); the v8
+// doom window re-pinned survival: its recorded self-death now hangs in a
+// doom window when the log runs out, so the replay ends mid-window, alive,
+// deadReason null, same score. No log was ever persisted, so no record was
+// rewritten. Speedrun still replays its v4 finals bit-identically.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -1018,7 +1171,7 @@ test('multi-snake: a leader outliving the last rival clinches on the same quantu
   g.players[1].score = 3;
   g.wallState = 'solid';
   g.wallLookup = new Set([K(6, 5)]);       // the next cell of snake 1's path
-  g.advanceQuanta(13);                     // one full tick at the default pace
+  g.advanceQuanta(13 + REDIRECT_MS / SIM_DT);   // one tick, then the doom window runs out
   assert.equal(g.players[1].deadReason, 'wall', 'the trailing snake hit the wall');
   assert.equal(g.players[0].deadReason, 'won', 'and the leader clinched instantly');
   assert.equal(g.players[0].diedAt, g.players[1].diedAt, 'both stamped on the same quantum');

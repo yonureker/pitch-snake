@@ -292,7 +292,7 @@
       "finalScore": 26
     },
     "score": 26,
-    "deadReason": "self",
+    "deadReason": null,
     "quanta": 3120,
     "snake": [
       { "x": 0, "y": 15 },
