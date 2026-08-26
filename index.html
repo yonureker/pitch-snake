@@ -1848,15 +1848,26 @@
   // cell, so the body pours out of the far window without a gap (rule 18).
   const _rp = { cx: 0, cy: 0 };
   function segRenderPos(pl, i, p) {
-    // rule 25: while a fatal move hangs, the body waits where it stands and
-    // only the head reaches into the cell that would kill it
+    // rule 25: a hanging move is drawn as if it had committed: every segment
+    // glides toward the one ahead (the head toward the fatal cell), so no gap
+    // opens behind the head. A save or a pardon commits onto this exact
+    // geometry (no seam), and a death freezes the whole body mid-stride.
     if (pl.doom) {
-      const s = pl.snake[i];
-      if (i > 0) { _rp.cx = s.x; _rp.cy = s.y; return _rp; }
-      let dx = pl.doom.tx - s.x, dy = pl.doom.ty - s.y;
+      const from = pl.snake[i];
+      if (i === pl.snake.length - 1 && pl.pendingGrowth > 0) {
+        _rp.cx = from.x; _rp.cy = from.y;      // a growing tail would have stayed
+        return _rp;
+      }
+      const ax = i === 0 ? pl.doom.tx : pl.snake[i - 1].x;
+      const ay = i === 0 ? pl.doom.ty : pl.snake[i - 1].y;
+      let dx = ax - from.x, dy = ay - from.y;
       if (dx > 1) dx -= GRID; else if (dx < -1) dx += GRID;
       if (dy > 1) dy -= GRID; else if (dy < -1) dy += GRID;
-      _rp.cx = s.x + dx * p; _rp.cy = s.y + dy * p;
+      if (dx > 1 || dx < -1 || dy > 1 || dy < -1) {   // mid-hop pair: snap (rule 19)
+        _rp.cx = p < 0.5 ? from.x : ax; _rp.cy = p < 0.5 ? from.y : ay;
+        return _rp;
+      }
+      _rp.cx = from.x + dx * p; _rp.cy = from.y + dy * p;
       return _rp;
     }
     const s = pl.snake[i];

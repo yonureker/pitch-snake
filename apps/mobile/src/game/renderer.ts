@@ -428,20 +428,31 @@ const _rp = { cx: 0, cy: 0 };
 function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: number } {
   const s = game.snake[i];
   if (s === undefined) return _rp;
-  // rule 25: while a fatal move hangs, the body waits where it stands and
-  // only the head reaches into the cell that would kill it
+  // rule 25: a hanging move is drawn as if it had committed: every segment
+  // glides toward the one ahead (the head toward the fatal cell), so no gap
+  // opens behind the head. A save or a pardon commits onto this exact
+  // geometry (no seam), and a death freezes the whole body mid-stride.
   if (game.doom !== null) {
-    if (i > 0) {
+    if (i === game.snake.length - 1 && game.pendingGrowth > 0) {
       _rp.cx = s.x;
-      _rp.cy = s.y;
+      _rp.cy = s.y; // a growing tail would have stayed
       return _rp;
     }
-    let dx = game.doom.tx - s.x;
-    let dy = game.doom.ty - s.y;
+    const aheadSeg = i === 0 ? null : game.snake[i - 1];
+    const ax = aheadSeg === null || aheadSeg === undefined ? game.doom.tx : aheadSeg.x;
+    const ay = aheadSeg === null || aheadSeg === undefined ? game.doom.ty : aheadSeg.y;
+    let dx = ax - s.x;
+    let dy = ay - s.y;
     if (dx > 1) dx -= GRID;
     else if (dx < -1) dx += GRID;
     if (dy > 1) dy -= GRID;
     else if (dy < -1) dy += GRID;
+    if (dx > 1 || dx < -1 || dy > 1 || dy < -1) {
+      // mid-hop pair: snap (rule 19)
+      _rp.cx = p < 0.5 ? s.x : ax;
+      _rp.cy = p < 0.5 ? s.y : ay;
+      return _rp;
+    }
     _rp.cx = s.x + dx * p;
     _rp.cy = s.y + dy * p;
     return _rp;
