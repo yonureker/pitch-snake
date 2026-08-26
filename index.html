@@ -58,7 +58,12 @@
     padding: 16px;
     width: 100%;
     max-width: 540px;
+    /* the versus strip's height plus its gap, claimed only while a room is on
+       screen; every height sum below subtracts it, so solo layouts are
+       untouched and the pitch never has to share its surface */
+    --mp-h: 0px;
   }
+  .wrap.mp-open { --mp-h: 42px; }
 
   header {
     width: 100%;
@@ -234,26 +239,34 @@
   .wall-banner.forming { animation: wallBlink 0.32s steps(1, end) infinite; }
   @keyframes wallBlink { 50% { opacity: 0.28; } }
 
-  /* versus: the live scoreboard over the field: a chip per player, leader
-     first with the crown, your own chip bright, the fallen struck through */
+  /* Versus furniture lives in its own strip ABOVE the pitch, never on it: a
+     scoreboard chip per player on the left, the exit on the right. Drawn over
+     the board these two covered the top row, and food landing up there was
+     hard to read. The strip costs real height, which the touch layout pays
+     for through --mp-h (see the board sizing below). */
+  .mp-bar {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  /* the live scoreboard: leader first with the crown, your own chip bright,
+     the fallen struck through */
   .mp-hud {
-    position: absolute; top: 10px; left: 10px; z-index: 3;
     display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;
     padding: 4px 11px; border-radius: 999px;
     background: rgba(20, 17, 13, 0.6);
     color: #d8d0bd; font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px;
-    pointer-events: none; white-space: nowrap; max-width: calc(100% - 20px);
-    overflow: hidden;
+    pointer-events: none; white-space: nowrap;
+    flex: 0 1 auto; min-width: 0; overflow: hidden;
   }
   .mp-hud[hidden] { display: none; }
-  /* the mid-round exit: sits where the gear lives outside a round, and arms
-     on the first tap so a stray thumb cannot dump you out of a match */
+  /* the mid-round exit, arming on the first tap so a stray thumb cannot dump
+     you out of a match. margin-left: auto keeps it right even alone. */
   .mp-quit {
-    position: absolute; top: 8px; right: 8px; z-index: 6;
+    flex: none; margin-left: auto;
     border: 1.5px solid rgba(244,236,216,0.35); border-radius: 999px;
     background: rgba(20,17,13,0.55); color: #e9e0cd;
     font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
-    padding: 8px 13px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    padding: 7px 13px; cursor: pointer; -webkit-tap-highlight-color: transparent;
     backdrop-filter: blur(2px);
   }
   .mp-quit[hidden] { display: none; }
@@ -360,7 +373,7 @@
      plus header, hint and gaps, about 200px of chrome), never narrower than
      the phone column, never wider than the window. The header spans the same
      column, so the logo and the scores ride the board's own edges. */
-  html.touchless .wrap { max-width: min(94vw, max(540px, calc(100dvh - 200px))); }
+  html.touchless .wrap { max-width: min(94vw, max(540px, calc(100dvh - 200px - var(--mp-h)))); }
 
   /* A phone has no room to spare. The game claims exactly one screen and
      never scrolls: the pad takes a slice of the height, the header and hint
@@ -396,7 +409,7 @@
        height; the pad takes what is left, with a floor so a short phone
        still has something to hit and a cap so a tall one does not hand it
        half the screen. */
-    --pad-h: clamp(190px, calc(100svh - min(100vw, 540px) - 62px), 320px);
+    --pad-h: clamp(190px, calc(100svh - min(100vw, 540px) - 62px - var(--mp-h)), 320px);
   }
   /* the legend under the pad is desktop's: a phone has the pad in front of
      it and the gear on the board, and the room is worth more than the words */
@@ -412,9 +425,15 @@
        is what stops it, so a board that fits sideways can never push the pad
        off the screen. 62px is the rest of the shell: header, the two gaps
        and the padding. Anything added to the touch layout comes out of it. */
-    width: min(100%, calc(100svh - var(--pad-h) - 62px));
+    width: min(100%, calc(100svh - var(--pad-h) - 62px - var(--mp-h)));
     flex: 0 0 auto;
     border-radius: 12px;
+  }
+  /* the strip tracks the pitch's own width so the chips line up with the
+     touchline rather than the screen edge */
+  html.touch .mp-bar {
+    width: min(100%, calc(100svh - var(--pad-h) - 62px - var(--mp-h)));
+    flex: 0 0 auto;
   }
   /* the pad runs to both edges: a thumb that misses it sideways would
      otherwise land on the page, which is where the stray taps were going */
@@ -777,13 +796,16 @@
       </div>
     </header>
 
+    <div class="mp-bar" id="mpBar" hidden>
+      <div class="mp-hud" id="mpHud" hidden></div>
+      <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
+    </div>
+
     <div class="board-frame">
       <canvas id="game"></canvas>
-      <div class="mp-hud" id="mpHud" hidden></div>
       <div class="wall-banner" id="wallBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
-      <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
       <div class="overlay" id="overlay">
         <div class="ov-head">
           <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
@@ -2722,6 +2744,19 @@
   // Leader first, crown on the front, my chip bright, the fallen struck.
   // When one snake is left chasing the clinch, the chip row says exactly how
   // many points settle it.
+  // The strip only exists while it has something to say, and while it does it
+  // takes a slice of the column's height (--mp-h), so the board has to be
+  // measured again: a CSS-driven size change fires no resize event.
+  const mpBar = document.getElementById('mpBar');
+  function syncMpBar() {
+    const open = !mpHud.hidden || !mpQuitBtn.hidden;
+    if (mpBar.hidden !== !open) {
+      mpBar.hidden = !open;
+      document.querySelector('.wrap').classList.toggle('mp-open', open);
+      resizeQueued = true;
+    }
+  }
+
   let mpHudHash = -1;
   function hudNote(t) {
     const s = document.createElement('span');
@@ -2732,7 +2767,7 @@
   function syncMpHud() {
     const show = vsView() && (state === 'playing' || state === 'countdown' || state === 'dead');
     if (!show) {
-      if (mpHudHash !== -1) { mpHudHash = -1; mpHud.hidden = true; mpHud.innerHTML = ''; }
+      if (mpHudHash !== -1) { mpHudHash = -1; mpHud.hidden = true; mpHud.innerHTML = ''; syncMpBar(); }
       return;
     }
     let h = (vs.spectating && !vs.over ? 1 : 0) | (vs.stalled ? 2 : 0) | 4;
@@ -2773,6 +2808,7 @@
         : (vs.roster[lastIdx] ? vs.roster[lastIdx].name : '?') + ' NEEDS ' + chase));
     }
     mpHud.hidden = false;
+    syncMpBar();
   }
   // Flags are derived from the live state every frame rather than from
   // events: a rollback can create OR repair a death retroactively, and the
@@ -2915,6 +2951,7 @@
     if (mpQuitBtn.hidden === !show) return;
     mpQuitBtn.hidden = !show;
     disarmMpQuit();
+    syncMpBar();
   }
   mpQuitBtn.addEventListener('click', () => {
     if (Date.now() - mpQuitArmTs < 2600) { vsLeave(); return; }
