@@ -1845,8 +1845,7 @@
     // rivals first, ghosted, so my own snake always reads on top of them;
     // the smoothing pass absorbs any rollback teleports into a paint offset
     if (vsView()) { updateVsSmoothing(p, dt); drawRivals(p); }
-    const meOffX = vsView() ? vsOffX[vs.myIdx] : 0;
-    const meOffY = vsView() ? vsOffY[vs.myIdx] : 0;
+    const mi = vsView() ? vs.myIdx : -1;   // my lane in the smoothing table, or none
 
     // my snake: glides smoothly between grid cells; fills come from a fixed
     // lookup table, nothing allocated, wrapped copies drawn through tunnels
@@ -1859,22 +1858,22 @@
       const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
       if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
       const rp = segRenderPos(me, i, p);
-      drawBodyCell(rp.cx + meOffX, rp.cy + meOffY, r, rad);
+      drawBodyCell(rp.cx + segOffX(mi, i), rp.cy + segOffY(mi, i), r, rad);
     }
 
     // the colours, worn on the second segment so the head keeps its face
     if (flagS && me.snake.length > 1) {
       const rp1 = segRenderPos(me, 1, p);
-      const gx = wrapf(rp1.cx + meOffX) * cell + cell / 2;
-      const gy = wrapf(rp1.cy + meOffY) * cell + cell / 2;
+      const gx = wrapf(rp1.cx + segOffX(mi, 1)) * cell + cell / 2;
+      const gy = wrapf(rp1.cy + segOffY(mi, 1)) * cell + cell / 2;
       ctx.drawImage(flagCanvas, Math.round(gx - flagS / 2), Math.round(gy - flagS / 2));
     }
 
     // eyes on the head, at its interpolated position
     if (me.snake.length) {
       const rp0 = segRenderPos(me, 0, p);
-      const hx = wrapf(rp0.cx + meOffX) * cell + cell / 2;
-      const hy = wrapf(rp0.cy + meOffY) * cell + cell / 2;
+      const hx = wrapf(rp0.cx + segOffX(mi, 0)) * cell + cell / 2;
+      const hy = wrapf(rp0.cy + segOffY(mi, 0)) * cell + cell / 2;
       const off = cell * 0.16, ex = me.dir.x, ey = me.dir.y, px = ey, py = ex;
       ctx.fillStyle = '#211e1a';
       ctx.beginPath();
@@ -1994,17 +1993,27 @@
   const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'];
   let vsTagFont = '';
 
-  // Rollback smoothing. A late remote turn rewinds and re-runs the sim, which
-  // teleports that snake up to a couple of cells between two frames: correct,
-  // but it reads as flicker. The screen absorbs the jump instead: on the
-  // frame a rollback lands, the difference between where a snake WAS drawn
-  // and where it now IS becomes a per-player visual offset that decays to
-  // zero in about a hundred milliseconds. Pure paint: the simulation is
-  // untouched, and a correction too big to glide (over ~2.5 cells) snaps.
-  const vsOffX = new Float64Array(5), vsOffY = new Float64Array(5);
-  const vsLastX = new Float64Array(5), vsLastY = new Float64Array(5);
+  // Rollback smoothing, per segment. A late remote turn rewinds and re-runs
+  // the sim, and what comes back is not a translated snake: it is a snake
+  // with a corner in it that the prediction drew straight. One offset for the
+  // whole body, taken from the head, therefore moved every segment by a
+  // correction that belonged only to the head, sliding a settled tail off its
+  // own cells and letting it snap back: that read as shaking. Each segment
+  // now absorbs its own correction, which is largest at the head and zero at
+  // the settled tail, so a turn arrives as a wave running down the body
+  // rather than the whole snake lurching sideways. Pure paint, no allocation:
+  // the simulation is untouched, and a correction too big to glide (over ~2.5
+  // cells) snaps. Segments past VS_SEG are on their own; a correction that
+  // deep is already indistinguishable from zero.
+  const VS_SEG = 64;
+  const vsOffX = new Float64Array(5 * VS_SEG), vsOffY = new Float64Array(5 * VS_SEG);
+  const vsLastX = new Float64Array(5 * VS_SEG), vsLastY = new Float64Array(5 * VS_SEG);
+  const vsSegN = new Int32Array(5);        // segments carrying history from last frame
   let vsSeenRb = 0;
   const wrapD = v => ((v % GRID) + GRID * 1.5) % GRID - GRID / 2;
+  // the paint offset for one segment; zero outside a room, or past the smoothed depth
+  const segOffX = (pi, i) => (pi < 0 || i >= VS_SEG) ? 0 : vsOffX[pi * VS_SEG + i];
+  const segOffY = (pi, i) => (pi < 0 || i >= VS_SEG) ? 0 : vsOffY[pi * VS_SEG + i];
   function updateVsSmoothing(prog, dt) {
     const rb = vs.session ? vs.session.stats.rollbacks : vsSeenRb;
     const caught = rb !== vsSeenRb;
@@ -2012,28 +2021,30 @@
     const decay = Math.exp(-dt / 90);
     for (let pi = 0; pi < g.players.length; pi++) {
       const pl = g.players[pi];
-      if (!pl.snake.length) { vsOffX[pi] = 0; vsOffY[pi] = 0; continue; }
-      const rp = segRenderPos(pl, 0, prog);
-      if (caught) {
-        const dx = wrapD(vsLastX[pi] - rp.cx), dy = wrapD(vsLastY[pi] - rp.cy);
-        if (dx * dx + dy * dy <= 6.25) { vsOffX[pi] = dx; vsOffY[pi] = dy; }
-        else { vsOffX[pi] = 0; vsOffY[pi] = 0; }
-      } else {
-        vsOffX[pi] *= decay; vsOffY[pi] *= decay;
-        if (vsOffX[pi] * vsOffX[pi] + vsOffY[pi] * vsOffY[pi] < 0.0001) { vsOffX[pi] = 0; vsOffY[pi] = 0; }
+      const base = pi * VS_SEG;
+      const n = Math.min(pl.snake.length, VS_SEG);
+      for (let i = 0; i < n; i++) {
+        const k = base + i;
+        const rp = segRenderPos(pl, i, prog);
+        if (i >= vsSegN[pi]) {
+          vsOffX[k] = 0; vsOffY[k] = 0;         // a segment with no history to glide from
+        } else if (caught) {
+          const dx = wrapD(vsLastX[k] - rp.cx), dy = wrapD(vsLastY[k] - rp.cy);
+          if (dx * dx + dy * dy <= 6.25) { vsOffX[k] = dx; vsOffY[k] = dy; }
+          else { vsOffX[k] = 0; vsOffY[k] = 0; }
+        } else {
+          vsOffX[k] *= decay; vsOffY[k] *= decay;
+          if (vsOffX[k] * vsOffX[k] + vsOffY[k] * vsOffY[k] < 0.0001) { vsOffX[k] = 0; vsOffY[k] = 0; }
+        }
+        vsLastX[k] = rp.cx + vsOffX[k];
+        vsLastY[k] = rp.cy + vsOffY[k];
       }
-      vsLastX[pi] = rp.cx + vsOffX[pi];
-      vsLastY[pi] = rp.cy + vsOffY[pi];
+      vsSegN[pi] = n;
     }
   }
   function resetVsSmoothing() {
     vsSeenRb = 0;
-    for (let i = 0; i < 5; i++) {
-      vsOffX[i] = 0; vsOffY[i] = 0;
-      const pl = g.players[i];
-      vsLastX[i] = pl && pl.snake.length ? pl.snake[0].x : 0;
-      vsLastY[i] = pl && pl.snake.length ? pl.snake[0].y : 0;
-    }
+    vsOffX.fill(0); vsOffY.fill(0); vsSegN.fill(0);
   }
   function drawRivals(prog) {
     const r = cell * 0.38, rad = cell * 0.3;
@@ -2047,7 +2058,7 @@
       ctx.fillStyle = VS_COLORS[pi];
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const rp = segRenderPos(pl, i, prog);
-        drawBodyCell(rp.cx + vsOffX[pi], rp.cy + vsOffY[pi], r, rad);
+        drawBodyCell(rp.cx + segOffX(pi, i), rp.cy + segOffY(pi, i), r, rad);
       }
     }
     // name tags over each living rival's head, one font set for the batch
@@ -2062,8 +2073,8 @@
       const rp = segRenderPos(pl, 0, prog);
       ctx.fillStyle = VS_COLORS[pi];
       ctx.fillText(vs.roster[pi].name,
-        wrapf(rp.cx + vsOffX[pi]) * cell + cell / 2,
-        wrapf(rp.cy + vsOffY[pi]) * cell - cell * 0.18);
+        wrapf(rp.cx + segOffX(pi, 0)) * cell + cell / 2,
+        wrapf(rp.cy + segOffY(pi, 0)) * cell - cell * 0.18);
     }
     ctx.globalAlpha = 1;
   }
