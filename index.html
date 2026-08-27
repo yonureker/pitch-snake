@@ -1991,6 +1991,10 @@
   // One flat colour per player index, drawn well under full alpha so they
   // never crowd your own snake off the field.
   const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'];
+  // rivals are information, not traffic: faint enough that your own snake is
+  // never the second thing you find, solid enough to read where they are.
+  // The tag stays clearer than the body, since a name is what you look FOR.
+  const VS_BODY_ALPHA = 0.22, VS_TAG_ALPHA = 0.7;
   let vsTagFont = '';
 
   // Rollback smoothing, per segment. A late remote turn rewinds and re-runs
@@ -2054,7 +2058,7 @@
       if (pi === vs.myIdx) continue;
       const pl = g.players[pi];
       if (!pl.snake.length) continue;
-      ctx.globalAlpha = 0.34;
+      ctx.globalAlpha = VS_BODY_ALPHA;
       ctx.fillStyle = VS_COLORS[pi];
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const rp = segRenderPos(pl, i, prog);
@@ -2062,7 +2066,7 @@
       }
     }
     // name tags over each living rival's head, one font set for the batch
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = VS_TAG_ALPHA;
     if (ctx.font !== vsTagFont) ctx.font = vsTagFont;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
