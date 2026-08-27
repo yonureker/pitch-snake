@@ -8,8 +8,8 @@
 // tests, and survival for the one test that must see a full round end.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, MODES } from '../engine/engine.js';
-import { createSession, loopbackBus, foldHash, SNAP_KEEP, SNAP_EVERY } from './net.js';
+import { createGame, MODES, SIM_DT } from '../engine/engine.js';
+import { createSession, loopbackBus, foldHash, SNAP_KEEP, SNAP_EVERY, FRESH_MS, STALL_AT } from './net.js';
 
 const QUIET = { seed: 90210, tickMs: 100, wallsEnabled: false };
 
@@ -141,6 +141,40 @@ test('an input from beyond the snapshot horizon fails loudly, never silently for
   assert.ok(40000 / 10 - 100 > SNAP_KEEP * SNAP_EVERY, 'the stamp really was outside the horizon');
 });
 
+test('a room runs at real time and stays together, clean wire or rough', () => {
+  // Pacing reads a peer's last report AGED FORWARD by the time since it
+  // arrived. Read raw it is stale by the beat cadence plus the wire, which
+  // made every healthy room look like it was running away from everyone:
+  // the slew brake sat on permanently (rooms simulated ~95% of real time)
+  // and the leash tripped on nothing worse than a dropped beat.
+  const run = (n, opts, endMs) => {
+    const bus = loopbackBus(n, opts);
+    const sessions = [], games = [];
+    for (let i = 0; i < n; i++) {
+      const game = createGame({ ...QUIET, players: n });
+      games.push(game);
+      sessions.push(createSession({ game, myIdx: i, transport: bus.endpoints[i] }));
+    }
+    let stalls = 0;
+    for (let now = 0; now <= endMs; now += 10) {
+      bus.pump(now);
+      for (let i = 0; i < n; i++) { sessions[i].frame(now); if (sessions[i].stalled) stalls++; }
+    }
+    const qs = games.map(g => g.quanta);
+    return { rate: qs[0] / (endMs / SIM_DT), spread: Math.max(...qs) - Math.min(...qs), stalls };
+  };
+  for (const [label, n, opts] of [
+    ['two players, clean', 2, { latency: 60, jitter: 20, seed: 5 }],
+    ['two players, transatlantic', 2, { latency: 150, jitter: 40, seed: 7 }],
+    ['five players, lossy', 5, { latency: 150, jitter: 60, drop: 0.05, seed: 23 }],
+  ]) {
+    const { rate, spread, stalls } = run(n, opts, 40000);
+    assert.ok(rate > 0.99, `${label}: simulates real time (${(rate * 100).toFixed(1)}%)`);
+    assert.ok(spread <= 20, `${label}: the clients stay together (${spread} quanta apart)`);
+    assert.equal(stalls, 0, `${label}: nobody is held for a wire that is merely imperfect`);
+  }
+});
+
 test('a silent peer stalls the sim; dropPeer releases it', () => {
   const bus = loopbackBus(2, { latency: 10 });
   const g0 = createGame({ ...QUIET, players: 2 });
@@ -152,7 +186,16 @@ test('a silent peer stalls the sim; dropPeer releases it', () => {
   const qAtSilence = g0.quanta;
   for (let now = 5010; now <= 12000; now += 10) { bus.pump(now); s0.frame(now); }
   assert.equal(s0.stalled, true, 'a live peer gone silent leashes the sim');
-  assert.ok(g0.quanta - qAtSilence <= 300, `the sim held instead of running away (${g0.quanta - qAtSilence})`);
+  // The bound is the design, not a magic number: a silent peer keeps being
+  // credited with progress for FRESH_MS, and only then does the gap grow at
+  // real time until it passes STALL_AT. Deliberately later than it used to
+  // be, because reading a peer's last report raw meant one dropped beat
+  // froze a healthy room, and freezing your game over somebody else's wifi
+  // is the worse failure. Still under a sixth of the rollback horizon.
+  const runAhead = g0.quanta - qAtSilence;
+  const bound = FRESH_MS / SIM_DT + STALL_AT + 20;
+  assert.ok(runAhead <= bound, `the sim held instead of running away (${runAhead} > ${bound})`);
+  assert.ok(bound * 4 < SNAP_KEEP * SNAP_EVERY, 'and the hold arrives well inside the horizon');
   s0.dropPeer(1);
   for (let now = 12010; now <= 13000; now += 10) { bus.pump(now); s0.frame(now); }
   assert.equal(s0.stalled, false, 'a departed peer no longer holds the room');
@@ -191,7 +234,9 @@ test('a LIVE peer gone silent leashes only until the give-up window', () => {
   const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
   for (let now = 0; now <= 5000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
   let now = 5010;
-  for (; now <= 9000; now += 10) { bus.pump(now); s0.frame(now); }
+  // past the credit a silent peer gets (FRESH_MS) plus STALL_AT, and still
+  // inside the give-up window measured from their last message
+  for (; now <= 12000; now += 10) { bus.pump(now); s0.frame(now); }
   assert.equal(s0.stalled, true, 'fresh silence from a live snake holds the room');
   const qHeld = g0.quanta;
   for (; now <= 20000; now += 10) { bus.pump(now); s0.frame(now); }

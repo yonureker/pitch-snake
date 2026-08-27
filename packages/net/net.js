@@ -39,6 +39,16 @@ export const END_GRACE_MS = 600;
 // beat) has had ample time to finish: comfortably several beat cycles, and
 // still well inside the snapshot horizon.
 export const SETTLED_Q = 600;
+// How far a peer's clock may sit from ours before we lean on the throttle.
+// Even aged forward, a report is still one wire trip old, so the band has to
+// swallow a bad transcontinental link (150ms is 15 quanta) with room to
+// spare, or the correction fights the network instead of real drift. Far
+// below STALL_AT, which remains the hard leash.
+export const SLEW_BAND = 25;      // quanta
+// How long a peer's last report is still worth extrapolating from. Two beats
+// covers a dropped one comfortably; past it the client is not merely unlucky
+// and the leash stops crediting them with progress they never reported.
+export const FRESH_MS = 2000;
 export const CATCHUP_MAX = 3000;  // ms one frame() may simulate before giving up
 export const NEED_COOLDOWN = 300; // ms between repeat resend requests per peer
 // Every input carries the sender's previous few inputs as ballast: one lost
@@ -74,6 +84,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   const lastSeq = new Array(N).fill(0);
   const buffered = Array.from({ length: N }, () => new Map());  // out-of-order arrivals
   const peerQ = new Array(N).fill(0);                  // last quantum a peer reported
+  const peerQAt = new Array(N).fill(0);                // ...and when that report reached us
   const lastHeard = new Array(N).fill(-1e15);          // frame-clock time of their last message
   const gone = new Array(N).fill(false);               // peer left: never stall on them
   const needAt = new Array(N).fill(0);                 // resend-request throttle
@@ -169,7 +180,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     const ay = msg.y === 1 || msg.y === -1 ? 1 : msg.y === 0 ? 0 : -1;
     if (ax < 0 || ay < 0 || ax + ay !== 1) return Infinity;   // exactly one unit step
     if (msg.s <= lastSeq[p]) return Infinity;              // duplicate
-    if (msg.q > peerQ[p]) peerQ[p] = msg.q;
+    if (msg.q > peerQ[p]) { peerQ[p] = msg.q; peerQAt[p] = nowMs; }
     if (msg.s !== lastSeq[p] + 1) {                        // a gap: hold it, ask again
       buffered[p].set(msg.s, msg);
       requestResend(p, nowMs);
@@ -231,7 +242,16 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     for (let p = 0; p < N; p++) {
       if (p === myIdx || gone[p]) continue;
       if (lastHeard[p] < -1e14) continue;   // never heard from: no clock signal yet
-      if (peerQ[p] > maxPeer) maxPeer = peerQ[p];
+      // A report says where a peer WAS when they sent it, and by the time it
+      // lands it is stale by the beat cadence plus the wire. Read raw against
+      // our own live quantum, every healthy room looked like it was running
+      // away from everyone: the brake below was on permanently (rooms ran
+      // several percent slow) and the leash tripped on rooms whose only sin
+      // was a dropped beat. So a report is aged forward by the time since it
+      // arrived, which is what the peer has almost certainly been doing.
+      const age = nowMs - peerQAt[p];
+      const aged = peerQ[p] + Math.min(age, FRESH_MS) / SIM_DT;
+      if (aged > maxPeer) maxPeer = aged;
       // Only a snake that can still act may leash the room: a dead one has
       // no legal inputs left, so its client going quiet (a spectator
       // backgrounding the tab) must never freeze the survivors. A LIVE
@@ -239,12 +259,19 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       // give-up window the room plays on and their snake rides the rails.
       if (!game.players[p].alive) continue;
       if (nowMs - lastHeard[p] > STALL_GIVEUP_MS) continue;
-      if (peerQ[p] < minPeer) minPeer = peerQ[p];
+      // The leash reads the same aged estimate. Holding a whole room because
+      // one client's beat went missing is the worse failure by far: freezing
+      // your game because somebody else's wifi blipped is the classic
+      // lockstep sin, and it cost a lossy five-player room a second and a
+      // half of drift and five hundred frames of stall. A genuinely stopped
+      // client still gets caught, just later: their credit runs out after
+      // FRESH_MS and the gap then grows at real time until STALL_AT.
+      if (aged < minPeer) minPeer = aged;
     }
     stalled = minPeer !== Infinity && minPeer < game.quanta - STALL_AT;
     if (!stalled) {
       const lead = maxPeer === -Infinity ? 0 : maxPeer - game.quanta;
-      const rate = lead > 15 ? 1.05 : lead < -15 ? 0.95 : 1;
+      const rate = lead > SLEW_BAND ? 1.05 : lead < -SLEW_BAND ? 0.95 : 1;
       acc += dt * rate;
       let guard = (CATCHUP_MAX / SIM_DT) | 0;
       while (acc >= SIM_DT && game.alive && !dead && guard-- > 0) {
@@ -282,7 +309,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     } else if (msg.t === 'b') {
       if (!pOk) return;                          // one validation, not three
       const p = msg.p;
-      if (msg.q > peerQ[p]) peerQ[p] = msg.q;
+      if (msg.q > peerQ[p]) { peerQ[p] = msg.q; peerQAt[p] = nowMs; }
       if (msg.s > lastSeq[p]) requestResend(p, nowMs);     // they sent things we never saw
       // compare only what is settled on BOTH sides: my copy of that quantum
       // may still be awaiting a repair of my own

@@ -1349,7 +1349,7 @@
       const mineVol = !vsView() || e.player === undefined || e.player === vs.myIdx ? 1 : 0.35;
       if (e.t === 'food') buildFoodSprite();
       else if (e.t === 'eat') {
-        if (e.bonus) sfxBonus(mineVol); else sfxEat((g.regularEaten + 4) % 5, mineVol);
+        if (e.bonus) sfxBonus(mineVol); else sfxEat((g.bonusStreak + 4) % 5, mineVol);
         const burstColor = getCss(e.bonus ? '--gold-bright' : '--food');
         spawnBurst(e.x, e.y, e.bonus ? 30 : 16, 0.5,
           () => (Math.random() * 2 + 1) * (cell / 14) * (e.bonus ? 1.5 : 1),

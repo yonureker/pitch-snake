@@ -139,9 +139,11 @@ export interface Game {
   headFrom: Cell; headMajX: number; headMajY: number;
   score: number; pendingGrowth: number;
   doom: Doom | null;
-  food: Food; foodAge: number; regularEaten: number;
+  food: Food; foodAge: number;
+  /** Regular items eaten since the last ringed bonus; resets on one, or on missing one. */
+  bonusStreak: number;
   /** Items eaten by anyone this round; every BOLT_EVERY of them drops a bolt. */
-  foodEaten: number;
+  itemsEaten: number;
   /** The bolt waiting to be taken, if one is out. */
   bolt: Bolt | null;
   boltsSpawned: number;
@@ -153,7 +155,10 @@ export interface Game {
   bombNextAt: number; bombExpireAt: number;
   ghosts: Ghost[];
   portal: Portal | null; warpedIn: boolean;
-  portalsUnlocked: number; portalsOpened: number; portalRetryAt: number;
+  portalsUnlocked: number;
+  /** Teleport marks consumed; a pair closed unused hands its mark back. */
+  portalMarksSpent: number;
+  portalRetryAt: number;
   portalExpireAt: number; portalOpenedAt: number;
   events: GameEvent[]; log: RoundLog;
   /** Steer a snake; the shells that know one snake omit the player index. */

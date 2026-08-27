@@ -294,7 +294,7 @@ test('teleport marks come every twenty for ever and never re-arm', () => {
   const h = quietGame();
   h.clockMs = 1000;
   h.score = 31;
-  h.portalsUnlocked = 2; h.portalsOpened = 2;
+  h.portalsUnlocked = 2; h.portalMarksSpent = 2;
   h._updatePortals();
   assert.equal(h.portal, null, 'at 31 with both pairs spent, nothing is owed');
   h.score = 26;                               // a TNT takes five
@@ -323,10 +323,10 @@ test('a wall refunds only a pair you never used', () => {
     foodFar(t);
     t.clockMs = 100; t.wallPhaseEnd = 0;
     t.portal = { ax: 0, ay: 0, bx: 10, by: 10, used };
-    t.portalsUnlocked = 1; t.portalsOpened = 1;
+    t.portalsUnlocked = 1; t.portalMarksSpent = 1;
     t._updateWalls();
     assert.equal(t.portal, null, 'the buried pair closed');
-    assert.equal(t.portalsOpened, used ? 1 : 0,
+    assert.equal(t.portalMarksSpent, used ? 1 : 0,
       used ? 'a pair already used refunds nothing' : 'a pair never used is owed again');
   }
 });
@@ -737,9 +737,9 @@ test('a bolt falls due every ten items, counting appetite and not points', () =>
   for (let i = 0; i < 9; i++) eatOne(g);
   g._updateBolt();
   assert.equal(g.bolt, null, 'nine is not ten');
-  assert.equal(g.foodEaten, 9);
+  assert.equal(g.itemsEaten, 9);
   eatOne(g, true);                              // the tenth is a ringed bonus
-  assert.equal(g.foodEaten, 10, 'a +5 counts as one item like any other');
+  assert.equal(g.itemsEaten, 10, 'a +5 counts as one item like any other');
   g._updateBolt();
   assert.ok(g.bolt, 'the tenth item drops a bolt');
   assert.equal(g.boltsSpawned, 1);
@@ -789,7 +789,7 @@ test('a bolt expires unclaimed, and spends its mark doing so', () => {
   const g = quietGame();
   g.portalRetryAt = 1e12;
   foodFar(g);
-  g.foodEaten = 10;
+  g.itemsEaten = 10;
   g._updateBolt();
   assert.ok(g.bolt, 'out on the pitch');
   g.clockMs = g.bolt.bornAt + BOLT_LIFE_MS;
@@ -798,7 +798,7 @@ test('a bolt expires unclaimed, and spends its mark doing so', () => {
   assert.ok(g.drainEvents().some(e => e.t === 'bolt' && e.gone), 'the shells hear it go');
   g._updateBolt();
   assert.equal(g.bolt, null, 'the mark was spent; the next one comes with the next ten');
-  g.foodEaten = 20;
+  g.itemsEaten = 20;
   g._updateBolt();
   assert.ok(g.bolt, 'as it does');
 });
@@ -846,12 +846,12 @@ test('eating a TNT: -5 points, -5 segments, floored, never fatal, streak untouch
   const g = quietGame();
   foodFar(g);
   setSnake(g, [[4, 5], [3, 5], [2, 5], [1, 5], [0, 5], [19, 5], [18, 5], [17, 5], [16, 5], [15, 5]], 1, 0);
-  g.score = 12; g.regularEaten = 3;
+  g.score = 12; g.bonusStreak = 3;
   g.bombs = [{ x: 5, y: 5 }]; g.bombPhase = 'active'; g.bombExpireAt = 1e12;
   g._step();
   assert.equal(g.snake.length, 5, 'five segments off a ten long snake');
   assert.equal(g.score, 7, 'and five points');
-  assert.equal(g.regularEaten, 3, 'the bonus streak is untouched');
+  assert.equal(g.bonusStreak, 3, 'the bonus streak is untouched');
   assert.ok(!g.cellOccupied(15, 5), 'the occupancy set let go of the lost segments');
   assert.equal(g.bombs.length, 0, 'the block it ate is gone');
 
@@ -882,13 +882,13 @@ test('a ringed bonus lands on every sixth food, and a miss resets the count', ()
   assert.equal(run, 'rrrrrBrrrrrB', 'a ringed one on every sixth food, without fail');
 
   // let the ringed one on the board time out on the real clock
-  assert.ok(g.food.bonus === false && g.regularEaten === 0, 'the second bonus reset the count');
+  assert.ok(g.food.bonus === false && g.bonusStreak === 0, 'the second bonus reset the count');
   for (let n = 0; n < 5; n++) eatOnce();
   assert.ok(g.food.bonus, 'the ringed one is out');
   g.foodAge = FOOD_TTL - SIM_DT;
   g.advance(SIM_DT);
   assert.ok(!g.food.bonus, 'a ringed one you did not reach is replaced by a plain one');
-  assert.equal(g.regularEaten, 0, 'and the streak drops all the way back');
+  assert.equal(g.bonusStreak, 0, 'and the streak drops all the way back');
   run = '';
   for (let n = 0; n < 6; n++) run += eatOnce();
   assert.equal(run, 'rrrrrB', 'so the miss really cost five more plain ones');

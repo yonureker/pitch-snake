@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 12;  // 12: the bolt drags harder; 11: the bolt; 10: ghosts walk the board
+export const ENGINE_VERSION = 13;  // 13: snapshot keys renamed (the hash moves with them); 12: the bolt drags harder
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -226,19 +226,19 @@ export function createGame(cfg = {}) {
   if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > MAX_PLAYERS) throw new Error('players out of range');
 
   // mulberry32: small, fast, good-enough PRNG with a 32-bit seed. Not for
-  // crypto; for making a round reproducible. The state lives in rngA so
+  // crypto; for making a round reproducible. The state lives in rngState so
   // snapshot()/restore() can carry it: a rollback must re-roll the same dice.
-  let rngA = seed >>> 0;
+  let rngState = seed >>> 0;
   function random() {
-    rngA |= 0; rngA = (rngA + 0x6d2b79f5) | 0;
-    let t = Math.imul(rngA ^ (rngA >>> 15), 1 | rngA);
+    rngState |= 0; rngState = (rngState + 0x6d2b79f5) | 0;
+    let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
   const rand = (a, b) => a + random() * (b - a);
 
   // One snake. Everything singular the old engine kept at the top level now
-  // lives here once per player; the world stays shared. _mx/_my/_m are
+  // lives here once per player; the world stays shared. _majX/_majY/_m are
   // per-quantum contact scratch (rule 24), never persisted.
   function makePlayer(idx, laneY) {
     const p = {
@@ -252,7 +252,7 @@ export function createGame(cfg = {}) {
       doom: null,              // {tx, ty, until, reason} while a fatal move hangs (rule 25)
       doomSave: null,          // a press taken during that window, applied by the next quantum
       alive: true, deadReason: null, diedAt: 0,
-      _mx: 0, _my: 0,          // this quantum's majority cell (rule 24 scratch)
+      _majX: 0, _majY: 0,          // this quantum's majority cell (rule 24 scratch)
     };
     for (let i = 0; i < START_LEN; i++) { p.snake.push({ x: 8 - i, y: laneY }); p.snakeSet.add(K(8 - i, laneY)); }
     return p;
@@ -278,12 +278,12 @@ export function createGame(cfg = {}) {
     accMs: 0,           // dt not yet turned into quanta (always < SIM_DT after advance)
 
     food: null,         // {x, y, bonus, kind} - kind indexes the renderer's emoji list
-    foodAge: 0, regularEaten: 0,   // the bonus streak is the board's, not a snake's
+    foodAge: 0, bonusStreak: 0,    // the bonus streak is the board's, not a snake's
     // The bolt is the board's too: one counter of everything eaten by anyone
     // (a ringed bonus is one item like any other, a teleport trip is not an
     // item at all), a mark every BOLT_EVERY that is only ever raised, and one
     // clock saying how long the pack is dragging.
-    foodEaten: 0, bolt: null, boltsSpawned: 0, slowUntil: 0,
+    itemsEaten: 0, bolt: null, boltsSpawned: 0, slowUntil: 0,
 
     wallState: 'off', wallPhaseEnd: 0, wallCells: [], wallLookup: new Set(),
 
@@ -292,7 +292,7 @@ export function createGame(cfg = {}) {
     ghosts: [],         // {x, y, px, py, dir, warped, moveAt}
 
     portal: null,       // {ax, ay, bx, by, used}: the blue end, then the violet end
-    portalsUnlocked: 0, portalsOpened: 0, portalRetryAt: 0,
+    portalsUnlocked: 0, portalMarksSpent: 0, portalRetryAt: 0,
     portalExpireAt: 0, portalOpenedAt: 0,
 
     // what happened since the caller last drained; renderers turn these into
@@ -378,7 +378,7 @@ export function createGame(cfg = {}) {
   function placeFood() {
     const c = spawnCell(0);
     if (!c) { S.foodAge = 0; return; }        // board full: keep the current food
-    c.bonus = S.regularEaten >= BONUS_EVERY;  // ringed +5 only after a full streak
+    c.bonus = S.bonusStreak >= BONUS_EVERY;  // ringed +5 only after a full streak
     c.kind = (random() * (c.bonus ? BONUS_KINDS : REGULAR_KINDS)) | 0;
     S.food = c;
     S.foodAge = 0;
@@ -451,7 +451,7 @@ export function createGame(cfg = {}) {
       }
       return;
     }
-    const due = (S.foodEaten / BOLT_EVERY) | 0;
+    const due = (S.itemsEaten / BOLT_EVERY) | 0;
     if (due <= S.boltsSpawned) return;
     const c = spawnCell(MIN_SPAWN_DIST);
     if (!c) return;                    // no room this quantum; ask again next
@@ -496,9 +496,9 @@ export function createGame(cfg = {}) {
     if (S.portal !== null && !S.portal.used) {
       for (const p of players) {
         if (!p.alive || p.warpedIn) continue;
-        const hw = portalEndAt(p.snake[0].x, p.snake[0].y);
-        if (hw === 1 && x === S.portal.bx && y === S.portal.by) return true;
-        if (hw === 2 && x === S.portal.ax && y === S.portal.ay) return true;
+        const headEnd = portalEndAt(p.snake[0].x, p.snake[0].y);
+        if (headEnd === 1 && x === S.portal.bx && y === S.portal.by) return true;
+        if (headEnd === 2 && x === S.portal.ax && y === S.portal.ay) return true;
       }
     }
     const k = K(x, y);
@@ -541,11 +541,11 @@ export function createGame(cfg = {}) {
   // which is exactly what the forced hop next move will do to it.
   function airDist(x, y, tx, ty) {
     let d = wrapDist(x, y, tx, ty);
-    const p = S.portal;
-    if (p !== null && !p.used) {
-      const viaA = wrapDist(x, y, p.ax, p.ay) + 1 + wrapDist(p.bx, p.by, tx, ty);
+    const pair = S.portal;
+    if (pair !== null && !pair.used) {
+      const viaA = wrapDist(x, y, pair.ax, pair.ay) + 1 + wrapDist(pair.bx, pair.by, tx, ty);
       if (viaA < d) d = viaA;
-      const viaB = wrapDist(x, y, p.bx, p.by) + 1 + wrapDist(p.ax, p.ay, tx, ty);
+      const viaB = wrapDist(x, y, pair.bx, pair.by) + 1 + wrapDist(pair.ax, pair.ay, tx, ty);
       if (viaB < d) d = viaB;
     }
     return d;
@@ -563,10 +563,10 @@ export function createGame(cfg = {}) {
   // Cheap by construction: a ghost steps twice a second, so a full pack asks
   // for ten sweeps of 400 cells a second, and the arrays are allocated once.
   // Deterministic by construction: fixed neighbour order, one queue, no dice.
-  const _fld = new Int16Array(GRID * GRID);      // steps from the target, -1 unreached
-  const _blk = new Uint8Array(GRID * GRID);      // terrain a ghost cannot walk
-  const _bfsQ = new Int32Array(GRID * GRID);
-  const UNREACHED = 4000;                        // worse than any real walk on this board
+  const _walkField = new Int16Array(GRID * GRID);   // steps from the target, -1 unreached
+  const _impassable = new Uint8Array(GRID * GRID); // terrain a ghost cannot walk
+  const _sweepQueue = new Int32Array(GRID * GRID);
+  const NO_ROUTE_BASE = 4000;                      // worse than any real walk on this board
 
   // Terrain, painted once per sweep by walking what is on the board rather
   // than asking every cell what is on it. Ghosts are left OUT: they move, and
@@ -574,49 +574,49 @@ export function createGame(cfg = {}) {
   // shut. A ghost a wall has formed on top of crosses walls (rule 23's one
   // exception), so it gets a map with the walls left off.
   function paintTerrain(g) {
-    _blk.fill(0);
+    _impassable.fill(0);
     // a shape stops a ghost from its first flash, not from the moment it
     // turns lethal, so the map matches ghostBlocked and not the wall phase
     if (!S.wallLookup.has(K(g.x, g.y))) {
-      for (const k of S.wallLookup) _blk[k] = 1;
+      for (const k of S.wallLookup) _impassable[k] = 1;
     }
     for (let i = 0; i < players.length; i++) {
       if (!players[i].alive) continue;
-      for (const k of players[i].snakeSet) _blk[k] = 1;
+      for (const k of players[i].snakeSet) _impassable[k] = 1;
     }
-    if (S.food !== null) _blk[K(S.food.x, S.food.y)] = 1;
-    for (let i = 0; i < S.bombs.length; i++) _blk[K(S.bombs[i].x, S.bombs[i].y)] = 1;
+    if (S.food !== null) _impassable[K(S.food.x, S.food.y)] = 1;
+    for (let i = 0; i < S.bombs.length; i++) _impassable[K(S.bombs[i].x, S.bombs[i].y)] = 1;
   }
 
-  // Fill _fld with the walk length from (tx, ty) to every cell. The target
+  // Fill _walkField with the walk length from (tx, ty) to every cell. The target
   // itself is seeded whatever stands on it, because a ghost hunts the cell a
   // head or a piece of food occupies and wants the ring around it.
   function ghostField(g, tx, ty) {
     paintTerrain(g);
-    _fld.fill(-1);
-    const p = S.portal;
-    const aK = (p !== null && !p.used) ? K(p.ax, p.ay) : -1;
-    const bK = (p !== null && !p.used) ? K(p.bx, p.by) : -1;
-    let head = 0, tail = 0;
-    const seed = K(tx, ty);
-    _fld[seed] = 0;
-    _bfsQ[tail++] = seed;
-    while (head < tail) {
-      const k = _bfsQ[head++];
-      const d = _fld[k] + 1;
+    _walkField.fill(-1);
+    const pair = S.portal;
+    const aK = (pair !== null && !pair.used) ? K(pair.ax, pair.ay) : -1;
+    const bK = (pair !== null && !pair.used) ? K(pair.bx, pair.by) : -1;
+    let qRead = 0, qWrite = 0;
+    const startCell = K(tx, ty);
+    _walkField[startCell] = 0;
+    _sweepQueue[qWrite++] = startCell;
+    while (qRead < qWrite) {
+      const k = _sweepQueue[qRead++];
+      const d = _walkField[k] + 1;
       const cx = (k / GRID) | 0, cy = k % GRID;
       for (let i = 0; i < GHOST_DIRS.length; i++) {
         const nk = K(wrap(cx + GHOST_DIRS[i].x), wrap(cy + GHOST_DIRS[i].y));
-        if (_fld[nk] !== -1 || _blk[nk]) continue;
-        _fld[nk] = d;
-        _bfsQ[tail++] = nk;
+        if (_walkField[nk] !== -1 || _impassable[nk]) continue;
+        _walkField[nk] = d;
+        _sweepQueue[qWrite++] = nk;
       }
       // an open unused pair is one edge between its two ends, priced like any
       // other step, which is exactly what the forced hop will cost
       const far = k === aK ? bK : k === bK ? aK : -1;
-      if (far >= 0 && _fld[far] === -1 && !_blk[far]) {
-        _fld[far] = d;
-        _bfsQ[tail++] = far;
+      if (far >= 0 && _walkField[far] === -1 && !_impassable[far]) {
+        _walkField[far] = d;
+        _sweepQueue[qWrite++] = far;
       }
     }
   }
@@ -626,8 +626,8 @@ export function createGame(cfg = {}) {
   // it cannot reach: those fall back to the straight line, all of them ranked
   // below anywhere it can actually walk to.
   function fieldDist(x, y, tx, ty) {
-    const d = _fld[K(x, y)];
-    return d >= 0 ? d : UNREACHED + wrapDist(x, y, tx, ty);
+    const d = _walkField[K(x, y)];
+    return d >= 0 ? d : NO_ROUTE_BASE + wrapDist(x, y, tx, ty);
   }
 
   // Which snake a ghost is hunting: the nearest living head by its own
@@ -708,10 +708,10 @@ export function createGame(cfg = {}) {
     // a ghost in either window spends this move coming out of the other,
     // keeping its heading, but only when the far side is clear, and never
     // straight back out of the window that has just put it down
-    const win = (g.warped || S.portal === null || S.portal.used) ? 0 : portalEndAt(g.x, g.y);
-    if (win) {
-      const tx = win === 1 ? S.portal.bx : S.portal.ax;
-      const ty = win === 1 ? S.portal.by : S.portal.ay;
+    const portalEnd = (g.warped || S.portal === null || S.portal.used) ? 0 : portalEndAt(g.x, g.y);
+    if (portalEnd) {
+      const tx = portalEnd === 1 ? S.portal.bx : S.portal.ax;
+      const ty = portalEnd === 1 ? S.portal.by : S.portal.ay;
       if (!ghostBlocked(tx, ty, g)) { g.x = tx; g.y = ty; g.warped = true; return; }
     }
     g.warped = false;
@@ -728,7 +728,7 @@ export function createGame(cfg = {}) {
       if (ghostBlocked(nx, ny, g)) continue;
       _optDir[n] = d; _optX[n] = nx; _optY[n] = ny; n++;
     }
-    let px, py, pd;
+    let pickX, pickY, pickDir;
     if (n) {
       if (random() < GHOST_FOCUS) {          // take a step toward the personality's target
         const target = ghostTarget(g);
@@ -747,17 +747,17 @@ export function createGame(cfg = {}) {
           if (_optDist[i] !== bestDist) continue;
           if (seen++ === nth) { at = i; break; }
         }
-        pd = _optDir[at]; px = _optX[at]; py = _optY[at];
+        pickDir = _optDir[at]; pickX = _optX[at]; pickY = _optY[at];
       } else {
         const i = (random() * n) | 0;
-        pd = _optDir[i]; px = _optX[i]; py = _optY[i];
+        pickDir = _optDir[i]; pickX = _optX[i]; pickY = _optY[i];
       }
     } else {                                 // boxed in: reverse if we can, else wait
       const rx = wrap(g.x - g.dir.x), ry = wrap(g.y - g.dir.y);
       if (!(g.dir.x || g.dir.y) || ghostBlocked(rx, ry, g)) return;
-      pd = { x: -g.dir.x, y: -g.dir.y }; px = rx; py = ry;
+      pickDir = { x: -g.dir.x, y: -g.dir.y }; pickX = rx; pickY = ry;
     }
-    g.x = px; g.y = py; g.dir = pd;
+    g.x = pickX; g.y = pickY; g.dir = pickDir;
   }
 
   function updateGhosts() {
@@ -772,9 +772,9 @@ export function createGame(cfg = {}) {
     // The one thing that ever changes a ghost's pace, and it is earned and it
     // runs out (rule 23). The span is stamped on the ghost as it steps, so
     // the renderers interpolate the glide they are actually watching.
-    const span = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
+    const stepMs = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
     for (const g of S.ghosts) {
-      if (S.clockMs >= g.moveAt) { moveGhost(g); g.stepMs = span; g.moveAt = S.clockMs + span; }
+      if (S.clockMs >= g.moveAt) { moveGhost(g); g.stepMs = stepMs; g.moveAt = S.clockMs + stepMs; }
     }
   }
 
@@ -836,7 +836,7 @@ export function createGame(cfg = {}) {
   function closePortal(refund) {
     S.portal = null;
     emit({ t: 'portal', open: false });
-    if (refund && S.portalsOpened > 0) { S.portalsOpened--; S.portalRetryAt = S.clockMs + 2000; }
+    if (refund && S.portalMarksSpent > 0) { S.portalMarksSpent--; S.portalRetryAt = S.clockMs + 2000; }
   }
 
   function updatePortals() {
@@ -852,9 +852,9 @@ export function createGame(cfg = {}) {
       if ((S.portal.used || S.clockMs >= S.portalExpireAt) && !portalBusy()) closePortal(false);
       return;
     }
-    if (S.portalsOpened >= S.portalsUnlocked || S.clockMs < S.portalRetryAt) return;
+    if (S.portalMarksSpent >= S.portalsUnlocked || S.clockMs < S.portalRetryAt) return;
     if (spawnPortal()) {
-      S.portalsOpened++;
+      S.portalMarksSpent++;
       S.portalExpireAt = S.clockMs + rand(PORTAL_LIFE_MIN, PORTAL_LIFE_MAX);
     } else {
       S.portalRetryAt = S.clockMs + 1000;      // board too full right now; look again shortly
@@ -934,15 +934,15 @@ export function createGame(cfg = {}) {
     // A head standing in a window spends this step coming out of the far one:
     // still exactly one step, heading untouched, pace unchanged (rules 16/17).
     // Only a head that walked in is carried, never one a window just put down.
-    const win = (p.warpedIn || S.portal === null || S.portal.used) ? 0
+    const portalEnd = (p.warpedIn || S.portal === null || S.portal.used) ? 0
               : portalEndAt(p.snake[0].x, p.snake[0].y);
-    const nx = win === 1 ? S.portal.bx : win === 2 ? S.portal.ax : wrap(p.snake[0].x + p.dir.x);
-    const ny = win === 1 ? S.portal.by : win === 2 ? S.portal.ay : wrap(p.snake[0].y + p.dir.y);
+    const nx = portalEnd === 1 ? S.portal.bx : portalEnd === 2 ? S.portal.ax : wrap(p.snake[0].x + p.dir.x);
+    const ny = portalEnd === 1 ? S.portal.by : portalEnd === 2 ? S.portal.ay : wrap(p.snake[0].y + p.dir.y);
     const reason = moveDeadly(p, nx, ny);
     if (reason) {
       // A hop is forced, so its one fatal case (a body on the far end) stays
       // entry-tested; there was never a choice to un-make.
-      if (win) return die(p, reason);
+      if (portalEnd) return die(p, reason);
       // The doom window (rule 25): the move hangs instead of killing. The
       // state stays put, the glide anchor snaps to the cell the head owns so
       // the rule 24 majority holds still, and the renderers draw the head
@@ -953,13 +953,13 @@ export function createGame(cfg = {}) {
       if (p.dirQueue.length && tryRedirect(p, p.dirQueue[0].x, p.dirQueue[0].y)) p.dirQueue.shift();
       return;
     }
-    commitMove(p, nx, ny, win);
+    commitMove(p, nx, ny, portalEnd);
   }
 
   // The move itself, past every fatal test: state, tail, growth, rewards.
   // Runs at the boundary normally, mid-glide for a doom save, and at window
   // end for a pardoned doom (the drawn glide can't tell the difference).
-  function commitMove(p, nx, ny, win) {
+  function commitMove(p, nx, ny, portalEnd) {
     const nk = K(nx, ny);
     const ate = nx === S.food.x && ny === S.food.y;
     const grows = p.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
@@ -970,11 +970,11 @@ export function createGame(cfg = {}) {
     else { p.tailFrom = p.snake.pop(); p.snakeSet.delete(K(p.tailFrom.x, p.tailFrom.y)); }
     p.snake.unshift({ x: nx, y: ny });
     p.snakeSet.add(nk);
-    p.warpedIn = win !== 0;
-    if (win) {
+    p.warpedIn = portalEnd !== 0;
+    if (portalEnd) {
       // one trip a pair, paid on surfacing, after every fatal test above;
       // with several snakes racing, the first head through takes the prize
-      const fromA = win === 1;
+      const fromA = portalEnd === 1;
       S.portal.used = true;
       p.score += PORTAL_BONUS;
       emit({ t: 'hop', player: p.idx, fromA,
@@ -986,12 +986,12 @@ export function createGame(cfg = {}) {
       const bonus = S.food.bonus;
       if (bonus) {
         p.score += 5; p.pendingGrowth += 5;
-        S.regularEaten = 0;          // bonus taken: restart the board's streak
+        S.bonusStreak = 0;          // bonus taken: restart the board's streak
       } else {
         p.score += 1; p.pendingGrowth += 1;
-        S.regularEaten++;
+        S.bonusStreak++;
       }
-      S.foodEaten++;          // appetite, board-wide: a ringed bonus is one item
+      S.itemsEaten++;          // appetite, board-wide: a ringed bonus is one item
       emit({ t: 'eat', player: p.idx, bonus, x: nx, y: ny });
       placeFood();
     }
@@ -1007,8 +1007,8 @@ export function createGame(cfg = {}) {
 
     // TNT never kills: -5 points (may go negative), up to 5 segments off,
     // floored at START_LEN. Queued growth is cancelled so the shrink sticks.
-    const hitBomb = S.bombs.findIndex(b => nx === b.x && ny === b.y);
-    if (hitBomb !== -1) {
+    const bombIndex = S.bombs.findIndex(b => nx === b.x && ny === b.y);
+    if (bombIndex !== -1) {
       p.score -= 5;
       p.pendingGrowth = 0;
       const lost = [];
@@ -1019,7 +1019,7 @@ export function createGame(cfg = {}) {
         lost.push(t);
       }
       p.tailFrom = null;   // the old glide anchor is far from the new tail; snap
-      S.bombs.splice(hitBomb, 1);
+      S.bombs.splice(bombIndex, 1);
       emit({ t: 'tnt', player: p.idx, x: nx, y: ny, lost });
       if (!S.bombs.length) {
         S.bombPhase = 'gap';
@@ -1067,7 +1067,7 @@ export function createGame(cfg = {}) {
     updateBolt();
     S.foodAge += SIM_DT;
     if (S.foodAge >= FOOD_TTL) {
-      if (S.food.bonus) S.regularEaten = 0;   // missed the bonus in time: lose the streak
+      if (S.food.bonus) S.bonusStreak = 0;   // missed the bonus in time: lose the streak
       placeFood();
     }
     // every living snake steps in the same drain, in index order: one shared
@@ -1123,22 +1123,22 @@ export function createGame(cfg = {}) {
       const half = S.progMs * 2 >= S.tickMs;
       for (const p of players) {
         if (!p.alive) continue;
-        p._mx = half ? p.snake[0].x : p.headFrom.x;
-        p._my = half ? p.snake[0].y : p.headFrom.y;
+        p._majX = half ? p.snake[0].x : p.headFrom.x;
+        p._majY = half ? p.snake[0].y : p.headFrom.y;
       }
       for (const gh of S.ghosts) {
         const g = ghostAt(gh);
         for (const p of players) {
           if (!p.alive) continue;     // includes anyone this ghost pass just took
-          const met = g.x === p._mx && g.y === p._my;
-          const crossed = g.x === p.headMajX && g.y === p.headMajY && gh.majX === p._mx && gh.majY === p._my;
+          const met = g.x === p._majX && g.y === p._majY;
+          const crossed = g.x === p.headMajX && g.y === p.headMajY && gh.majX === p._majX && gh.majY === p._majY;
           if (met || crossed) die(p, 'ghost');
         }
         gh.majX = g.x; gh.majY = g.y;
       }
       // the majority cell only matters to the next quantum's crossing test,
       // which skips the dead, so a snake taken above needs no final write
-      for (const p of players) if (p.alive) { p.headMajX = p._mx; p.headMajY = p._my; }
+      for (const p of players) if (p.alive) { p.headMajX = p._majX; p.headMajY = p._majY; }
     }
     // ---- the whistle ----
     // A timed round ends at exactly durationMs, after everything else in the
@@ -1244,9 +1244,9 @@ export function createGame(cfg = {}) {
   // fodder and deliberately not part of a snapshot.
   function snapshot() {
     return {
-      quanta: S.quanta, clockMs: S.clockMs, progMs: S.progMs, rng: rngA,
-      foodAge: S.foodAge, regularEaten: S.regularEaten,
-      foodEaten: S.foodEaten, boltsSpawned: S.boltsSpawned, slowUntil: S.slowUntil,
+      quanta: S.quanta, clockMs: S.clockMs, progMs: S.progMs, rng: rngState,
+      foodAge: S.foodAge, bonusStreak: S.bonusStreak,
+      itemsEaten: S.itemsEaten, boltsSpawned: S.boltsSpawned, slowUntil: S.slowUntil,
       bolt: S.bolt ? { x: S.bolt.x, y: S.bolt.y, bornAt: S.bolt.bornAt } : null,
       food: S.food ? { x: S.food.x, y: S.food.y, bonus: S.food.bonus, kind: S.food.kind } : null,
       wallState: S.wallState, wallPhaseEnd: S.wallPhaseEnd, walls: [...S.wallLookup],
@@ -1255,7 +1255,7 @@ export function createGame(cfg = {}) {
       bombNextAt: S.bombNextAt, bombExpireAt: S.bombExpireAt,
       ghosts: S.ghosts.map(cloneGhost),
       portal: S.portal ? { ...S.portal } : null,
-      portalsUnlocked: S.portalsUnlocked, portalsOpened: S.portalsOpened,
+      portalsUnlocked: S.portalsUnlocked, portalMarksSpent: S.portalMarksSpent,
       portalRetryAt: S.portalRetryAt, portalExpireAt: S.portalExpireAt, portalOpenedAt: S.portalOpenedAt,
       players: players.map(p => ({
         snake: p.snake.map(c => ({ x: c.x, y: c.y })),
@@ -1274,10 +1274,10 @@ export function createGame(cfg = {}) {
   }
 
   function restore(s) {
-    S.quanta = s.quanta; S.clockMs = s.clockMs; S.progMs = s.progMs; rngA = s.rng | 0;
+    S.quanta = s.quanta; S.clockMs = s.clockMs; S.progMs = s.progMs; rngState = s.rng | 0;
     S.accMs = 0;
-    S.foodAge = s.foodAge; S.regularEaten = s.regularEaten;
-    S.foodEaten = s.foodEaten; S.boltsSpawned = s.boltsSpawned; S.slowUntil = s.slowUntil;
+    S.foodAge = s.foodAge; S.bonusStreak = s.bonusStreak;
+    S.itemsEaten = s.itemsEaten; S.boltsSpawned = s.boltsSpawned; S.slowUntil = s.slowUntil;
     S.bolt = s.bolt ? { x: s.bolt.x, y: s.bolt.y, bornAt: s.bolt.bornAt } : null;
     S.food = s.food ? { x: s.food.x, y: s.food.y, bonus: s.food.bonus, kind: s.food.kind } : null;
     S.wallState = s.wallState; S.wallPhaseEnd = s.wallPhaseEnd;
@@ -1288,7 +1288,7 @@ export function createGame(cfg = {}) {
     S.bombNextAt = s.bombNextAt; S.bombExpireAt = s.bombExpireAt;
     S.ghosts = s.ghosts.map(cloneGhost);
     S.portal = s.portal ? { ...s.portal } : null;
-    S.portalsUnlocked = s.portalsUnlocked; S.portalsOpened = s.portalsOpened;
+    S.portalsUnlocked = s.portalsUnlocked; S.portalMarksSpent = s.portalMarksSpent;
     S.portalRetryAt = s.portalRetryAt; S.portalExpireAt = s.portalExpireAt; S.portalOpenedAt = s.portalOpenedAt;
     for (let i = 0; i < players.length; i++) {
       const p = players[i], q = s.players[i];
