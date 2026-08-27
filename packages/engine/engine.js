@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 10;  // 10: ghosts walk the board instead of flying over it; 9: doom corrected
+export const ENGINE_VERSION = 11;  // 11: the bolt; 10: ghosts walk the board; 9: doom corrected
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -59,6 +59,16 @@ export const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
 export const GHOST_SCORES = [10, 20, 30, 40, 50];
 export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed setting
+
+// The bolt: the one thing that changes a ghost's pace, and it is earned,
+// temporary and never in the player's favour twice over (it does nothing at
+// all to your own speed, per rule 14). A quarter off their speed is a step
+// of GHOST_MS / 0.75, quantized up to the grid every timing constant lives
+// on, which lands at 670 and is a 25.4% cut in practice.
+export const BOLT_EVERY = 10;      // food eaten, board-wide, between bolts
+export const BOLT_LIFE_MS = 8000;  // how long one waits on the pitch to be taken
+export const BOLT_SLOW_MS = 5000;  // how long the pack drags after it is taken
+export const GHOST_SLOW_MS = 670;  // a slowed ghost's step
 
 // The doom window (rule 25): walking into a wall or yourself is not final
 // for this long. The head hangs mid-glide over the fatal cell; one safe
@@ -174,7 +184,10 @@ const WALL_PATTERNS = [
 
 // 0..1 progress through a ghost's current glide between cells, at sim time now
 export function ghostProgress(g, nowMs) {
-  return Math.max(0, Math.min(1, 1 - (g.moveAt - nowMs) / GHOST_MS));
+  // against the span of the step actually being taken, not the constant: a
+  // slowed ghost's glide is longer, and measuring it against GHOST_MS would
+  // read as a snap backwards followed by a stand still
+  return Math.max(0, Math.min(1, 1 - (g.moveAt - nowMs) / (g.stepMs || GHOST_MS)));
 }
 
 // Continuous cell coords of a ghost at time nowMs, following the shortest
@@ -266,6 +279,11 @@ export function createGame(cfg = {}) {
 
     food: null,         // {x, y, bonus, kind} - kind indexes the renderer's emoji list
     foodAge: 0, regularEaten: 0,   // the bonus streak is the board's, not a snake's
+    // The bolt is the board's too: one counter of everything eaten by anyone
+    // (a ringed bonus is one item like any other, a teleport trip is not an
+    // item at all), a mark every BOLT_EVERY that is only ever raised, and one
+    // clock saying how long the pack is dragging.
+    foodEaten: 0, bolt: null, boltsSpawned: 0, slowUntil: 0,
 
     wallState: 'off', wallPhaseEnd: 0, wallCells: [], wallLookup: new Set(),
 
@@ -326,6 +344,7 @@ export function createGame(cfg = {}) {
     for (let i = 0; i < players.length; i++) if (players[i].snakeSet.has(k)) return true;
     if (S.wallLookup.has(k)) return true;
     if (S.food !== null && S.food.x === x && S.food.y === y) return true;
+    if (S.bolt !== null && S.bolt.x === x && S.bolt.y === y) return true;
     if (S.portal !== null && ((S.portal.ax === x && S.portal.ay === y) ||
                               (S.portal.bx === x && S.portal.by === y))) return true;
     for (let i = 0; i < S.bombs.length; i++) if (S.bombs[i].x === x && S.bombs[i].y === y) return true;
@@ -418,6 +437,29 @@ export function createGame(cfg = {}) {
     }
   }
 
+  // ---- the bolt ----
+  // One falls due every BOLT_EVERY items eaten, by anyone, for ever: a count
+  // of appetite rather than of score, so it never rides the hazard ladders
+  // and a TNT costing points cannot buy one. The mark is derived and only
+  // ever raised, so a bolt left to expire spends its mark exactly as a bolt
+  // taken does; the next one comes with the next ten.
+  function updateBolt() {
+    if (S.bolt !== null) {
+      if (S.clockMs - S.bolt.bornAt >= BOLT_LIFE_MS) {
+        emit({ t: 'bolt', gone: true, x: S.bolt.x, y: S.bolt.y });
+        S.bolt = null;
+      }
+      return;
+    }
+    const due = (S.foodEaten / BOLT_EVERY) | 0;
+    if (due <= S.boltsSpawned) return;
+    const c = spawnCell(MIN_SPAWN_DIST);
+    if (!c) return;                    // no room this quantum; ask again next
+    S.bolt = { x: c.x, y: c.y, bornAt: S.clockMs };
+    S.boltsSpawned = due;
+    emit({ t: 'bolt', gone: false, x: c.x, y: c.y });
+  }
+
   // ---- TNT ----
   function spawnBomb(minDist = MIN_SPAWN_DIST) {
     const c = spawnCell(minDist);
@@ -485,7 +527,7 @@ export function createGame(cfg = {}) {
       x: c.x, y: c.y, px: c.x, py: c.y,
       dir: { x: 0, y: 0 }, warped: false,
       role: S.ghosts.length,
-      moveAt: S.clockMs + GHOST_MS,
+      moveAt: S.clockMs + GHOST_MS, stepMs: GHOST_MS,
       majX: c.x, majY: c.y,        // majority cell one quantum ago (rule 24)
     });
   }
@@ -654,7 +696,7 @@ export function createGame(cfg = {}) {
   // every peer.
   const cloneGhost = g => ({
     x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
-    warped: g.warped, role: g.role, moveAt: g.moveAt, majX: g.majX, majY: g.majY,
+    warped: g.warped, role: g.role, moveAt: g.moveAt, stepMs: g.stepMs, majX: g.majX, majY: g.majY,
   });
 
   // one ghost moves at a time, so the step search shares this scratch
@@ -727,8 +769,12 @@ export function createGame(cfg = {}) {
       spawnGhost();
       if (S.ghosts.length > before) emit({ t: 'ghost', n: S.ghosts.length });
     }
+    // The one thing that ever changes a ghost's pace, and it is earned and it
+    // runs out (rule 23). The span is stamped on the ghost as it steps, so
+    // the renderers interpolate the glide they are actually watching.
+    const span = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
     for (const g of S.ghosts) {
-      if (S.clockMs >= g.moveAt) { moveGhost(g); g.moveAt = S.clockMs + GHOST_MS; }
+      if (S.clockMs >= g.moveAt) { moveGhost(g); g.stepMs = span; g.moveAt = S.clockMs + span; }
     }
   }
 
@@ -945,8 +991,17 @@ export function createGame(cfg = {}) {
         p.score += 1; p.pendingGrowth += 1;
         S.regularEaten++;
       }
+      S.foodEaten++;          // appetite, board-wide: a ringed bonus is one item
       emit({ t: 'eat', player: p.idx, bonus, x: nx, y: ny });
       placeFood();
+    }
+
+    // The bolt binds at entry and locks, like every other consuming move
+    // (rule 25). It scores nothing and grows nothing: all it buys is time.
+    if (S.bolt !== null && nx === S.bolt.x && ny === S.bolt.y) {
+      S.slowUntil = S.clockMs + BOLT_SLOW_MS;
+      emit({ t: 'zap', player: p.idx, x: nx, y: ny, untilMs: S.slowUntil });
+      S.bolt = null;
     }
     if (grows) p.pendingGrowth--;
 
@@ -1009,6 +1064,7 @@ export function createGame(cfg = {}) {
     updateBombs();
     updateGhosts();
     updatePortals();
+    updateBolt();
     S.foodAge += SIM_DT;
     if (S.foodAge >= FOOD_TTL) {
       if (S.food.bonus) S.regularEaten = 0;   // missed the bonus in time: lose the streak
@@ -1190,6 +1246,8 @@ export function createGame(cfg = {}) {
     return {
       quanta: S.quanta, clockMs: S.clockMs, progMs: S.progMs, rng: rngA,
       foodAge: S.foodAge, regularEaten: S.regularEaten,
+      foodEaten: S.foodEaten, boltsSpawned: S.boltsSpawned, slowUntil: S.slowUntil,
+      bolt: S.bolt ? { x: S.bolt.x, y: S.bolt.y, bornAt: S.bolt.bornAt } : null,
       food: S.food ? { x: S.food.x, y: S.food.y, bonus: S.food.bonus, kind: S.food.kind } : null,
       wallState: S.wallState, wallPhaseEnd: S.wallPhaseEnd, walls: [...S.wallLookup],
       bombs: S.bombs.map(b => ({ x: b.x, y: b.y })),
@@ -1219,6 +1277,8 @@ export function createGame(cfg = {}) {
     S.quanta = s.quanta; S.clockMs = s.clockMs; S.progMs = s.progMs; rngA = s.rng | 0;
     S.accMs = 0;
     S.foodAge = s.foodAge; S.regularEaten = s.regularEaten;
+    S.foodEaten = s.foodEaten; S.boltsSpawned = s.boltsSpawned; S.slowUntil = s.slowUntil;
+    S.bolt = s.bolt ? { x: s.bolt.x, y: s.bolt.y, bornAt: s.bolt.bornAt } : null;
     S.food = s.food ? { x: s.food.x, y: s.food.y, bonus: s.food.bonus, kind: s.food.kind } : null;
     S.wallState = s.wallState; S.wallPhaseEnd = s.wallPhaseEnd;
     S.wallLookup = new Set(s.walls);
@@ -1296,7 +1356,7 @@ export function createGame(cfg = {}) {
     // exposed for tests and the validator; not for renderers
     _step: () => stepPlayer(players[0]), _stepPlayer: i => stepPlayer(players[i]),
     _updateWalls: updateWalls, _updateBombs: updateBombs,
-    _updateGhosts: updateGhosts, _updatePortals: updatePortals,
+    _updateGhosts: updateGhosts, _updatePortals: updatePortals, _updateBolt: updateBolt,
     _moveGhost: moveGhost, _ghostTarget: ghostTarget, _spawnPortal: spawnPortal, _closePortal: closePortal,
     // the walk a ghost standing at (x, y) sees to (tx, ty): sweep, then read
     _ghostDist: (x, y, tx, ty) => { ghostField({ x, y }, tx, ty); return fieldDist(x, y, tx, ty); },

@@ -236,6 +236,12 @@
     z-index: 5;
   }
   .wall-banner[hidden] { display: none; }
+  /* the bolt's drag sits under the wall pill so the two never overlap */
+  .bolt-banner {
+    top: auto; bottom: -14px;
+    background: #2b6fb5;
+    box-shadow: 0 3px 12px rgba(43,111,181,0.5);
+  }
   .wall-banner.forming { animation: wallBlink 0.32s steps(1, end) infinite; }
   @keyframes wallBlink { 50% { opacity: 0.28; } }
 
@@ -804,6 +810,7 @@
     <div class="board-frame">
       <canvas id="game"></canvas>
       <div class="wall-banner" id="wallBanner" hidden></div>
+      <div class="wall-banner bolt-banner" id="boltBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
       <div class="overlay" id="overlay">
@@ -976,7 +983,7 @@
   // state, no string building in hot loops, DOM only on state change.
   import {
     createGame, ghostRenderPos, MODES,
-    GRID, SPEEDS, FOOD_TTL, REDIRECT_MS,
+    GRID, SPEEDS, FOOD_TTL, REDIRECT_MS, BOLT_LIFE_MS,
     PORTAL_OPEN_MS, PORTAL_WARN_MS,
   } from './packages/engine/engine.js';
   // versus rides the same deterministic engine: every client simulates the
@@ -1312,6 +1319,13 @@
     sfxTone('sine', 480, 1040, at, 0.13, 0.35 * vol);
     sfxTone('triangle', 960, 2080, at + 0.03, 0.11, 0.18 * vol);
   }
+  function sfxZap(vol) {
+    if (!sfxOn()) return;
+    const at = audio.currentTime;                              // the bolt: a crack, then the drag
+    sfxBoom(at, 0.16, 0.5 * vol, 6000, 900);
+    sfxTone('square', 1750, 300, at, 0.22, 0.3 * vol);
+    sfxTone('sine', 300, 120, at + 0.1, 0.4, 0.25 * vol);
+  }
   function sfxKickoff() { if (sfxOn()) sfxPeep(audio.currentTime, 0.3, 1); }
   function sfxFullTime() {
     if (!sfxOn()) return;
@@ -1328,7 +1342,8 @@
     for (const e of events) {
       const replayed = vsView() && e.q !== undefined && e.q <= vsEventQ;
       if (vsView() && e.q !== undefined && e.q > vsEventQ) vsEventQ = e.q;
-      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die' || e.t === 'ghost' || e.t === 'save')) continue;
+      if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die'
+                       || e.t === 'ghost' || e.t === 'save' || e.t === 'zap')) continue;
       // rival events play quiet; the board-level ones (walls, portals,
       // ghosts) are everyone's and play full
       const mineVol = !vsView() || e.player === undefined || e.player === vs.myIdx ? 1 : 0.35;
@@ -1361,6 +1376,10 @@
         if (e.open && !replayed) sfxPortalOpen();
       } else if (e.t === 'ghost') {
         sfxGhostIn();
+      } else if (e.t === 'zap') {
+        sfxZap(mineVol);
+        spawnBurst(e.x, e.y, 26, 0.6, () => (Math.random() * 2.4 + 1) * (cell / 13),
+          i => i % 2 === 0 ? '#ffe9a3' : '#8fd0ff');
       } else if (e.t === 'save') {
         sfxSave(mineVol);
         spawnBurst(e.x, e.y, 10, 0.45, () => (Math.random() * 1.6 + 0.7) * (cell / 14), () => '#f4ecd8');
@@ -1445,6 +1464,7 @@
     buildGhostSprites();
     buildPortalSprites();
     buildFoodSprite();
+    buildBoltSprite();
     buildFlagSprite();
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
@@ -1534,6 +1554,35 @@
       c.clearRect(0, 0, flagS, flagS);
       c.fillText(flagGlyph, flagS / 2 + dx, flagS / 2 + dy);
     }
+  }
+
+  // The bolt: one glyph, baked once like the food and blitted while it is on
+  // the pitch. Same solid-fill rule (a fancy paint turns a colour emoji into
+  // a silhouette on iOS Safari).
+  const boltCanvas = document.createElement('canvas');
+  const boltCtx = boltCanvas.getContext('2d');
+  let boltS = 0;
+  function buildBoltSprite() {
+    boltS = Math.ceil(cell * 1.1);
+    boltCanvas.width = boltS; boltCanvas.height = boltS;
+    const c = boltCtx;
+    c.fillStyle = '#000';
+    c.font = `${(cell * 0.82) | 0}px ${EMOJI_FONT}`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText('⚡', boltS / 2, boltS / 2);
+  }
+
+  function drawBolt() {
+    if (!g.bolt || !boltS) return;
+    const now = g.renderNow();
+    const pulse = 1 + Math.sin(foodPulse * 1.6) * 0.12;
+    const left = g.bolt.bornAt + BOLT_LIFE_MS - now;
+    if (left < 1500 && ((now / 110) | 0) % 2) ctx.globalAlpha = 0.35;   // blink before it goes
+    const s = Math.round(boltS * pulse);
+    const x = g.bolt.x * cell + cell / 2, y = g.bolt.y * cell + cell / 2;
+    ctx.drawImage(boltCanvas, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+    ctx.globalAlpha = 1;
   }
 
   // The wall shape is static for its whole phase, so it is rendered once to an
@@ -1838,6 +1887,7 @@
     ctx.drawImage(foodSpriteCanvas, Math.round(fx - fd / 2), Math.round(fy + cell * 0.02 - fd / 2), fd, fd);
     if (foodDim) ctx.globalAlpha = 1;
 
+    drawBolt();
     drawBombs();
 
     const p = state === 'playing' ? g.renderProg() : 1;
@@ -1904,6 +1954,7 @@
     ctx.globalAlpha = 1;
 
     syncWallBanner();
+    syncBoltBanner();
     syncCountdown();
 
     if (showFps) {
@@ -2115,6 +2166,22 @@
     wallBanner.textContent = shown === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
     wallBanner.classList.toggle('forming', shown === 'warning');
     wallBanner.hidden = false;
+  }
+
+  // The bolt's own banner, counting the drag down so the player knows both
+  // why the pack slowed and how long they have. DOM only when the printed
+  // second changes (rule 8), same as the speed run clock.
+  const boltBanner = document.getElementById('boltBanner');
+  let boltBannerText = '';
+  function syncBoltBanner() {
+    const live = state === 'playing' || state === 'countdown';
+    const left = live && g ? g.slowUntil - g.renderNow() : 0;
+    const text = left > 0 ? '⚡ GHOSTS SLOWED · ' + Math.ceil(left / 1000) : '';
+    if (text === boltBannerText) return;
+    boltBannerText = text;
+    if (!text) { boltBanner.hidden = true; return; }
+    boltBanner.textContent = text;
+    boltBanner.hidden = false;
   }
 
   // ---- pre-round countdown: page-owned; the engine does not advance ----

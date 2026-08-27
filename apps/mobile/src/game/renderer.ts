@@ -35,6 +35,7 @@ import {
   PORTAL_OPEN_MS,
   PORTAL_WARN_MS,
   REDIRECT_MS,
+  BOLT_LIFE_MS,
   ghostRenderPos,
   type Game,
 } from '@pitch-snake/engine';
@@ -610,6 +611,31 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       fillPaint,
     );
     fillPaint.setAlphaf(1);
+  }
+
+  // The bolt, drawn rather than blitted: the atlas holds food glyphs and this
+  // phone cannot render a text emoji at all, so the shape is a path. Cheap
+  // enough to build per frame at one bolt a board.
+  const bolt = game.bolt;
+  if (bolt !== null) {
+    const bx = bolt.x * cell + cell / 2;
+    const by = bolt.y * cell + cell / 2;
+    const left = bolt.bornAt + BOLT_LIFE_MS - game.clockMs;
+    const blink = left < 1500 && ((game.clockMs / 110) | 0) % 2 !== 0;
+    const s = cell * 0.5 * pulse;
+    const p = Skia.Path.Make();
+    p.moveTo(bx + s * 0.18, by - s);
+    p.lineTo(bx - s * 0.62, by + s * 0.12);
+    p.lineTo(bx - s * 0.06, by + s * 0.12);
+    p.lineTo(bx - s * 0.22, by + s);
+    p.lineTo(bx + s * 0.66, by - s * 0.18);
+    p.lineTo(bx + s * 0.08, by - s * 0.18);
+    p.close();
+    fillPaint.setColor(C.goldBright);
+    fillPaint.setAlphaf(blink ? 0.35 : 1);
+    canvas.drawPath(p, fillPaint);
+    fillPaint.setAlphaf(1);
+    p.dispose();
   }
 
   // TNT: one image per block; wave blink via alpha, pulse via dst size

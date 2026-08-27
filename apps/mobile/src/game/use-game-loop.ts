@@ -217,6 +217,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             else if (e.phase === 'solid') bakeWallLayer(g, box.boardPx, true);
             break;
           }
+          case 'zap': {
+            // the bolt landed: the pack drags for five seconds
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            break;
+          }
           case 'save': {
             // the doom window paid off: a light tap for the great escape
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

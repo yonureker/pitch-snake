@@ -12,6 +12,7 @@ import {
   TNT_SCORES, GHOST_SCORES, GHOST_MS, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
+  BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -716,6 +717,128 @@ test('a ghost joining mid-round emits an arrival; the survival kickoff pack is s
   const s = createGame({ seed: 7, ...MODES.survival });
   assert.equal(s.ghosts.length, 5, 'survival opens with the pack');
   assert.ok(s.drainEvents().every(e => e.t !== 'ghost'), 'and none of them made a sound');
+});
+
+// ------------------------------------------------------------------ the bolt
+function eatOne(g, bonus = false) {
+  // walk the head onto the food wherever it is, one item eaten
+  const h = g.snake[0];
+  g.food = { x: wrap(h.x + g.dir.x), y: wrap(h.y + g.dir.y), bonus, kind: 0 };
+  g.foodAge = 0;
+  g._step();
+}
+const wrap = v => ((v % GRID) + GRID) % GRID;
+
+test('a bolt falls due every ten items, counting appetite and not points', () => {
+  const g = quietGame();
+  g.portalRetryAt = 1e12;
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  assert.equal(BOLT_EVERY, 10);
+  for (let i = 0; i < 9; i++) eatOne(g);
+  g._updateBolt();
+  assert.equal(g.bolt, null, 'nine is not ten');
+  assert.equal(g.foodEaten, 9);
+  eatOne(g, true);                              // the tenth is a ringed bonus
+  assert.equal(g.foodEaten, 10, 'a +5 counts as one item like any other');
+  g._updateBolt();
+  assert.ok(g.bolt, 'the tenth item drops a bolt');
+  assert.equal(g.boltsSpawned, 1);
+  const where = { x: g.bolt.x, y: g.bolt.y };
+  g._updateBolt();
+  assert.deepEqual({ x: g.bolt.x, y: g.bolt.y }, where, 'and only one of it');
+});
+
+test('a bolt drags the pack for five seconds, then lets it go', () => {
+  const g = quietGame();
+  g.portalRetryAt = 1e12;
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.ghosts.push({ x: 12, y: 12, px: 12, py: 12, dir: { x: 0, y: 0 }, warped: false, role: 0,
+                  moveAt: 0, stepMs: GHOST_MS, majX: 12, majY: 12 });
+  g.bolt = { x: 6, y: 5, bornAt: 0 };
+  g._step();                                     // the head takes it
+  assert.equal(g.bolt, null, 'taken');
+  assert.equal(g.slowUntil, g.clockMs + BOLT_SLOW_MS);
+  assert.equal(g.score, 0, 'a bolt is not food: it scores nothing');
+  assert.equal(g.pendingGrowth, 0, 'and grows nothing');
+  const zap = g.drainEvents().find(e => e.t === 'zap');
+  assert.ok(zap && zap.untilMs === g.slowUntil, 'and it announces how long it lasts');
+  g.ghosts[0].moveAt = g.clockMs;                // due to step right now
+  g._updateGhosts();
+  assert.equal(g.ghosts[0].stepMs, GHOST_SLOW_MS, 'the pack drags');
+  assert.ok(GHOST_SLOW_MS > GHOST_MS && GHOST_SLOW_MS % SIM_DT === 0);
+  g.clockMs = g.slowUntil;                       // the moment it runs out
+  g.ghosts[0].moveAt = g.clockMs;
+  g._updateGhosts();
+  assert.equal(g.ghosts[0].stepMs, GHOST_MS, 'and then it is over');
+});
+
+test('a slowed ghost is interpolated against the step it is actually taking', () => {
+  const g = quietGame();
+  const gh = { x: 5, y: 5, px: 4, py: 5, dir: { x: 1, y: 0 }, warped: false, role: 0,
+               moveAt: 1000, stepMs: GHOST_SLOW_MS, majX: 5, majY: 5 };
+  g.ghosts.push(gh);
+  assert.equal(ghostProgress(gh, 1000 - GHOST_SLOW_MS), 0, 'nought at the start of ITS step');
+  assert.ok(Math.abs(ghostProgress(gh, 1000 - GHOST_SLOW_MS / 2) - 0.5) < 1e-9, 'half way at half way');
+  assert.equal(ghostProgress(gh, 1000), 1, 'and arrived on time');
+  gh.stepMs = GHOST_MS;                          // the fast case is unchanged
+  assert.equal(ghostProgress(gh, 1000 - GHOST_MS), 0);
+});
+
+test('a bolt expires unclaimed, and spends its mark doing so', () => {
+  const g = quietGame();
+  g.portalRetryAt = 1e12;
+  foodFar(g);
+  g.foodEaten = 10;
+  g._updateBolt();
+  assert.ok(g.bolt, 'out on the pitch');
+  g.clockMs = g.bolt.bornAt + BOLT_LIFE_MS;
+  g._updateBolt();
+  assert.equal(g.bolt, null, 'and gone when nobody came');
+  assert.ok(g.drainEvents().some(e => e.t === 'bolt' && e.gone), 'the shells hear it go');
+  g._updateBolt();
+  assert.equal(g.bolt, null, 'the mark was spent; the next one comes with the next ten');
+  g.foodEaten = 20;
+  g._updateBolt();
+  assert.ok(g.bolt, 'as it does');
+});
+
+test('nothing else spawns on a bolt, and a round with one replays exactly', () => {
+  const g = quietGame();
+  g.bolt = { x: 7, y: 7, bornAt: 0 };
+  assert.equal(g.cellOccupied(7, 7), true, 'the cell is taken');
+  // an organic round that takes at least one bolt must replay to the same
+  // end, so the pilot here actually goes and eats
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  let done = null;
+  for (let seed = 1; seed < 40 && !done; seed++) {
+    const h = createGame({ seed });
+    let zaps = 0;
+    for (let q = 0; q < 20000 && h.alive; q++) {
+      const head = h.snake[0];
+      const aim = h.bolt ?? h.food;              // a bolt on the pitch is worth the detour
+      let best = null, bestD = Infinity;
+      for (const [dx, dy] of dirs) {
+        if (dx === -h.dir.x && dy === -h.dir.y) continue;
+        const nx = wrap(head.x + dx), ny = wrap(head.y + dy);
+        const tail = h.snake[h.snake.length - 1];
+        if (h.snakeSet.has(K(nx, ny)) && !(nx === tail.x && ny === tail.y)) continue;
+        if (h.wallLookup.has(K(nx, ny))) continue;
+        const d = aim ? wrapDist(nx, ny, aim.x, aim.y) : 0;
+        if (d < bestD) { bestD = d; best = [dx, dy]; }
+      }
+      if (best) h.setDir(best[0], best[1]);
+      h.advanceQuanta(1);
+      for (const e of h.drainEvents()) if (e.t === 'zap') zaps++;
+    }
+    if (zaps > 0 && !h.alive) done = h;
+  }
+  assert.ok(done, 'found a seed whose round takes a bolt and ends');
+  const r = replay(done.log);
+  assert.equal(r.score, done.score, 'same score');
+  assert.equal(r.deadReason, done.deadReason, 'same end');
+  assert.equal(r.quanta, done.quanta, 'same length');
+  assert.equal(r.slowUntil, done.slowUntil, 'and the same drag on the pack');
 });
 
 // ------------------------------------------------------------------- the TNT

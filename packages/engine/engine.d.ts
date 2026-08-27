@@ -19,6 +19,10 @@ export declare const SOLID_MS: number;
 export declare const TNT_SCORES: number[];
 export declare const GHOST_SCORES: number[];
 export declare const GHOST_MS: number;
+export declare const BOLT_EVERY: number;
+export declare const BOLT_LIFE_MS: number;
+export declare const BOLT_SLOW_MS: number;
+export declare const GHOST_SLOW_MS: number;
 export declare const PORTAL_FIRST: number;
 export declare const PORTAL_EVERY: number;
 export declare const PORTAL_BONUS: number;
@@ -48,9 +52,14 @@ export interface Ghost extends Cell {
   role?: number;
   majX?: number; majY?: number;
   moveAt: number;
+  /** Span of the step it is currently taking: GHOST_MS, or GHOST_SLOW_MS
+   *  while a bolt is in effect. Interpolate the glide against this. */
+  stepMs?: number;
 }
 export interface Portal { ax: number; ay: number; bx: number; by: number; used: boolean }
 export interface Food extends Cell { bonus: boolean; kind: number }
+/** The thunderbolt waiting on the pitch; taking it drags the ghosts. */
+export interface Bolt extends Cell { bornAt: number }
 
 /**
  * One snake on the board. A one-snake game exposes players[0] under the
@@ -86,6 +95,10 @@ export type GameEvent = (
   | { t: 'wall'; phase: 'off' | 'warning' | 'solid' }
   | { t: 'portal'; open: boolean }
   | { t: 'ghost'; n: number }
+  /** A bolt arriving on the pitch (gone: false) or expiring unclaimed (gone: true). */
+  | { t: 'bolt'; gone: boolean; x: number; y: number }
+  /** A bolt taken: the pack drags until untilMs on the sim clock. */
+  | { t: 'zap'; player: number; x: number; y: number; untilMs: number }
   | { t: 'save'; player: number; x: number; y: number }
   /** `segments` is present only when the round continues without this snake
    *  (its body left the board); a round-ending death keeps the body. */
@@ -127,6 +140,13 @@ export interface Game {
   score: number; pendingGrowth: number;
   doom: Doom | null;
   food: Food; foodAge: number; regularEaten: number;
+  /** Items eaten by anyone this round; every BOLT_EVERY of them drops a bolt. */
+  foodEaten: number;
+  /** The bolt waiting to be taken, if one is out. */
+  bolt: Bolt | null;
+  boltsSpawned: number;
+  /** Sim clock the ghosts stop dragging at; 0 when nobody has taken a bolt. */
+  slowUntil: number;
   wallState: 'off' | 'warning' | 'solid'; wallPhaseEnd: number;
   wallCells: Cell[]; wallLookup: Set<number>;
   bombs: Cell[]; bombsUnlocked: number; bombPhase: 'gap' | 'active';
