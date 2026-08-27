@@ -1562,25 +1562,48 @@
   const boltCanvas = document.createElement('canvas');
   const boltCtx = boltCanvas.getContext('2d');
   let boltS = 0;
+  // Baked once with a glow behind it, the way the TNT face is: the glyph
+  // alone was a small gold thing on a dark board and went unnoticed. The
+  // shadow is paid for here, never inside the frame loop (rule 6), so PAD
+  // leaves room for the bloom to land inside the sprite.
   function buildBoltSprite() {
-    boltS = Math.ceil(cell * 1.1);
+    const PAD = Math.max(8, Math.round(cell * 0.3));
+    boltS = Math.ceil(cell * 1.05) + PAD * 2;
     boltCanvas.width = boltS; boltCanvas.height = boltS;
     const c = boltCtx;
-    c.fillStyle = '#000';
-    c.font = `${(cell * 0.82) | 0}px ${EMOJI_FONT}`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
+    c.font = `${(cell * 0.92) | 0}px ${EMOJI_FONT}`;
+    // two passes of glow, then the glyph clean on top: a colour emoji ignores
+    // fillStyle but not shadow, so the bloom is the halo and the glyph stays
+    // its own colours
+    c.shadowColor = 'rgba(255,214,102,0.95)';
+    c.fillStyle = '#ffd666';
+    for (const blur of [22, 11]) {
+      c.shadowBlur = blur;
+      c.fillText('⚡', boltS / 2, boltS / 2);
+    }
+    c.shadowBlur = 0;
     c.fillText('⚡', boltS / 2, boltS / 2);
   }
 
   function drawBolt() {
     if (!g.bolt || !boltS) return;
     const now = g.renderNow();
-    const pulse = 1 + Math.sin(foodPulse * 1.6) * 0.12;
+    const beat = 1 + Math.sin(now / 150) * 0.16;             // its own faster heartbeat
     const left = g.bolt.bornAt + BOLT_LIFE_MS - now;
-    if (left < 1500 && ((now / 110) | 0) % 2) ctx.globalAlpha = 0.35;   // blink before it goes
-    const s = Math.round(boltS * pulse);
+    if (left < 1500 && ((now / 110) | 0) % 2) ctx.globalAlpha = 0.4;   // blink before it goes
     const x = g.bolt.x * cell + cell / 2, y = g.bolt.y * cell + cell / 2;
+    // a ring that breathes the other way, so the pair pumps rather than just
+    // grows: the same trick the ringed bonus uses to say "this one is special"
+    ctx.strokeStyle = '#ffd666';
+    ctx.lineWidth = Math.max(2, cell * 0.07);
+    ctx.globalAlpha *= 0.55 + Math.sin(now / 150 + Math.PI) * 0.2;
+    ctx.beginPath();
+    ctx.arc(x, y, cell * 0.52 * (2 - beat), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = left < 1500 && ((now / 110) | 0) % 2 ? 0.4 : 1;
+    const s = Math.round(boltS * beat);
     ctx.drawImage(boltCanvas, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
     ctx.globalAlpha = 1;
   }
@@ -1719,8 +1742,13 @@
   }
 
   const _gr = { cx: 0, cy: 0 };   // shared scratch: no allocation per ghost per frame
+  // A ghost that has taken a bolt to the face lurches instead of bobbing, its
+  // eyes wander apart and cross, and it wears a ring that tips like a spun
+  // coin. Every bit of it is read off the clock (rule 3) and drawn only while
+  // the drag is on, so a sober board pays nothing for it.
   function drawGhosts() {
     const now = g.renderNow();
+    const drunk = g.slowUntil > now;
     const bob = Math.sin(foodPulse * 1.1) * cell * 0.03;
     for (let i = 0; i < g.ghosts.length; i++) {
       const gh = g.ghosts[i];
@@ -1728,23 +1756,60 @@
       const { cx, cy } = ghostRenderPos(gh, now, _gr);
       const wx = cx < 0 ? cx + GRID : cx > GRID - 1 ? cx - GRID : null;
       const wy = cy < 0 ? cy + GRID : cy > GRID - 1 ? cy - GRID : null;
-      drawGhostBody(cx, cy, gh.dir, ci, bob);
-      if (wx !== null) drawGhostBody(wx, cy, gh.dir, ci, bob);
-      if (wy !== null) drawGhostBody(cx, wy, gh.dir, ci, bob);
-      if (wx !== null && wy !== null) drawGhostBody(wx, wy, gh.dir, ci, bob);
+      // each one on its own phase, or the pack sways like a chorus line
+      const ph = drunk ? now / 260 + i * 1.9 : 0;
+      const sway = drunk ? Math.sin(ph) * cell * 0.09 : 0;
+      const lurch = drunk ? bob + Math.sin(ph * 1.7) * cell * 0.05 : bob;
+      drawGhostBody(cx, cy, gh.dir, ci, lurch, sway, drunk, ph);
+      if (wx !== null) drawGhostBody(wx, cy, gh.dir, ci, lurch, sway, drunk, ph);
+      if (wy !== null) drawGhostBody(cx, wy, gh.dir, ci, lurch, sway, drunk, ph);
+      if (wx !== null && wy !== null) drawGhostBody(wx, wy, gh.dir, ci, lurch, sway, drunk, ph);
     }
   }
 
-  function drawGhostBody(cxCell, cyCell, look, ci, bob) {
+  function drawGhostBody(cxCell, cyCell, look, ci, bob, sway, drunk, ph) {
     const r = cell * 0.4;
-    const gx = cxCell * cell + cell / 2;
+    const gx = cxCell * cell + cell / 2 + sway;
     const gy = cyCell * cell + cell / 2 + bob;
+    if (drunk) {
+      // the dizzy halo: a flat ring riding clear above the head with two
+      // sparks going round it. Cartoon shorthand, and it reads at a glance
+      // where a thin wobbling arc did not.
+      const ringY = gy - r * 1.35, rx = r * 0.72, ry = r * 0.26;
+      ctx.strokeStyle = '#eaf6ff';
+      ctx.lineWidth = Math.max(1.5, cell * 0.055);
+      ctx.globalAlpha = 0.75 + Math.sin(ph * 1.3) * 0.2;
+      ctx.beginPath();
+      ctx.ellipse(gx, ringY, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#fff6c9';
+      for (let k = 0; k < 2; k++) {
+        const a = ph * 2.1 + k * Math.PI;
+        ctx.globalAlpha = 0.55 + Math.sin(a) * 0.4;    // dimmer at the back of the orbit
+        ctx.beginPath();
+        ctx.arc(gx + Math.cos(a) * rx, ringY + Math.sin(a) * ry, cell * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = GHOST_EYE;
+    }
     ctx.drawImage(ghostSprites[ci], gx - ghostSprW / 2, gy - ghostSprOY);
     const eyeDX = r * 0.42, eyeY = gy - r * 0.16 - r * 0.03;
     const ewx = r * 0.28, ewy = r * 0.36;
     ctx.fillStyle = GHOST_EYE;
     for (let sx = -1; sx <= 1; sx += 2) {
       const ex = gx + sx * eyeDX;
+      if (drunk) {
+        // pupils roll on their own little orbits, each eye out of step with
+        // the other, and drift inward so they cross
+        const a = ph * (sx > 0 ? 1.4 : -1.1) + (sx > 0 ? 0 : 2.2);
+        ctx.beginPath();
+        ctx.arc(ex + Math.cos(a) * ewx * 0.5 - sx * ewx * 0.35,
+                eyeY + Math.sin(a * 1.3) * ewy * 0.45,
+                r * 0.15, 0, 2 * Math.PI);
+        ctx.fill();
+        continue;
+      }
       ctx.beginPath();
       ctx.arc(ex + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, 0, 2 * Math.PI);
       ctx.fill();

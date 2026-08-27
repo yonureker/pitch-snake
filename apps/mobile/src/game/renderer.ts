@@ -509,19 +509,52 @@ function drawGhost(
   look: { x: number; y: number },
   bob: number,
   cell: number,
+  /** Phase of this ghost's stagger while a bolt is in effect; null when sober. */
+  ph: number | null,
 ): void {
   const sprite = ghostSprites[index % ghostSprites.length];
   if (sprite === null || sprite === undefined) return;
-  const gx = cx * cell + cell / 2;
+  const sway = ph === null ? 0 : Math.sin(ph) * cell * 0.09;
+  const gx = cx * cell + cell / 2 + sway;
   const gy = cy * cell + cell / 2 + bob;
-  drawBaked(canvas, sprite, gx - sprite.w / 2, gy - ghostSpriteOriginY);
   const r = cell * 0.4;
+  if (ph !== null) {
+    // the dizzy halo, riding clear above the head with two sparks going round
+    const ringY = gy - r * 1.35;
+    const rx = r * 0.72;
+    const ry = r * 0.26;
+    strokePaint.setColor(Skia.Color('#eaf6ff'));
+    strokePaint.setStrokeWidth(Math.max(1.5, cell * 0.055));
+    strokePaint.setAlphaf(0.75 + Math.sin(ph * 1.3) * 0.2);
+    canvas.drawOval(Skia.XYWHRect(gx - rx, ringY - ry, rx * 2, ry * 2), strokePaint);
+    strokePaint.setAlphaf(1);
+    fillPaint.setColor(Skia.Color('#fff6c9'));
+    for (let k = 0; k < 2; k++) {
+      const a = ph * 2.1 + k * Math.PI;
+      fillPaint.setAlphaf(0.55 + Math.sin(a) * 0.4);
+      canvas.drawCircle(gx + Math.cos(a) * rx, ringY + Math.sin(a) * ry, cell * 0.06, fillPaint);
+    }
+    fillPaint.setAlphaf(1);
+  }
+  drawBaked(canvas, sprite, gx - sprite.w / 2, gy - ghostSpriteOriginY);
   const eyeDX = r * 0.42;
   const eyeY = gy - r * 0.16 - r * 0.03;
   const ewx = r * 0.28;
   const ewy = r * 0.36;
   fillPaint.setColor(C.ghostEye);
   for (let sx = -1; sx <= 1; sx += 2) {
+    if (ph !== null) {
+      // pupils roll on their own orbits, out of step with each other, and
+      // drift inward so they cross
+      const a = ph * (sx > 0 ? 1.4 : -1.1) + (sx > 0 ? 0 : 2.2);
+      canvas.drawCircle(
+        gx + sx * eyeDX + Math.cos(a) * ewx * 0.5 - sx * ewx * 0.35,
+        eyeY + Math.sin(a * 1.3) * ewy * 0.45,
+        r * 0.15,
+        fillPaint,
+      );
+      continue;
+    }
     canvas.drawCircle(gx + sx * eyeDX + look.x * ewx * 0.55, eyeY + look.y * ewy * 0.5, r * 0.16, fillPaint);
   }
 }
@@ -631,6 +664,11 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     p.lineTo(bx + s * 0.66, by - s * 0.18);
     p.lineTo(bx + s * 0.08, by - s * 0.18);
     p.close();
+    strokePaint.setColor(C.goldBright);
+    strokePaint.setStrokeWidth(Math.max(2, cell * 0.07));
+    strokePaint.setAlphaf((blink ? 0.35 : 1) * (0.55 + Math.sin(game.clockMs / 150 + Math.PI) * 0.2));
+    canvas.drawCircle(bx, by, cell * 0.52 * (2 - pulse), strokePaint);
+    strokePaint.setAlphaf(1);
     fillPaint.setColor(C.goldBright);
     fillPaint.setAlphaf(blink ? 0.35 : 1);
     canvas.drawPath(p, fillPaint);
@@ -692,10 +730,14 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       pos.cy < 0 ? pos.cy + GRID
       : pos.cy > GRID - 1 ? pos.cy - GRID
       : null;
-    drawGhost(canvas, i, pos.cx, pos.cy, gh.dir, bob, cell);
-    if (wx !== null) drawGhost(canvas, i, wx, pos.cy, gh.dir, bob, cell);
-    if (wy !== null) drawGhost(canvas, i, pos.cx, wy, gh.dir, bob, cell);
-    if (wx !== null && wy !== null) drawGhost(canvas, i, wx, wy, gh.dir, bob, cell);
+    // a ghost that has taken a bolt to the face lurches on its own phase,
+    // or the whole pack sways like a chorus line
+    const ph = game.slowUntil > now ? now / 260 + i * 1.9 : null;
+    const lurch = ph === null ? bob : bob + Math.sin(ph * 1.7) * cell * 0.05;
+    drawGhost(canvas, i, pos.cx, pos.cy, gh.dir, lurch, cell, ph);
+    if (wx !== null) drawGhost(canvas, i, wx, pos.cy, gh.dir, lurch, cell, ph);
+    if (wy !== null) drawGhost(canvas, i, pos.cx, wy, gh.dir, lurch, cell, ph);
+    if (wx !== null && wy !== null) drawGhost(canvas, i, wx, wy, gh.dir, lurch, cell, ph);
   }
 
   // particles
