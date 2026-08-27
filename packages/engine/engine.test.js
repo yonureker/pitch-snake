@@ -385,12 +385,49 @@ test('doom: a safe press inside the window converts death into the turn that was
   assert.ok(cellEq(g.snake[0], 5, 5), 'the state never entered it');
   assert.ok(g.headFrom.x === 5 && g.headFrom.y === 5, 'the glide anchor holds the majority still');
   g.advanceQuanta(2);                          // 20ms into the window
-  g.setDir(0, -1);                             // the save
+  g.setDir(0, -1);                             // the save: recorded, not taken
+  assert.ok(g.doom, 'setDir moves nothing; the world only changes in a quantum');
+  assert.deepEqual(g.doomSave, { x: 0, y: -1 }, 'the press is held for the next one');
+  assert.ok(cellEq(g.snake[0], 5, 5), 'the head has not moved yet');
+  g.advanceQuanta(1);
   assert.equal(g.doom, null, 'the window is spent');
   assert.ok(cellEq(g.snake[0], 5, 4), 'the head took the turn instead');
   assert.ok(g.drainEvents().some(e => e.t === 'save'), 'and the save announced itself');
-  g.advanceQuanta(11);                         // to the next boundary: quantum 26
+  g.advanceQuanta(10);                         // to the next boundary: quantum 26
   assert.ok(cellEq(g.snake[0], 5, 3), 'the pace never changed: next cell right on schedule');
+});
+
+test('doom: a press taken while the clock is stopped moves nothing', () => {
+  const g = walledGame();
+  g.food = { x: 5, y: 4, bonus: true, kind: 0 };   // a bonus on the escape cell
+  g.foodAge = 0;
+  g.advanceQuanta(13);
+  const clock = g.clockMs, score = g.score;
+  g.clearQueue();                              // what both shells do around a pause
+  assert.equal(g.doomSave, null, 'a save pressed before the pause does not survive it');
+  g.setDir(0, -1);                             // pressed while nothing is simulating
+  assert.equal(g.clockMs, clock, 'the clock never moved');
+  assert.equal(g.score, score, 'and neither did the score');
+  assert.ok(cellEq(g.snake[0], 5, 5), 'nor the head');
+  assert.equal(g.pendingGrowth, 0, 'nothing was eaten on a round that is not running');
+  g.advanceQuanta(1);                          // the sim resumes and takes it
+  assert.equal(g.score, score + 5, 'the bonus counts once the round is running again');
+});
+
+test('doom: a stale press left by a save is dropped, never played as a reversal', () => {
+  const g = walledGame();
+  g.wallLookup.add(K(5, 4));                   // up is walled too
+  g.advanceQuanta(13);
+  g.setDir(0, -1);                             // fatal: no save, so it queues
+  assert.deepEqual(g.dirQueue, [{ x: 0, y: -1 }], 'the press still counts as a queued turn');
+  g.setDir(0, 1);                              // down saves
+  g.advanceQuanta(1);
+  assert.equal(g.doom, null);
+  assert.deepEqual(g.dir, { x: 0, y: 1 }, 'the save set the heading');
+  assert.deepEqual(g.dirQueue, [{ x: 0, y: -1 }], 'and left a press that is now a reversal');
+  g.advanceQuanta(13);                         // the next boundary must refuse it
+  assert.equal(g.alive, true, 'the snake did not turn back into its own neck');
+  assert.deepEqual(g.dir, { x: 0, y: 1 }, 'the stale press was dropped, the heading held');
 });
 
 test('doom: silence lands the sentence at exactly REDIRECT_MS, pose kept', () => {
@@ -410,11 +447,53 @@ test('doom: a press into another fatal cell saves nothing; a later safe one stil
   g.wallLookup.add(K(5, 4));                   // up is walled too
   g.advanceQuanta(13);
   g.setDir(0, -1);                             // into the second wall: no save
+  g.advanceQuanta(1);
   assert.ok(g.doom, 'still doomed');
   g.setDir(0, 1);                              // down is open
+  g.advanceQuanta(1);
   assert.equal(g.doom, null);
   assert.ok(cellEq(g.snake[0], 5, 6), 'the safe press took it');
   assert.equal(g.alive, true);
+});
+
+test('doom: a save is judged again on the way in, not just when it was pressed', () => {
+  const g = walledGame();
+  g.advanceQuanta(13);
+  g.setDir(0, -1);                             // (5,4) is open at the instant of the press
+  assert.deepEqual(g.doomSave, { x: 0, y: -1 });
+  g.wallLookup.add(K(5, 4));                   // the board moves before the tick lands it
+  g.advanceQuanta(1);
+  assert.ok(g.doom, 'consent to a save was never consent to a fatal one');
+  assert.equal(g.doomSave, null, 'the dead intent is dropped');
+  assert.ok(cellEq(g.snake[0], 5, 5), 'the head stayed where it stood');
+});
+
+test('doom: a death from elsewhere takes the record with it; the sentence keeps it', () => {
+  const byGhost = walledGame();
+  byGhost.advanceQuanta(13);
+  byGhost.ghosts.push({
+    x: 5, y: 5, px: 5, py: 5, dir: { x: 0, y: 0 }, warped: false, role: 0,
+    moveAt: 1e12, majX: 5, majY: 5,
+  });
+  byGhost.advanceQuanta(1);
+  assert.equal(byGhost.deadReason, 'ghost');
+  assert.equal(byGhost.doom, null, 'no corpse lunging into a wall it never entered');
+  const byWall = walledGame();
+  byWall.advanceQuanta(13 + DOOM_Q);
+  assert.equal(byWall.deadReason, 'wall');
+  assert.ok(byWall.doom && byWall.doom.tx === 6, 'its own sentence keeps the pose');
+});
+
+test('doom: a tick no longer than the window still ends the snake', () => {
+  const g = createGame({ seed: 7, tickMs: REDIRECT_MS });
+  g.wallPhaseEnd = 1e12;
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.wallState = 'solid';
+  g.wallLookup = new Set([K(6, 5)]);
+  g.advanceQuanta(400);
+  assert.equal(g.alive, false, 'the window cannot re-arm itself into immortality');
+  assert.equal(g.deadReason, 'wall');
 });
 
 test('doom: a combo press already queued is an instant save at the boundary', () => {
@@ -456,6 +535,72 @@ test('doom: the whistle outranks the sentence on a shared quantum', () => {
     g.advanceQuanta(60);
     assert.equal(g.deadReason, want, `duration ${durationMs} ends as ${want}`);
   }
+});
+
+test('doom: a pardon lands on the whistle quantum too, and its points count', () => {
+  // the whistle may cancel a SENTENCE; cancelling a pardon would make a timed
+  // round's final score depend on which quantum the whistle happened to land
+  const run = (durationMs) => {
+    const g = createGame({ seed: 7, durationMs });
+    g.wallPhaseEnd = 1e12;
+    setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+    g.food = { x: 6, y: 5, bonus: false, kind: 0 };   // food under the wall
+    g.foodAge = 0;
+    g.wallState = 'solid';
+    g.wallLookup = new Set([K(6, 5)]);
+    g.advanceQuanta(13);
+    g.wallState = 'off'; g.wallLookup = new Set(); g.wallCells = [];   // pardoned
+    g.advanceQuanta(10);
+    return g;
+  };
+  const late = run(190), onTheWhistle = run(180);
+  assert.equal(late.score, 1, 'the pardon commits and the point counts');
+  assert.ok(cellEq(late.snake[0], 6, 5));
+  assert.equal(onTheWhistle.score, late.score, 'and the whistle quantum scores the same');
+  assert.ok(cellEq(onTheWhistle.snake[0], 6, 5), 'the deferred move landed either way');
+  assert.equal(onTheWhistle.doom, null, 'no window left dangling into the end screen');
+});
+
+test('doom: the room waits out a hanging move rather than crowning a crash', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 15], [4, 15], [3, 15]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.players[0].score = 9;
+  g.players[1].score = 3;
+  g.wallState = 'solid';
+  g.wallLookup = new Set([K(6, 15)]);           // the LEADER flies into it
+  g.advanceQuanta(13);
+  g.ghosts.push({
+    x: 5, y: 5, px: 5, py: 5, dir: { x: 0, y: 0 }, warped: false, role: 0,
+    moveAt: 1e12, majX: 5, majY: 5,
+  });
+  g.advanceQuanta(1);                           // the rival falls to the ghost
+  assert.equal(g.players[1].deadReason, 'ghost');
+  assert.equal(g.players[0].deadReason, null, 'a snake already in the wall is not the winner');
+  g.advanceQuanta(DOOM_Q);
+  assert.equal(g.players[0].deadReason, 'wall', 'it takes its own sentence');
+});
+
+test('doom: a save clears the hanging move, and then the room may clinch', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 15], [4, 15], [3, 15]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.players[0].score = 9;
+  g.players[1].score = 3;
+  g.wallState = 'solid';
+  g.wallLookup = new Set([K(6, 15)]);
+  g.advanceQuanta(13);
+  g.ghosts.push({
+    x: 5, y: 5, px: 5, py: 5, dir: { x: 0, y: 0 }, warped: false, role: 0,
+    moveAt: 1e12, majX: 5, majY: 5,
+  });
+  g.advanceQuanta(1);
+  assert.equal(g.players[0].deadReason, null, 'still hanging, so no verdict yet');
+  g.setDir(0, -1, 0);                           // the leader turns out of it
+  g.advanceQuanta(1);
+  assert.equal(g.players[0].deadReason, 'won', 'saved, last standing, and ahead: the room is his');
 });
 
 test('doom: a ghost sliding onto the hanging head still kills by contact', () => {

@@ -34,6 +34,7 @@ import {
   FOOD_TTL,
   PORTAL_OPEN_MS,
   PORTAL_WARN_MS,
+  REDIRECT_MS,
   ghostRenderPos,
   type Game,
 } from '@pitch-snake/engine';
@@ -433,6 +434,11 @@ function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: numbe
   // opens behind the head. A save or a pardon commits onto this exact
   // geometry (no seam), and a death freezes the whole body mid-stride.
   if (game.doom !== null) {
+    // a hanging move only ever gets REDIRECT_MS of the tick, so its glide
+    // stops there: past that the head would be drawn a whole cell inside the
+    // wall the moment the round stops being 'playing' and p arrives as 1
+    const cap = REDIRECT_MS / game.tickMs;
+    if (p > cap) p = cap;
     if (i === game.snake.length - 1 && game.pendingGrowth > 0) {
       _rp.cx = s.x;
       _rp.cy = s.y; // a growing tail would have stayed

@@ -67,6 +67,8 @@ export interface Player {
   /** A fatal move hanging in its doom window (rule 25); kept after a doom
    *  death so renderers can draw the head where it reached. */
   doom: Doom | null;
+  /** A save pressed during that window, taken by the next quantum. */
+  doomSave: Cell | null;
   alive: boolean; deadReason: string | null;
   /** Quantum this snake went down on; 0 while alive. */
   diedAt: number;

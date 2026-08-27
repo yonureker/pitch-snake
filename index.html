@@ -976,7 +976,7 @@
   // state, no string building in hot loops, DOM only on state change.
   import {
     createGame, ghostRenderPos, MODES,
-    GRID, SPEEDS, FOOD_TTL,
+    GRID, SPEEDS, FOOD_TTL, REDIRECT_MS,
     PORTAL_OPEN_MS, PORTAL_WARN_MS,
   } from './packages/engine/engine.js';
   // versus rides the same deterministic engine: every client simulates the
@@ -1940,6 +1940,13 @@
     // opens behind the head. A save or a pardon commits onto this exact
     // geometry (no seam), and a death freezes the whole body mid-stride.
     if (pl.doom) {
+      // A hanging move only ever gets REDIRECT_MS of the tick, so its glide
+      // stops there. Taking the caller's progress instead put the head a
+      // whole cell INSIDE the wall the moment the round stopped being
+      // 'playing', because the draw pass hands out p = 1 once it is over:
+      // the snake popped forward a full cell on death, and again on a pause.
+      const cap = REDIRECT_MS / g.tickMs;
+      if (p > cap) p = cap;
       const from = pl.snake[i];
       if (i === pl.snake.length - 1 && pl.pendingGrowth > 0) {
         _rp.cx = from.x; _rp.cy = from.y;      // a growing tail would have stayed
