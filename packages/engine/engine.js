@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 9;   // 9: the doom window, corrected; 8: it arrived; 7: ghost burial
+export const ENGINE_VERSION = 10;  // 10: ghosts walk the board instead of flying over it; 9: doom corrected
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -497,7 +497,7 @@ export function createGame(cfg = {}) {
   // the window genuinely gets it there sooner - and never when the pair is
   // spent. A step landing ON an end is priced as the far side plus the hop,
   // which is exactly what the forced hop next move will do to it.
-  function ghostDist(x, y, tx, ty) {
+  function airDist(x, y, tx, ty) {
     let d = wrapDist(x, y, tx, ty);
     const p = S.portal;
     if (p !== null && !p.used) {
@@ -509,6 +509,85 @@ export function createGame(cfg = {}) {
     return d;
   }
 
+  // ---- the ghosts' map (rule 23) ----
+  // A ghost's real sense of distance: the shortest WALK to a cell, over the
+  // board it may actually cross. The old metric flew straight (through walls,
+  // through bodies) and a third of every ghost's steps went nowhere as a
+  // result: it would press against the wrong side of a shape with the head
+  // three cells away and no route to it. This is one breadth-first sweep from
+  // the target, and every candidate step then reads its own true distance out
+  // of the field.
+  //
+  // Cheap by construction: a ghost steps twice a second, so a full pack asks
+  // for ten sweeps of 400 cells a second, and the arrays are allocated once.
+  // Deterministic by construction: fixed neighbour order, one queue, no dice.
+  const _fld = new Int16Array(GRID * GRID);      // steps from the target, -1 unreached
+  const _blk = new Uint8Array(GRID * GRID);      // terrain a ghost cannot walk
+  const _bfsQ = new Int32Array(GRID * GRID);
+  const UNREACHED = 4000;                        // worse than any real walk on this board
+
+  // Terrain, painted once per sweep by walking what is on the board rather
+  // than asking every cell what is on it. Ghosts are left OUT: they move, and
+  // a route that a passing ghost happens to sit on is not a route that is
+  // shut. A ghost a wall has formed on top of crosses walls (rule 23's one
+  // exception), so it gets a map with the walls left off.
+  function paintTerrain(g) {
+    _blk.fill(0);
+    // a shape stops a ghost from its first flash, not from the moment it
+    // turns lethal, so the map matches ghostBlocked and not the wall phase
+    if (!S.wallLookup.has(K(g.x, g.y))) {
+      for (const k of S.wallLookup) _blk[k] = 1;
+    }
+    for (let i = 0; i < players.length; i++) {
+      if (!players[i].alive) continue;
+      for (const k of players[i].snakeSet) _blk[k] = 1;
+    }
+    if (S.food !== null) _blk[K(S.food.x, S.food.y)] = 1;
+    for (let i = 0; i < S.bombs.length; i++) _blk[K(S.bombs[i].x, S.bombs[i].y)] = 1;
+  }
+
+  // Fill _fld with the walk length from (tx, ty) to every cell. The target
+  // itself is seeded whatever stands on it, because a ghost hunts the cell a
+  // head or a piece of food occupies and wants the ring around it.
+  function ghostField(g, tx, ty) {
+    paintTerrain(g);
+    _fld.fill(-1);
+    const p = S.portal;
+    const aK = (p !== null && !p.used) ? K(p.ax, p.ay) : -1;
+    const bK = (p !== null && !p.used) ? K(p.bx, p.by) : -1;
+    let head = 0, tail = 0;
+    const seed = K(tx, ty);
+    _fld[seed] = 0;
+    _bfsQ[tail++] = seed;
+    while (head < tail) {
+      const k = _bfsQ[head++];
+      const d = _fld[k] + 1;
+      const cx = (k / GRID) | 0, cy = k % GRID;
+      for (let i = 0; i < GHOST_DIRS.length; i++) {
+        const nk = K(wrap(cx + GHOST_DIRS[i].x), wrap(cy + GHOST_DIRS[i].y));
+        if (_fld[nk] !== -1 || _blk[nk]) continue;
+        _fld[nk] = d;
+        _bfsQ[tail++] = nk;
+      }
+      // an open unused pair is one edge between its two ends, priced like any
+      // other step, which is exactly what the forced hop will cost
+      const far = k === aK ? bK : k === bK ? aK : -1;
+      if (far >= 0 && _fld[far] === -1 && !_blk[far]) {
+        _fld[far] = d;
+        _bfsQ[tail++] = far;
+      }
+    }
+  }
+
+  // A cell's distance after a sweep. Somewhere genuinely walled off still
+  // needs an ordering, or a boxed-in ghost would pick at random among cells
+  // it cannot reach: those fall back to the straight line, all of them ranked
+  // below anywhere it can actually walk to.
+  function fieldDist(x, y, tx, ty) {
+    const d = _fld[K(x, y)];
+    return d >= 0 ? d : UNREACHED + wrapDist(x, y, tx, ty);
+  }
+
   // Which snake a ghost is hunting: the nearest living head by its own
   // wormhole metric, ties to the lower index. One snake is just the
   // degenerate case (the loop, or the fallback once it is dead, both name
@@ -516,10 +595,20 @@ export function createGame(cfg = {}) {
   // collects the whole pack. Pure arithmetic: no PRNG draw, so a one-snake
   // round rolls exactly the dice it always rolled.
   function victimOf(g) {
+    // one snake on the board is the whole answer, and asking the map for it
+    // would be a sweep spent to learn nothing
+    let living = null, count = 0;
+    for (const p of players) if (p.alive) { living = p; count++; }
+    if (count <= 1) return living ?? players[0];
+    // otherwise the nearest head by the walk, not by the crow: a rival three
+    // cells away through a wall is not the one to hunt. The sweep is rooted
+    // at the ghost so one pass prices every head; moveGhost roots its own at
+    // the target afterwards, and the two never overlap.
+    ghostField(g, g.x, g.y);
     let best = null, bestD = Infinity;
     for (const p of players) {
       if (!p.alive) continue;
-      const d = ghostDist(g.x, g.y, p.snake[0].x, p.snake[0].y);
+      const d = fieldDist(p.snake[0].x, p.snake[0].y, g.x, g.y);
       if (d < bestD) { bestD = d; best = p; }
     }
     return best ?? players[0];
@@ -601,9 +690,10 @@ export function createGame(cfg = {}) {
     if (n) {
       if (random() < GHOST_FOCUS) {          // take a step toward the personality's target
         const target = ghostTarget(g);
+        ghostField(g, target.x, target.y);       // one sweep, then every option is a lookup
         let bestDist = Infinity;
         for (let i = 0; i < n; i++) {
-          const d = ghostDist(_optX[i], _optY[i], target.x, target.y);
+          const d = fieldDist(_optX[i], _optY[i], target.x, target.y);
           _optDist[i] = d;
           if (d < bestDist) bestDist = d;
         }
@@ -1207,7 +1297,10 @@ export function createGame(cfg = {}) {
     _step: () => stepPlayer(players[0]), _stepPlayer: i => stepPlayer(players[i]),
     _updateWalls: updateWalls, _updateBombs: updateBombs,
     _updateGhosts: updateGhosts, _updatePortals: updatePortals,
-    _moveGhost: moveGhost, _ghostTarget: ghostTarget, _ghostDist: ghostDist, _spawnPortal: spawnPortal, _closePortal: closePortal,
+    _moveGhost: moveGhost, _ghostTarget: ghostTarget, _spawnPortal: spawnPortal, _closePortal: closePortal,
+    // the walk a ghost standing at (x, y) sees to (tx, ty): sweep, then read
+    _ghostDist: (x, y, tx, ty) => { ghostField({ x, y }, tx, ty); return fieldDist(x, y, tx, ty); },
+    _airDist: airDist,
     _placeFood: placeFood, _spawnCell: spawnCell,
   });
 }

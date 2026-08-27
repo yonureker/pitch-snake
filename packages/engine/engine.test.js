@@ -1068,6 +1068,54 @@ test('contact: exchanging cells inside one quantum is a crossing, and lethal', (
   assert.equal(g.deadReason, 'ghost');
 });
 
+test('a ghost measures the walk, not the straight line, and steps by it', () => {
+  const g = quietGame({ seed: 3 });
+  foodFar(g);
+  // the head sits in a box with its one door at the bottom
+  setSnake(g, [[10, 10], [10, 11], [10, 12]], 0, -1);
+  g.wallState = 'solid';
+  g.wallLookup = new Set([
+    K(9, 9), K(10, 9), K(11, 9),
+    K(9, 10), K(11, 10),
+    K(9, 11), K(11, 11),
+  ]);
+  g.wallCells = [...g.wallLookup].map(k => ({ x: (k / GRID) | 0, y: k % GRID }));
+  // three cells as the crow flies, and the crow is wrong: the only way in is
+  // round the outside and back up through the door
+  assert.equal(g._airDist(10, 7, 10, 10), 3, 'the straight line is blind to the box');
+  assert.ok(g._ghostDist(10, 7, 10, 10) >= 8,
+    `the walk knows better (${String(g._ghostDist(10, 7, 10, 10))} steps)`);
+
+  // and the ghost steers by the walk: with GHOST_FOCUS at 0.85 roughly one
+  // step in seven is deliberately random, so most of them must be the best
+  const gh = { x: 10, y: 6, px: 10, py: 5, dir: { x: 0, y: 1 }, warped: false, role: 0,
+               moveAt: 0, majX: 10, majY: 6 };
+  g.ghosts.push(gh);
+  const DIRS = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+  let optimal = 0, tried = 0;
+  for (let n = 0; n < 60; n++) {
+    const keep = { x: gh.x, y: gh.y, px: gh.px, py: gh.py, dir: { ...gh.dir } };
+    const t = g._ghostTarget(gh);
+    let best = Infinity;
+    for (const d of DIRS) {
+      if (d.x === -gh.dir.x && d.y === -gh.dir.y) continue;
+      const nx = (gh.x + d.x + GRID) % GRID, ny = (gh.y + d.y + GRID) % GRID;
+      if (g.wallLookup.has(K(nx, ny))) continue;
+      const w = g._ghostDist(nx, ny, t.x, t.y);
+      if (w < best) best = w;
+    }
+    g._moveGhost(gh);
+    if (gh.x !== keep.x || gh.y !== keep.y) {
+      tried++;
+      if (g._ghostDist(gh.x, gh.y, t.x, t.y) === best) optimal++;
+    }
+    Object.assign(gh, keep);                    // put it back and ask again
+  }
+  assert.ok(tried > 40, 'the ghost kept moving');
+  assert.ok(optimal / tried > 0.7,
+    `most steps take the shortest walk (${optimal}/${tried})`);
+});
+
 test('ghosts route through portals on purpose, and never through spent ones', () => {
   // metric first: with an open pair the wormhole route must price in
   const g = quietGame();
@@ -1102,12 +1150,13 @@ test('ghosts route through portals on purpose, and never through spent ones', ()
 // ------------------------------------------------------------ golden fixtures
 // Rounds recorded by the v4 (single-snake) engine, committed as JSON, pinned
 // to what today's engine deterministically makes of them. They began as the
-// proof that one snake on the multi-snake machine IS the old machine. The v7
-// burial rule re-pinned classic (a wall buried a ghost mid-round); the v8
-// doom window re-pinned survival: its recorded self-death now hangs in a
-// doom window when the log runs out, so the replay ends mid-window, alive,
-// deadReason null, same score. No log was ever persisted, so no record was
-// rewritten. Speedrun still replays its v4 finals bit-identically.
+// proof that one snake on the multi-snake machine IS the old machine, and
+// they have been re-pinned by every rules change since: v7's ghost burial,
+// v8's doom window, and now v10, where ghosts walk the board instead of
+// flying over it. That last one moved all three: a recorded log is a fixed
+// script, so once a ghost stands somewhere else the pilot is playing blind
+// and dies early. It is divergence, not difficulty. No log was ever
+// persisted, so no record was rewritten.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
