@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 11;  // 11: the bolt; 10: ghosts walk the board; 9: doom corrected
+export const ENGINE_VERSION = 12;  // 12: the bolt drags harder; 11: the bolt; 10: ghosts walk the board
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -62,13 +62,13 @@ export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed se
 
 // The bolt: the one thing that changes a ghost's pace, and it is earned,
 // temporary and never in the player's favour twice over (it does nothing at
-// all to your own speed, per rule 14). A quarter off their speed is a step
-// of GHOST_MS / 0.75, quantized up to the grid every timing constant lives
-// on, which lands at 670 and is a 25.4% cut in practice.
+// all to your own speed, per rule 14). Thirty five percent off their speed
+// is a step of GHOST_MS / 0.65, quantized onto the grid every timing
+// constant lives on, which lands at 770 and is a 35.1% cut in practice.
 export const BOLT_EVERY = 10;      // food eaten, board-wide, between bolts
 export const BOLT_LIFE_MS = 8000;  // how long one waits on the pitch to be taken
 export const BOLT_SLOW_MS = 5000;  // how long the pack drags after it is taken
-export const GHOST_SLOW_MS = 670;  // a slowed ghost's step
+export const GHOST_SLOW_MS = 770;  // a slowed ghost's step
 
 // The doom window (rule 25): walking into a wall or yourself is not final
 // for this long. The head hangs mid-glide over the fatal cell; one safe
