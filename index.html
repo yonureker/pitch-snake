@@ -1465,7 +1465,6 @@
     buildPortalSprites();
     buildFoodSprite();
     buildBoltSprite();
-    buildFlagSprite();
     buildHatSprite();
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
@@ -1498,63 +1497,6 @@
     c.textBaseline = 'middle';
     const glyph = (g.food.bonus ? BONUS_EMOJIS : FOOD_EMOJIS)[g.food.kind];
     c.fillText(glyph, foodS / 2, foodS / 2);
-  }
-
-  // ---- the colours: a flag rides the second segment ----
-  // A flag emoji is a regional-indicator pair ('TR' -> 🇹🇷), baked once like
-  // the food glyph and blitted onto one segment per frame (rule 7). Pick the
-  // country with ?flag=US; anything that is not two letters (?flag=off) wears
-  // none. Caveat worth knowing before this becomes a real feature: Chrome on
-  // Windows and most Android ship no flag glyphs and fall back to the two
-  // letters, so the sprite is measured and scaled to fit either way.
-  const flagCanvas = document.createElement('canvas');
-  const flagCtx = flagCanvas.getContext('2d');
-  let flagS = 0;
-  const flagParam = new URLSearchParams(location.search).get('flag');
-  const flagCode = (flagParam === null ? 'TR' : flagParam).toUpperCase();
-  const flagGlyph = /^[A-Z]{2}$/.test(flagCode)
-    ? String.fromCodePoint(...[...flagCode].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))
-    : null;
-  function buildFlagSprite() {
-    if (!flagGlyph) { flagS = 0; return; }
-    flagS = Math.ceil(cell);
-    flagCanvas.width = flagS; flagCanvas.height = flagS;
-    const c = flagCtx;
-    // solid fill, no shadow or gradient: iOS Safari paints a color emoji as a
-    // silhouette of the active paint when that paint is fancy. The colour
-    // only ever shows on the letter fallback.
-    c.fillStyle = '#211e1a';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    let size = (cell * 0.8) | 0;
-    c.font = `700 ${size}px ${EMOJI_FONT}`;
-    const max = cell * 0.92;
-    const w = c.measureText(flagGlyph).width;   // the letter fallback runs wide
-    if (w > max) {
-      size = Math.max(6, (size * max / w) | 0);
-      c.font = `700 ${size}px ${EMOJI_FONT}`;
-    }
-    c.fillText(flagGlyph, flagS / 2, flagS / 2);
-    // Optical centring, once per bake: a waving-flag glyph rides high in its
-    // em box and the letter fallback sits differently again, so find the ink
-    // and re-lay it on the sprite's middle. Font-agnostic by construction.
-    const px = c.getImageData(0, 0, flagS, flagS).data;
-    let top = -1, bot = -1, left = -1, right = -1;
-    for (let y = 0; y < flagS; y++) {
-      for (let x = 0; x < flagS; x++) {
-        if (px[(y * flagS + x) * 4 + 3] < 8) continue;
-        if (top < 0) top = y;
-        bot = y;
-        if (left < 0 || x < left) left = x;
-        if (x > right) right = x;
-      }
-    }
-    if (top < 0) return;                       // nothing drew: no glyph, no sprite
-    const dx = (flagS - 1 - right - left) / 2, dy = (flagS - 1 - bot - top) / 2;
-    if (dx || dy) {
-      c.clearRect(0, 0, flagS, flagS);
-      c.fillText(flagGlyph, flagS / 2 + dx, flagS / 2 + dy);
-    }
   }
 
   // The bolt: one glyph, baked once like the food and blitted while it is on
@@ -2037,14 +1979,6 @@
       if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
       const rp = segRenderPos(me, i, p);
       drawBodyCell(rp.cx + segOffX(mi, i), rp.cy + segOffY(mi, i), r, rad);
-    }
-
-    // the colours, worn on the second segment so the head keeps its face
-    if (flagS && me.snake.length > 1) {
-      const rp1 = segRenderPos(me, 1, p);
-      const gx = wrapf(rp1.cx + segOffX(mi, 1)) * cell + cell / 2;
-      const gy = wrapf(rp1.cy + segOffY(mi, 1)) * cell + cell / 2;
-      ctx.drawImage(flagCanvas, Math.round(gx - flagS / 2), Math.round(gy - flagS / 2));
     }
 
     // eyes on the head, at its interpolated position
