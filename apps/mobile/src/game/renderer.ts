@@ -667,7 +667,15 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     strokePaint.setColor(C.goldBright);
     strokePaint.setStrokeWidth(Math.max(2, cell * 0.07));
     strokePaint.setAlphaf((blink ? 0.35 : 1) * (0.55 + Math.sin(game.clockMs / 150 + Math.PI) * 0.2));
-    canvas.drawCircle(bx, by, cell * 0.52 * (2 - pulse), strokePaint);
+    const halfBox = cell * 0.5 * (2 - pulse);
+    canvas.drawRRect(
+      Skia.RRectXY(
+        Skia.XYWHRect(bx - halfBox, by - halfBox, halfBox * 2, halfBox * 2),
+        cell * 0.1,
+        cell * 0.1,
+      ),
+      strokePaint,
+    );
     strokePaint.setAlphaf(1);
     fillPaint.setColor(C.goldBright);
     fillPaint.setAlphaf(blink ? 0.35 : 1);
