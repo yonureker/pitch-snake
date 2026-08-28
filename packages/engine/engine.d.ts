@@ -23,6 +23,8 @@ export declare const BOLT_EVERY: number;
 export declare const BOLT_LIFE_MS: number;
 export declare const BOLT_SLOW_MS: number;
 export declare const GHOST_SLOW_MS: number;
+/** A dragged snake's step, derived from the round's pace and quantized. */
+export declare function slowTick(ms: number): number;
 export declare const PORTAL_FIRST: number;
 export declare const PORTAL_EVERY: number;
 export declare const PORTAL_BONUS: number;
@@ -73,6 +75,9 @@ export interface Player {
   dir: Cell; dirQueue: Cell[];
   score: number; pendingGrowth: number;
   warpedIn: boolean;
+  /** This snake's own pace and its progress through the current step. A bolt
+   *  taken by a rival drags these onto slowTick(tickMs) until slowUntil. */
+  tickMs: number; progMs: number; slowUntil: number;
   /** A fatal move hanging in its doom window (rule 25); kept after a doom
    *  death so renderers can draw the head where it reached. */
   doom: Doom | null;
@@ -170,7 +175,10 @@ export interface Game {
   snapshot(): GameSnapshot;
   /** Reinstate a snapshot taken from THIS game; the log rewinds with it. */
   restore(s: GameSnapshot): void;
-  renderProg(): number;
+  /** Progress through THIS snake's current step, 0..1, including the
+   *  sub-quantum remainder. Per snake because a bolt can drag a rival onto
+   *  a longer tick; omit the index for player 0, as the classic call did. */
+  renderProg(player?: number): number;
   renderNow(): number;
   drainEvents(): GameEvent[];
   ghostAt(g: Ghost): Cell;

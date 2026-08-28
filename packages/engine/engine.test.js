@@ -11,8 +11,8 @@ import {
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
   TNT_SCORES, GHOST_SCORES, GHOST_MS, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
-  MIN_SPAWN_DIST, K, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
-  BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress,
+  MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
+  BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress, slowTick,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -727,7 +727,6 @@ function eatOne(g, bonus = false) {
   g.foodAge = 0;
   g._step();
 }
-const wrap = v => ((v % GRID) + GRID) % GRID;
 
 test('a bolt falls due every ten items, counting appetite and not points', () => {
   const g = quietGame();
@@ -839,6 +838,107 @@ test('nothing else spawns on a bolt, and a round with one replays exactly', () =
   assert.equal(r.deadReason, done.deadReason, 'same end');
   assert.equal(r.quanta, done.quanta, 'same length');
   assert.equal(r.slowUntil, done.slowUntil, 'and the same drag on the pack');
+});
+
+test('a bolt in a room drags the rivals and never the snake that took it', () => {
+  const g = quietGame({ players: 3 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 10], [4, 10], [3, 10]], 1, 0);
+  setPlayerSnake(g, 2, [[5, 15], [4, 15], [3, 15]], 1, 0);
+  const base = g.tickMs;
+  g.bolt = { x: 6, y: 5, bornAt: 0 };
+  g._stepPlayer(0);                             // player 0 takes it
+  assert.equal(g.players[0].tickMs, base, 'the taker keeps its own pace');
+  assert.equal(g.players[0].slowUntil, 0);
+  for (const i of [1, 2]) {
+    assert.equal(g.players[i].tickMs, slowTick(base), `rival ${i} drags`);
+    assert.equal(g.players[i].slowUntil, g.clockMs + BOLT_SLOW_MS);
+  }
+  assert.ok(slowTick(base) > base && slowTick(base) % SIM_DT === 0);
+  assert.ok(Math.abs(base / slowTick(base) - 0.65) < 0.02, 'a rival moves at about 65% speed');
+  // and it wears off, back to the pace everyone started on
+  g.advanceQuanta(BOLT_SLOW_MS / SIM_DT + 1);
+  for (const i of [0, 1, 2]) assert.equal(g.players[i].tickMs, base, `player ${i} is back to pace`);
+});
+
+test('a bolt in a solo round drags nobody but the ghosts', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  const base = g.tickMs;
+  g.bolt = { x: 6, y: 5, bornAt: 0 };
+  g._step();
+  assert.equal(g.players[0].tickMs, base, 'your own pace is never the price');
+  assert.ok(g.slowUntil > 0, 'the pack still drags');
+});
+
+test('a change of pace re-times what is coming, never the step in flight', () => {
+  // rule 14: the drawn snake must not jump when its tick changes
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[10, 10], [9, 10], [8, 10]], 1, 0);
+  g.advanceQuanta(6);                           // the rival is part way through a step
+  const before = g.renderProg(1);
+  assert.ok(before > 0.1 && before < 0.9, `mid-step (${before.toFixed(2)})`);
+  g.bolt = { x: 6, y: 5, bornAt: 0 };
+  g._stepPlayer(0);                             // the bolt lands on the rival's pace
+  assert.ok(Math.abs(g.renderProg(1) - before) < 1e-9,
+    'the rival is drawn exactly where it was, on a longer step');
+  // and from here it advances evenly at the new pace, no lurch
+  const seen = [];
+  for (let i = 0; i < 8; i++) { g.advanceQuanta(1); seen.push(g.renderProg(1)); }
+  for (let i = 1; i < seen.length; i++) {
+    const step = seen[i] - seen[i - 1];
+    assert.ok(Math.abs(step - (SIM_DT / g.players[1].tickMs)) < 1e-9,
+      'every quantum moves it the same distance');
+  }
+});
+
+test('a dragged rival really does cover less ground', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 10], [4, 10], [3, 10]], 1, 0);
+  g.bolt = { x: 6, y: 5, bornAt: 0 };
+  g._stepPlayer(0);
+  // count steps, not displacement: over five seconds both lap the torus
+  let mine = 0, theirs = 0;
+  let was0 = g.players[0].snake[0].x, was1 = g.players[1].snake[0].x;
+  for (let i = 0; i < BOLT_SLOW_MS / SIM_DT; i++) {
+    g.advanceQuanta(1);
+    if (g.players[0].snake[0].x !== was0) { mine++; was0 = g.players[0].snake[0].x; }
+    if (g.players[1].snake[0].x !== was1) { theirs++; was1 = g.players[1].snake[0].x; }
+  }
+  assert.ok(mine > theirs, `the taker outruns them (${mine} cells to ${theirs})`);
+  assert.ok(theirs / mine > 0.6 && theirs / mine < 0.72,
+    `by about a third (${(theirs / mine).toFixed(2)})`);
+});
+
+test('per-snake pace survives a snapshot and a rollback resim', () => {
+  const mk = () => {
+    const g = quietGame({ players: 2 });
+    foodFar(g);
+    setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+    setPlayerSnake(g, 1, [[5, 10], [4, 10], [3, 10]], 1, 0);
+    g.bolt = { x: 6, y: 5, bornAt: 0 };
+    g._stepPlayer(0);
+    return g;
+  };
+  const g = mk();
+  g.advanceQuanta(20);
+  const snap = g.snapshot();
+  const straight = mk();
+  straight.advanceQuanta(20 + 40);
+  g.advanceQuanta(40);
+  const after = { tick: g.players[1].tickMs, prog: g.players[1].progMs, x: g.players[1].snake[0].x };
+  g.restore(snap);
+  assert.equal(g.players[1].tickMs, slowTick(g.tickMs), 'the drag rode the snapshot');
+  g.advanceQuanta(40);
+  assert.deepEqual({ tick: g.players[1].tickMs, prog: g.players[1].progMs, x: g.players[1].snake[0].x },
+    after, 'and the resim lands in the identical place');
+  assert.equal(g.players[1].snake[0].x, straight.players[1].snake[0].x, 'as does a straight run');
 });
 
 // ------------------------------------------------------------------- the TNT

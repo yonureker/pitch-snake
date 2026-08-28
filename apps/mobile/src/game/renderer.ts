@@ -438,7 +438,7 @@ function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: numbe
     // a hanging move only ever gets REDIRECT_MS of the tick, so its glide
     // stops there: past that the head would be drawn a whole cell inside the
     // wall the moment the round stops being 'playing' and p arrives as 1
-    const cap = REDIRECT_MS / game.tickMs;
+    const cap = REDIRECT_MS / (game.players[0]?.tickMs ?? game.tickMs);
     if (p > cap) p = cap;
     if (i === game.snake.length - 1 && game.pendingGrowth > 0) {
       _rp.cx = s.x;
@@ -699,6 +699,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
 
   // the snake: one pre-tinted image per segment (outline baked in)
   const denom = Math.max(1, game.snake.length - 1);
+  // per snake: a rival dragged by a bolt is on a longer step than you are
   const p = rc.playing ? game.renderProg() : 1;
   for (let i = game.snake.length - 1; i >= 0; i--) {
     const shade = ((i * (SNAKE_SHADES - 1)) / denom) | 0;

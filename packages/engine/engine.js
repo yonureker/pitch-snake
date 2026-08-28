@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 13;  // 13: snapshot keys renamed (the hash moves with them); 12: the bolt drags harder
+export const ENGINE_VERSION = 14;  // 14: every snake keeps its own pace; 13: snapshot keys renamed
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -69,6 +69,10 @@ export const BOLT_EVERY = 10;      // food eaten, board-wide, between bolts
 export const BOLT_LIFE_MS = 8000;  // how long one waits on the pitch to be taken
 export const BOLT_SLOW_MS = 5000;  // how long the pack drags after it is taken
 export const GHOST_SLOW_MS = 770;  // a slowed ghost's step
+// A rival's step while a bolt drags them, at the same 35% off. Derived from
+// the round's pace rather than fixed, so it means the same thing at every
+// speed setting, and quantized onto the grid every timing constant lives on.
+export const slowTick = ms => Math.round(ms / 0.65 / SIM_DT) * SIM_DT;
 
 // The doom window (rule 25): walking into a wall or yourself is not final
 // for this long. The head hangs mid-glide over the fatal cell; one safe
@@ -249,6 +253,11 @@ export function createGame(cfg = {}) {
       dir: { x: 1, y: 0 }, dirQueue: [],
       score: 0, pendingGrowth: 0,
       warpedIn: false,
+      // This snake's own pace. Every snake used to share one clock, which is
+      // why they crossed cell boundaries together; a bolt taken in a room
+      // slows the rivals and not the taker, so the pace had to become each
+      // snake's own. progMs is progress toward THIS snake's next step.
+      tickMs, progMs: 0, slowUntil: 0,
       doom: null,              // {tx, ty, until, reason} while a fatal move hangs (rule 25)
       doomSave: null,          // a press taken during that window, applied by the next quantum
       alive: true, deadReason: null, diedAt: 0,
@@ -309,7 +318,7 @@ export function createGame(cfg = {}) {
   // unchanged. Engine code below never goes through these.
   for (const f of ['snake', 'snakeSet', 'tailFrom', 'headFrom', 'headMajX', 'headMajY',
                    'dir', 'dirQueue', 'score', 'pendingGrowth', 'warpedIn', 'deadReason',
-                   'doom', 'doomSave']) {
+                   'doom', 'doomSave', 'progMs']) {
     Object.defineProperty(S, f, {
       get() { return players[0][f]; },
       set(v) { players[0][f] = v; },
@@ -434,6 +443,27 @@ export function createGame(cfg = {}) {
       clearWalls();
       S.wallPhaseEnd = S.clockMs + rand(6000, 14000);
       emit({ t: 'wall', phase: 'off' });
+    }
+  }
+
+  // ---- pace ----
+  // A snake's tick is constant between events and changes only when a bolt
+  // starts or stops dragging it (rule 14 is about never re-timing the step in
+  // flight to shave latency, which this does not do). The change would still
+  // jump the drawn snake, because progress is read as progMs / tickMs: at the
+  // instant the tick grows, the same progMs suddenly means less of a step. So
+  // progress is rescaled into the new tick, which keeps the head exactly where
+  // it was drawn and only re-times what is still to come.
+  function setPace(p, tickMs) {
+    if (p.tickMs === tickMs) return;
+    p.progMs = p.progMs * tickMs / p.tickMs;
+    p.tickMs = tickMs;
+  }
+
+  function expirePace(p) {
+    if (p.slowUntil && S.clockMs >= p.slowUntil) {
+      p.slowUntil = 0;
+      setPace(p, tickMs);
     }
   }
 
@@ -1000,6 +1030,14 @@ export function createGame(cfg = {}) {
     // (rule 25). It scores nothing and grows nothing: all it buys is time.
     if (S.bolt !== null && nx === S.bolt.x && ny === S.bolt.y) {
       S.slowUntil = S.clockMs + BOLT_SLOW_MS;
+      // In a room it drags the rivals too, and never the snake that took it:
+      // the ghosts slowing helps everyone equally, so without this a bolt
+      // would be worth no more to the player who went and got it.
+      for (const other of players) {
+        if (other === p || !other.alive) continue;
+        other.slowUntil = S.slowUntil;
+        setPace(other, slowTick(tickMs));
+      }
       emit({ t: 'zap', player: p.idx, x: nx, y: ny, untilMs: S.slowUntil });
       S.bolt = null;
     }
@@ -1059,7 +1097,6 @@ export function createGame(cfg = {}) {
   function quantum() {
     S.quanta++;
     S.clockMs += SIM_DT;
-    S.progMs += SIM_DT;
     updateWalls();
     updateBombs();
     updateGhosts();
@@ -1070,14 +1107,22 @@ export function createGame(cfg = {}) {
       if (S.food.bonus) S.bonusStreak = 0;   // missed the bonus in time: lose the streak
       placeFood();
     }
-    // every living snake steps in the same drain, in index order: one shared
-    // tickMs means they all cross cell boundaries together, and index order
-    // is the deterministic tie-break when two heads want the same food. The
-    // alive guard stops the drain the moment the LAST snake dies: no zombie
-    // steps.
-    while (anyAlive() && S.progMs >= S.tickMs) {
-      S.progMs -= S.tickMs;
-      for (const p of players) if (p.alive) stepPlayer(p);
+    // Every living snake advances on its own clock, in index order. They used
+    // to share one, which made them cross cell boundaries together; a bolt
+    // slows the rivals and not the taker, so each snake keeps its own now.
+    // Index order still stands as the deterministic tie-break when two heads
+    // want the same food, because a snake's tick is never shorter than ten
+    // quanta and so no snake can take two steps in one. The alive guard stops
+    // the drain the moment the LAST snake dies: no zombie steps.
+    for (const p of players) {
+      if (!anyAlive()) break;
+      if (!p.alive) continue;
+      expirePace(p);
+      p.progMs += SIM_DT;
+      while (p.alive && p.progMs >= p.tickMs) {
+        p.progMs -= p.tickMs;
+        stepPlayer(p);
+      }
     }
     // ---- saves taken, then the doom window closes (rule 25) ----
     // A press recorded during the window is applied here, inside the sim,
@@ -1120,9 +1165,10 @@ export function createGame(cfg = {}) {
     // Snakes are tested against ghosts only: two heads sharing a cell is a
     // race, not a wreck.
     if (anyAlive()) {
-      const half = S.progMs * 2 >= S.tickMs;
       for (const p of players) {
         if (!p.alive) continue;
+        // each snake's own half, since each is its own way through its step
+        const half = p.progMs * 2 >= p.tickMs;
         p._majX = half ? p.snake[0].x : p.headFrom.x;
         p._majY = half ? p.snake[0].y : p.headFrom.y;
       }
@@ -1244,7 +1290,7 @@ export function createGame(cfg = {}) {
   // fodder and deliberately not part of a snapshot.
   function snapshot() {
     return {
-      quanta: S.quanta, clockMs: S.clockMs, progMs: S.progMs, rng: rngState,
+      quanta: S.quanta, clockMs: S.clockMs, rng: rngState,
       foodAge: S.foodAge, bonusStreak: S.bonusStreak,
       itemsEaten: S.itemsEaten, boltsSpawned: S.boltsSpawned, slowUntil: S.slowUntil,
       bolt: S.bolt ? { x: S.bolt.x, y: S.bolt.y, bornAt: S.bolt.bornAt } : null,
@@ -1265,6 +1311,7 @@ export function createGame(cfg = {}) {
         dir: { x: p.dir.x, y: p.dir.y },
         dirQueue: p.dirQueue.map(d => ({ x: d.x, y: d.y })),
         score: p.score, pendingGrowth: p.pendingGrowth, warpedIn: p.warpedIn,
+        tickMs: p.tickMs, progMs: p.progMs, slowUntil: p.slowUntil,
         doom: p.doom ? { tx: p.doom.tx, ty: p.doom.ty, until: p.doom.until, reason: p.doom.reason } : null,
         doomSave: p.doomSave ? { x: p.doomSave.x, y: p.doomSave.y } : null,
         alive: p.alive, deadReason: p.deadReason, diedAt: p.diedAt,
@@ -1274,7 +1321,7 @@ export function createGame(cfg = {}) {
   }
 
   function restore(s) {
-    S.quanta = s.quanta; S.clockMs = s.clockMs; S.progMs = s.progMs; rngState = s.rng | 0;
+    S.quanta = s.quanta; S.clockMs = s.clockMs; rngState = s.rng | 0;
     S.accMs = 0;
     S.foodAge = s.foodAge; S.bonusStreak = s.bonusStreak;
     S.itemsEaten = s.itemsEaten; S.boltsSpawned = s.boltsSpawned; S.slowUntil = s.slowUntil;
@@ -1301,6 +1348,7 @@ export function createGame(cfg = {}) {
       p.dir = { x: q.dir.x, y: q.dir.y };
       p.dirQueue = q.dirQueue.map(d => ({ x: d.x, y: d.y }));
       p.score = q.score; p.pendingGrowth = q.pendingGrowth; p.warpedIn = q.warpedIn;
+      p.tickMs = q.tickMs; p.progMs = q.progMs; p.slowUntil = q.slowUntil;
       p.doom = q.doom ? { tx: q.doom.tx, ty: q.doom.ty, until: q.doom.until, reason: q.doom.reason } : null;
       p.doomSave = q.doomSave ? { x: q.doomSave.x, y: q.doomSave.y } : null;
       p.alive = q.alive; p.deadReason = q.deadReason; p.diedAt = q.diedAt;
@@ -1315,7 +1363,13 @@ export function createGame(cfg = {}) {
   // ---- render helpers (pure reads; safe from any thread) ----
   // continuous 0..1 progress through the current cell, including the
   // not-yet-simulated remainder, so every frame advances by exactly dt/tickMs
-  function renderProg() { return Math.min(1, (S.progMs + S.accMs) / S.tickMs); }
+  // Per snake, because a dragged rival is a different way through a longer
+  // step than you are through yours. The shells pass the index they are
+  // about to draw; the classic no-argument call is player 0, as ever.
+  function renderProg(player = 0) {
+    const p = players[player] ?? players[0];
+    return Math.min(1, (p.progMs + S.accMs) / p.tickMs);
+  }
   // the continuous clock renderers should use for glides, pulses and blinks
   function renderNow() { return S.clockMs + S.accMs; }
 

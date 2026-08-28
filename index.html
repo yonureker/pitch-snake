@@ -1958,11 +1958,15 @@
     drawBolt();
     drawBombs();
 
-    const p = state === 'playing' ? g.renderProg() : 1;
+    // Progress is per snake now: a rival dragged by a bolt is a different way
+    // through a longer step than you are through yours, so nothing may be
+    // drawn on somebody else's clock.
+    const progOf = (i) => state === 'playing' ? g.renderProg(i) : 1;
+    const p = progOf(vsView() ? vs.myIdx : 0);
 
     // rivals first, ghosted, so my own snake always reads on top of them;
     // the smoothing pass absorbs any rollback teleports into a paint offset
-    if (vsView()) { updateVsSmoothing(p, dt); drawRivals(p); }
+    if (vsView()) { updateVsSmoothing(progOf, dt); drawRivals(progOf); }
     const mi = vsView() ? vs.myIdx : -1;   // my lane in the smoothing table, or none
 
     // my snake: glides smoothly between grid cells; fills come from a fixed
@@ -2064,7 +2068,7 @@
       // whole cell INSIDE the wall the moment the round stopped being
       // 'playing', because the draw pass hands out p = 1 once it is over:
       // the snake popped forward a full cell on death, and again on a pause.
-      const cap = REDIRECT_MS / g.tickMs;
+      const cap = REDIRECT_MS / (pl.tickMs || g.tickMs);
       if (p > cap) p = cap;
       const from = pl.snake[i];
       if (i === pl.snake.length - 1 && pl.pendingGrowth > 0) {
@@ -2144,7 +2148,7 @@
   // the paint offset for one segment; zero outside a room, or past the smoothed depth
   const segOffX = (pi, i) => (pi < 0 || i >= VS_SEG) ? 0 : vsOffX[pi * VS_SEG + i];
   const segOffY = (pi, i) => (pi < 0 || i >= VS_SEG) ? 0 : vsOffY[pi * VS_SEG + i];
-  function updateVsSmoothing(prog, dt) {
+  function updateVsSmoothing(progOf, dt) {
     const rb = vs.session ? vs.session.stats.rollbacks : vsSeenRb;
     const caught = rb !== vsSeenRb;
     vsSeenRb = rb;
@@ -2153,6 +2157,7 @@
       const pl = g.players[pi];
       const base = pi * VS_SEG;
       const n = Math.min(pl.snake.length, VS_SEG);
+      const prog = progOf(pi);
       for (let i = 0; i < n; i++) {
         const k = base + i;
         const rp = segRenderPos(pl, i, prog);
@@ -2176,7 +2181,7 @@
     vsSeenRb = 0;
     vsOffX.fill(0); vsOffY.fill(0); vsSegN.fill(0);
   }
-  function drawRivals(prog) {
+  function drawRivals(progOf) {
     const r = cell * 0.38, rad = cell * 0.3;
     ctx.lineWidth = 1;
     ctx.strokeStyle = 'rgba(0,0,0,0)';
@@ -2186,6 +2191,7 @@
       if (!pl.snake.length) continue;
       ctx.globalAlpha = VS_BODY_ALPHA;
       ctx.fillStyle = VS_COLORS[pi];
+      const prog = progOf(pi);
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const rp = segRenderPos(pl, i, prog);
         drawBodyCell(rp.cx + segOffX(pi, i), rp.cy + segOffY(pi, i), r, rad);
@@ -2200,7 +2206,7 @@
       if (pi === vs.myIdx) continue;
       const pl = g.players[pi];
       if (!pl.snake.length || !vs.roster || !vs.roster[pi]) continue;
-      const rp = segRenderPos(pl, 0, prog);
+      const rp = segRenderPos(pl, 0, progOf(pi));
       ctx.fillStyle = VS_COLORS[pi];
       ctx.fillText(vs.roster[pi].name,
         wrapf(rp.cx + segOffX(pi, 0)) * cell + cell / 2,
