@@ -1466,6 +1466,7 @@
     buildFoodSprite();
     buildBoltSprite();
     buildFlagSprite();
+    buildHatSprite();
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
   }
@@ -1609,6 +1610,61 @@
     const s = Math.round(boltS * beat);
     ctx.drawImage(boltCanvas, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
     ctx.globalAlpha = 1;
+  }
+
+  // ---- the hat: a first look at a real skin ----
+  // Drawn rather than lettered, unlike the flag: there is no standalone
+  // cowboy hat in the emoji set (the one that exists is a whole face), and
+  // art beats a glyph for a skin anyway, since it depends on no platform's
+  // font and the phone can draw the same shapes. Baked once per resize like
+  // every other repeated thing, so a frame costs one drawImage (rule 7).
+  // Wear it with ?hat=on, take it off with ?hat=off.
+  const hatCanvas = document.createElement('canvas');
+  const hatCtx = hatCanvas.getContext('2d');
+  let hatW = 0, hatH = 0;
+  const hatParam = new URLSearchParams(location.search).get('hat');
+  const hatOn = hatParam !== 'off';
+  function buildHatSprite() {
+    if (!hatOn) { hatW = 0; return; }
+    hatW = Math.ceil(cell * 1.5);
+    hatH = Math.ceil(cell * 0.95);
+    hatCanvas.width = hatW; hatCanvas.height = hatH;
+    const c = hatCtx;
+    const midX = hatW / 2;
+    const brimY = hatH * 0.72;              // where the brim sits in the sprite
+    // the crown: a tapered shape with the dented top a felt hat has
+    c.fillStyle = '#8a5a2b';
+    c.beginPath();
+    c.moveTo(midX - hatW * 0.20, brimY);
+    c.lineTo(midX - hatW * 0.165, hatH * 0.30);
+    c.quadraticCurveTo(midX - hatW * 0.10, hatH * 0.11, midX - hatW * 0.045, hatH * 0.20);
+    c.quadraticCurveTo(midX, hatH * 0.30, midX + hatW * 0.045, hatH * 0.20);
+    c.quadraticCurveTo(midX + hatW * 0.10, hatH * 0.11, midX + hatW * 0.165, hatH * 0.30);
+    c.lineTo(midX + hatW * 0.20, brimY);
+    c.closePath();
+    c.fill();
+    // the band, where the crown meets the brim
+    c.fillStyle = '#42291a';
+    c.fillRect(midX - hatW * 0.205, brimY - hatH * 0.16, hatW * 0.41, hatH * 0.13);
+    // the brim: wide, and curling up at the tips, which is the whole
+    // silhouette of the thing at this size
+    c.fillStyle = '#9a6631';
+    c.beginPath();
+    c.moveTo(midX - hatW * 0.5, brimY - hatH * 0.06);
+    c.quadraticCurveTo(midX, brimY + hatH * 0.26, midX + hatW * 0.5, brimY - hatH * 0.06);
+    c.quadraticCurveTo(midX, brimY + hatH * 0.02, midX - hatW * 0.5, brimY - hatH * 0.06);
+    c.closePath();
+    c.fill();
+  }
+
+  // The hat rides the head, upright whichever way the snake is going: this is
+  // a face seen from the front, so a hat that spun with the heading would
+  // read as a hat falling off.
+  function drawHat(cxCell, cyCell) {
+    if (!hatW) return;
+    const x = wrapf(cxCell) * cell + cell / 2;
+    const y = wrapf(cyCell) * cell + cell / 2;
+    ctx.drawImage(hatCanvas, Math.round(x - hatW / 2), Math.round(y - cell * 0.42 - hatH * 0.62));
   }
 
   // The wall shape is static for its whole phase, so it is rendered once to an
@@ -2002,6 +2058,7 @@
       ctx.arc(hx + ex*off + px*off, hy + ey*off + py*off, cell*0.08, 0, Math.PI*2);
       ctx.arc(hx + ex*off - px*off, hy + ey*off - py*off, cell*0.08, 0, Math.PI*2);
       ctx.fill();
+      drawHat(rp0.cx + segOffX(mi, 0), rp0.cy + segOffY(mi, 0));
     }
 
     drawGhosts();
