@@ -3414,13 +3414,19 @@
     // the footer lives in the overlay's pinned foot, so it has to be told
     // about screens the panel itself never sees
     vsFooter.hidden = vsPanel.hidden || inRoom;
+    // The who-row shares the overlay's head with every other screen, so left
+    // to itself it followed you onto the pitch and into a room. That made
+    // CHANGE a trap: it hands over to a name input that lives inside the
+    // setup panel, so anywhere else it hid the row and revealed nothing. It
+    // belongs to the setup screen alone, where the input it opens exists.
+    vsWho.hidden = true;
     if (!inRoom) {
       // three doors, all open at once: play with anyone, walk into a
       // friend's room, or open one of your own
       const named = !!vsTypedName();
       const editing = vsEditingName || !named;
       vsNameRow.hidden = !editing;
-      vsWho.hidden = editing;
+      vsWho.hidden = editing || vsPanel.hidden;
       if (!editing) vsWhoName.textContent = vsTypedName();
       vsQuickBtn.disabled = vsBusy || !named;
       vsCreateBtn.disabled = vsBusy || !named;
