@@ -83,7 +83,11 @@
     text-transform: uppercase;
   }
 
-  .scores { text-align: right; line-height: 1.1; }
+  /* The clock stands BESIDE the tally, not under it: stacked, a timed round
+     pushed the count of seconds below BEST, where it read as a third score
+     and cost height a phone does not have. */
+  .scores { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+  .scores .tally { text-align: right; line-height: 1.1; }
   .scores .label {
     font-size: 11px; letter-spacing: 2px; color: var(--muted);
     text-transform: uppercase; font-weight: 600;
@@ -96,8 +100,9 @@
     letter-spacing: 1px;
   }
   .scores .clock {
-    font-family: 'Anton', sans-serif; font-size: 20px; color: var(--text);
-    letter-spacing: 1px;
+    font-family: 'Anton', sans-serif; font-size: 30px; color: var(--text);
+    letter-spacing: 1px; line-height: 1;
+    padding-left: 12px; border-left: 2px solid var(--gold-deep);
   }
   .scores .clock.late { color: var(--food); }
   .scores .clock[hidden] { display: none; }
@@ -424,7 +429,8 @@
   html.touch h1 br { display: none; }
   html.touch .scores .val { font-size: 22px; }
   html.touch .scores .label, html.touch .scores .best { font-size: 9px; }
-  html.touch .scores .clock { font-size: 15px; }
+  html.touch .scores .clock { font-size: 19px; padding-left: 8px; }
+  html.touch .scores { gap: 8px; }
   html.touch header { padding: 0 10px; }
   html.touch .board-frame {
     /* The pitch takes the full width too, and stays square: the height term
@@ -795,9 +801,11 @@
     <header>
       <h1><span class="p-egg" id="pEgg">P</span>ITCH<br> SNAKE</h1>
       <div class="scores">
-        <div class="label">Score</div>
-        <div class="val" id="score">0</div>
-        <div class="best">BEST <span id="best">0</span></div>
+        <div class="tally">
+          <div class="label">Score</div>
+          <div class="val" id="score">0</div>
+          <div class="best">BEST <span id="best">0</span></div>
+        </div>
         <div class="clock" id="clock" hidden>1:00</div>
       </div>
     </header>
