@@ -120,7 +120,7 @@ export interface RoundLog {
   durationMs?: number; startGhosts?: number; startBombs?: number; bombFirstMs?: number;
   /** The survival knobs (v15+); absent means the classic values. */
   scoreByTime?: boolean; startLen?: number;
-  eatGrowth?: number; bonusGrowth?: number; tntGrowth?: number;
+  eatGrowth?: number; bonusGrowth?: number; tntGrowth?: number; portalGrowth?: number;
   ghostEveryMs?: number; bombEveryMs?: number; boltEveryMs?: number;
   /** Snakes on the board; absent in v4 (single-snake era) logs. */
   players?: number;
@@ -207,9 +207,9 @@ export interface GameConfig {
    * teleport trips pay nothing in such a round (survival).
    */
   scoreByTime?: boolean;
-  /** Opening length, 3..30, standing on the board in full from the first
-   *  frame: solo 10..29 lays the corner L (tail on the top-left square),
-   *  rooms and 30 fold into the lane band; see layoutSnake. */
+  /** Opening length, 3..31, standing on the board in full from the first
+   *  frame: solo past nine lays the hook (tail on the top-left square),
+   *  rooms fold into the lane band; see layoutSnake. */
   startLen?: number;
   /** What entering food adds to the body; negative trims (survival: -1). */
   eatGrowth?: number;
@@ -217,6 +217,8 @@ export interface GameConfig {
   bonusGrowth?: number;
   /** Same for TNT (classic: -5; survival: +5). */
   tntGrowth?: number;
+  /** Body change on surfacing from a teleport trip (survival: -5). */
+  portalGrowth?: number;
   /** Move a ladder off the score and onto the clock: one more ghost / one
    *  more block per wave / one bolt every this many ms (0 = classic rule). */
   ghostEveryMs?: number;

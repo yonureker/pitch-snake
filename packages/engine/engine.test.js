@@ -1306,31 +1306,31 @@ test('survival: TNT feeds the snake five and pays nothing', () => {
   assert.equal(g.snake.length, 8, 'and the snake really is five longer');
 });
 
-test('survival: the corner L stands on the board at the first frame', () => {
+test('survival: the opening hook stands on the board at the first frame', () => {
   const g = createGame({ seed: 7, ...MODES.survival, startGhosts: 0, ghostEveryMs: 0 });
   g.wallPhaseEnd = 1e12;
   foodFar(g);
-  assert.equal(g.snake.length, 25, 'all twenty five cells are down before anything moves');
+  assert.equal(g.snake.length, 31, 'fifteen down, one right, ten up, five right: all there');
   assert.equal(g.pendingGrowth, 0, 'nothing arrives later');
-  assert.equal(g.log.startLen, 25, 'and the opening rides in the log');
-  // the L itself: head at (15,9), fifteen along row 9, the corner, ten up
-  // the left wall, tail on the top left square
-  assert.deepEqual(g.snake[0], { x: 15, y: 9 }, 'the head at the end of the long leg');
-  assert.deepEqual(g.snake[15], { x: 0, y: 9 }, 'the corner where the legs meet');
-  assert.deepEqual(g.snake[24], { x: 0, y: 0 }, 'the tail on the top left square');
+  assert.equal(g.log.startLen, 31, 'and the opening rides in the log');
+  // the hook, joint by joint
+  assert.deepEqual(g.snake[0], { x: 6, y: 4 }, 'the head at the tip of the short leg');
+  assert.deepEqual(g.snake[5], { x: 1, y: 4 }, 'the top of the doubled-back column');
+  assert.deepEqual(g.snake[15], { x: 1, y: 14 }, 'the one-cell elbow');
+  assert.deepEqual(g.snake[16], { x: 0, y: 14 }, 'the foot of the wall leg');
+  assert.deepEqual(g.snake[30], { x: 0, y: 0 }, 'the tail on the top left square');
   const seen = new Set();
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 31; i++) {
     const c = g.snake[i];
     assert.ok(!seen.has(K(c.x, c.y)), 'no cell twice');
     seen.add(K(c.x, c.y));
-    assert.ok(i < 15 ? c.y === 9 : c.x === 0, 'every cell on one of the two legs');
     if (i) {
       const p = g.snake[i - 1];
       assert.equal(Math.abs(c.x - p.x) + Math.abs(c.y - p.y), 1, 'each segment touches the next');
     }
   }
   // three of the four directions really play from the whistle
-  for (const [dx, dy, wx, wy] of [[1, 0, 16, 9], [0, -1, 15, 8], [0, 1, 15, 10]]) {
+  for (const [dx, dy, wx, wy] of [[1, 0, 7, 4], [0, -1, 6, 3], [0, 1, 6, 5]]) {
     const h = createGame({ seed: 7, ...MODES.survival, startGhosts: 0, ghostEveryMs: 0 });
     h.wallPhaseEnd = 1e12;
     foodFar(h);
@@ -1344,14 +1344,34 @@ test('survival: five lane-folded openings share the pitch without touching', () 
   const g = createGame({ seed: 7, ...MODES.survival, players: 5, startGhosts: 0, ghostEveryMs: 0 });
   const all = new Set();
   for (const p of g.players) {
-    assert.equal(p.snake.length, 25, 'rooms fold the same length into the lanes');
+    assert.equal(p.snake.length, 31, 'rooms fold the same length into the lanes');
     assert.equal(p.snake[0].x, 8, 'lane heads stay where they have always been');
     for (const c of p.snake) {
       assert.ok(!all.has(K(c.x, c.y)), 'no two bodies share a cell');
       all.add(K(c.x, c.y));
     }
   }
-  assert.equal(all.size, 125, 'a hundred and twenty five distinct cells');
+  assert.equal(all.size, 155, 'a hundred and fifty five distinct cells');
+});
+
+test('survival: a trip through the window trims five, in survival\'s own coin', () => {
+  const g = quietGame({ scoreByTime: true, portalGrowth: -5 });
+  foodFar(g);
+  assert.ok(g._spawnPortal(), 'a pair opens for the test');
+  const { ax, ay, bx, by } = g.portal;
+  // a ten-cell line walking into end A, laid on whichever axis avoids end B
+  const mk = (dx, dy) => Array.from({ length: 10 }, (_, i) => [wrap(ax - (i + 1) * dx), wrap(ay - (i + 1) * dy)]);
+  let line = mk(1, 0), dir = [1, 0];
+  if (line.some(([x, y]) => x === bx && y === by)) { line = mk(0, 1); dir = [0, 1]; }
+  assert.ok(!line.some(([x, y]) => x === bx && y === by), 'the approach avoids the far end');
+  setSnake(g, line, dir[0], dir[1]);
+  g._step();                                   // onto the near end
+  assert.equal(g.snake.length, 10, 'standing in the window changes nothing');
+  g._step();                                   // out of the far one
+  assert.ok(g.portal.used, 'the pair is spent');
+  assert.equal(g.snake.length, 5, 'and the trip took five segments off');
+  assert.equal(g.score, 0, 'for no points, as nothing pays points here');
+  assert.equal(g.pendingGrowth, 0, 'nothing left owed');
 });
 
 test('survival: the clock hires a ghost every mark, personalities cycling, capped', () => {

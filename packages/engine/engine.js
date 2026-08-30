@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 17;  // 17: survival's solo opening is the corner L; 15/16: survival scores the clock, full spawn
+export const ENGINE_VERSION = 18;  // 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -105,17 +105,17 @@ export const MODES = {
   classic: {},                              // endless: the run ends when you do
   speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
   // Survival proper: nothing scores but the clock. Seconds survived ARE the
-  // score; food trims the snake by one (the ringed one by five), TNT feeds
-  // it five, and the hazards ride the clock instead of the points: one more
-  // ghost and one more block per wave every ten seconds for ever, a bolt on
-  // the pitch every fifteen. The snake stands twenty five long on the board
-  // from the first frame, the corner L when played solo (see layoutSnake),
-  // so the round looks like what it is before the whistle, and eating is
-  // the relief, not the reward.
+  // score; food trims the snake by one (the ringed one by five), a window
+  // trip trims five, TNT feeds it five, and the hazards ride the clock
+  // instead of the points: one more ghost and one more block per wave every
+  // ten seconds for ever, a bolt on the pitch every fifteen. The snake
+  // stands thirty one long on the board from the first frame, the hook when
+  // played solo (see layoutSnake), so the round looks like what it is
+  // before the whistle, and eating is the relief, not the reward.
   survival: {
     startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST,
-    scoreByTime: true, startLen: 25,
-    eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5,
+    scoreByTime: true, startLen: 31,
+    eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5, portalGrowth: -5,
     ghostEveryMs: 10_000, bombEveryMs: 10_000, boltEveryMs: 15_000,
   },
 };
@@ -233,28 +233,30 @@ export function ghostRenderPos(g, nowMs, out) {
 // The opening body, all of it, from the first frame, nothing wrapping the
 // screen edge. Up to nine cells is the classic straight line back along
 // the lane from the head at (8, laneY). A longer SOLO opening (survival's
-// twenty five) is the corner L the mode is known by: the tail on the top
-// left square, ten cells down the left wall, then the rest along row 9 to
-// the head, which leaves three of the four directions open at the whistle
-// (straight on meets the snake's own wrapped body a few cells out, and the
-// doom window judges that press like any other wrong turn). The solo L
-// fits n <= 29. A long opening in a ROOM cannot share the one corner, so
-// it packs into the lane's own three rows instead: a weave of the lane row
-// and its center-side neighbour column by column down to 0, a run back
-// along the far row, and a hook up the far column; the bands never collide
-// at any player count, and the head keeps (9, laneY) and its center-side
-// neighbour free.
+// thirty one) is the hook the mode is known by: the tail on the top left
+// square, fifteen cells down the left wall, one right, ten back up the
+// next column, and five right to the head at (6, 4), which leaves three of
+// the four directions open at the whistle (straight on meets the snake's
+// own wrapped body a lap out, and the doom window judges that press like
+// any other wrong turn). A long opening in a ROOM cannot share the one
+// corner, so it packs into the lane's own three rows instead: a weave of
+// the lane row and its center-side neighbour column by column down to 0, a
+// run back along the far row, and a hook up and back along the far column;
+// the bands never collide at any player count, and the head keeps
+// (9, laneY) and its center-side neighbour free. Both shapes hold n <= 31.
 function layoutSnake(n, laneY, solo) {
   if (n <= 9) {
     const line = [[8, laneY]];
     for (let i = 1; i < n; i++) line.push([8 - i, laneY]);
     return line;
   }
-  if (solo && n <= 29) {
+  if (solo) {
     const cells = [];
-    for (let x = n - 10; x >= 1; x--) cells.push([x, 9]);   // head first, back along row 9
-    for (let y = 9; y >= 0; y--) cells.push([0, y]);        // then up the left wall to the corner
-    return cells;
+    for (let x = 6; x >= 2; x--) cells.push([x, 4]);      // head first: the five along row 4
+    for (let y = 4; y <= 13; y++) cells.push([1, y]);     // the ten of the doubled-back column
+    cells.push([1, 14]);                                  // the one-cell elbow
+    for (let y = 14; y >= 0; y--) cells.push([0, y]);     // the fifteen up the wall to the corner
+    return cells.slice(0, n);
   }
   const m = laneY > GRID / 2 ? -1 : 1;
   const cells = [[8, laneY]];
@@ -264,7 +266,7 @@ function layoutSnake(n, laneY, solo) {
   }
   cells.push([0, laneY - m]);
   for (let x = 1; x <= 10; x++) cells.push([x, laneY - m]);
-  cells.push([10, laneY], [10, laneY + m]);
+  cells.push([10, laneY], [10, laneY + m], [9, laneY + m]);
   return cells.slice(0, n);
 }
 
@@ -289,6 +291,7 @@ export function createGame(cfg = {}) {
   const eatGrowth = cfg.eatGrowth ?? 1;
   const bonusGrowth = cfg.bonusGrowth ?? 5;
   const tntGrowth = cfg.tntGrowth ?? -5;
+  const portalGrowth = cfg.portalGrowth ?? 0;   // survival: a trip trims five
   const ghostEveryMs = cfg.ghostEveryMs ?? 0;
   const bombEveryMs = cfg.bombEveryMs ?? 0;
   const boltEveryMs = cfg.boltEveryMs ?? 0;
@@ -298,8 +301,8 @@ export function createGame(cfg = {}) {
   if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > (bombEveryMs ? BOMB_MAX : TNT_SCORES.length)) throw new Error('startBombs out of range');
   if (bombFirstMs % SIM_DT !== 0 || bombFirstMs < 0) throw new Error('bombFirstMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > MAX_PLAYERS) throw new Error('players out of range');
-  if (!Number.isInteger(startLen) || startLen < START_LEN || startLen > 30) throw new Error('startLen out of range');
-  if (!Number.isInteger(eatGrowth) || !Number.isInteger(bonusGrowth) || !Number.isInteger(tntGrowth)) throw new Error('growth knobs must be integers');
+  if (!Number.isInteger(startLen) || startLen < START_LEN || startLen > 31) throw new Error('startLen out of range');
+  if (!Number.isInteger(eatGrowth) || !Number.isInteger(bonusGrowth) || !Number.isInteger(tntGrowth) || !Number.isInteger(portalGrowth)) throw new Error('growth knobs must be integers');
   for (const v of [ghostEveryMs, bombEveryMs, boltEveryMs])
     if (v % SIM_DT !== 0 || v < 0) throw new Error('everyMs knobs must be non-negative multiples of SIM_DT');
 
@@ -356,7 +359,8 @@ export function createGame(cfg = {}) {
   // live aliases of players[0], so one-snake callers never notice the array.
   const S = {
     seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
-    scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, ghostEveryMs, bombEveryMs, boltEveryMs,
+    scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, portalGrowth,
+    ghostEveryMs, bombEveryMs, boltEveryMs,
     players,
     quanta: 0,          // sim quanta elapsed; the replay clock
     clockMs: 0,         // one hazard clock (the old wall/bomb/ghost/portal clocks were identical)
@@ -387,7 +391,8 @@ export function createGame(cfg = {}) {
     // the round's replayable record. end/finalScore are stamped when the last
     // snake goes down; a multi-snake log carries every score and death time.
     log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
-           scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, ghostEveryMs, bombEveryMs, boltEveryMs,
+           scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, portalGrowth,
+           ghostEveryMs, bombEveryMs, boltEveryMs,
            players: playerCount, inputs: [], end: 0, finalScore: 0 },
   };
 
@@ -1107,8 +1112,10 @@ export function createGame(cfg = {}) {
       const fromA = portalEnd === 1;
       S.portal.used = true;
       // in a time-scored round the trip is free travel: the score is the
-      // clock and nothing else may touch it
+      // clock and nothing else may touch it. Survival pays in its own coin
+      // instead: portalGrowth trims segments (drained below, floored).
       if (!scoreByTime) p.score += PORTAL_BONUS;
+      p.pendingGrowth += portalGrowth;
       emit({ t: 'hop', player: p.idx, fromA,
              fx: fromA ? S.portal.ax : S.portal.bx, fy: fromA ? S.portal.ay : S.portal.by,
              tx: nx, ty: ny });
@@ -1557,8 +1564,9 @@ export function replay(log) {
   // v4 was the single-snake era, v5 multi-snake before the clinch rule, v6
   // before a wall forming on a ghost buried it in place, v7 before the doom
   // window, v14 before survival scored the clock, v15 before the opening
-  // body stood in full, v16 before the solo opening became the corner L.
-  // All these shapes replay here under today's rules;
+  // body stood in full, v16 and v17 while the solo opening found its shape
+  // and before windows trimmed. All these shapes replay here under today's
+  // rules;
   // the survival knobs default to the classic values, so a pre-15 log
   // (which cannot carry them) replays under the exact rules it was played
   // by. No log of any era was ever persisted, so a rule changing an old
@@ -1570,6 +1578,7 @@ export function replay(log) {
     bombFirstMs: log.bombFirstMs ?? 0,
     scoreByTime: log.scoreByTime ?? false, startLen: log.startLen ?? START_LEN,
     eatGrowth: log.eatGrowth ?? 1, bonusGrowth: log.bonusGrowth ?? 5, tntGrowth: log.tntGrowth ?? -5,
+    portalGrowth: log.portalGrowth ?? 0,
     ghostEveryMs: log.ghostEveryMs ?? 0, bombEveryMs: log.bombEveryMs ?? 0, boltEveryMs: log.boltEveryMs ?? 0,
     players: log.players ?? 1,
   });
