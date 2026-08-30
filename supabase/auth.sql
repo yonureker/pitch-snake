@@ -12,9 +12,14 @@
 --   2. Authentication -> Sign In / Providers -> "Allow manual linking": ON.
 --      (This is what lets an anonymous player later attach Apple / Google /
 --      email WITHOUT changing their user id, which is the whole design.)
--- And one for the next phase, harmless to do now: Authentication -> Email
--- Templates -> Magic Link -> include {{ .Token }} in the body, so email
--- sign-in sends a 6-digit code instead of a link.
+-- And for the sign-in sheet, TWO EMAIL TEMPLATES need {{ .Token }} in their
+-- body (Authentication -> Email Templates), so the mails carry a 6-digit
+-- code instead of a link:
+--   "Magic Link"            (signing in to an existing account)
+--   "Change Email Address"  (an anonymous player attaching their email)
+-- Note the built-in mailer only delivers to the project's own team members
+-- and only a couple of mails an hour; before real players sign in, set a
+-- custom SMTP provider under Project Settings -> Authentication.
 --
 -- The design in one breath: every player is silently signed in anonymously
 -- from first launch, so every write can carry auth.uid() from day one; nobody
@@ -63,7 +68,9 @@ $$;
 -- set upserts the caller's row. The name goes through the exact wash every
 -- score name has always gone through (upper, alphanumeric, five characters,
 -- 'YOU' when nothing survives), so a profile name can never be a thing a
--- score name could not be. Country is two letters or nothing.
+-- score name could not be. Country: null keeps whatever flag is already
+-- chosen (every plain name commit passes null and must not strip one), an
+-- empty string clears it (the sheet's NO FLAG choice), a code sets it.
 drop function if exists public.pitch_snake_set_profile(text, text);
 
 create or replace function public.pitch_snake_set_profile(p_name text, p_country text default null)
@@ -95,10 +102,11 @@ begin
   values (auth.uid(), clean_name, clean_country)
   on conflict (user_id) do update
     set name       = excluded.name,
-        -- a set with no country keeps the one already chosen: the versus
-        -- screen saves names without knowing about flags, and must not
-        -- silently strip one
-        country    = coalesce(excluded.country, public.pitch_snake_profiles.country),
+        -- null means the caller was not talking about the flag: keep it.
+        -- Anything else (a code, or '' washed to null) is a decision.
+        country    = case when p_country is null
+                          then public.pitch_snake_profiles.country
+                          else excluded.country end,
         updated_at = now();
 
   select to_json(p) into row_out from (

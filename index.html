@@ -760,6 +760,41 @@
   .lock-hint { font-size: 12px; color: var(--food); font-weight: 700; text-align: center; }
   .speed-row button:disabled, .switch:disabled { opacity: 0.4; cursor: default; }
 
+  /* ---- player chip + profile sheet ---- */
+  .gear.who {
+    left: 8px; right: auto; width: auto; min-width: 38px;
+    padding: 0 12px; border-radius: 19px; gap: 5px;
+    font-family: 'Barlow', sans-serif; font-size: 13px;
+    font-weight: 700; letter-spacing: 1.2px; color: #d8d0bd;
+  }
+  .modal.profile { gap: 11px; max-height: 86vh; overflow-y: auto; }
+  .modal.profile .entry.wide { width: 100%; }
+  .modal.profile select {
+    width: 100%; padding: 9px 10px; border-radius: 6px;
+    border: 2px solid var(--gold); background: rgba(246,239,222,0.96);
+    color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14px;
+    font-weight: 600; letter-spacing: 0.5px; outline: none;
+  }
+  .modal.profile input.prof-email {
+    font-family: 'Barlow', sans-serif; font-size: 15px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: none; width: 100%;
+  }
+  .prof-auth {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    width: 100%; border-top: 1px solid rgba(194,162,90,0.35); padding-top: 12px;
+  }
+  .prof-auth[hidden] { display: none; }
+  .prof-auth .vs-hint { text-align: center; margin: 0; }
+  /* the ghost button was dressed for the dark overlay; on the cream modal
+     it needs ink, not chalk */
+  .modal .btn.ghostbtn { color: #6b6250; border-color: rgba(107,98,80,0.55); box-shadow: none; }
+  .prof-auth b { color: var(--gold-bright); letter-spacing: 0.5px; text-transform: none; }
+  .linkline {
+    background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+    font-family: 'Barlow', sans-serif; letter-spacing: 0.8px;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+
   /* ---- terminal easter egg (click the P in PITCH) ---- */
   .p-egg { cursor: pointer; }
   .terminal {
@@ -821,6 +856,7 @@
       <div class="wall-banner bolt-banner" id="boltBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
+      <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
       <div class="overlay" id="overlay">
         <div class="ov-head">
           <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
@@ -909,6 +945,7 @@
           <button class="btn small" id="saveBtn">SAVE</button>
         </div>
         <div class="save-note" id="saveNote" hidden></div>
+        <button class="save-note soft linkline" id="authNudge" hidden>KEEP YOUR BESTS ON EVERY DEVICE &rsaquo; SIGN IN</button>
         <div class="board-head" id="boardHead" style="display:none">Top 10</div>
         <ol class="standings" id="standings" style="display:none"></ol>
         <div class="mode-caption" id="modeCaption"></div>
@@ -969,6 +1006,29 @@
         </div>
         <p class="lock-hint" id="lockHint">Finish the round to change settings.</p>
         <button class="btn small" id="settingsClose">DONE</button>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="profileModal" hidden>
+      <div class="modal profile">
+        <div class="modal-title">Player</div>
+        <div class="entry wide"><input id="profName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false"></div>
+        <div class="entry wide" id="profCountryRow"><select id="profCountry"><option value="">NO FLAG</option></select></div>
+        <button class="btn small" id="profSaveBtn">SAVE</button>
+        <div class="prof-auth" id="profAuthAnon" hidden>
+          <p class="vs-hint">Add your email and your name, flag and scores follow you onto any phone or computer.</p>
+          <div class="entry wide"><input id="profEmail" class="prof-email" type="email" placeholder="EMAIL" autocomplete="email" autocapitalize="off" spellcheck="false"></div>
+          <div class="entry wide" id="profCodeRow" hidden>
+            <input id="profCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="CODE" spellcheck="false">
+          </div>
+          <button class="btn small" id="profSendBtn">SEND CODE</button>
+        </div>
+        <div class="prof-auth" id="profAuthOn" hidden>
+          <p class="vs-hint">SIGNED IN AS <b id="profWhoEmail"></b></p>
+          <button class="btn small ghostbtn" id="profSignOut">SIGN OUT</button>
+        </div>
+        <p class="save-note" id="profStatus" hidden></p>
+        <button class="btn small" id="profileClose">DONE</button>
       </div>
     </div>
 
@@ -2446,43 +2506,54 @@
   // Auth is a bonus tier on top of the game, never a dependency: if the CDN
   // is down, the switch is off, or the request fails, everything plays and
   // submits exactly as it did before this existed.
-  let sbToken = null, sbProfile = null;
+  let sbToken = null, sbProfile = null, sbAuth = null, sbUser = null;
+  function sbAnon() { return !!(sbUser && sbUser.is_anonymous); }
   async function bootAuth() {
     if (!sbOn()) return;
     try {
       const { GoTrueClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/auth-js@2.112.4/+esm');
-      const auth = new GoTrueClient({
+      sbAuth = new GoTrueClient({
         url: SB_URL + '/auth/v1',
         headers: { apikey: SB_KEY },
         storageKey: 'snakeAuth',
         autoRefreshToken: true,
         persistSession: true,
       });
-      auth.onAuthStateChange((_ev, session) => { sbToken = session ? session.access_token : null; });
-      let { data: { session } } = await auth.getSession();
-      if (!session) session = (await auth.signInAnonymously()).data.session;
+      sbAuth.onAuthStateChange((_ev, session) => {
+        sbToken = session ? session.access_token : null;
+        sbUser = session ? session.user : null;
+      });
+      let { data: { session } } = await sbAuth.getSession();
+      if (!session) session = (await sbAuth.signInAnonymously()).data.session;
       sbToken = session ? session.access_token : null;
+      sbUser = session ? session.user : null;
       if (sbToken) await syncProfile();
+      refreshWho();
     } catch (e) { /* no identity today; the game does not care */ }
   }
 
   // The one name, everywhere. With a profile, its name feeds both the score
   // entry and the versus screen; without one, the first name typed anywhere
   // becomes it. localStorage keeps working as the offline copy throughout.
-  async function syncProfile() {
+  // takeTheirs: after signing into another account, its name outranks
+  // whatever this device had typed; on a plain boot the device name only
+  // fills gaps.
+  async function syncProfile(takeTheirs) {
     try {
       const prof = await sbRpc('pitch_snake_get_profile', {});
       if (prof && prof.name) {
         sbProfile = prof;
-        if (!vsNameInput.value) {
+        if (takeTheirs || !vsNameInput.value) {
           vsNameInput.value = prof.name;
           vsEditingName = false;
           try { localStorage.setItem('snakeVsName', prof.name); } catch (e) {}
         }
+        refreshWho();
         return;
       }
       const local = (localStorage.getItem('snakeVsName') || '').trim();
       if (local) sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: local, p_country: null });
+      refreshWho();
     } catch (e) { /* same rule: identity never blocks anything */ }
   }
 
@@ -2490,7 +2561,7 @@
   function adoptName(name) {
     if (!sbToken || !name) return;
     sbRpc('pitch_snake_set_profile', { p_name: name, p_country: null })
-      .then(prof => { sbProfile = prof; })
+      .then(prof => { sbProfile = prof; refreshWho(); })
       .catch(() => {});
   }
   bootAuth();
@@ -2770,6 +2841,9 @@
     standingsEl.style.display = deadPanels ? 'block' : 'none';
     boardHead.style.display = deadPanels ? 'block' : 'none';
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
+    // one quiet line, at the one moment the pitch sells itself: a score just
+    // went onto the world board and the identity under it is still anonymous
+    document.getElementById('authNudge').hidden = !(deadPanels && savedThisRound && sbAnon());
     // the caption carries only what the START button cannot: which
     // tournament or room, and whether it is open
     const showCaption = onMenu && !modesOpen &&
@@ -3843,6 +3917,7 @@
   function refreshSettingsUI() {
     const inRound = (state === 'playing' || state === 'paused' || state === 'countdown');
     gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
+    document.getElementById('whoBtn').style.display = gearBtn.style.display;
     settingsModal.querySelectorAll('.speed-row button, #wallToggle').forEach(el => { el.disabled = inRound; });
     lockHint.style.display = inRound ? 'block' : 'none';
     syncMpQuit();
@@ -3850,6 +3925,262 @@
   gearBtn.addEventListener('click', () => { refreshSettingsUI(); settingsModal.hidden = false; });
   settingsClose.addEventListener('click', () => { settingsModal.hidden = true; });
   settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.hidden = true; });
+
+  // ---- player chip + profile sheet ----
+  // The one login surface: the chip and the post-save line both land here,
+  // and play is never gated on any of it. The sheet only offers to make the
+  // identity underneath portable. Two flows share the email box: an
+  // anonymous player attaches an email (updateUser, then the 6-digit code
+  // through verifyOtp 'email_change'), keeping the SAME user id; an email
+  // that already has an account answers 422, and the code signs into that
+  // account instead (signInWithOtp shouldCreateUser:false, verifyOtp
+  // 'email'), which is the second-device door.
+  const whoBtn = document.getElementById('whoBtn');
+  const profileModal = document.getElementById('profileModal');
+  const profileClose = document.getElementById('profileClose');
+  const profName = document.getElementById('profName');
+  const profCountryRow = document.getElementById('profCountryRow');
+  const profCountry = document.getElementById('profCountry');
+  const profSaveBtn = document.getElementById('profSaveBtn');
+  const profAuthAnon = document.getElementById('profAuthAnon');
+  const profAuthOn = document.getElementById('profAuthOn');
+  const profEmail = document.getElementById('profEmail');
+  const profCodeRow = document.getElementById('profCodeRow');
+  const profCode = document.getElementById('profCode');
+  const profSendBtn = document.getElementById('profSendBtn');
+  const profWhoEmail = document.getElementById('profWhoEmail');
+  const profSignOut = document.getElementById('profSignOut');
+  const profStatus = document.getElementById('profStatus');
+
+  function flagOf(c) {
+    return String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65, 0x1f1e6 + c.charCodeAt(1) - 65);
+  }
+
+  // the chip states who you are wherever a name is known; the silhouette
+  // stands in until one exists anywhere
+  function refreshWho() {
+    let name = (sbProfile && sbProfile.name) || '';
+    if (!name) { try { name = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {} }
+    const c = sbProfile && sbProfile.country;
+    whoBtn.textContent = name ? ((c ? flagOf(c) + ' ' : '') + name) : '\u{1F464}';
+    refreshModeUI();
+  }
+
+  // The country list writes itself: probe every two-letter code against the
+  // browser's own region names and keep the ones that mean somewhere, minus
+  // CLDR's handful of non-countries. No 250-line list to hand-maintain, and
+  // new countries arrive with browser updates.
+  const NOT_COUNTRIES = new Set(['AC','AN','BU','CP','CS','DD','DG','EA','EU','EZ','FX','IC','NT','QO','SU','TA','TP','UN','XA','XB','YD','YU','ZR','ZZ']);
+  let countriesBuilt = false;
+  function buildCountries() {
+    if (countriesBuilt) return;
+    countriesBuilt = true;
+    let dn;
+    try { dn = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) { return; }
+    const opts = [];
+    for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
+      const code = String.fromCharCode(a, b);
+      if (NOT_COUNTRIES.has(code)) continue;
+      let label;
+      try { label = dn.of(code); } catch (e) { continue; }
+      if (!label || label === code) continue;
+      opts.push([code, label]);
+    }
+    opts.sort((x, y) => x[1].localeCompare(y[1]));
+    for (const [code, label] of opts) {
+      const o = document.createElement('option');
+      o.value = code;
+      o.textContent = flagOf(code) + ' ' + label;
+      profCountry.appendChild(o);
+    }
+  }
+
+  function profSay(msg, calm) {
+    profStatus.textContent = msg || '';
+    profStatus.hidden = !msg;
+    profStatus.classList.toggle('soft', !!calm);
+  }
+
+  // otpKind decides what the code answers for: 'link' binds the email onto
+  // the current anonymous user, 'signin' switches to the account owning it
+  let otpKind = '', otpEmail = '', resendTimer = null, autoVerified = false;
+
+  function refreshProfileSheet(reset) {
+    let localName = '';
+    try { localName = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {}
+    profName.value = (sbProfile && sbProfile.name) || localName;
+    profCountry.value = (sbProfile && sbProfile.country) || '';
+    profCountryRow.style.display = sbToken ? '' : 'none';
+    profAuthAnon.hidden = !(sbToken && sbAnon());
+    profAuthOn.hidden = !(sbToken && sbUser && !sbUser.is_anonymous);
+    if (!profAuthOn.hidden) profWhoEmail.textContent = sbUser.email || '';
+    if (reset) {
+      profCodeRow.hidden = true;
+      profCode.value = '';
+      profEmail.disabled = false;
+      otpKind = '';
+      autoVerified = false;
+      if (resendTimer) { clearInterval(resendTimer); resendTimer = null; }
+      profSendBtn.disabled = false;
+      profSendBtn.textContent = 'SEND CODE';
+      profSay('');
+    }
+  }
+
+  function openProfile() {
+    buildCountries();
+    refreshProfileSheet(true);
+    profileModal.hidden = false;
+  }
+
+  whoBtn.addEventListener('click', openProfile);
+  document.getElementById('authNudge').addEventListener('click', openProfile);
+  profileClose.addEventListener('click', () => { profileModal.hidden = true; });
+  profileModal.addEventListener('click', (e) => { if (e.target === profileModal) profileModal.hidden = true; });
+
+  // same wash the server applies, mirrored so the field shows what will stick
+  profName.addEventListener('input', () => {
+    const w = (profName.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+    if (profName.value !== w) profName.value = w;
+  });
+
+  profSaveBtn.addEventListener('click', async () => {
+    const name = (profName.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+    if (!name) { profSay('Pick a name first.'); return; }
+    profName.value = name;
+    try { localStorage.setItem('snakeVsName', name); } catch (e) {}
+    vsNameInput.value = name;
+    vsEditingName = false;
+    if (sbToken) {
+      profSaveBtn.disabled = true;
+      profSay('Saving…', true);
+      try {
+        // '' is the NO FLAG choice and clears the flag; a code sets it
+        sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: name, p_country: profCountry.value });
+        profSay('Saved.', true);
+      } catch (e) {
+        profSay('Could not reach your account. The name is kept on this device.');
+      }
+      profSaveBtn.disabled = false;
+    } else {
+      profSay('Saved on this device.', true);
+    }
+    refreshWho();
+  });
+
+  function authWords(e) {
+    const c = (e && e.code) || '';
+    if (c === 'over_email_send_rate_limit' || c === 'over_request_rate_limit') return 'Too many codes just now. Wait a minute, then resend.';
+    if (c === 'otp_expired') return 'Wrong or expired code. Check it, or resend a new one.';
+    if (c === 'email_address_invalid' || c === 'validation_failed') return 'That email address was refused.';
+    if (c === 'email_address_not_authorized') return 'Codes cannot reach that address yet; email delivery is still being set up.';
+    return 'Could not reach the sign-in service. Try again.';
+  }
+
+  // matches the server's floor of one email a minute per address, so the
+  // button never invites a press that is doomed to bounce
+  function startCooldown() {
+    let left = 60;
+    profSendBtn.disabled = true;
+    profSendBtn.textContent = 'RESEND 60';
+    if (resendTimer) clearInterval(resendTimer);
+    resendTimer = setInterval(() => {
+      left -= 1;
+      if (left > 0) { profSendBtn.textContent = 'RESEND ' + left; return; }
+      clearInterval(resendTimer);
+      resendTimer = null;
+      profSendBtn.disabled = false;
+      profSendBtn.textContent = 'RESEND';
+    }, 1000);
+  }
+
+  async function profSend() {
+    const email = (profEmail.value || '').trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { profSay('Enter a real email address.'); return; }
+    if (!sbAuth || !sbToken) { profSay('Sign-in is not reachable right now.'); return; }
+    profSendBtn.disabled = true;
+    profSay('Sending the code…', true);
+    try {
+      let r = await sbAuth.updateUser({ email });
+      if (r.error && (r.error.code === 'email_exists' || r.error.status === 422)) {
+        otpKind = 'signin';
+        r = await sbAuth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+        if (!r.error) profSay('That email already has an account, so this code signs you into it.', true);
+      } else if (!r.error) {
+        otpKind = 'link';
+        profSay('Code sent. Check your inbox.', true);
+      }
+      if (r.error) throw r.error;
+      otpEmail = email;
+      profCodeRow.hidden = false;
+      profCode.value = '';
+      autoVerified = false;
+      profCode.focus();
+      startCooldown();
+    } catch (e) {
+      profSay(authWords(e));
+      profSendBtn.disabled = false;
+      profSendBtn.textContent = otpEmail ? 'RESEND' : 'SEND CODE';
+    }
+  }
+
+  async function profVerify() {
+    const code = (profCode.value || '').replace(/\D/g, '');
+    if (code.length !== 6 || !otpKind) return;
+    profCode.disabled = true;
+    profSay('Checking…', true);
+    try {
+      const { data, error } = await sbAuth.verifyOtp({
+        email: otpEmail,
+        token: code,
+        type: otpKind === 'link' ? 'email_change' : 'email',
+      });
+      if (error) throw error;
+      if (data && data.session) { sbToken = data.session.access_token; sbUser = data.session.user || sbUser; }
+      else if (data && data.user) sbUser = data.user;
+      const switched = otpKind === 'signin';
+      if (switched) sbProfile = null;   // that account's own name outranks this device's
+      await syncProfile(switched);
+      refreshProfileSheet(true);
+      profSay(switched ? 'Signed in. This device is yours now.' : 'Done. Your progress follows this email onto any device.', true);
+    } catch (e) {
+      profSay(authWords(e));
+    }
+    profCode.disabled = false;
+  }
+
+  // the sixth digit is the submit, with a guard so editing a wrong code
+  // does not re-fire until it reaches six again
+  profCode.addEventListener('input', () => {
+    const digits = (profCode.value || '').replace(/\D/g, '').slice(0, 6);
+    if (profCode.value !== digits) profCode.value = digits;
+    if (digits.length < 6) { autoVerified = false; return; }
+    if (!autoVerified) { autoVerified = true; profVerify(); }
+  });
+
+  profSendBtn.addEventListener('click', profSend);
+  profEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); profSend(); } });
+  profName.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); profSaveBtn.click(); } });
+
+  profSignOut.addEventListener('click', async () => {
+    profSignOut.disabled = true;
+    profSay('Signing out…', true);
+    try { await sbAuth.signOut(); } catch (e) {}
+    sbToken = null; sbUser = null; sbProfile = null;
+    // the invisible tier comes straight back: a fresh anonymous identity,
+    // so scores keep carrying an id even for a signed-out device
+    try {
+      const { data } = await sbAuth.signInAnonymously();
+      if (data && data.session) { sbToken = data.session.access_token; sbUser = data.session.user; }
+      await syncProfile();
+    } catch (e) {}
+    profSignOut.disabled = false;
+    refreshWho();
+    refreshProfileSheet(true);
+    profSay('Signed out. Playing as a guest on this device.', true);
+  });
+
+  refreshWho();
 
   // ---- terminal easter egg: click the "P" in PITCH to reveal the hidden brief ----
   const pEgg = document.getElementById('pEgg');
@@ -3922,6 +4253,7 @@ $ `;
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
+
   requestAnimationFrame(loop);
 
 </script>
