@@ -19,6 +19,9 @@ export declare const SOLID_MS: number;
 export declare const TNT_SCORES: number[];
 export declare const GHOST_SCORES: number[];
 export declare const GHOST_MS: number;
+/** Absolute pack / wave caps for time-laddered (survival) rounds. */
+export declare const GHOST_MAX: number;
+export declare const BOMB_MAX: number;
 export declare const BOLT_EVERY: number;
 export declare const BOLT_LIFE_MS: number;
 export declare const BOLT_SLOW_MS: number;
@@ -115,6 +118,10 @@ export type GameEvent = (
 export interface RoundLog {
   v: number; seed: number; tickMs: number; wallsEnabled: boolean;
   durationMs?: number; startGhosts?: number; startBombs?: number; bombFirstMs?: number;
+  /** The survival knobs (v15+); absent means the classic values. */
+  scoreByTime?: boolean; startLen?: number;
+  eatGrowth?: number; bonusGrowth?: number; tntGrowth?: number;
+  ghostEveryMs?: number; bombEveryMs?: number; boltEveryMs?: number;
   /** Snakes on the board; absent in v4 (single-snake era) logs. */
   players?: number;
   /** [quantum, x, y] triples; a fourth column names the player when players > 1. */
@@ -195,6 +202,24 @@ export interface GameConfig {
    * wave stands on the board from the whistle). Must be a multiple of SIM_DT.
    */
   bombFirstMs?: number;
+  /**
+   * Seconds survived become the score and the ONLY score: eating, TNT and
+   * teleport trips pay nothing in such a round (survival).
+   */
+  scoreByTime?: boolean;
+  /** Opening length; anything past START_LEN arrives as queued growth. */
+  startLen?: number;
+  /** What entering food adds to the body; negative trims (survival: -1). */
+  eatGrowth?: number;
+  /** Same for the ringed bonus (survival: -5). */
+  bonusGrowth?: number;
+  /** Same for TNT (classic: -5; survival: +5). */
+  tntGrowth?: number;
+  /** Move a ladder off the score and onto the clock: one more ghost / one
+   *  more block per wave / one bolt every this many ms (0 = classic rule). */
+  ghostEveryMs?: number;
+  bombEveryMs?: number;
+  boltEveryMs?: number;
   /** Snakes on one shared board, 1..MAX_PLAYERS (default 1). */
   players?: number;
 }

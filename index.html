@@ -837,7 +837,7 @@
       <h1><span class="p-egg" id="pEgg">P</span>ITCH<br> SNAKE</h1>
       <div class="scores">
         <div class="tally">
-          <div class="label">Score</div>
+          <div class="label" id="scoreLabel">Score</div>
           <div class="val" id="score">0</div>
           <div class="best">BEST <span id="best">0</span></div>
         </div>
@@ -1120,7 +1120,7 @@
   const MODE_DESC = {
     classic: 'No time limit. Beat your best, take a top ten spot, brag about your snake skills.',
     speedrun: 'One minute on the clock. Do not let the snake skip her meals.',
-    survival: 'Every ghost is out from the whistle, and the TNT is right behind them.',
+    survival: 'Time is the score. Emojis shrink you, TNT feeds you, and every ten seconds the pitch turns meaner.',
     versus: 'Settle disputes the friendly way. Hunger Games, snake edition.',
     tourney: 'A private board among friends, so you can bet all your money and lose it.',
   };
@@ -1480,7 +1480,9 @@
               : reason === 'ghost' ? 'The ghost got you. '
               : reason === 'time' ? 'The final whistle. '
               : '';
-    overlayText.textContent = `${how}You scored ${g.score}.`;
+    overlayText.textContent = ruleMode() === 'survival'
+      ? `${how}You survived ${g.score} seconds.`
+      : `${how}You scored ${g.score}.`;
     savedThisRound = false;
     saveBtn.disabled = false;
     nameInput.disabled = false;
@@ -2703,7 +2705,10 @@
       if (v && typeof v === 'object') {
         bestByMode.classic = parseInt(v.classic, 10) || 0;
         bestByMode.speedrun = parseInt(v.speedrun, 10) || 0;
-        bestByMode.survival = parseInt(v.survival, 10) || 0;
+        // survival bests from the points era would gate the new seconds
+        // count behind an incomparable number; without the sv2 stamp the
+        // old figure resets once and the clock starts honest
+        bestByMode.survival = v.sv2 ? (parseInt(v.survival, 10) || 0) : 0;
       } else {
         bestByMode.classic = parseInt(localStorage.getItem('snakeBest'), 10) || 0;
       }
@@ -2712,7 +2717,7 @@
     bestEl.textContent = best;
   }
   function savePersonalBest() {
-    try { localStorage.setItem(BEST_KEY, JSON.stringify(bestByMode)); } catch (e) {}
+    try { localStorage.setItem(BEST_KEY, JSON.stringify({ ...bestByMode, sv2: true })); } catch (e) {}
   }
 
   async function submitScore() {
@@ -2792,6 +2797,29 @@
   const fmtWhen = (iso) =>
     new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+  // The legend tells the truth per mode: survival inverts what the food and
+  // the TNT do, and its teleport trip pays nothing. Menu-time DOM writes only.
+  function applyLegend() {
+    const rows = legend.children;
+    const set = (i, txt, val, cls) => {
+      rows[i].querySelector('.lg-txt').textContent = txt;
+      const v = rows[i].querySelector('.lg-val');
+      v.textContent = val;
+      v.className = 'lg-val ' + cls;
+    };
+    if (ruleMode() === 'survival') {
+      set(0, 'Emoji, one shorter', '-1', 'pos');
+      set(1, 'Emoji with a ring, 5 shorter', '-5', 'pos');
+      set(2, 'TNT block, 5 LONGER', '+5', 'neg');
+      set(3, 'Teleport, one trip', 'HOP', 'pos');
+    } else {
+      set(0, 'Emoji', '+1', 'pos');
+      set(1, 'Emoji with a ring', '+5', 'pos');
+      set(2, 'TNT block, 5 shorter', '-5', 'neg');
+      set(3, 'Teleport, one trip', '+5', 'pos');
+    }
+  }
+
   // One function owns every surface the menus show or hide: the chooser (the
   // MODES view), the ready screen's legend, the death screen's board and
   // entry, the caption, and both buttons. Everything else just flips state
@@ -2837,6 +2865,10 @@
     // its place either way, and the list gets the room back
     overlayText.style.display = modesOpen ? 'none' : '';
     legend.style.display = (state === 'ready' && !modesOpen) ? '' : 'none';
+    applyLegend();
+    // survival counts seconds, everything else counts points; the tally
+    // says which it is holding
+    document.getElementById('scoreLabel').textContent = ruleMode() === 'survival' ? 'Seconds' : 'Score';
     const deadPanels = state === 'dead' && !modesOpen;
     standingsEl.style.display = deadPanels ? 'block' : 'none';
     boardHead.style.display = deadPanels ? 'block' : 'none';
@@ -4253,6 +4285,7 @@ $ `;
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
+
 
   requestAnimationFrame(loop);
 

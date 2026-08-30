@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import {
   createGame, replay, ghostRenderPos, ENGINE_VERSION, MODES,
   GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
-  TNT_SCORES, GHOST_SCORES, GHOST_MS, MAX_PLAYERS,
+  TNT_SCORES, GHOST_SCORES, GHOST_MS, GHOST_MAX, BOMB_MAX, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
   BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress, slowTick,
@@ -1198,7 +1198,11 @@ test('survival: the pitch opens clear, and the first full wave lands on the mark
   // blink out a few seconds later having threatened nobody. The pack still
   // arrives with the whistle; the TNT gives you the opening.
   assert.equal(SURVIVAL_TNT_FIRST % SIM_DT, 0, 'the delay is a whole number of quanta');
-  const g = quietGame({ ...MODES.survival });
+  assert.equal(MODES.survival.bombFirstMs, SURVIVAL_TNT_FIRST, 'the mode asks for the clear opening');
+  // the delay knob on its own (the mode adds the clock ladders and the long
+  // opening body, which have their own tests): the walk below needs a snake
+  // that can walk out an eight-second straight line
+  const g = quietGame({ startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST });
   foodFar(g);
   assert.equal(g.ghosts.length, 5, 'the whole pack is on from the whistle');
   assert.equal(g.bombs.length, 0, 'and not one stick of dynamite');
@@ -1241,6 +1245,152 @@ test('survival: a full round replays exactly', () => {
   assert.equal(r.score, g.score);
   assert.equal(r.deadReason, g.deadReason);
   assert.deepEqual(r.snake, g.snake);
+});
+
+// ------------------------------------------------ survival scores the clock
+test('survival: seconds are the score, and nothing else may touch it', () => {
+  const g = quietGame({ scoreByTime: true });
+  foodFar(g);
+  g.portalRetryAt = 1e12;
+  g.advanceQuanta(250);                       // 2.5 seconds on the clock
+  assert.equal(g.score, 2, 'the score is the clock in whole seconds');
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  eatOne(g);
+  assert.equal(g.score, 2, 'food pays nothing in a time-scored round');
+  assert.equal(g.itemsEaten, 1, 'though appetite still counts');
+  eatOne(g, true);
+  assert.equal(g.score, 2, 'the ringed one pays nothing either');
+  g.advanceQuanta(250);
+  assert.equal(g.score, 5, 'only the clock moves it');
+});
+
+test('survival: a teleport trip is free travel when the clock is the score', () => {
+  const g = quietGame({ scoreByTime: true });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  assert.ok(g._spawnPortal(), 'a pair opens for the test');
+  const { ax, ay } = g.portal;
+  setSnake(g, [[wrap(ax - 1), ay], [wrap(ax - 2), ay], [wrap(ax - 3), ay]], 1, 0);
+  g._step();                                  // onto the near end
+  g._step();                                  // out of the far one
+  const hop = g.drainEvents().find(e => e.t === 'hop');
+  assert.ok(hop, 'the hop happened');
+  assert.ok(g.portal.used, 'and spent the pair');
+  assert.equal(g.score, 0, 'and paid nothing');
+});
+
+test('survival: eating trims one, the ringed one trims five, floored and never fatal', () => {
+  const g = quietGame({ eatGrowth: -1, bonusGrowth: -5 });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5], [2, 5], [1, 5], [0, 5], [19, 5], [18, 5]], 1, 0);
+  eatOne(g);
+  assert.equal(g.snake.length, 7, 'one segment off for a regular emoji');
+  assert.equal(g.pendingGrowth, 0, 'nothing left owed');
+  eatOne(g, true);
+  assert.equal(g.snake.length, START_LEN, 'five off floors at the minimum');
+  assert.equal(g.alive, true, 'shrinking is relief, never a death');
+  assert.equal(g.pendingGrowth, 0, 'the floor forgives what it cannot pay');
+});
+
+test('survival: TNT feeds the snake five and pays nothing', () => {
+  const g = quietGame({ tntGrowth: 5, scoreByTime: true });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.bombs.push({ x: 6, y: 5 });
+  g._step();
+  assert.equal(g.score, 0, 'no points move, in either direction');
+  assert.equal(g.pendingGrowth, 5, 'the punishment is five segments ON');
+  const tnt = g.drainEvents().find(e => e.t === 'tnt');
+  assert.deepEqual(tnt.lost, [], 'nothing came off');
+  for (let i = 0; i < 5; i++) g._step();
+  assert.equal(g.snake.length, 8, 'and the snake really is five longer');
+});
+
+test('survival: the opening thirty arrives as growth over the first steps', () => {
+  const g = createGame({ seed: 7, ...MODES.survival, startGhosts: 0, ghostEveryMs: 0 });
+  g.wallPhaseEnd = 1e12;
+  foodFar(g);
+  assert.equal(g.snake.length, START_LEN, 'the body spawns at the classic three');
+  assert.equal(g.pendingGrowth, 30 - START_LEN, 'with the rest owed as growth');
+  assert.equal(g.log.startLen, 30, 'and the opening rides in the log');
+  // one lap of a 10x10 ring (36 cells): 40 steps, 5.2 seconds, inside the
+  // clear opening, and a 30-long body never catches its own tail on it
+  for (const [dx, dy] of [[0, 1], [-1, 0], [0, -1], [1, 0]]) {
+    g.setDir(dx, dy);
+    for (let s = 0; s < 10 && g.alive; s++) g.advanceQuanta(g.tickMs / SIM_DT);
+  }
+  assert.equal(g.alive, true, 'the ring is safe at full length');
+  assert.equal(g.snake.length, 30, 'and the snake reached its opening thirty');
+});
+
+test('survival: the clock hires a ghost every mark, personalities cycling, capped', () => {
+  const g = quietGame({ startGhosts: 0, ghostEveryMs: 10_000 });
+  foodFar(g);
+  g._updateGhosts();
+  assert.equal(g.ghosts.length, 0, 'nothing owed before the first mark');
+  g.clockMs = 10_000;
+  g._updateGhosts();
+  assert.equal(g.ghosts.length, 1, 'the mark hires one');
+  g.clockMs = 70_000;
+  for (let i = 0; i < 6; i++) g._updateGhosts();    // one spawn per call, like per quantum
+  assert.equal(g.ghosts.length, 7, 'the pack catches up one at a time');
+  assert.deepEqual(g.ghosts.map(x => x.role), [0, 1, 2, 3, 4, 0, 1], 'the sixth starts the cycle again');
+  assert.equal(g.drainEvents().filter(e => e.t === 'ghost').length, 7, 'every hire announces itself');
+  g.clockMs = 1_000_000;
+  for (let i = 0; i < 30; i++) g._updateGhosts();
+  assert.equal(g.ghosts.length, GHOST_MAX, 'the pack pins at the cap');
+});
+
+test('survival: the clock widens the wave every mark, capped, and the kickoff nine holds early', () => {
+  const g = quietGame({ startBombs: 2, bombEveryMs: 1000 });
+  foodFar(g);
+  assert.equal(g.bombs.length, 2, 'the seeded wave is down');
+  g.clockMs = 1000;
+  g._updateBombs();
+  assert.equal(g.bombsUnlocked, 3, 'one more block per mark');
+  g.bombs.length = 0;                         // force the next wave now
+  g.bombPhase = 'gap';
+  g.bombNextAt = g.clockMs;
+  g._updateBombs();
+  assert.equal(g.bombs.length, 3, 'and the next wave wears it');
+  g.clockMs = 60_000;
+  g._updateBombs();
+  assert.equal(g.bombsUnlocked, BOMB_MAX, 'the wave pins at the cap');
+  // the real mode: nine at the kickoff, ten only past ten seconds
+  assert.equal(createGame({ seed: 7, ...MODES.survival }).bombsUnlocked, 9);
+});
+
+test('survival: a bolt rides the clock, not the appetite', () => {
+  const g = quietGame({ boltEveryMs: 1000 });
+  foodFar(g);
+  g.portalRetryAt = 1e12;
+  g.advanceQuanta(99);
+  assert.equal(g.bolt, null, 'nothing owed short of the mark');
+  g.advanceQuanta(1);
+  assert.ok(g.bolt, 'the mark drops one');
+  assert.equal(g.itemsEaten, 0, 'with not a bite eaten');
+});
+
+test('survival versus: the last snake standing clinches by outliving the field', () => {
+  const g = quietGame({ players: 2, scoreByTime: true });
+  foodFar(g);
+  // player 1 is steered into its own side; player 0 just keeps walking
+  setPlayerSnake(g, 1, [[5, 15], [4, 15], [3, 15], [2, 15], [1, 15]], 1, 0);
+  g.advanceQuanta(50);                        // half a second in
+  g.setDir(0, -1, 1);                         // up,
+  g.advanceQuanta(g.tickMs / SIM_DT);
+  g.setDir(-1, 0, 1);                         // left,
+  g.advanceQuanta(g.tickMs / SIM_DT);
+  g.setDir(0, 1, 1);                          // and down into its own body
+  g.advanceQuanta(g.tickMs / SIM_DT + REDIRECT_MS / SIM_DT);
+  assert.equal(g.players[1].alive, false, 'the u-turn ends the rival');
+  assert.equal(g.players[1].deadReason, 'self');
+  assert.equal(g.players[0].alive, true, 'the survivor plays the clock');
+  g.advanceQuanta(100);                       // the next whole second passes
+  assert.equal(g.players[0].alive, false, 'and the clinch calls it there');
+  assert.equal(g.players[0].deadReason, 'won', 'outliving the field is the win');
+  assert.ok(g.players[0].score > g.players[1].score, 'the times say the same');
+  assert.deepEqual(g.log.finalScores, g.players.map(p => p.score), 'the record carries both times');
 });
 
 test('contact: a ghost sliding majority-onto the head kills between snake steps', () => {

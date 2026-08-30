@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 14;  // 14: every snake keeps its own pace; 13: snapshot keys renamed
+export const ENGINE_VERSION = 15;  // 15: survival scores the clock and inverts growth; 14: per-snake pace
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -59,6 +59,12 @@ export const BOMB_LIFE_MIN = 3800, BOMB_LIFE_MAX = 5600;
 
 export const GHOST_SCORES = [10, 20, 30, 40, 50];
 export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed setting
+// Absolute caps for time-laddered rounds (survival), where the clock keeps
+// asking for more of everything for ever (rule 22: a gate scales, it never
+// stops). The caps bound the sim, not the difficulty a human will ever meet:
+// twenty ghosts arrive two and a half minutes in.
+export const GHOST_MAX = 20;
+export const BOMB_MAX = 15;
 
 // The bolt: the one thing that changes a ghost's pace, and it is earned,
 // temporary and never in the player's favour twice over (it does nothing at
@@ -98,9 +104,18 @@ export const SURVIVAL_TNT_FIRST = 8000;
 export const MODES = {
   classic: {},                              // endless: the run ends when you do
   speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
-  // the whole ghost pack from the kickoff whistle; the TNT waves are at
-  // full size from the first one, but the first one lets you off the line
-  survival: { startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST },
+  // Survival proper: nothing scores but the clock. Seconds survived ARE the
+  // score; food trims the snake by one (the ringed one by five), TNT feeds
+  // it five, and the hazards ride the clock instead of the points: one more
+  // ghost and one more block per wave every ten seconds for ever, a bolt on
+  // the pitch every fifteen. The snake opens thirty long, so the round
+  // starts hard and eating is the relief, not the reward.
+  survival: {
+    startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST,
+    scoreByTime: true, startLen: 30,
+    eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5,
+    ghostEveryMs: 10_000, bombEveryMs: 10_000, boltEveryMs: 15_000,
+  },
 };
 
 // how much room the opening hazards of a survival round leave the head,
@@ -222,12 +237,31 @@ export function createGame(cfg = {}) {
   const startBombs = cfg.startBombs ?? 0;   // survival: TNT wave size floored here for ever
   const bombFirstMs = cfg.bombFirstMs ?? 0; // how long the board stays clear of that first wave
   const playerCount = cfg.players ?? 1;
+  // ---- the survival knobs ----
+  // scoreByTime makes seconds survived the score and the ONLY score: eating,
+  // TNT and teleport trips all pay nothing in such a round. The growth knobs
+  // say what entering food or TNT does to the body (survival inverts both),
+  // startLen how long the snake opens (arriving as queued growth over the
+  // first steps, since a folded spawn would be a puzzle, not an opening).
+  // The everyMs knobs move a ladder off the score and onto the clock.
+  const scoreByTime = cfg.scoreByTime ?? false;
+  const startLen = cfg.startLen ?? START_LEN;
+  const eatGrowth = cfg.eatGrowth ?? 1;
+  const bonusGrowth = cfg.bonusGrowth ?? 5;
+  const tntGrowth = cfg.tntGrowth ?? -5;
+  const ghostEveryMs = cfg.ghostEveryMs ?? 0;
+  const bombEveryMs = cfg.bombEveryMs ?? 0;
+  const boltEveryMs = cfg.boltEveryMs ?? 0;
   if (tickMs % SIM_DT !== 0) throw new Error('tickMs must be a multiple of SIM_DT');
   if (durationMs % SIM_DT !== 0 || durationMs < 0) throw new Error('durationMs must be a non-negative multiple of SIM_DT');
-  if (!Number.isInteger(startGhosts) || startGhosts < 0 || startGhosts > GHOST_SCORES.length) throw new Error('startGhosts out of range');
-  if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > TNT_SCORES.length) throw new Error('startBombs out of range');
+  if (!Number.isInteger(startGhosts) || startGhosts < 0 || startGhosts > (ghostEveryMs ? GHOST_MAX : GHOST_SCORES.length)) throw new Error('startGhosts out of range');
+  if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > (bombEveryMs ? BOMB_MAX : TNT_SCORES.length)) throw new Error('startBombs out of range');
   if (bombFirstMs % SIM_DT !== 0 || bombFirstMs < 0) throw new Error('bombFirstMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > MAX_PLAYERS) throw new Error('players out of range');
+  if (!Number.isInteger(startLen) || startLen < START_LEN || startLen > 100) throw new Error('startLen out of range');
+  if (!Number.isInteger(eatGrowth) || !Number.isInteger(bonusGrowth) || !Number.isInteger(tntGrowth)) throw new Error('growth knobs must be integers');
+  for (const v of [ghostEveryMs, bombEveryMs, boltEveryMs])
+    if (v % SIM_DT !== 0 || v < 0) throw new Error('everyMs knobs must be non-negative multiples of SIM_DT');
 
   // mulberry32: small, fast, good-enough PRNG with a 32-bit seed. Not for
   // crypto; for making a round reproducible. The state lives in rngState so
@@ -251,7 +285,9 @@ export function createGame(cfg = {}) {
       headFrom: { x: 8, y: laneY },
       headMajX: 8, headMajY: laneY,
       dir: { x: 1, y: 0 }, dirQueue: [],
-      score: 0, pendingGrowth: 0,
+      // an opening longer than START_LEN arrives as queued growth: the body
+      // reaches full length over the first steps rather than spawning folded
+      score: 0, pendingGrowth: startLen - START_LEN,
       warpedIn: false,
       // This snake's own pace. Every snake used to share one clock, which is
       // why they crossed cell boundaries together; a bolt taken in a room
@@ -280,6 +316,7 @@ export function createGame(cfg = {}) {
   // live aliases of players[0], so one-snake callers never notice the array.
   const S = {
     seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
+    scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, ghostEveryMs, bombEveryMs, boltEveryMs,
     players,
     quanta: 0,          // sim quanta elapsed; the replay clock
     clockMs: 0,         // one hazard clock (the old wall/bomb/ghost/portal clocks were identical)
@@ -310,6 +347,7 @@ export function createGame(cfg = {}) {
     // the round's replayable record. end/finalScore are stamped when the last
     // snake goes down; a multi-snake log carries every score and death time.
     log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
+           scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, ghostEveryMs, bombEveryMs, boltEveryMs,
            players: playerCount, inputs: [], end: 0, finalScore: 0 },
   };
 
@@ -481,7 +519,9 @@ export function createGame(cfg = {}) {
       }
       return;
     }
-    const due = (S.itemsEaten / BOLT_EVERY) | 0;
+    // a time-laddered round (survival) drops one on the clock instead of on
+    // appetite; the mark stays derived and only ever raised either way
+    const due = boltEveryMs ? (S.clockMs / boltEveryMs) | 0 : (S.itemsEaten / BOLT_EVERY) | 0;
     if (due <= S.boltsSpawned) return;
     const c = spawnCell(MIN_SPAWN_DIST);
     if (!c) return;                    // no room this quantum; ask again next
@@ -497,13 +537,19 @@ export function createGame(cfg = {}) {
   }
 
   function updateBombs() {
-    // The leader's score only ever sets the SIZE of a wave, never whether one
-    // comes (rule 22). Past the last mark the size pins at TNT_SCORES.length
-    // and the cycle carries on for ever. Do not add a score check below this
-    // line: that is what would make waves stop. Monotonic, so the five points
-    // a TNT takes can never shrink the wave.
-    const lead = leaderScore();
-    while (S.bombsUnlocked < TNT_SCORES.length && lead >= TNT_SCORES[S.bombsUnlocked]) S.bombsUnlocked++;
+    // The ladder only ever sets the SIZE of a wave, never whether one comes
+    // (rule 22). On the clock (survival): one more block per wave every
+    // bombEveryMs from the kickoff size, pinned at BOMB_MAX, for ever. On
+    // the score: the classic marks, pinned at TNT_SCORES.length. Do not add
+    // a gate check below this line: that is what would make waves stop.
+    // Monotonic either way, so nothing ever shrinks the wave.
+    if (bombEveryMs) {
+      const target = Math.min(BOMB_MAX, startBombs + ((S.clockMs / bombEveryMs) | 0));
+      if (target > S.bombsUnlocked) S.bombsUnlocked = target;
+    } else {
+      const lead = leaderScore();
+      while (S.bombsUnlocked < TNT_SCORES.length && lead >= TNT_SCORES[S.bombsUnlocked]) S.bombsUnlocked++;
+    }
     if (S.bombsUnlocked === 0) return;
     if (S.bombPhase === 'active') {
       if (S.clockMs >= S.bombExpireAt) {         // the whole wave vanishes together
@@ -552,11 +598,12 @@ export function createGame(cfg = {}) {
     if (!c) return;                          // board too full; try again later
     // the personality is the spawn position in the ladder, and since ghosts
     // never leave, it is also the color: red chases, blue ambushes, orange
-    // flanks, pink cuts off, cyan wardens the food
+    // flanks, pink cuts off, cyan wardens the food. A pack past five (the
+    // survival clock keeps hiring) starts the cycle again.
     S.ghosts.push({
       x: c.x, y: c.y, px: c.x, py: c.y,
       dir: { x: 0, y: 0 }, warped: false,
-      role: S.ghosts.length,
+      role: S.ghosts.length % 5,
       moveAt: S.clockMs + GHOST_MS, stepMs: GHOST_MS,
       majX: c.x, majY: c.y,        // majority cell one quantum ago (rule 24)
     });
@@ -794,7 +841,13 @@ export function createGame(cfg = {}) {
     // The arrival emit lives here, not in spawnGhost, so the survival
     // kickoff pack stays silent: standing there at the whistle is scenery,
     // joining mid-round is a moment. Events are not part of the log.
-    if (S.ghosts.length < GHOST_SCORES.length && leaderScore() >= GHOST_SCORES[S.ghosts.length]) {
+    // On the clock (survival): one joins every ghostEveryMs for ever, one
+    // spawn attempt per quantum, pinned at GHOST_MAX. On the score: the
+    // classic five marks.
+    const ghostsDue = ghostEveryMs
+      ? Math.min(GHOST_MAX, startGhosts + ((S.clockMs / ghostEveryMs) | 0)) > S.ghosts.length
+      : S.ghosts.length < GHOST_SCORES.length && leaderScore() >= GHOST_SCORES[S.ghosts.length];
+    if (ghostsDue) {
       const before = S.ghosts.length;
       spawnGhost();
       if (S.ghosts.length > before) emit({ t: 'ghost', n: S.ghosts.length });
@@ -926,6 +979,13 @@ export function createGame(cfg = {}) {
     }
   }
 
+  // Whether THIS move keeps the tail: growth already owed plus what the food
+  // on the entered cell would add, which the growth knobs make negative in
+  // survival, where eating trims. One formula shared by the fatal judgment
+  // and the move itself, so the tail exemption and the actual tail always
+  // agree.
+  const stepGrows = (p, ate) => p.pendingGrowth + (ate ? (S.food.bonus ? bonusGrowth : eatGrowth) : 0) > 0;
+
   // What entering (nx, ny) would cost this snake its life to: 'wall', 'self',
   // or null. The one shared judgment for the step, the doom save, and the
   // doom sentence, so all three always agree.
@@ -937,7 +997,7 @@ export function createGame(cfg = {}) {
     // race, they never fence). The tail cell is exempt when it glides out
     // this tick; whether this tick grows decides that, so settle it first.
     const ate = nx === S.food.x && ny === S.food.y;
-    const grows = p.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
+    const grows = stepGrows(p, ate);
     const tail = p.snake[p.snake.length - 1];
     if (p.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return 'self';
     // ghosts are NOT tested here: contact with a mover is decided by the
@@ -992,7 +1052,7 @@ export function createGame(cfg = {}) {
   function commitMove(p, nx, ny, portalEnd) {
     const nk = K(nx, ny);
     const ate = nx === S.food.x && ny === S.food.y;
-    const grows = p.pendingGrowth + (ate ? (S.food.bonus ? 5 : 1) : 0) > 0;
+    const grows = stepGrows(p, ate);
 
     // move: pop the vacated tail first so the set stays exact, then add the head
     p.headFrom.x = p.snake[0].x; p.headFrom.y = p.snake[0].y;
@@ -1006,7 +1066,9 @@ export function createGame(cfg = {}) {
       // with several snakes racing, the first head through takes the prize
       const fromA = portalEnd === 1;
       S.portal.used = true;
-      p.score += PORTAL_BONUS;
+      // in a time-scored round the trip is free travel: the score is the
+      // clock and nothing else may touch it
+      if (!scoreByTime) p.score += PORTAL_BONUS;
       emit({ t: 'hop', player: p.idx, fromA,
              fx: fromA ? S.portal.ax : S.portal.bx, fy: fromA ? S.portal.ay : S.portal.by,
              tx: nx, ty: ny });
@@ -1014,13 +1076,11 @@ export function createGame(cfg = {}) {
 
     if (ate) {
       const bonus = S.food.bonus;
-      if (bonus) {
-        p.score += 5; p.pendingGrowth += 5;
-        S.bonusStreak = 0;          // bonus taken: restart the board's streak
-      } else {
-        p.score += 1; p.pendingGrowth += 1;
-        S.bonusStreak++;
-      }
+      // a time-scored round pays nothing for food: eating is body management
+      if (!scoreByTime) p.score += bonus ? 5 : 1;
+      p.pendingGrowth += bonus ? bonusGrowth : eatGrowth;
+      if (bonus) S.bonusStreak = 0;   // bonus taken: restart the board's streak
+      else S.bonusStreak++;
       S.itemsEaten++;          // appetite, board-wide: a ringed bonus is one item
       emit({ t: 'eat', player: p.idx, bonus, x: nx, y: ny });
       placeFood();
@@ -1043,26 +1103,46 @@ export function createGame(cfg = {}) {
     }
     if (grows) p.pendingGrowth--;
 
-    // TNT never kills: -5 points (may go negative), up to 5 segments off,
-    // floored at START_LEN. Queued growth is cancelled so the shrink sticks.
+    // TNT never kills, in either direction of the knob. Classic (negative):
+    // -5 points (may go negative), up to five segments off, floored at
+    // START_LEN, queued growth cancelled so the shrink sticks. Survival
+    // (positive): it pays nothing and instead feeds the snake, which on a
+    // board where small is safe IS the punishment.
     const bombIndex = S.bombs.findIndex(b => nx === b.x && ny === b.y);
     if (bombIndex !== -1) {
-      p.score -= 5;
-      p.pendingGrowth = 0;
+      if (!scoreByTime) p.score -= 5;
       const lost = [];
-      const target = Math.max(START_LEN, p.snake.length - 5);
-      while (p.snake.length > target) {
-        const t = p.snake.pop();
-        p.snakeSet.delete(K(t.x, t.y));
-        lost.push(t);
+      if (tntGrowth < 0) {
+        p.pendingGrowth = 0;
+        const target = Math.max(START_LEN, p.snake.length + tntGrowth);
+        while (p.snake.length > target) {
+          const t = p.snake.pop();
+          p.snakeSet.delete(K(t.x, t.y));
+          lost.push(t);
+        }
+        p.tailFrom = null;   // the old glide anchor is far from the new tail; snap
+      } else {
+        p.pendingGrowth += tntGrowth;
       }
-      p.tailFrom = null;   // the old glide anchor is far from the new tail; snap
       S.bombs.splice(bombIndex, 1);
       emit({ t: 'tnt', player: p.idx, x: nx, y: ny, lost });
       if (!S.bombs.length) {
         S.bombPhase = 'gap';
         S.bombNextAt = S.clockMs + rand(BOMB_GAP_MIN, BOMB_GAP_MAX);
       }
+    }
+
+    // Negative growth owed (survival's eating) comes off the tail right
+    // here, floored at START_LEN like the TNT cut: shrinking is relief in
+    // that mode, never a death.
+    if (p.pendingGrowth < 0) {
+      while (p.pendingGrowth < 0 && p.snake.length > START_LEN) {
+        const t = p.snake.pop();
+        p.snakeSet.delete(K(t.x, t.y));
+        p.pendingGrowth++;
+      }
+      if (p.pendingGrowth < 0) p.pendingGrowth = 0;   // the floor forgives the rest
+      p.tailFrom = null;   // the anchor is far from the new tail; snap
     }
   }
 
@@ -1097,6 +1177,14 @@ export function createGame(cfg = {}) {
   function quantum() {
     S.quanta++;
     S.clockMs += SIM_DT;
+    // Time-scored rounds: the score IS the clock in whole seconds, stamped
+    // per living snake so a fallen rival's count freezes where it fell. The
+    // one thing allowed to move a score in such a round; it feeds the same
+    // ladders (portals) and the same clinch that points feed elsewhere.
+    if (scoreByTime) {
+      const sec = (S.clockMs / 1000) | 0;
+      for (const p of players) if (p.alive) p.score = sec;
+    }
     updateWalls();
     updateBombs();
     updateGhosts();
@@ -1428,14 +1516,19 @@ export function createGame(cfg = {}) {
 export function replay(log) {
   // v4 was the single-snake era, v5 multi-snake before the clinch rule, v6
   // before a wall forming on a ghost buried it in place, v7 before the doom
-  // window. All these shapes replay here under today's rules; no log of any
-  // of them was ever persisted, so a rule changing an old round's course
-  // rewrites nobody's record.
+  // window, v14 before survival scored the clock. All these shapes replay
+  // here under today's rules; the new knobs default to the classic values,
+  // so a pre-15 log (which cannot carry them) replays under the exact rules
+  // it was played by. No log of any era was ever persisted, so a rule
+  // changing an old round's course rewrites nobody's record.
   if (!log || !(log.v >= 4 && log.v <= ENGINE_VERSION)) throw new Error('unsupported log version');
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,
     bombFirstMs: log.bombFirstMs ?? 0,
+    scoreByTime: log.scoreByTime ?? false, startLen: log.startLen ?? START_LEN,
+    eatGrowth: log.eatGrowth ?? 1, bonusGrowth: log.bonusGrowth ?? 5, tntGrowth: log.tntGrowth ?? -5,
+    ghostEveryMs: log.ghostEveryMs ?? 0, bombEveryMs: log.bombEveryMs ?? 0, boltEveryMs: log.boltEveryMs ?? 0,
     players: log.players ?? 1,
   });
   const inputs = log.inputs;
