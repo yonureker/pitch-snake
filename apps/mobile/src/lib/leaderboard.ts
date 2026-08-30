@@ -6,6 +6,7 @@
  * hooks in hooks/queries/ are the sanctioned wrappers.
  * @module
  */
+import { authToken } from './auth';
 import { isRuleMode, type RuleMode } from './modes';
 import { SUPABASE_ANON_KEY, SUPABASE_CONFIGURED, SUPABASE_URL } from './supabase-config';
 
@@ -30,7 +31,9 @@ async function rpc(fn: string, args: Record<string, unknown>): Promise<unknown> 
       headers: {
         'Content-Type': 'application/json',
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        // the silent session when there is one, so scores carry a user id;
+        // the publishable key otherwise, exactly as before identity existed
+        Authorization: `Bearer ${authToken() ?? SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify(args),
       signal: ac.signal,

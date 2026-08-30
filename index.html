@@ -1424,7 +1424,8 @@
     savedThisRound = false;
     saveBtn.disabled = false;
     nameInput.disabled = false;
-    nameInput.value = '';
+    // a profile means the name is already known: asked once, never again
+    nameInput.value = sbProfile && sbProfile.name ? sbProfile.name : '';
     // a tournament board only takes entries while its window is open
     const canEnter = mode !== 'tourney' || tourneyState() === 'open';
     entryWanted = g.score > 0 && canEnter;
@@ -2425,7 +2426,7 @@
         headers: {
           'Content-Type': 'application/json',
           apikey: SB_KEY,
-          Authorization: 'Bearer ' + SB_KEY,
+          Authorization: 'Bearer ' + (sbToken || SB_KEY),
         },
         body: JSON.stringify(args),
         signal: ac.signal,
@@ -2436,6 +2437,63 @@
       clearTimeout(timer);
     }
   }
+
+  // ---- identity ----
+  // Every player is signed in anonymously from first launch, silently: a
+  // real user id under every score from day one, and never a login screen
+  // to play. "Signing in" later links a real identity onto the SAME id
+  // (verified end to end against a local stack: the id survives linking).
+  // Auth is a bonus tier on top of the game, never a dependency: if the CDN
+  // is down, the switch is off, or the request fails, everything plays and
+  // submits exactly as it did before this existed.
+  let sbToken = null, sbProfile = null;
+  async function bootAuth() {
+    if (!sbOn()) return;
+    try {
+      const { GoTrueClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/auth-js@2.112.4/+esm');
+      const auth = new GoTrueClient({
+        url: SB_URL + '/auth/v1',
+        headers: { apikey: SB_KEY },
+        storageKey: 'snakeAuth',
+        autoRefreshToken: true,
+        persistSession: true,
+      });
+      auth.onAuthStateChange((_ev, session) => { sbToken = session ? session.access_token : null; });
+      let { data: { session } } = await auth.getSession();
+      if (!session) session = (await auth.signInAnonymously()).data.session;
+      sbToken = session ? session.access_token : null;
+      if (sbToken) await syncProfile();
+    } catch (e) { /* no identity today; the game does not care */ }
+  }
+
+  // The one name, everywhere. With a profile, its name feeds both the score
+  // entry and the versus screen; without one, the first name typed anywhere
+  // becomes it. localStorage keeps working as the offline copy throughout.
+  async function syncProfile() {
+    try {
+      const prof = await sbRpc('pitch_snake_get_profile', {});
+      if (prof && prof.name) {
+        sbProfile = prof;
+        if (!vsNameInput.value) {
+          vsNameInput.value = prof.name;
+          vsEditingName = false;
+          try { localStorage.setItem('snakeVsName', prof.name); } catch (e) {}
+        }
+        return;
+      }
+      const local = (localStorage.getItem('snakeVsName') || '').trim();
+      if (local) sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: local, p_country: null });
+    } catch (e) { /* same rule: identity never blocks anything */ }
+  }
+
+  // a name the player just committed anywhere becomes the profile name
+  function adoptName(name) {
+    if (!sbToken || !name) return;
+    sbRpc('pitch_snake_set_profile', { p_name: name, p_country: null })
+      .then(prof => { sbProfile = prof; })
+      .catch(() => {});
+  }
+  bootAuth();
 
   // A stored value that parses but is not an array (a foreign write on the
   // shared github.io origin, an old format, a devtools edit) must never crash
@@ -2590,6 +2648,7 @@
     if (savedThisRound) return;
     let name = (nameInput.value || '').trim().toUpperCase().slice(0, 5);
     if (!name) name = 'YOU';
+    adoptName(name);
     savedThisRound = true;
     saveBtn.disabled = true;
     nameInput.disabled = true;
@@ -3050,6 +3109,7 @@
     const name = vsCleanName(vsNameInput.value);
     vsEditingName = false;         // acting on it settles it
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
+    adoptName(name);
     try {
       if (!vsClient) {
         const { RealtimeClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/realtime-js@2.112.3/+esm');
@@ -3578,6 +3638,7 @@
     if (!vsTypedName()) return;
     vsEditingName = false;
     try { localStorage.setItem('snakeVsName', vsCleanName(vsNameInput.value)); } catch (err) {}
+    adoptName(vsCleanName(vsNameInput.value));
     vsRefreshPanel();
   });
   vsChangeBtn.addEventListener('click', () => {

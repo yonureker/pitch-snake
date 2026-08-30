@@ -5,6 +5,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 
+import { bootAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/query-client';
 
 void SplashScreen.preventAutoHideAsync();
@@ -25,6 +26,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) void SplashScreen.hideAsync();
   }, [loaded]);
+
+  // the silent session starts with the app, on the device only: static
+  // render imports this tree in node, where there is no storage to boot from
+  useEffect(() => {
+    void bootAuth();
+  }, []);
 
   if (!loaded) return null;
   return (
