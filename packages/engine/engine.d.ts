@@ -207,7 +207,8 @@ export interface GameConfig {
    * teleport trips pay nothing in such a round (survival).
    */
   scoreByTime?: boolean;
-  /** Opening length; anything past START_LEN arrives as queued growth. */
+  /** Opening length, 3..30, standing on the board in full from the first
+   *  frame (folded past nine; see layoutSnake). */
   startLen?: number;
   /** What entering food adds to the body; negative trims (survival: -1). */
   eatGrowth?: number;

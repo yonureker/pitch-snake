@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 15;  // 15: survival scores the clock and inverts growth; 14: per-snake pace
+export const ENGINE_VERSION = 16;  // 16: the opening body spawns in full; 15: survival scores the clock
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -108,8 +108,9 @@ export const MODES = {
   // score; food trims the snake by one (the ringed one by five), TNT feeds
   // it five, and the hazards ride the clock instead of the points: one more
   // ghost and one more block per wave every ten seconds for ever, a bolt on
-  // the pitch every fifteen. The snake opens thirty long, so the round
-  // starts hard and eating is the relief, not the reward.
+  // the pitch every fifteen. The snake stands thirty long on the board from
+  // the first frame (folded; see layoutSnake), so the round looks like what
+  // it is before the whistle, and eating is the relief, not the reward.
   survival: {
     startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST,
     scoreByTime: true, startLen: 30,
@@ -228,6 +229,34 @@ export function ghostRenderPos(g, nowMs, out) {
   return out;
 }
 
+// The opening body, all of it, from the first frame: head at (8, laneY)
+// heading right, n cells, nothing wrapping the screen edge. Up to nine is
+// the classic straight line back along the lane. Longer (survival's thirty)
+// packs into rows laneY-1..laneY+1, which never collide between lanes at
+// any player count: a weave of the lane row and its center-side neighbour
+// column by column down to 0, a run back along the far row, and a hook up
+// the far column. The mirror m points the weave at the board's middle, so
+// the head's first cell (9, laneY) and its center-side neighbour both stay
+// free and the whistle offers two honest directions; the edge-side
+// neighbour is body, and the doom window judges a press into it like any
+// other wrong turn.
+function layoutSnake(n, laneY) {
+  const cells = [[8, laneY]];
+  if (n <= 9) {
+    for (let i = 1; i < n; i++) cells.push([8 - i, laneY]);
+    return cells;
+  }
+  const m = laneY > GRID / 2 ? -1 : 1;
+  for (let x = 7; x >= 0; x--) {
+    if ((7 - x) % 2 === 0) cells.push([x, laneY], [x, laneY + m]);
+    else cells.push([x, laneY + m], [x, laneY]);
+  }
+  cells.push([0, laneY - m]);
+  for (let x = 1; x <= 10; x++) cells.push([x, laneY - m]);
+  cells.push([10, laneY], [10, laneY + m]);
+  return cells.slice(0, n);
+}
+
 export function createGame(cfg = {}) {
   const seed = (cfg.seed ?? 1) >>> 0;
   const tickMs = cfg.tickMs ?? SPEEDS.normal;
@@ -241,9 +270,9 @@ export function createGame(cfg = {}) {
   // scoreByTime makes seconds survived the score and the ONLY score: eating,
   // TNT and teleport trips all pay nothing in such a round. The growth knobs
   // say what entering food or TNT does to the body (survival inverts both),
-  // startLen how long the snake opens (arriving as queued growth over the
-  // first steps, since a folded spawn would be a puzzle, not an opening).
-  // The everyMs knobs move a ladder off the score and onto the clock.
+  // startLen how long the snake stands at the first frame, in full, folded
+  // when it outgrows the classic straight line (layoutSnake). The everyMs
+  // knobs move a ladder off the score and onto the clock.
   const scoreByTime = cfg.scoreByTime ?? false;
   const startLen = cfg.startLen ?? START_LEN;
   const eatGrowth = cfg.eatGrowth ?? 1;
@@ -258,7 +287,7 @@ export function createGame(cfg = {}) {
   if (!Number.isInteger(startBombs) || startBombs < 0 || startBombs > (bombEveryMs ? BOMB_MAX : TNT_SCORES.length)) throw new Error('startBombs out of range');
   if (bombFirstMs % SIM_DT !== 0 || bombFirstMs < 0) throw new Error('bombFirstMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > MAX_PLAYERS) throw new Error('players out of range');
-  if (!Number.isInteger(startLen) || startLen < START_LEN || startLen > 100) throw new Error('startLen out of range');
+  if (!Number.isInteger(startLen) || startLen < START_LEN || startLen > 30) throw new Error('startLen out of range');
   if (!Number.isInteger(eatGrowth) || !Number.isInteger(bonusGrowth) || !Number.isInteger(tntGrowth)) throw new Error('growth knobs must be integers');
   for (const v of [ghostEveryMs, bombEveryMs, boltEveryMs])
     if (v % SIM_DT !== 0 || v < 0) throw new Error('everyMs knobs must be non-negative multiples of SIM_DT');
@@ -285,9 +314,7 @@ export function createGame(cfg = {}) {
       headFrom: { x: 8, y: laneY },
       headMajX: 8, headMajY: laneY,
       dir: { x: 1, y: 0 }, dirQueue: [],
-      // an opening longer than START_LEN arrives as queued growth: the body
-      // reaches full length over the first steps rather than spawning folded
-      score: 0, pendingGrowth: startLen - START_LEN,
+      score: 0, pendingGrowth: 0,
       warpedIn: false,
       // This snake's own pace. Every snake used to share one clock, which is
       // why they crossed cell boundaries together; a bolt taken in a room
@@ -299,7 +326,7 @@ export function createGame(cfg = {}) {
       alive: true, deadReason: null, diedAt: 0,
       _majX: 0, _majY: 0,          // this quantum's majority cell (rule 24 scratch)
     };
-    for (let i = 0; i < START_LEN; i++) { p.snake.push({ x: 8 - i, y: laneY }); p.snakeSet.add(K(8 - i, laneY)); }
+    for (const [x, y] of layoutSnake(startLen, laneY)) { p.snake.push({ x, y }); p.snakeSet.add(K(x, y)); }
     return p;
   }
 
@@ -1516,11 +1543,12 @@ export function createGame(cfg = {}) {
 export function replay(log) {
   // v4 was the single-snake era, v5 multi-snake before the clinch rule, v6
   // before a wall forming on a ghost buried it in place, v7 before the doom
-  // window, v14 before survival scored the clock. All these shapes replay
-  // here under today's rules; the new knobs default to the classic values,
-  // so a pre-15 log (which cannot carry them) replays under the exact rules
-  // it was played by. No log of any era was ever persisted, so a rule
-  // changing an old round's course rewrites nobody's record.
+  // window, v14 before survival scored the clock, v15 before the opening
+  // body stood in full. All these shapes replay here under today's rules;
+  // the survival knobs default to the classic values, so a pre-15 log
+  // (which cannot carry them) replays under the exact rules it was played
+  // by. No log of any era was ever persisted, so a rule changing an old
+  // round's course rewrites nobody's record.
   if (!log || !(log.v >= 4 && log.v <= ENGINE_VERSION)) throw new Error('unsupported log version');
   const game = createGame({
     seed: log.seed, tickMs: log.tickMs, wallsEnabled: log.wallsEnabled,
