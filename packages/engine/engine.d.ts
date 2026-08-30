@@ -25,11 +25,6 @@ export declare const BOLT_SLOW_MS: number;
 export declare const GHOST_SLOW_MS: number;
 /** A dragged snake's step, derived from the round's pace and quantized. */
 export declare function slowTick(ms: number): number;
-export declare const SIGHT_EVERY: number;
-export declare const SIGHT_LIFE_MS: number;
-export declare const SHOT_EVERY_MS: number;
-export declare const SHOT_COUNT: number;
-export declare const SHOT_MS: number;
 export declare const PORTAL_FIRST: number;
 export declare const PORTAL_EVERY: number;
 export declare const PORTAL_BONUS: number;
@@ -67,10 +62,6 @@ export interface Portal { ax: number; ay: number; bx: number; by: number; used: 
 export interface Food extends Cell { bonus: boolean; kind: number }
 /** The thunderbolt waiting on the pitch; taking it drags the ghosts. */
 export interface Bolt extends Cell { bornAt: number }
-/** The sight waiting on the pitch; taking it arms SHOT_COUNT shots. */
-export interface Sight extends Cell { bornAt: number }
-/** A shot in flight: its cell, its heading, and who fired it. */
-export interface Shot extends Cell { dx: number; dy: number; owner: number; moveAt: number }
 
 /**
  * One snake on the board. A one-snake game exposes players[0] under the
@@ -87,8 +78,6 @@ export interface Player {
   /** This snake's own pace and its progress through the current step. A bolt
    *  taken by a rival drags these onto slowTick(tickMs) until slowUntil. */
   tickMs: number; progMs: number; slowUntil: number;
-  /** Shots still owed from a sight, and when the next one leaves the head. */
-  shotsLeft: number; nextShotAt: number;
   /** A fatal move hanging in its doom window (rule 25); kept after a doom
    *  death so renderers can draw the head where it reached. */
   doom: Doom | null;
@@ -115,10 +104,6 @@ export type GameEvent = (
   | { t: 'bolt'; gone: boolean; x: number; y: number }
   /** A bolt taken: the pack drags until untilMs on the sim clock. */
   | { t: 'zap'; player: number; x: number; y: number; untilMs: number }
-  | { t: 'sight'; gone: boolean; x: number; y: number }
-  | { t: 'armed'; player: number; x: number; y: number; shots: number }
-  | { t: 'shot'; player: number; x: number; y: number; dx: number; dy: number }
-  | { t: 'hit'; player: number; by: number; x: number; y: number }
   | { t: 'save'; player: number; x: number; y: number }
   /** `segments` is present only when the round continues without this snake
    *  (its body left the board); a round-ending death keeps the body. */
@@ -167,12 +152,6 @@ export interface Game {
   /** The bolt waiting to be taken, if one is out. */
   bolt: Bolt | null;
   boltsSpawned: number;
-  /** Everything anyone has picked up; every SIGHT_EVERY of them drops a sight. */
-  pickups: number;
-  sight: Sight | null;
-  sightsSpawned: number;
-  /** Shots in flight, rooms only. */
-  shots: Shot[];
   /** Sim clock the ghosts stop dragging at; 0 when nobody has taken a bolt. */
   slowUntil: number;
   wallState: 'off' | 'warning' | 'solid'; wallPhaseEnd: number;

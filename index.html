@@ -991,7 +991,7 @@
   // state, no string building in hot loops, DOM only on state change.
   import {
     createGame, ghostRenderPos, MODES,
-    GRID, SPEEDS, FOOD_TTL, REDIRECT_MS, BOLT_LIFE_MS, SIGHT_LIFE_MS,
+    GRID, SPEEDS, FOOD_TTL, REDIRECT_MS, BOLT_LIFE_MS,
     PORTAL_OPEN_MS, PORTAL_WARN_MS,
   } from './packages/engine/engine.js';
   // versus rides the same deterministic engine: every client simulates the
@@ -1475,7 +1475,6 @@
     buildBoltSprite();
     buildHatSprite();
     buildSpikeSprite();
-    buildSightSprite();
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
   }
@@ -1562,61 +1561,6 @@
     const s = Math.round(boltS * beat);
     ctx.drawImage(boltCanvas, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
     ctx.globalAlpha = 1;
-  }
-
-  // ---- the sight, and the shots it buys ----
-  // Drawn, not lettered: a glyph would be at the mercy of whatever the
-  // platform has, and this one has to read as a target at thirty pixels. A
-  // ring with four ticks around it says crosshair at any size.
-  const sightCanvas = document.createElement('canvas');
-  const sightCtx = sightCanvas.getContext('2d');
-  let sightS = 0;
-  function buildSightSprite() {
-    sightS = Math.ceil(cell * 1.15);
-    sightCanvas.width = sightS; sightCanvas.height = sightS;
-    const c = sightCtx;
-    const m = sightS / 2, r = cell * 0.34;
-    c.strokeStyle = '#ff5f5f';
-    c.lineWidth = Math.max(2, cell * 0.09);
-    c.beginPath(); c.arc(m, m, r, 0, Math.PI * 2); c.stroke();
-    c.beginPath();                                  // four ticks, north first
-    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
-      c.moveTo(m + dx * r * 0.55, m + dy * r * 0.55);
-      c.lineTo(m + dx * r * 1.5, m + dy * r * 1.5);
-    }
-    c.stroke();
-    c.fillStyle = '#ffd0d0';
-    c.beginPath(); c.arc(m, m, cell * 0.08, 0, Math.PI * 2); c.fill();
-  }
-
-  function drawSight() {
-    if (!g.sight || !sightS) return;
-    const now = g.renderNow();
-    const left = g.sight.bornAt + SIGHT_LIFE_MS - now;
-    if (left < 1500 && ((now / 110) | 0) % 2) ctx.globalAlpha = 0.4;
-    const spin = 1 + Math.sin(now / 170) * 0.1;
-    const d = Math.round(sightS * spin);
-    ctx.drawImage(sightCanvas,
-      Math.round(g.sight.x * cell + cell / 2 - d / 2),
-      Math.round(g.sight.y * cell + cell / 2 - d / 2), d, d);
-    ctx.globalAlpha = 1;
-  }
-
-  // A shot is a short streak lying along its own travel, so at a glance you
-  // can tell which way it is going and get out of the lane.
-  function drawShots() {
-    if (!g.shots || !g.shots.length) return;
-    ctx.strokeStyle = '#ff7a5f';
-    ctx.lineWidth = Math.max(2, cell * 0.16);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (const sh of g.shots) {
-      const x = sh.x * cell + cell / 2, y = sh.y * cell + cell / 2;
-      ctx.moveTo(x - sh.dx * cell * 0.3, y - sh.dy * cell * 0.3);
-      ctx.lineTo(x + sh.dx * cell * 0.3, y + sh.dy * cell * 0.3);
-    }
-    ctx.stroke();
-    ctx.lineCap = 'butt';
   }
 
   // ---- the crest: purple spikes coming down off the head ----
@@ -2059,7 +2003,6 @@
     if (foodDim) ctx.globalAlpha = 1;
 
     drawBolt();
-    drawSight();
     drawBombs();
 
     // Progress is per snake now: a rival dragged by a bolt is a different way
@@ -2102,7 +2045,6 @@
       drawHat(rp0.cx + segOffX(mi, 0), rp0.cy + segOffY(mi, 0));
     }
 
-    drawShots();
     drawGhosts();
 
     // particles, integrated over real time; dead ones are swap-removed
