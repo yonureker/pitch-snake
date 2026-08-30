@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 14;  // 14: every snake keeps its own pace; 13: snapshot keys renamed
+export const ENGINE_VERSION = 15;  // 15: the sight, and snakes that can shoot; 14: per-snake pace
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -73,6 +73,20 @@ export const GHOST_SLOW_MS = 770;  // a slowed ghost's step
 // the round's pace rather than fixed, so it means the same thing at every
 // speed setting, and quantized onto the grid every timing constant lives on.
 export const slowTick = ms => Math.round(ms / 0.65 / SIM_DT) * SIM_DT;
+
+// The sight: the room's one way for a snake to end another one. It falls due
+// on a count of EVERYTHING picked up (food, a ringed bonus, a teleport trip,
+// a bolt), which is a different tally from the bolt's own appetite count, so
+// the two ladders stay independent. Armed, the head fires straight ahead on
+// its heading, once a second, five times, the first a second after arming.
+// A shot crosses a cell every SHOT_MS and keeps going through the tunnels
+// until something stops it. Rooms only: with one snake on the board there is
+// nothing a shot could do that the pitch does not already do better.
+export const SIGHT_EVERY = 8;      // pickups, board-wide, between sights
+export const SIGHT_LIFE_MS = 8000; // how long one waits to be claimed
+export const SHOT_EVERY_MS = 1000; // and the wait before the first
+export const SHOT_COUNT = 5;
+export const SHOT_MS = 40;         // a shot's step: about 25 cells a second
 
 // The doom window (rule 25): walking into a wall or yourself is not final
 // for this long. The head hangs mid-glide over the fatal cell; one safe
@@ -258,6 +272,7 @@ export function createGame(cfg = {}) {
       // slows the rivals and not the taker, so the pace had to become each
       // snake's own. progMs is progress toward THIS snake's next step.
       tickMs, progMs: 0, slowUntil: 0,
+      shotsLeft: 0, nextShotAt: 0,   // armed by a sight; counts itself down
       doom: null,              // {tx, ty, until, reason} while a fatal move hangs (rule 25)
       doomSave: null,          // a press taken during that window, applied by the next quantum
       alive: true, deadReason: null, diedAt: 0,
@@ -293,6 +308,9 @@ export function createGame(cfg = {}) {
     // item at all), a mark every BOLT_EVERY that is only ever raised, and one
     // clock saying how long the pack is dragging.
     itemsEaten: 0, bolt: null, boltsSpawned: 0, slowUntil: 0,
+    // everything anyone has picked up, and the sight that rides on it
+    pickups: 0, sight: null, sightsSpawned: 0,
+    shots: [],          // {x, y, dx, dy, owner, moveAt} in flight
 
     wallState: 'off', wallPhaseEnd: 0, wallCells: [], wallLookup: new Set(),
 
@@ -354,6 +372,7 @@ export function createGame(cfg = {}) {
     if (S.wallLookup.has(k)) return true;
     if (S.food !== null && S.food.x === x && S.food.y === y) return true;
     if (S.bolt !== null && S.bolt.x === x && S.bolt.y === y) return true;
+    if (S.sight !== null && S.sight.x === x && S.sight.y === y) return true;
     if (S.portal !== null && ((S.portal.ax === x && S.portal.ay === y) ||
                               (S.portal.bx === x && S.portal.by === y))) return true;
     for (let i = 0; i < S.bombs.length; i++) if (S.bombs[i].x === x && S.bombs[i].y === y) return true;
@@ -488,6 +507,89 @@ export function createGame(cfg = {}) {
     S.bolt = { x: c.x, y: c.y, bornAt: S.clockMs };
     S.boltsSpawned = due;
     emit({ t: 'bolt', gone: false, x: c.x, y: c.y });
+  }
+
+  // ---- the sight ----
+  // Same shape as the bolt's ladder: a mark every SIGHT_EVERY pickups,
+  // derived and only ever raised, so one left to expire spends its mark. One
+  // snake on the board never sees one; there would be nothing to shoot.
+  function updateSight() {
+    if (players.length < 2) return;
+    if (S.sight !== null) {
+      if (S.clockMs - S.sight.bornAt >= SIGHT_LIFE_MS) {
+        emit({ t: 'sight', gone: true, x: S.sight.x, y: S.sight.y });
+        S.sight = null;
+      }
+      return;
+    }
+    const due = (S.pickups / SIGHT_EVERY) | 0;
+    if (due <= S.sightsSpawned) return;
+    const c = spawnCell(MIN_SPAWN_DIST);
+    if (!c) return;
+    S.sight = { x: c.x, y: c.y, bornAt: S.clockMs };
+    S.sightsSpawned = due;
+    emit({ t: 'sight', gone: false, x: c.x, y: c.y });
+  }
+
+  // ---- shots ----
+  // A shot is fired from the cell ahead of the head, so it never begins
+  // inside its own shooter, and then walks the board a cell at a time. It
+  // stops at the first thing it meets: a live wall, a ghost, or any snake at
+  // all, its own included, which is also what keeps a shot that has been all
+  // the way round the tunnels from haunting the board for ever. It kills only
+  // heads, and every rival head in the cell it stops on, so two of them
+  // sharing a square is one shot and two deaths.
+  function fireShots() {
+    for (const p of players) {
+      if (!p.alive || p.shotsLeft <= 0 || S.clockMs < p.nextShotAt) continue;
+      p.shotsLeft--;
+      p.nextShotAt = S.clockMs + SHOT_EVERY_MS;
+      const dx = p.dir.x, dy = p.dir.y;
+      if (!dx && !dy) continue;
+      const x = wrap(p.snake[0].x + dx), y = wrap(p.snake[0].y + dy);
+      S.shots.push({ x, y, dx, dy, owner: p.idx, moveAt: S.clockMs + SHOT_MS });
+      emit({ t: 'shot', player: p.idx, x, y, dx, dy });
+      resolveShot(S.shots[S.shots.length - 1]);
+    }
+  }
+
+  // What the shot standing on its cell has hit, if anything. Returns true
+  // when the shot is spent.
+  function resolveShot(sh) {
+    const k = K(sh.x, sh.y);
+    if (S.wallState === 'solid' && S.wallLookup.has(k)) return true;
+    for (const gh of S.ghosts) if (gh.x === sh.x && gh.y === sh.y) return true;
+    let stopped = false;
+    for (const p of players) {
+      if (!p.alive || !p.snakeSet.has(k)) continue;
+      stopped = true;
+      // a head, and not the shooter's own: that is the kill. Every rival head
+      // standing here goes, which is the double headshot.
+      if (p.idx !== sh.owner && p.snake[0].x === sh.x && p.snake[0].y === sh.y) {
+        emit({ t: 'hit', player: p.idx, by: sh.owner, x: sh.x, y: sh.y });
+        die(p, 'shot');
+      }
+    }
+    return stopped;
+  }
+
+  // A shot is tested on every cell it enters AND once more where it stands,
+  // because the two things that can meet are both moving: without the second
+  // test a head that walked onto a waiting shot lived, which is the most
+  // natural way in the world to be shot and it missed every time.
+  function moveShots() {
+    for (let i = S.shots.length - 1; i >= 0; i--) {
+      const sh = S.shots[i];
+      let spent = false;
+      while (!spent && S.clockMs >= sh.moveAt) {
+        sh.x = wrap(sh.x + sh.dx);
+        sh.y = wrap(sh.y + sh.dy);
+        sh.moveAt += SHOT_MS;
+        spent = resolveShot(sh);
+      }
+      if (!spent) spent = resolveShot(sh);
+      if (spent) S.shots.splice(i, 1);
+    }
   }
 
   // ---- TNT ----
@@ -912,6 +1014,8 @@ export function createGame(cfg = {}) {
     // sentence itself puts the record back, because there the pose is true.
     p.doom = null;
     p.doomSave = null;
+    p.shotsLeft = 0;                         // the dead do not keep firing
+    for (let i = S.shots.length - 1; i >= 0; i--) if (S.shots[i].owner === p.idx) S.shots.splice(i, 1);
     if (anyAlive()) {
       // the round goes on: the fallen snake leaves the board (snakes never
       // block each other, so only spawns and ghosts ever noticed it), and the
@@ -1007,6 +1111,7 @@ export function createGame(cfg = {}) {
       const fromA = portalEnd === 1;
       S.portal.used = true;
       p.score += PORTAL_BONUS;
+      S.pickups++;                 // a trip counts toward the sight
       emit({ t: 'hop', player: p.idx, fromA,
              fx: fromA ? S.portal.ax : S.portal.bx, fy: fromA ? S.portal.ay : S.portal.by,
              tx: nx, ty: ny });
@@ -1022,13 +1127,23 @@ export function createGame(cfg = {}) {
         S.bonusStreak++;
       }
       S.itemsEaten++;          // appetite, board-wide: a ringed bonus is one item
+      S.pickups++;
       emit({ t: 'eat', player: p.idx, bonus, x: nx, y: ny });
       placeFood();
     }
 
     // The bolt binds at entry and locks, like every other consuming move
     // (rule 25). It scores nothing and grows nothing: all it buys is time.
+    if (S.sight !== null && nx === S.sight.x && ny === S.sight.y) {
+      S.pickups++;
+      p.shotsLeft = SHOT_COUNT;
+      p.nextShotAt = S.clockMs + SHOT_EVERY_MS;   // the first shot waits a second
+      emit({ t: 'armed', player: p.idx, x: nx, y: ny, shots: SHOT_COUNT });
+      S.sight = null;
+    }
+
     if (S.bolt !== null && nx === S.bolt.x && ny === S.bolt.y) {
+      S.pickups++;
       S.slowUntil = S.clockMs + BOLT_SLOW_MS;
       // In a room it drags the rivals too, and never the snake that took it:
       // the ghosts slowing helps everyone equally, so without this a bolt
@@ -1087,6 +1202,8 @@ export function createGame(cfg = {}) {
     const nx = wrap(p.snake[0].x + x), ny = wrap(p.snake[0].y + y);
     p.doom = null;
     p.doomSave = null;
+    p.shotsLeft = 0;                         // the dead do not keep firing
+    for (let i = S.shots.length - 1; i >= 0; i--) if (S.shots[i].owner === p.idx) S.shots.splice(i, 1);
     p.dir = { x, y };
     commitMove(p, nx, ny, 0);
     emit({ t: 'save', player: p.idx, x: nx, y: ny });
@@ -1102,6 +1219,7 @@ export function createGame(cfg = {}) {
     updateGhosts();
     updatePortals();
     updateBolt();
+    updateSight();
     S.foodAge += SIM_DT;
     if (S.foodAge >= FOOD_TTL) {
       if (S.food.bonus) S.bonusStreak = 0;   // missed the bonus in time: lose the streak
@@ -1124,6 +1242,11 @@ export function createGame(cfg = {}) {
         stepPlayer(p);
       }
     }
+    // The room's gunfire: after the snakes have moved, so a shot is judged
+    // against where they actually are, and before contact, so a snake shot
+    // dead this quantum is not also walked into a ghost.
+    fireShots();
+    moveShots();
     // ---- saves taken, then the doom window closes (rule 25) ----
     // A press recorded during the window is applied here, inside the sim,
     // where every other state change lives. It is judged again on the way in:
@@ -1293,6 +1416,9 @@ export function createGame(cfg = {}) {
       quanta: S.quanta, clockMs: S.clockMs, rng: rngState,
       foodAge: S.foodAge, bonusStreak: S.bonusStreak,
       itemsEaten: S.itemsEaten, boltsSpawned: S.boltsSpawned, slowUntil: S.slowUntil,
+      pickups: S.pickups, sightsSpawned: S.sightsSpawned,
+      sight: S.sight ? { x: S.sight.x, y: S.sight.y, bornAt: S.sight.bornAt } : null,
+      shots: S.shots.map(h => ({ x: h.x, y: h.y, dx: h.dx, dy: h.dy, owner: h.owner, moveAt: h.moveAt })),
       bolt: S.bolt ? { x: S.bolt.x, y: S.bolt.y, bornAt: S.bolt.bornAt } : null,
       food: S.food ? { x: S.food.x, y: S.food.y, bonus: S.food.bonus, kind: S.food.kind } : null,
       wallState: S.wallState, wallPhaseEnd: S.wallPhaseEnd, walls: [...S.wallLookup],
@@ -1312,6 +1438,7 @@ export function createGame(cfg = {}) {
         dirQueue: p.dirQueue.map(d => ({ x: d.x, y: d.y })),
         score: p.score, pendingGrowth: p.pendingGrowth, warpedIn: p.warpedIn,
         tickMs: p.tickMs, progMs: p.progMs, slowUntil: p.slowUntil,
+        shotsLeft: p.shotsLeft, nextShotAt: p.nextShotAt,
         doom: p.doom ? { tx: p.doom.tx, ty: p.doom.ty, until: p.doom.until, reason: p.doom.reason } : null,
         doomSave: p.doomSave ? { x: p.doomSave.x, y: p.doomSave.y } : null,
         alive: p.alive, deadReason: p.deadReason, diedAt: p.diedAt,
@@ -1325,6 +1452,9 @@ export function createGame(cfg = {}) {
     S.accMs = 0;
     S.foodAge = s.foodAge; S.bonusStreak = s.bonusStreak;
     S.itemsEaten = s.itemsEaten; S.boltsSpawned = s.boltsSpawned; S.slowUntil = s.slowUntil;
+    S.pickups = s.pickups; S.sightsSpawned = s.sightsSpawned;
+    S.sight = s.sight ? { x: s.sight.x, y: s.sight.y, bornAt: s.sight.bornAt } : null;
+    S.shots = s.shots.map(h => ({ x: h.x, y: h.y, dx: h.dx, dy: h.dy, owner: h.owner, moveAt: h.moveAt }));
     S.bolt = s.bolt ? { x: s.bolt.x, y: s.bolt.y, bornAt: s.bolt.bornAt } : null;
     S.food = s.food ? { x: s.food.x, y: s.food.y, bonus: s.food.bonus, kind: s.food.kind } : null;
     S.wallState = s.wallState; S.wallPhaseEnd = s.wallPhaseEnd;
@@ -1349,6 +1479,7 @@ export function createGame(cfg = {}) {
       p.dirQueue = q.dirQueue.map(d => ({ x: d.x, y: d.y }));
       p.score = q.score; p.pendingGrowth = q.pendingGrowth; p.warpedIn = q.warpedIn;
       p.tickMs = q.tickMs; p.progMs = q.progMs; p.slowUntil = q.slowUntil;
+      p.shotsLeft = q.shotsLeft; p.nextShotAt = q.nextShotAt;
       p.doom = q.doom ? { tx: q.doom.tx, ty: q.doom.ty, until: q.doom.until, reason: q.doom.reason } : null;
       p.doomSave = q.doomSave ? { x: q.doomSave.x, y: q.doomSave.y } : null;
       p.alive = q.alive; p.deadReason = q.deadReason; p.diedAt = q.diedAt;
@@ -1411,6 +1542,7 @@ export function createGame(cfg = {}) {
     _step: () => stepPlayer(players[0]), _stepPlayer: i => stepPlayer(players[i]),
     _updateWalls: updateWalls, _updateBombs: updateBombs,
     _updateGhosts: updateGhosts, _updatePortals: updatePortals, _updateBolt: updateBolt,
+    _updateSight: updateSight,
     _moveGhost: moveGhost, _ghostTarget: ghostTarget, _spawnPortal: spawnPortal, _closePortal: closePortal,
     // the walk a ghost standing at (x, y) sees to (tx, ty): sweep, then read
     _ghostDist: (x, y, tx, ty) => { ghostField({ x, y }, tx, ty); return fieldDist(x, y, tx, ty); },
