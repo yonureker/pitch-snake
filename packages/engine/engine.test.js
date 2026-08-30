@@ -1306,51 +1306,52 @@ test('survival: TNT feeds the snake five and pays nothing', () => {
   assert.equal(g.snake.length, 8, 'and the snake really is five longer');
 });
 
-test('survival: the opening thirty stands on the board at the first frame', () => {
+test('survival: the corner L stands on the board at the first frame', () => {
   const g = createGame({ seed: 7, ...MODES.survival, startGhosts: 0, ghostEveryMs: 0 });
   g.wallPhaseEnd = 1e12;
   foodFar(g);
-  assert.equal(g.snake.length, 30, 'all thirty cells are down before anything moves');
+  assert.equal(g.snake.length, 25, 'all twenty five cells are down before anything moves');
   assert.equal(g.pendingGrowth, 0, 'nothing arrives later');
-  assert.equal(g.log.startLen, 30, 'and the opening rides in the log');
-  // the body is one real snake: distinct cells, each adjacent to the next,
-  // packed into the lane's own three rows, never wrapping the screen edge
+  assert.equal(g.log.startLen, 25, 'and the opening rides in the log');
+  // the L itself: head at (15,9), fifteen along row 9, the corner, ten up
+  // the left wall, tail on the top left square
+  assert.deepEqual(g.snake[0], { x: 15, y: 9 }, 'the head at the end of the long leg');
+  assert.deepEqual(g.snake[15], { x: 0, y: 9 }, 'the corner where the legs meet');
+  assert.deepEqual(g.snake[24], { x: 0, y: 0 }, 'the tail on the top left square');
   const seen = new Set();
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 25; i++) {
     const c = g.snake[i];
     assert.ok(!seen.has(K(c.x, c.y)), 'no cell twice');
     seen.add(K(c.x, c.y));
-    assert.ok(c.y >= 9 && c.y <= 11, 'inside the lane band');
+    assert.ok(i < 15 ? c.y === 9 : c.x === 0, 'every cell on one of the two legs');
     if (i) {
       const p = g.snake[i - 1];
       assert.equal(Math.abs(c.x - p.x) + Math.abs(c.y - p.y), 1, 'each segment touches the next');
     }
   }
-  assert.deepEqual(g.snake[0], { x: 8, y: 10 }, 'the head where it has always been');
-  assert.ok(!g.snakeSet.has(K(9, 10)), 'the cell ahead is open');
-  assert.ok(!g.snakeSet.has(K(8, 11)), 'and so is the center-side turn');
-  // both honest directions really play from the whistle
-  g.advanceQuanta(g.tickMs / SIM_DT);
-  assert.ok(g.alive && g.snake[0].x === 9, 'straight on is a legal first step');
-  const h = createGame({ seed: 7, ...MODES.survival, startGhosts: 0, ghostEveryMs: 0 });
-  h.wallPhaseEnd = 1e12;
-  foodFar(h);
-  h.setDir(0, 1);
-  h.advanceQuanta(h.tickMs / SIM_DT);
-  assert.ok(h.alive && h.snake[0].y === 11, 'the open turn is legal too');
+  // three of the four directions really play from the whistle
+  for (const [dx, dy, wx, wy] of [[1, 0, 16, 9], [0, -1, 15, 8], [0, 1, 15, 10]]) {
+    const h = createGame({ seed: 7, ...MODES.survival, startGhosts: 0, ghostEveryMs: 0 });
+    h.wallPhaseEnd = 1e12;
+    foodFar(h);
+    if (dx !== 1) h.setDir(dx, dy);
+    h.advanceQuanta(h.tickMs / SIM_DT);
+    assert.ok(h.alive && h.snake[0].x === wx && h.snake[0].y === wy, `(${dx},${dy}) is a legal first step`);
+  }
 });
 
-test('survival: five folded thirties share the pitch without touching', () => {
+test('survival: five lane-folded openings share the pitch without touching', () => {
   const g = createGame({ seed: 7, ...MODES.survival, players: 5, startGhosts: 0, ghostEveryMs: 0 });
   const all = new Set();
   for (const p of g.players) {
-    assert.equal(p.snake.length, 30);
+    assert.equal(p.snake.length, 25, 'rooms fold the same length into the lanes');
+    assert.equal(p.snake[0].x, 8, 'lane heads stay where they have always been');
     for (const c of p.snake) {
       assert.ok(!all.has(K(c.x, c.y)), 'no two bodies share a cell');
       all.add(K(c.x, c.y));
     }
   }
-  assert.equal(all.size, 150, 'a hundred and fifty distinct cells');
+  assert.equal(all.size, 125, 'a hundred and twenty five distinct cells');
 });
 
 test('survival: the clock hires a ghost every mark, personalities cycling, capped', () => {

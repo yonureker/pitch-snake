@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 16;  // 16: the opening body spawns in full; 15: survival scores the clock
+export const ENGINE_VERSION = 17;  // 17: survival's solo opening is the corner L; 15/16: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -108,12 +108,13 @@ export const MODES = {
   // score; food trims the snake by one (the ringed one by five), TNT feeds
   // it five, and the hazards ride the clock instead of the points: one more
   // ghost and one more block per wave every ten seconds for ever, a bolt on
-  // the pitch every fifteen. The snake stands thirty long on the board from
-  // the first frame (folded; see layoutSnake), so the round looks like what
-  // it is before the whistle, and eating is the relief, not the reward.
+  // the pitch every fifteen. The snake stands twenty five long on the board
+  // from the first frame, the corner L when played solo (see layoutSnake),
+  // so the round looks like what it is before the whistle, and eating is
+  // the relief, not the reward.
   survival: {
     startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST,
-    scoreByTime: true, startLen: 30,
+    scoreByTime: true, startLen: 25,
     eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5,
     ghostEveryMs: 10_000, bombEveryMs: 10_000, boltEveryMs: 15_000,
   },
@@ -229,24 +230,34 @@ export function ghostRenderPos(g, nowMs, out) {
   return out;
 }
 
-// The opening body, all of it, from the first frame: head at (8, laneY)
-// heading right, n cells, nothing wrapping the screen edge. Up to nine is
-// the classic straight line back along the lane. Longer (survival's thirty)
-// packs into rows laneY-1..laneY+1, which never collide between lanes at
-// any player count: a weave of the lane row and its center-side neighbour
-// column by column down to 0, a run back along the far row, and a hook up
-// the far column. The mirror m points the weave at the board's middle, so
-// the head's first cell (9, laneY) and its center-side neighbour both stay
-// free and the whistle offers two honest directions; the edge-side
-// neighbour is body, and the doom window judges a press into it like any
-// other wrong turn.
-function layoutSnake(n, laneY) {
-  const cells = [[8, laneY]];
+// The opening body, all of it, from the first frame, nothing wrapping the
+// screen edge. Up to nine cells is the classic straight line back along
+// the lane from the head at (8, laneY). A longer SOLO opening (survival's
+// twenty five) is the corner L the mode is known by: the tail on the top
+// left square, ten cells down the left wall, then the rest along row 9 to
+// the head, which leaves three of the four directions open at the whistle
+// (straight on meets the snake's own wrapped body a few cells out, and the
+// doom window judges that press like any other wrong turn). The solo L
+// fits n <= 29. A long opening in a ROOM cannot share the one corner, so
+// it packs into the lane's own three rows instead: a weave of the lane row
+// and its center-side neighbour column by column down to 0, a run back
+// along the far row, and a hook up the far column; the bands never collide
+// at any player count, and the head keeps (9, laneY) and its center-side
+// neighbour free.
+function layoutSnake(n, laneY, solo) {
   if (n <= 9) {
-    for (let i = 1; i < n; i++) cells.push([8 - i, laneY]);
+    const line = [[8, laneY]];
+    for (let i = 1; i < n; i++) line.push([8 - i, laneY]);
+    return line;
+  }
+  if (solo && n <= 29) {
+    const cells = [];
+    for (let x = n - 10; x >= 1; x--) cells.push([x, 9]);   // head first, back along row 9
+    for (let y = 9; y >= 0; y--) cells.push([0, y]);        // then up the left wall to the corner
     return cells;
   }
   const m = laneY > GRID / 2 ? -1 : 1;
+  const cells = [[8, laneY]];
   for (let x = 7; x >= 0; x--) {
     if ((7 - x) % 2 === 0) cells.push([x, laneY], [x, laneY + m]);
     else cells.push([x, laneY + m], [x, laneY]);
@@ -308,11 +319,13 @@ export function createGame(cfg = {}) {
   // lives here once per player; the world stays shared. _majX/_majY/_m are
   // per-quantum contact scratch (rule 24), never persisted.
   function makePlayer(idx, laneY) {
+    const cells = layoutSnake(startLen, laneY, playerCount === 1);
+    const [hx, hy] = cells[0];
     const p = {
       idx,
       snake: [], snakeSet: new Set(), tailFrom: null,
-      headFrom: { x: 8, y: laneY },
-      headMajX: 8, headMajY: laneY,
+      headFrom: { x: hx, y: hy },
+      headMajX: hx, headMajY: hy,
       dir: { x: 1, y: 0 }, dirQueue: [],
       score: 0, pendingGrowth: 0,
       warpedIn: false,
@@ -326,7 +339,7 @@ export function createGame(cfg = {}) {
       alive: true, deadReason: null, diedAt: 0,
       _majX: 0, _majY: 0,          // this quantum's majority cell (rule 24 scratch)
     };
-    for (const [x, y] of layoutSnake(startLen, laneY)) { p.snake.push({ x, y }); p.snakeSet.add(K(x, y)); }
+    for (const [x, y] of cells) { p.snake.push({ x, y }); p.snakeSet.add(K(x, y)); }
     return p;
   }
 
@@ -1544,7 +1557,8 @@ export function replay(log) {
   // v4 was the single-snake era, v5 multi-snake before the clinch rule, v6
   // before a wall forming on a ghost buried it in place, v7 before the doom
   // window, v14 before survival scored the clock, v15 before the opening
-  // body stood in full. All these shapes replay here under today's rules;
+  // body stood in full, v16 before the solo opening became the corner L.
+  // All these shapes replay here under today's rules;
   // the survival knobs default to the classic values, so a pre-15 log
   // (which cannot carry them) replays under the exact rules it was played
   // by. No log of any era was ever persisted, so a rule changing an old

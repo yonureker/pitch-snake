@@ -208,7 +208,8 @@ export interface GameConfig {
    */
   scoreByTime?: boolean;
   /** Opening length, 3..30, standing on the board in full from the first
-   *  frame (folded past nine; see layoutSnake). */
+   *  frame: solo 10..29 lays the corner L (tail on the top-left square),
+   *  rooms and 30 fold into the lane band; see layoutSnake. */
   startLen?: number;
   /** What entering food adds to the body; negative trims (survival: -1). */
   eatGrowth?: number;
