@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 15;  // 15: the sight, and snakes that can shoot; 14: per-snake pace
+export const ENGINE_VERSION = 16;  // 16: shots fly at half the pace; 15: the sight arrived
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -86,7 +86,14 @@ export const SIGHT_EVERY = 8;      // pickups, board-wide, between sights
 export const SIGHT_LIFE_MS = 8000; // how long one waits to be claimed
 export const SHOT_EVERY_MS = 1000; // and the wait before the first
 export const SHOT_COUNT = 5;
-export const SHOT_MS = 40;         // a shot's step: about 25 cells a second
+// A shot's step. The floor here is not the ghosts but the SNAKE: anything
+// slower than SPEEDS.fast and a shooter overruns its own shot, which then
+// stops on the shooter's own body a step after leaving the muzzle and the
+// weapon does nothing at all. So this is as slow as a shot can honestly be
+// (12.5 cells a second against the quickest snake's 10), which is half the
+// speed it first flew at and crosses the pitch in a second and a half
+// rather than under one.
+export const SHOT_MS = 80;
 
 // The doom window (rule 25): walking into a wall or yourself is not final
 // for this long. The head hangs mid-glide over the fatal cell; one safe

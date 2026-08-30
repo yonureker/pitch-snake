@@ -13,7 +13,7 @@ import {
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
   BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress, slowTick,
-  SIGHT_EVERY, SHOT_COUNT, SHOT_EVERY_MS,
+  SIGHT_EVERY, SHOT_COUNT, SHOT_EVERY_MS, SHOT_MS,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -943,6 +943,10 @@ test('per-snake pace survives a snapshot and a rollback resim', () => {
 });
 
 // ------------------------------------------------------------------ the sight
+// long enough for a shot to cross the whole pitch, derived so that tuning
+// the shot's speed never silently turns these into tests of nothing
+const SHOT_CROSS_Q = (GRID * SHOT_MS) / SIM_DT;
+
 function armedRoom(seed = 7) {
   const g = quietGame({ players: 2, seed });
   g.portalRetryAt = 1e12;
@@ -1007,7 +1011,7 @@ test('a shot down the lane kills a rival head, and stops there', () => {
   g.players[0].nextShotAt = g.clockMs;
   g.advanceQuanta(1);                            // fired at (6,10), heading right
   assert.equal(g.shots.length, 1);
-  g.advanceQuanta(60);                           // long enough to cross to (14,10)
+  g.advanceQuanta(SHOT_CROSS_Q);                           // long enough to cross to (14,10)
   assert.equal(g.players[1].alive, false, 'the rival head took it');
   assert.equal(g.players[1].deadReason, 'shot');
   assert.equal(g.shots.length, 0, 'and the shot is spent');
@@ -1022,7 +1026,7 @@ test('a shot stops on a body without killing it', () => {
   g.players[1].tickMs = 1e9;
   g.players[0].shotsLeft = 1;
   g.players[0].nextShotAt = g.clockMs;
-  g.advanceQuanta(60);
+  g.advanceQuanta(SHOT_CROSS_Q);
   assert.equal(g.players[1].alive, true, 'a body is not a head');
   assert.equal(g.shots.length, 0, 'but it still swallowed the shot');
 });
@@ -1036,42 +1040,47 @@ test('two rival heads on one square is one shot and two deaths', () => {
   setPlayerSnake(g, 2, [[14, 10], [15, 11], [16, 11]], -1, 0);   // same head cell
   g.players[0].shotsLeft = 1;
   g.players[0].nextShotAt = g.clockMs;
-  g.advanceQuanta(60);
+  g.advanceQuanta(SHOT_CROSS_Q);
   assert.equal(g.players[1].deadReason, 'shot', 'the first head');
   assert.equal(g.players[2].deadReason, 'shot', 'and the second, on the same square');
   assert.equal(g.players[0].alive, true, 'the shooter walks on');
 });
 
 test('a shot dies on a live wall and on a ghost, and never on the shooter', () => {
-  const wall = armedRoom();
+  // every snake held still, so what stops the shot is the thing under test
+  // and not a snake that had time to drive into it
+  const still = (g) => { for (const p of g.players) p.tickMs = 1e9; return g; };
+  const wall = still(armedRoom());
   setPlayerSnake(wall, 1, [[14, 10], [15, 10], [16, 10]], -1, 0);
+  still(wall);
   wall.wallState = 'solid';
   wall.wallLookup = new Set([K(8, 10)]);
   wall.players[0].shotsLeft = 1;
   wall.players[0].nextShotAt = wall.clockMs;
-  wall.advanceQuanta(60);
+  wall.advanceQuanta(SHOT_CROSS_Q);
   assert.equal(wall.players[1].alive, true, 'the wall took it');
   assert.equal(wall.shots.length, 0);
 
-  const ghost = armedRoom();
+  const ghost = still(armedRoom());
   setPlayerSnake(ghost, 1, [[14, 10], [15, 10], [16, 10]], -1, 0);
+  still(ghost);
   ghost.ghosts.push({ x: 8, y: 10, px: 8, py: 10, dir: { x: 0, y: 0 }, warped: false,
                       role: 0, moveAt: 1e12, stepMs: GHOST_MS, majX: 8, majY: 8 });
   ghost.players[0].shotsLeft = 1;
   ghost.players[0].nextShotAt = ghost.clockMs;
-  ghost.advanceQuanta(60);
+  ghost.advanceQuanta(SHOT_CROSS_Q);
   assert.equal(ghost.players[1].alive, true, 'the ghost took it');
   assert.equal(ghost.shots.length, 0);
 
   // fired into an empty lane it wraps the tunnels and comes home to its own
   // body, which stops it: a shot never outlives the board
-  const lone = armedRoom();
+  const lone = still(armedRoom());
   lone.players[1].alive = false;
   lone.players[1].snake.length = 0;
   lone.players[1].snakeSet.clear();
   lone.players[0].shotsLeft = 1;
   lone.players[0].nextShotAt = lone.clockMs;
-  lone.advanceQuanta(200);
+  lone.advanceQuanta(SHOT_CROSS_Q * 2);
   assert.equal(lone.players[0].alive, true, 'you cannot shoot yourself');
   assert.equal(lone.shots.length, 0, 'and the shot did not circle for ever');
 });
@@ -1086,14 +1095,14 @@ test('a round with a shooting kill replays exactly, and rolls back the same', ()
   const g = mk();
   g.advanceQuanta(40);
   const snap = g.snapshot();
-  g.advanceQuanta(90);
+  g.advanceQuanta(SHOT_CROSS_Q);
   const after = { dead: g.players[1].deadReason, shots: g.shots.length, q: g.quanta };
   const armedAt40 = mk();
   armedAt40.advanceQuanta(40);
   g.restore(snap);
   assert.equal(g.players[0].shotsLeft, armedAt40.players[0].shotsLeft,
     'the arming rode the snapshot');
-  g.advanceQuanta(90);
+  g.advanceQuanta(SHOT_CROSS_Q);
   assert.deepEqual({ dead: g.players[1].deadReason, shots: g.shots.length, q: g.quanta }, after,
     'the resim lands in the identical place');
 });
