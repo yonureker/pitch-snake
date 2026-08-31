@@ -3823,12 +3823,28 @@
     void vsEnter(code || vsMakeCode(), true);
   });
 
-  // play with whoever is waiting
+  // Which third of the world this player sits in, from the device's own
+  // timezone: 'am' the Americas, 'eu' Europe/Africa/Middle East, 'as' Asia
+  // and Oceania. Coarse on purpose: it is a matchmaking preference (rooms
+  // beyond ~150ms of wire read as warping), not identity, and the UTC
+  // offset stands in when the timezone name is withheld.
+  function vsRegion() {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      if (/^America\//.test(tz)) return 'am';
+      if (/^(Europe|Africa|Atlantic)\//.test(tz)) return 'eu';
+      if (/^(Asia|Australia|Pacific|Indian)\//.test(tz)) return 'as';
+    } catch (e) {}
+    const east = -new Date().getTimezoneOffset() / 60;   // hours east of UTC
+    return east <= -2 ? 'am' : east < 4 ? 'eu' : 'as';
+  }
+
+  // play with whoever is waiting, neighbors first
   vsQuickBtn.addEventListener('click', async () => {
     if (vs || vsBusy || !vsTypedName()) return;
     vsSetNote('Looking for a room…', true);
     try {
-      const rows = await sbRpc('pitch_snake_room_quickmatch', {});
+      const rows = await sbRpc('pitch_snake_room_quickmatch', { p_region: vsRegion() });
       const r = Array.isArray(rows) ? rows[0] : null;
       if (r && typeof r.code === 'string') { void vsEnter(r.code, !!r.created); return; }
     } catch (e) {}

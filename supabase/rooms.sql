@@ -35,6 +35,14 @@ create table if not exists public.pitch_snake_rooms (
 -- row's lifetime so a family evening has a score that survives reloads
 alter table public.pitch_snake_rooms add column if not exists wins jsonb not null default '{}'::jsonb;
 
+-- Where the room's creator roughly is: 'am' (the Americas), 'eu' (Europe,
+-- Africa, the Middle East) or 'as' (Asia and Oceania), reported by the
+-- client from its own timezone. A preference for matchmaking, never a wall:
+-- prediction past 100-150ms of wire reads as warping, so quick match seats
+-- a searcher with neighbors first, but a thin pool still fills any room.
+-- Friend rooms (CREATE) carry null and rank with the strangers.
+alter table public.pitch_snake_rooms add column if not exists region text;
+
 alter table public.pitch_snake_rooms enable row level security;
 revoke all on table public.pitch_snake_rooms from anon, authenticated;
 
@@ -89,11 +97,18 @@ as $$
 $$;
 
 -- ------------------------------------------------------------ quick match ----
--- The fullest waiting room with a live host and a free seat, else a fresh
--- one. SKIP LOCKED keeps two simultaneous searchers off the same row.
+-- The fullest waiting room with a live host and a free seat, neighbors
+-- first, else a fresh one stamped with the searcher's region. Same-region
+-- rooms outrank everything (coalesce, because DESC would put the unknowns
+-- first otherwise); past that the old order holds, so a thin pool still
+-- fills any living room rather than stranding a lone searcher. SKIP LOCKED
+-- keeps two simultaneous searchers off the same row. The old zero-argument
+-- signature is dropped and the argument defaults, so pages from before the
+-- region ride the same door with no preference.
 drop function if exists public.pitch_snake_room_quickmatch();
+drop function if exists public.pitch_snake_room_quickmatch(text);
 
-create or replace function public.pitch_snake_room_quickmatch()
+create or replace function public.pitch_snake_room_quickmatch(p_region text default null)
 returns table (code text, created boolean)
 language plpgsql
 security definer
@@ -101,13 +116,15 @@ set search_path = ''
 as $$
 declare
   found_code text;
+  reg text;
 begin
+  reg := case when p_region in ('am', 'eu', 'as') then p_region else null end;
   select r.code into found_code
   from public.pitch_snake_rooms r
   where r.status = 'waiting'
     and r.player_count between 1 and 4
     and r.last_seen > now() - interval '25 seconds'
-  order by r.player_count desc, r.created_at desc
+  order by coalesce(r.region = reg, false) desc, r.player_count desc, r.created_at desc
   limit 1
   for update skip locked;
   if found_code is not null then
@@ -115,7 +132,9 @@ begin
     return query select found_code, false;
     return;
   end if;
-  return query select public.pitch_snake_room_create(), true;
+  select public.pitch_snake_room_create() into found_code;
+  update public.pitch_snake_rooms set region = reg where public.pitch_snake_rooms.code = found_code;
+  return query select found_code, true;
 end;
 $$;
 
@@ -242,11 +261,11 @@ select cron.schedule(
 -- SECURITY DEFINER doors ARE the design, not an advisor finding to fix).
 revoke all on function public.pitch_snake_room_create()                    from public;
 revoke all on function public.pitch_snake_room_touch(text, integer)        from public;
-revoke all on function public.pitch_snake_room_quickmatch()                from public;
+revoke all on function public.pitch_snake_room_quickmatch(text)            from public;
 revoke all on function public.pitch_snake_room_start(text, jsonb, integer) from public;
 revoke all on function public.pitch_snake_room_finish(text, jsonb)         from public;
 grant execute on function public.pitch_snake_room_create()                    to anon, authenticated;
 grant execute on function public.pitch_snake_room_touch(text, integer)        to anon, authenticated;
-grant execute on function public.pitch_snake_room_quickmatch()                to anon, authenticated;
+grant execute on function public.pitch_snake_room_quickmatch(text)            to anon, authenticated;
 grant execute on function public.pitch_snake_room_start(text, jsonb, integer) to anon, authenticated;
 grant execute on function public.pitch_snake_room_finish(text, jsonb)         to anon, authenticated;
