@@ -178,11 +178,15 @@ begin
   returning public.pitch_snake_rooms.start_n, public.pitch_snake_rooms.seed,
             public.pitch_snake_rooms.wins into n, sd, w;
 
-  -- the kickoff carries the room's running series, so a late joiner or a
-  -- reloaded tab inherits the tally with the same message that seats them
+  -- The kickoff carries the room's running series, so a late joiner or a
+  -- reloaded tab inherits the tally with the same message that seats them.
+  -- 'at' is the server's own clock in epoch ms: clients whose copy arrived
+  -- late pre-elapse their countdown by the difference, so every screen
+  -- whistles at the same absolute moment.
   perform realtime.send(
     jsonb_build_object('t', 'start', 'n', n, 'seed', sd, 'roster', clean_roster, 'ev', p_ev,
-                       'wins', coalesce(w, '{}'::jsonb)),
+                       'wins', coalesce(w, '{}'::jsonb),
+                       'at', (extract(epoch from now()) * 1000)::bigint),
     'lobby',
     'ps-' || clean_code,
     false);

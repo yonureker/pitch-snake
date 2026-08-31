@@ -275,6 +275,40 @@ test('a peer written off as gone still gets their turns applied when they return
   assert.equal(s0.stalled, false, 'and being gone still means nobody waits for them');
 });
 
+test('a reconnect flush heals a socket blip in one flight, no beat wait', () => {
+  // channelTransport drops sends while the channel is down; the page calls
+  // flush() when it re-subscribes. Without it, turns made during the blip
+  // sit in myHist until a peer's beat notices the seq gap and asks.
+  const bus = loopbackBus(2, { latency: 20 });
+  let open = true;
+  const flaky = {
+    send: (o) => { if (open) bus.endpoints[1].send(o); },
+    onMessage: (f) => bus.endpoints[1].onMessage(f),
+    close: () => bus.endpoints[1].close(),
+  };
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: flaky });
+  for (let now = 0; now <= 3000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  open = false;                                    // the blip
+  for (let now = 3010; now <= 5000; now += 10) {
+    bus.pump(now);
+    if (now === 3500) s1.localDir(0, -1, now);     // turns made in the dark
+    if (now === 4200) s1.localDir(-1, 0, now);
+    s0.frame(now); s1.frame(now);
+  }
+  assert.equal(g0.log.inputs.filter(e => e[3] === 1).length, 0, 'nothing crossed while down');
+  open = true;
+  s1.flush();                                      // what the page does on re-subscribe
+  bus.pump(5100);                                  // one flight of wire, well under a beat
+  s0.frame(5100); s1.frame(5100);
+  assert.equal(g0.log.inputs.filter(e => e[3] === 1).length, 2,
+    'the flush landed both dark turns in one flight');
+  for (let now = 5110; now <= 9000; now += 10) { bus.pump(now); s0.frame(now); s1.frame(now); }
+  assert.equal(JSON.stringify(g0.log), JSON.stringify(g1.log), 'one timeline after the blip');
+});
+
 test('junk on the wire is refused without taking the session down', () => {
   // anyone with the room code can broadcast; a malformed slot used to reach
   // a missing bucket and throw out of the socket handler

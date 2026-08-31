@@ -1155,7 +1155,10 @@ export function createGame(cfg = {}) {
     // START_LEN, queued growth cancelled so the shrink sticks. Survival
     // (positive): it pays nothing and instead feeds the snake, which on a
     // board where small is safe IS the punishment.
-    const bombIndex = S.bombs.findIndex(b => nx === b.x && ny === b.y);
+    let bombIndex = -1;
+    for (let i = 0; i < S.bombs.length; i++) {
+      if (nx === S.bombs[i].x && ny === S.bombs[i].y) { bombIndex = i; break; }
+    }
     if (bombIndex !== -1) {
       if (!scoreByTime) p.score -= 5;
       const lost = [];
@@ -1508,9 +1511,15 @@ export function createGame(cfg = {}) {
   // the continuous clock renderers should use for glides, pulses and blinks
   function renderNow() { return S.clockMs + S.accMs; }
 
+  // Double-buffered: callers consume the returned array before the next
+  // drain (every renderer does), so the two buffers swap instead of
+  // allocating one per frame.
+  let _eventsSpare = [];
   function drainEvents() {
     const e = S.events;
-    S.events = [];
+    _eventsSpare.length = 0;
+    S.events = _eventsSpare;
+    _eventsSpare = e;
     return e;
   }
 

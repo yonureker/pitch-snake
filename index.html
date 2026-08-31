@@ -1192,19 +1192,18 @@
 
   // the speed-run clock: DOM only when the printed second changes (rule 8)
   const clockEl = document.getElementById('clock');
-  let lastClockText = '';
-  function syncClockDom() {
+  let lastClockSec = -1;                 // gate on the integer, not the string:
+  function syncClockDom() {              // building m:ss every frame is allocation
     if (!g || !g.durationMs) {
-      if (lastClockText !== '') { lastClockText = ''; clockEl.hidden = true; }
+      if (lastClockSec !== -1) { lastClockSec = -1; clockEl.hidden = true; }
       return;
     }
     const left = Math.max(0, g.durationMs - g.clockMs);
     const sec = Math.ceil(left / 1000);
-    const text = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-    if (text === lastClockText) return;
-    lastClockText = text;
+    if (sec === lastClockSec) return;
+    lastClockSec = sec;
     clockEl.hidden = false;
-    clockEl.textContent = text;
+    clockEl.textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
     clockEl.classList.toggle('late', left <= 10_000);
   }
 
@@ -2052,6 +2051,12 @@
   }
 
   // ---- the frame ----
+  // Progress is per snake: a rival dragged by a bolt is a different way
+  // through a longer step than you are through yours, so nothing may be
+  // drawn on somebody else's clock. Module-level so draw() does not build a
+  // closure every frame.
+  function progOf(i) { return state === 'playing' ? g.renderProg(i) : 1; }
+
   function draw(dt) {
     ctx.drawImage(arenaCanvas, 0, 0);   // opaque and full-surface: doubles as the clear
     drawWalls();
@@ -2079,10 +2084,6 @@
     drawBolt();
     drawBombs();
 
-    // Progress is per snake now: a rival dragged by a bolt is a different way
-    // through a longer step than you are through yours, so nothing may be
-    // drawn on somebody else's clock.
-    const progOf = (i) => state === 'playing' ? g.renderProg(i) : 1;
     const p = progOf(vsView() ? vs.myIdx : 0);
 
     // rivals first, ghosted, so my own snake always reads on top of them;
@@ -2145,8 +2146,11 @@
     syncCountdown();
 
     if (showFps) {
+      // a perf probe must not perturb what it measures: cache the font
+      // string so the meter itself adds no per-frame string building
+      if (fpsFontCell !== cell) { fpsFontCell = cell; fpsFont = Math.max(11, (cell * 0.5) | 0) + 'px monospace'; }
       ctx.fillStyle = '#7CFC00';
-      ctx.font = `${Math.max(11, (cell * 0.5) | 0)}px monospace`;
+      ctx.font = fpsFont;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(fpsValue + ' fps · ' + workMs.toFixed(1) + 'ms', 6, 6);
@@ -2376,15 +2380,15 @@
   // why the pack slowed and how long they have. DOM only when the printed
   // second changes (rule 8), same as the speed run clock.
   const boltBanner = document.getElementById('boltBanner');
-  let boltBannerText = '';
+  let boltBannerSec = 0;                 // gate on the integer, not the string
   function syncBoltBanner() {
     const live = state === 'playing' || state === 'countdown';
     const left = live && g ? g.slowUntil - g.renderNow() : 0;
-    const text = left > 0 ? '⚡ GHOSTS SLOWED · ' + Math.ceil(left / 1000) : '';
-    if (text === boltBannerText) return;
-    boltBannerText = text;
-    if (!text) { boltBanner.hidden = true; return; }
-    boltBanner.textContent = text;
+    const sec = left > 0 ? Math.ceil(left / 1000) : 0;
+    if (sec === boltBannerSec) return;
+    boltBannerSec = sec;
+    if (!sec) { boltBanner.hidden = true; return; }
+    boltBanner.textContent = '⚡ GHOSTS SLOWED · ' + sec;
     boltBanner.hidden = false;
   }
 
@@ -2419,6 +2423,7 @@
   // optional on-screen FPS meter: ?fps=1
   const fpsFlag = new URLSearchParams(location.search).get('fps');
   const showFps = fpsFlag !== null && fpsFlag !== '0';
+  let fpsFont = '', fpsFontCell = 0;
   let fpsCount = 0, fpsSince = 0, fpsValue = 0, fpsWork = 0, workMs = 0;
 
   // ---- loop ----
@@ -3373,6 +3378,9 @@
           if (!settled) { settled = true; clearTimeout(guard); }
           room.up = true;
           room.transport.setOpen(true);
+          // a mid-round reconnect pushes its recent turns out unasked, so a
+          // socket blip heals in one flight instead of a beat + resend trip
+          if (room.session) room.session.flush();
           // presence dies with the old join on every reconnect: track again
           room.lastTrackAt = Date.now();
           room.trackDirty = false;
@@ -3583,7 +3591,7 @@
         const m = {
           t: 'start', n: room.startN + 1, ev: ENGINE_VERSION,
           seed: crypto.getRandomValues(new Uint32Array(1))[0],
-          roster, wins: room.wins,
+          roster, wins: room.wins, at: Date.now(),
         };
         void room.channel.send({ type: 'broadcast', event: 'lobby', payload: m });
         room.startN = m.n;
@@ -3639,10 +3647,18 @@
     syncScoreDom();
     mpHudHash = -1;
     syncMpHud();
-    // straight into the shared countdown; skew between clients is at most a
-    // message flight and the session's pacing walks it off
+    // Straight into the shared countdown. The kickoff carries the moment it
+    // was minted ('at': the server's clock, or the sender's on the no-tier
+    // fallback), so a client whose copy arrived late starts its countdown
+    // that much elapsed and every screen whistles at the same absolute
+    // moment, instead of the late one opening the round fifty quanta behind
+    // and rolling everyone back while the slew walks it off. Clamped so a
+    // wild device clock can only trim the count, never eat it; whatever
+    // skew remains is the session's pacing to close, as before.
     state = 'countdown';
-    countClock = 0; countBeat = -1;
+    const skew = typeof m.at === 'number' ? Date.now() - m.at : 0;
+    countClock = Math.min(1200, Math.max(0, skew));
+    countBeat = -1;
     lastTick = 0;
     overlayTitle.className = '';
     saveNote.hidden = true;

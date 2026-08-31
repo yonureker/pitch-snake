@@ -25,7 +25,7 @@ export const NET_PROTO = 1;
 export const SNAP_EVERY = 32;     // quanta between keyframes (320ms)
 export const SNAP_KEEP = 96;      // keyframes retained: ~30s of rollback horizon
 export const STALL_AT = 250;      // quanta a live peer may lag before we hold the sim
-export const BEAT_MS = 1000;      // heartbeat cadence
+export const BEAT_MS = 500;       // heartbeat cadence: loss and clock signals twice a second
 // A LIVE peer's fresh silence holds the room (their inputs may be in
 // flight); silence older than this is a vanished client, and the room plays
 // on with their snake on the rails. Dead peers never hold the room at all.
@@ -45,6 +45,11 @@ export const SETTLED_Q = 600;
 // spare, or the correction fights the network instead of real drift. Far
 // below STALL_AT, which remains the hard leash.
 export const SLEW_BAND = 25;      // quanta
+// Past this the gap is not network noise, it is a genuinely offset clock (a
+// kickoff that reached one client half a second late), and the gentle slew
+// would take ten seconds to close what the hard one closes in about two.
+// Still far below STALL_AT, which remains the hard leash.
+export const SLEW_HARD = 100;     // quanta
 // How long a peer's last report is still worth extrapolating from. Two beats
 // covers a dropped one comfortably; past it the client is not merely unlucky
 // and the leash stops crediting them with progress they never reported.
@@ -53,8 +58,11 @@ export const CATCHUP_MAX = 3000;  // ms one frame() may simulate before giving u
 export const NEED_COOLDOWN = 300; // ms between repeat resend requests per peer
 // Every input carries the sender's previous few inputs as ballast: one lost
 // packet is then healed by the NEXT turn, no resend round trip. Bytes are
-// free on this wire (billing counts messages), so redundancy costs nothing.
-export const REDUNDANCY = 3;
+// free on this wire (billing counts messages), so redundancy costs nothing;
+// six rides out a loss burst that three left to the slow resend cycle. A
+// receiver caps its reads at its own constant, so mixed builds only lose
+// the extra ballast, never correctness.
+export const REDUNDANCY = 6;
 
 // FNV-1a over a string: cheap, stable, good enough to catch divergence
 export function foldHash(str) {
@@ -108,7 +116,19 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     const last = snaps[snaps.length - 1];
     if (last && last.q === game.quanta) return;
     snaps.push({ q: game.quanta, s: game.snapshot(), h: 0 });
-    if (snaps.length > SNAP_KEEP) snaps.shift();
+    if (snaps.length > SNAP_KEEP) {
+      snaps.shift();
+      // inputs older than the horizon can never be re-applied (a rollback
+      // past snaps[0] fails anyway), so a long round does not hoard them.
+      // Only the applied prefix is eligible, which keeps applied[p] >= 0.
+      const floor = snaps[0].q;
+      for (let p = 0; p < N; p++) {
+        const list = table[p];
+        let cut = 0;
+        while (cut < applied[p] && list[cut].q < floor) cut++;
+        if (cut) { list.splice(0, cut); applied[p] -= cut; }
+      }
+    }
   }
 
   function applyDue(q) {
@@ -271,7 +291,8 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     stalled = minPeer !== Infinity && minPeer < game.quanta - STALL_AT;
     if (!stalled) {
       const lead = maxPeer === -Infinity ? 0 : maxPeer - game.quanta;
-      const rate = lead > SLEW_BAND ? 1.05 : lead < -SLEW_BAND ? 0.95 : 1;
+      const rate = lead > SLEW_HARD ? 1.15 : lead > SLEW_BAND ? 1.05
+                 : lead < -SLEW_HARD ? 0.85 : lead < -SLEW_BAND ? 0.95 : 1;
       acc += dt * rate;
       let guard = (CATCHUP_MAX / SIM_DT) | 0;
       while (acc >= SIM_DT && game.alive && !dead && guard-- > 0) {
@@ -354,6 +375,9 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       if (dead || ended || !game.players[myIdx].alive) return;
       const e = { s: ++mySeq, q: game.quanta + 1, x, y };
       myHist.push(e);
+      // resend history far beyond the snapshot horizon serves nobody; a
+      // peer missing more than this is already past repair (hash/horizon)
+      if (myHist.length > 640) myHist.splice(0, myHist.length - 512);
       table[myIdx].push(e);
       lastSeq[myIdx] = mySeq;
       const r = [];
@@ -362,6 +386,29 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
         r.push([h.s, h.q, h.x, h.y]);
       }
       transport.send({ t: 'i', v: NET_PROTO, p: myIdx, s: e.s, q: e.q, x, y, r });
+    },
+
+    /**
+     * The wire just came back (the page saw the channel re-subscribe): push
+     * the recent past out unasked instead of waiting for a peer's beat to
+     * notice the gap. Turns made during a socket blip otherwise sit in
+     * myHist for up to a beat plus a resend round trip, and land as deep
+     * rollbacks; this makes a reconnect heal itself in one flight. The
+     * batch reuses the 'ri' shape, so old builds accept it unchanged, and a
+     * beat rides along to hand the peers a fresh clock and seq high-water.
+     */
+    flush() {
+      if (dead || ended) return;
+      const list = [];
+      for (let k = Math.max(0, myHist.length - REDUNDANCY * 2); k < myHist.length; k++) {
+        const e = myHist[k];
+        list.push([e.s, e.q, e.x, e.y]);
+      }
+      if (list.length) {
+        stats.resends++;
+        transport.send({ t: 'ri', v: NET_PROTO, p: myIdx, list });
+      }
+      sendBeat();
     },
 
     /**
