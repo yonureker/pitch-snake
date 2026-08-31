@@ -2345,15 +2345,16 @@
   // A skin is a ramp from the head's colour to the tail's, the outline that
   // rides every segment, and whatever crest the head wears. Nothing here
   // reaches the engine: a skin is paint, so it can never touch a rule or a
-  // replay. Pick one with ?skin=viper; ?skin=classic is the pitch's own.
+  // replay. Classic, the pitch's own gold, is what a snake wears by default;
+  // ?skin=viper is the blue one with the crest.
   const SKINS = {
     classic: { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
                spikes: null, spikesAlt: null },
     viper:   { head: [ 88, 168, 246], tail: [ 24,  74, 150], line: 'rgba(150,110,235,0.75)',
                spikes: '#9a5cf0', spikesAlt: '#7b3fd6' },
   };
-  const skinParam = (new URLSearchParams(location.search).get('skin') || 'viper').toLowerCase();
-  const SKIN = SKINS[skinParam] ?? SKINS.viper;
+  const skinParam = (new URLSearchParams(location.search).get('skin') || 'classic').toLowerCase();
+  const SKIN = SKINS[skinParam] ?? SKINS.classic;
 
   // body shades from head to tail, precomputed once
   const SNAKE_SHADES = 64;
