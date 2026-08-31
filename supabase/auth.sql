@@ -118,82 +118,14 @@ end;
 $$;
 
 -- -------------------------------------- the boards learn whose score it is ----
--- Same functions, same shapes, same validation, one new fact: the row
--- carries auth.uid(). Null for a signed-out client, which keeps every old
--- page working unchanged; the column has sat empty since the day it was
--- added, waiting for exactly this.
-create or replace function public.pitch_snake_submit_score(p_name text, p_score integer, p_mode text default 'classic')
-returns bigint
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  clean_name text;
-  new_id     bigint;
-begin
-  if p_mode is null or p_mode not in ('classic', 'speedrun', 'survival') then
-    raise exception 'unknown mode';
-  end if;
-  -- speed run is the one mode a minute physically bounds; everything else
-  -- shares the endless range
-  if p_score is null or p_score < -999
-     or (p_mode = 'speedrun' and p_score > 300)
-     or (p_mode <> 'speedrun' and p_score > 9999) then
-    raise exception 'score out of range';
-  end if;
-
-  clean_name := left(upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')), 5);
-  if clean_name = '' then
-    clean_name := 'YOU';
-  end if;
-
-  insert into public.pitch_snake_scores (name, score, mode, user_id)
-  values (clean_name, p_score, p_mode, auth.uid())
-  returning id into new_id;
-
-  return new_id;
-end;
-$$;
-
-create or replace function public.pitch_snake_tournament_submit(p_code text, p_name text, p_score integer)
-returns bigint
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  t          record;
-  clean_name text;
-  new_id     bigint;
-begin
-  select id, mode, starts_at, ends_at into t
-  from public.pitch_snake_tournaments
-  where code = upper(trim(coalesce(p_code, '')));
-  if not found then
-    raise exception 'no such tournament';
-  end if;
-  if now() < t.starts_at or now() > t.ends_at then
-    raise exception 'tournament is not open';
-  end if;
-  if p_score is null or p_score < -999
-     or (t.mode = 'speedrun' and p_score > 300)
-     or (t.mode <> 'speedrun' and p_score > 9999) then
-    raise exception 'score out of range';
-  end if;
-
-  clean_name := left(upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')), 5);
-  if clean_name = '' then
-    clean_name := 'YOU';
-  end if;
-
-  insert into public.pitch_snake_tournament_scores (tournament_id, name, score, user_id)
-  values (t.id, clean_name, p_score, auth.uid())
-  returning id into new_id;
-
-  return new_id;
-end;
-$$;
+-- RETIRED: this file used to redefine the two submit functions so rows
+-- carried auth.uid(). Validated scoring (validate.sql + the validate-score
+-- edge function) replaced them outright: the server replays the round's log
+-- and writes the score AND the user id itself. The drops keep any file-run
+-- order converging on gone; a function that accepts a score from the
+-- browser must never come back.
+drop function if exists public.pitch_snake_submit_score(text, integer, text);
+drop function if exists public.pitch_snake_tournament_submit(text, text, integer);
 
 -- Postgres grants EXECUTE to PUBLIC on every new function; take that back,
 -- then hand it to exactly the two roles the publishable key can become.

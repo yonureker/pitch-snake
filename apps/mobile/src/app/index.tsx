@@ -242,10 +242,13 @@ export default function Index() {
 
   const saveScore = (): void => {
     if (submit.isPending || tSubmit.isPending || submittedId !== null || submittedName !== null) return;
+    // the validator wants the round itself, not our opinion of its score
+    const round = loop.roundForSubmit();
+    if (round === null) return;
     const name = entryName.trim() === '' ? 'YOU' : entryName;
     if (uiMode === 'tourney' && tourney !== null) {
       tSubmit.mutate(
-        { code: tourney.code, name, score: loop.score },
+        { code: tourney.code, mode: tourney.mode, name, seedId: round.seedId, log: round.log },
         {
           onSuccess: () => {
             setSubmittedName(squashName(name));
@@ -255,7 +258,7 @@ export default function Index() {
       return;
     }
     submit.mutate(
-      { name, score: loop.score, mode: ruleMode },
+      { name, mode: ruleMode, seedId: round.seedId, log: round.log },
       {
         onSuccess: (id) => {
           setSubmittedId(id);
@@ -282,7 +285,8 @@ export default function Index() {
     : loop.deadReason === 'ghost' ? 'The ghost got you. '
     : loop.deadReason === 'time' ? 'The final whistle. '
     : '';
-  const canEnterBoard = uiMode !== 'tourney' || tStatus === 'open';
+  // a round can only enter a board when it was seeded by a server ticket
+  const canEnterBoard = loop.canSubmit && (uiMode !== 'tourney' || tStatus === 'open');
   const saving = submit.isPending || tSubmit.isPending;
   const menuPhase = loop.phase === 'ready' || dead;
   const modeCaption =

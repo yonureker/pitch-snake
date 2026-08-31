@@ -1,21 +1,34 @@
 /**
- * TanStack Query mutation for submitting a finished round's score. On
- * success the top-ten query is invalidated so the fresh row appears.
+ * TanStack Query mutation for submitting a finished round. The round goes
+ * to the validator as its LOG against the server ticket that seeded it; the
+ * server replays it and computes the score itself. On success the top-ten
+ * query is invalidated so the fresh row appears.
  * @module
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { submitScore } from '@/lib/leaderboard';
+import type { RoundLog } from '@pitch-snake/engine';
+
 import type { RuleMode } from '@/lib/modes';
+import { validateRound } from '@/lib/validate';
 
 import { TOP_SCORES_KEY } from './use-top-scores';
 
-/** Submit { name, score, mode }; resolves to the new row id for highlighting. */
+/** Submit { name, mode, seedId, log }; resolves to the new row id for highlighting. */
 export function useSubmitScore() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, score, mode }: { name: string; score: number; mode: RuleMode }) =>
-      submitScore(name, score, mode),
+    mutationFn: ({
+      name,
+      mode,
+      seedId,
+      log,
+    }: {
+      name: string;
+      mode: RuleMode;
+      seedId: number;
+      log: RoundLog;
+    }) => validateRound({ seedId, mode, name, log }).then((r) => r.id),
     onSuccess: async () => {
       // the prefix invalidates every mode's board; only the played one refetches
       await client.invalidateQueries({ queryKey: TOP_SCORES_KEY });

@@ -93,45 +93,13 @@ as $$
 $$;
 
 -- --------------------------------------------------------------- write ----
--- Names are squashed to at most five A-Z0-9 characters, so no board can be
--- used as a message channel, and each mode has its own believable range: a
--- minute of speed run cannot produce a classic-sized number. Neither check
--- makes this authoritative: see the note at the bottom.
+-- RETIRED: the client-score submit lived here until validated scoring
+-- (validate.sql + the validate-score edge function) took over. The client
+-- now submits its round LOG and the server replays it to compute the score
+-- itself; a function that accepts a number from the browser must never
+-- come back. The drops below keep any file-run order converging on gone.
 drop function if exists public.pitch_snake_submit_score(text, integer);
-
-create or replace function public.pitch_snake_submit_score(p_name text, p_score integer, p_mode text default 'classic')
-returns bigint
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  clean_name text;
-  new_id     bigint;
-begin
-  if p_mode is null or p_mode not in ('classic', 'speedrun', 'survival') then
-    raise exception 'unknown mode';
-  end if;
-  -- speed run is the one mode a minute physically bounds; everything else
-  -- shares the endless range
-  if p_score is null or p_score < -999
-     or (p_mode = 'speedrun' and p_score > 300)
-     or (p_mode <> 'speedrun' and p_score > 9999) then
-    raise exception 'score out of range';
-  end if;
-
-  clean_name := left(upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')), 5);
-  if clean_name = '' then
-    clean_name := 'YOU';
-  end if;
-
-  insert into public.pitch_snake_scores (name, score, mode)
-  values (clean_name, p_score, p_mode)
-  returning id into new_id;
-
-  return new_id;
-end;
-$$;
+drop function if exists public.pitch_snake_submit_score(text, integer, text);
 
 -- --------------------------------------------------- tournament: create ----
 -- The code is six characters from an alphabet with no 0/O or 1/I, 32^6 of
@@ -235,73 +203,30 @@ as $$
 $$;
 
 -- ------------------------------------------------------ tournament: submit ----
--- A submission lands only while the window is open, checked against the
--- server's clock, and the range check follows the tournament's own mode.
+-- RETIRED like pitch_snake_submit_score above: tournament submissions go
+-- through the validator now (same edge function, with the room code); the
+-- window check moved there and still reads the server's clock.
 drop function if exists public.pitch_snake_tournament_submit(text, text, integer);
-
-create or replace function public.pitch_snake_tournament_submit(p_code text, p_name text, p_score integer)
-returns bigint
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  t          record;
-  clean_name text;
-  new_id     bigint;
-begin
-  select id, mode, starts_at, ends_at into t
-  from public.pitch_snake_tournaments
-  where code = upper(trim(coalesce(p_code, '')));
-  if not found then
-    raise exception 'no such tournament';
-  end if;
-  if now() < t.starts_at or now() > t.ends_at then
-    raise exception 'tournament is not open';
-  end if;
-  if p_score is null or p_score < -999
-     or (t.mode = 'speedrun' and p_score > 300)
-     or (t.mode <> 'speedrun' and p_score > 9999) then
-    raise exception 'score out of range';
-  end if;
-
-  clean_name := left(upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')), 5);
-  if clean_name = '' then
-    clean_name := 'YOU';
-  end if;
-
-  insert into public.pitch_snake_tournament_scores (tournament_id, name, score)
-  values (t.id, clean_name, p_score)
-  returning id into new_id;
-
-  return new_id;
-end;
-$$;
 
 -- Postgres grants EXECUTE to PUBLIC on every new function, which would make
 -- these callable by roles we never considered. Take that back, then hand it
 -- out deliberately. EXECUTE is also all it takes to publish a function at
 -- /rest/v1/rpc/<name>; tables need far more, which is exactly why we use these.
 revoke all on function public.pitch_snake_top_scores(integer, text)                       from public;
-revoke all on function public.pitch_snake_submit_score(text, integer, text)               from public;
 revoke all on function public.pitch_snake_tournament_create(text, text, integer, integer) from public;
 revoke all on function public.pitch_snake_tournament_get(text)                            from public;
 revoke all on function public.pitch_snake_tournament_top(text, integer)                   from public;
-revoke all on function public.pitch_snake_tournament_submit(text, text, integer)          from public;
 grant execute on function public.pitch_snake_top_scores(integer, text)                       to anon, authenticated;
-grant execute on function public.pitch_snake_submit_score(text, integer, text)               to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_create(text, text, integer, integer) to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_get(text)                            to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_top(text, integer)                   to anon, authenticated;
-grant execute on function public.pitch_snake_tournament_submit(text, text, integer)          to anon, authenticated;
 
 -- `supabase db advisors` will flag every function above as a SECURITY DEFINER
 -- routine executable by anon. That is this design working, not a finding: the
 -- tables are shut and these are the doors. Do not "fix" it by switching them
 -- to SECURITY INVOKER or revoking anon, which turns the boards off.
 --
--- The browser still reports its own score, so every board is only as honest
--- as the client. The per-mode range checks stop a board being taken over by
--- one absurd number, nothing more. Making it authoritative means submitting
--- (seed, log) and letting the server replay the round; the seed column above
--- is the first brick of that.
+-- Scores land through the validator only (validate.sql + the validate-score
+-- edge function): the client submits its round LOG against a server-issued
+-- seed, the server replays it with the same engine and writes the score it
+-- computed. The browser's opinion of its score no longer exists here.

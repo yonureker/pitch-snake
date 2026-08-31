@@ -1143,8 +1143,19 @@
     return 'open';
   }
 
-  function newRound() {
-    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  // forReal: a round the player is about to play spends a server ticket
+  // (its seed makes the score submittable); preview boards behind menus
+  // never do, or browsing the modes would drain the pocket.
+  function newRound(forReal) {
+    roundTicket = null;
+    let seed;
+    const ticket = forReal ? takeTicket() : null;
+    if (ticket) {
+      seed = ticket.seed;
+      roundTicket = { id: ticket.id };
+    } else {
+      seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    }
     g = createGame({ seed, tickMs: pageTickMs, wallsEnabled: pageWalls, ...MODES[ruleMode()] });
     lastShownScore = null;
     handleEvents(g.drainEvents());   // the constructor placed the first food
@@ -2531,7 +2542,70 @@
       sbUser = session ? session.user : null;
       if (sbToken) await syncProfile();
       refreshWho();
+      fetchSeed();
     } catch (e) { /* no identity today; the game does not care */ }
+  }
+
+  // ---- validated rounds: the server decides the score ----
+  // A seed is minted server-side before a round starts and the finished
+  // round goes back as its input LOG: the validate-score edge function
+  // replays it with the same engine and computes the score itself, so the
+  // number this page holds is never what the board believes. The pocket
+  // keeps the next round's ticket fetched ahead, which makes START free of
+  // any wait; a round without a ticket (offline, auth down, stale pocket)
+  // still plays and still saves, on this device.
+  let seedPocket = null;    // { id, seed, at }: the next round's ticket
+  let roundTicket = null;   // the ticket of the round in g, spent by saveScore
+  async function fetchSeed() {
+    if (!sbOn() || !sbToken || seedPocket) return;
+    try {
+      const r = await sbRpc('pitch_snake_issue_seed', {});
+      if (r && typeof r.id === 'number' && typeof r.seed === 'number')
+        seedPocket = { id: r.id, seed: r.seed >>> 0, at: Date.now() };
+    } catch (e) { /* no ticket: the next round saves on this device */ }
+  }
+
+  // the ticket's server shelf life is two hours; stay well inside it
+  function takeTicket() {
+    if (seedPocket && Date.now() - seedPocket.at > 90 * 60 * 1000) seedPocket = null;
+    const t = seedPocket;
+    seedPocket = null;
+    fetchSeed();               // refill for the round after this one
+    return t;
+  }
+
+  async function sbValidate(seedId, name) {
+    const ac = new AbortController();
+    // a replay plus an insert deserves more patience than a plain RPC
+    const timer = setTimeout(() => ac.abort(), 12000);
+    try {
+      const res = await fetch(SB_URL + '/functions/v1/validate-score', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SB_KEY,
+          Authorization: 'Bearer ' + (sbToken || SB_KEY),
+        },
+        body: JSON.stringify({
+          seedId,
+          mode: ruleMode(),
+          name,
+          code: mode === 'tourney' && tourney ? tourney.code : undefined,
+          log: g.log,
+        }),
+        signal: ac.signal,
+      });
+      if (res.status >= 400 && res.status < 500) {
+        // the referee said no: not retryable, the seed is spent either way
+        const e = new Error('refused');
+        e.refused = true;
+        throw e;
+      }
+      if (!res.ok) throw new Error('validate: ' + res.status);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // The one name, everywhere. With a profile, its name feeds both the score
@@ -2601,7 +2675,15 @@
 
   // true once a remote read has failed, so the board can say whose list this is
   let boardIsLocal = true;
+  // a round just saved on this device (no ticket, or the validator declined)
+  // shows the board its row actually lives on, once
+  let showLocalBoardOnce = false;
   async function loadStandings() {
+    if (showLocalBoardOnce) {
+      showLocalBoardOnce = false;
+      boardIsLocal = true;
+      if (mode !== 'tourney') return loadLocalStandings();
+    }
     if (sbOn()) {
       try {
         if (mode === 'tourney' && tourney) {
@@ -2640,19 +2722,33 @@
   // score is not quietly written somewhere else, because a local copy of a
   // global board is a lie the next session would expose.
   async function saveScore(name, sc) {
-    if (sbOn() && mode === 'tourney' && tourney) {
-      await sbRpc('pitch_snake_tournament_submit', { p_code: tourney.code, p_name: name, p_score: sc });
-      return 'n:' + name;        // the standings key up there is the squashed name
-    }
-    if (sbOn()) {
-      const id = await sbRpc('pitch_snake_submit_score', { p_name: name, p_score: sc, p_mode: ruleMode() });
-      return 'r' + id;
+    // The world boards take LOGS, not numbers: a round with a ticket goes to
+    // the validator, which replays it and writes the score it computed. A
+    // network failure throws (the form re-opens and a retry is honest: the
+    // seed is only spent once the server touches it); a refusal, or a round
+    // with no ticket at all, falls through to this device's own board.
+    const ticket = roundTicket;
+    if (sbOn() && sbToken && ticket) {
+      try {
+        const r = await sbValidate(ticket.id, name);
+        if (mode === 'tourney' && tourney) return 'n:' + name;
+        return 'r' + r.id;
+      } catch (e) {
+        if (!e || !e.refused) throw e;
+        // a declined tournament entry has no device to fall back to
+        if (mode === 'tourney' && tourney) throw new Error('tournament declined');
+        // declined: keep the round here rather than looping a doomed retry
+      }
+    } else if (sbOn() && mode === 'tourney' && tourney) {
+      // a tournament entry is meaningless off the server; say so honestly
+      throw new Error('tournament needs the validator');
     }
     const list = await loadLocalStandings();
     const ts = Date.now();
     list.push({ key: 'l' + ts, name, score: sc, ts });
     list.sort((a, b) => b.score - a.score || a.ts - b.ts);
     await persistLocalStandings(list.slice(0, MAX_ENTRIES));
+    if (sbOn()) showLocalBoardOnce = true;   // show the board this row lives on
     return 'l' + ts;
   }
 
@@ -3775,7 +3871,7 @@
       return;
     }
     if (mode === 'tourney' && tourneyState() !== 'open') return;   // the window rules
-    if (state === 'dead' || state === 'ready') { lastRunKey = runKey(); newRound(); }
+    if (state === 'dead' || state === 'ready') { lastRunKey = runKey(); newRound(true); }
     else g.clearQueue();          // a turn queued before the pause must not fire on resume
     state = 'countdown';          // the round opens on 3, 2, 1, START!
     countClock = 0; countBeat = -1;
@@ -4173,6 +4269,8 @@
       const switched = otpKind === 'signin';
       if (switched) sbProfile = null;   // that account's own name outranks this device's
       await syncProfile(switched);
+      seedPocket = null;                // tickets belong to an identity; remint
+      fetchSeed();
       refreshProfileSheet(true);
       profSay(switched ? 'Signed in. This device is yours now.' : 'Done. Your progress follows this email onto any device.', true);
     } catch (e) {
@@ -4206,6 +4304,8 @@
       if (data && data.session) { sbToken = data.session.access_token; sbUser = data.session.user; }
       await syncProfile();
     } catch (e) {}
+    seedPocket = null;                  // tickets belong to an identity; remint
+    fetchSeed();
     profSignOut.disabled = false;
     refreshWho();
     refreshProfileSheet(true);
@@ -4285,6 +4385,7 @@ $ `;
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
+
 
 
   requestAnimationFrame(loop);

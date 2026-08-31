@@ -15,11 +15,20 @@ import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
-import { createGame, GRID, MODES, SPEEDS, type Game, type GameEvent } from '@pitch-snake/engine';
+import {
+  createGame,
+  GRID,
+  MODES,
+  SPEEDS,
+  type Game,
+  type GameEvent,
+  type RoundLog,
+} from '@pitch-snake/engine';
 
 import type { RuleMode } from '@/lib/modes';
 
 import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';
+import { issueSeed, type SeedTicket } from '@/lib/validate';
 
 import { GameColors } from './theme';
 import {
@@ -66,6 +75,12 @@ export interface GameLoop {
   pause: () => void;
   /** Direction input from any source; gated on phase like the web page. */
   steer: (x: number, y: number) => void;
+  /** Whether the round in play was seeded by a server ticket (validated
+   *  scoring): only such a round may enter a board. */
+  canSubmit: boolean;
+  /** The finished round's evidence for the validator; null without a ticket.
+   *  Event-handler use only: it reads the live refs. */
+  roundForSubmit: () => { seedId: number; log: RoundLog } | null;
   /**
    * The direction the snake will actually be moving when the next input
    * lands: the tail of the turn queue if turns are pending, else the current
@@ -134,6 +149,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // immutability rule is right that state must not be written in place. They
   // are written only from effects and handlers, never during render.
   const game = useRef<Game | null>(null);
+  // validated scoring: the next round's server ticket, and the one the round
+  // on the table was seeded with (null = that round cannot enter a board)
+  const pocket = useRef<SeedTicket | null>(null);
+  const roundTicket = useRef<number | null>(null);
   const boxRef = useRef<LoopBox>({
     retired: [null, null],
     frameCount: 0,
@@ -155,6 +174,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const picture = useSharedValue<SkPicture>(makeEmptyPicture());
 
   const [phase, setPhase] = useState<RoundPhase>('ready');
+  // whether the round in play carries a ticket, as state so the entry form
+  // can gate on it without reading refs mid-render
+  const [canSubmit, setCanSubmit] = useState(false);
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [countText, setCountText] = useState('');
@@ -339,7 +361,23 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const start = (): void => {
     const box = boxRef.current;
     if (box.phase === 'dead' || box.phase === 'ready') {
-      game.current = createGame({ seed: freshSeed(), tickMs: box.tickMs, ...MODES[box.mode] });
+      // A real round spends a pocketed server ticket: its seed makes the
+      // finished log submittable (validated scoring). Without one the round
+      // plays identically and just cannot enter a board. The pocket refills
+      // right away so the round after this one is covered.
+      let seed = freshSeed();
+      roundTicket.current = null;
+      const ticket = pocket.current;
+      pocket.current = null;
+      if (ticket !== null && Date.now() - ticket.at < 90 * 60 * 1000) {
+        seed = ticket.seed;
+        roundTicket.current = ticket.id;
+      }
+      void issueSeed().then((next) => {
+        pocket.current ??= next;
+      });
+      setCanSubmit(roundTicket.current !== null);
+      game.current = createGame({ seed, tickMs: box.tickMs, ...MODES[box.mode] });
       game.current.drainEvents();
       box.lastClock = game.current.durationMs > 0 ? fmtClock(game.current.durationMs) : '';
       setClockText(box.lastClock);
@@ -438,6 +476,21 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     });
   };
 
+  // the pocket fills at mount so the very first round can carry a ticket
+  useEffect(() => {
+    void issueSeed().then((first) => {
+      pocket.current ??= first;
+    });
+  }, []);
+
+  // the finished round's evidence for the validator; null without a ticket.
+  // An event-handler read (never render): it touches the live refs.
+  const roundForSubmit = (): { seedId: number; log: RoundLog } | null => {
+    const finished = game.current;
+    if (!finished || roundTicket.current === null) return null;
+    return { seedId: roundTicket.current, log: finished.log };
+  };
+
   return {
     game,
     picture,
@@ -458,5 +511,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     effectiveHeading,
     debugDie,
     perfText,
+    canSubmit,
+    roundForSubmit,
   };
 }

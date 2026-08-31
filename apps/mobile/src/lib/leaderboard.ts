@@ -19,7 +19,8 @@ export interface ScoreRow {
 
 const TIMEOUT_MS = 6000;
 
-async function rpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
+/** Shared by the validate layer; components still go through query hooks. */
+export async function rpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
   if (!SUPABASE_CONFIGURED) throw new Error('leaderboard not configured');
   const ac = new AbortController();
   const timer = setTimeout(() => {
@@ -68,16 +69,11 @@ export async function fetchTopScores(limit = 10, mode: RuleMode = 'classic'): Pr
   return out;
 }
 
-/**
- * Submit one finished round. The server squashes the name to five A-Z0-9 and
- * refuses impossible scores; the returned id identifies the new row so the
- * board can highlight it.
- */
-export async function submitScore(name: string, score: number, mode: RuleMode): Promise<number> {
-  const id = await rpc('pitch_snake_submit_score', { p_name: name, p_score: score, p_mode: mode });
-  if (typeof id !== 'number') throw new Error('unexpected submit response');
-  return id;
-}
+// Submitting a score is no longer a thing any client can do: the server
+// retired the client-score RPCs in favour of validated rounds (a seed from
+// pitch_snake_issue_seed, the finished round's LOG to the validate-score
+// edge function, which replays it and computes the score itself). When the
+// app grows gameplay, its submit path is that validator, same as the page.
 
 // ---- tournaments ----
 
@@ -149,7 +145,6 @@ export async function fetchTournamentTop(code: string, limit = 10): Promise<Tour
   return out;
 }
 
-/** Submit into a tournament; the server enforces the window and the range. */
-export async function submitTournamentScore(code: string, name: string, score: number): Promise<void> {
-  await rpc('pitch_snake_tournament_submit', { p_code: code, p_name: name, p_score: score });
-}
+// Tournament submissions go through the validator too (same edge function,
+// with the tournament code riding along); see the note above submitScore's
+// old spot.
