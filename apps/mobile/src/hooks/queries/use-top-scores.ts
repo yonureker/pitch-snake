@@ -5,7 +5,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchTopScores } from '@/lib/leaderboard';
+import { BOARD_PLACES, fetchTopScores } from '@/lib/leaderboard';
 import type { RuleMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
@@ -16,7 +16,14 @@ export const TOP_SCORES_KEY = ['leaderboard', 'top'] as const;
 export function useTopScores(enabled: boolean, mode: RuleMode) {
   return useQuery({
     queryKey: [...TOP_SCORES_KEY, mode],
-    queryFn: () => fetchTopScores(10, mode),
+    queryFn: () => fetchTopScores(BOARD_PLACES, mode),
     enabled: enabled && SUPABASE_CONFIGURED,
+    // The FULL TIME board is a snapshot of the moment the round ended, and the
+    // screen reads its tenth row to decide whether to ask for a name. A board
+    // that re-shuffled on every app focus would re-judge a round already
+    // decided and could take the entry form away mid-keystroke, so the fetch
+    // on the whistle is the only one: enabling this query is what refreshes it.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }

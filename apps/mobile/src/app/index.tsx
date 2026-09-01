@@ -20,7 +20,7 @@ import { useSubmitScore } from '@/hooks/queries/use-submit-score';
 import { useSubmitTournamentScore } from '@/hooks/queries/use-submit-tournament-score';
 import { useTopScores } from '@/hooks/queries/use-top-scores';
 import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
-import type { TournamentRow } from '@/lib/leaderboard';
+import { BOARD_PLACES, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
@@ -287,6 +287,30 @@ export default function Index() {
     : '';
   // a round can only enter a board when it was seeded by a server ticket
   const canEnterBoard = loop.canSubmit && (uiMode !== 'tourney' || tStatus === 'open');
+  // A world board has ten places, so a round that cannot reach one has nowhere
+  // to save into and is never asked for a name. The tenth row comes off the
+  // standings this screen already fetches to draw them, so the gate costs no
+  // extra call and no cached cutoff that could go stale, and a round is judged
+  // against the board the player is looking at while it is judged. A
+  // tournament is a small named field where every entry belongs, so it asks.
+  const worldBoard = uiMode !== 'tourney';
+  const wantsEntry =
+    dead && loop.score > 0 && submittedId === null && submittedName === null && canEnterBoard;
+  // The answer only counts once the fetch has SETTLED. TanStack hands back the
+  // previous death's rows the instant this screen wants them and revalidates
+  // behind them, so judging on `data` alone would decide from a stale board and
+  // then change its mind, pulling the form out from under a player already
+  // typing. Waiting on isFetching is what makes this the page's own "fetch the
+  // standings at the whistle, decide once from that answer" (and why the hook
+  // turns the background refetches off, so nothing re-judges a settled round).
+  // A board that cannot be read asks: a round that might belong gets the
+  // benefit of the doubt, and the validator has the last word regardless.
+  const judged = worldBoard && topScores.isSuccess && !topScores.isFetching;
+  const placed = !worldBoard || topScores.isError || (judged && placesOnBoard(topScores.data, loop.score));
+  // what a miss would have had to beat, and null whenever there is nothing to
+  // say; a board with room always places, so a miss always has a tenth
+  const tenthScore =
+    wantsEntry && judged && !placed ? (topScores.data[BOARD_PLACES - 1]?.score ?? null) : null;
   const saving = submit.isPending || tSubmit.isPending;
   const menuPhase = loop.phase === 'ready' || dead;
   const modeCaption =
@@ -538,39 +562,38 @@ export default function Index() {
                   : loop.phase === 'paused' ?
                     <Text style={styles.overlayText}>Take a breather.</Text>
                   : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
-                  {dead &&
-                    loop.score > 0 &&
-                    submittedId === null &&
-                    submittedName === null &&
-                    canEnterBoard && (
-                      <View style={styles.entryRow}>
-                        <TextInput
-                          style={styles.nameInput}
-                          value={entryName}
-                          onChangeText={(t) => {
-                            setEntryName(
-                              t
-                                .replace(/[^a-z0-9]/gi, '')
-                                .toUpperCase()
-                                .slice(0, 5),
-                            );
-                          }}
-                          placeholder="NAME"
-                          placeholderTextColor="#9a917c"
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          maxLength={5}
-                        />
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={saveScore}
-                          disabled={saving}
-                          style={[styles.saveBtn, saving && styles.saveBtnBusy]}
-                        >
-                          <Text style={styles.saveText}>SAVE</Text>
-                        </Pressable>
-                      </View>
-                    )}
+                  {wantsEntry && placed && (
+                    <View style={styles.entryRow}>
+                      <TextInput
+                        style={styles.nameInput}
+                        value={entryName}
+                        onChangeText={(t) => {
+                          setEntryName(
+                            t
+                              .replace(/[^a-z0-9]/gi, '')
+                              .toUpperCase()
+                              .slice(0, 5),
+                          );
+                        }}
+                        placeholder="NAME"
+                        placeholderTextColor="#9a917c"
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        maxLength={5}
+                      />
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={saveScore}
+                        disabled={saving}
+                        style={[styles.saveBtn, saving && styles.saveBtnBusy]}
+                      >
+                        <Text style={styles.saveText}>SAVE</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                  {tenthScore !== null && (
+                    <Text style={styles.saveNoteSoft}>Top 10 starts at {tenthScore}.</Text>
+                  )}
                   {dead && (submit.isError || tSubmit.isError) && (
                     <Text style={styles.saveNote}>Could not reach the leaderboard. Try again.</Text>
                   )}
@@ -619,7 +642,7 @@ export default function Index() {
                   {dead && SUPABASE_CONFIGURED && uiMode !== 'tourney' && (
                     <View style={styles.standings}>
                       <Text style={styles.boardHead}>
-                        TOP 10 WORLDWIDE{ruleMode === 'speedrun' ? ' \u00b7 SPEED RUN' : ''}
+                        TOP 10 WORLDWIDE{ruleMode === 'classic' ? '' : ` \u00b7 ${RULE_LABEL[ruleMode]}`}
                       </Text>
                       {topScores.isPending ?
                         <Text style={styles.boardEmpty}>Loading…</Text>
@@ -1037,6 +1060,9 @@ const styles = StyleSheet.create({
   saveBtnBusy: { opacity: 0.5 },
   saveText: { fontFamily: ANTON, color: '#ffffff', fontSize: 14, letterSpacing: 1.5 },
   saveNote: { fontFamily: BARLOW, fontSize: 12, color: GameColors.food },
+  // guidance is not failure: only a genuine error wears the red, same split
+  // the page makes with .save-note.soft
+  saveNoteSoft: { fontFamily: BARLOW, fontSize: 12, color: '#b7ac93' },
   standings: {
     width: '72%',
     maxWidth: 250,

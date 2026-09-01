@@ -17,6 +17,22 @@ export interface ScoreRow {
   score: number;
 }
 
+/** How many places a world board has. One source for the ten. */
+export const BOARD_PLACES = 10;
+
+/**
+ * Whether a score reaches the board, and so whether the round is worth asking
+ * a name for. The board orders by score desc, created_at asc, so matching the
+ * tenth is not reaching it: an equal score sorts behind the older row and has
+ * to be beaten. A board with room takes anyone, which is why a missing tenth
+ * is a yes. Lives here rather than in the screen because it is a fact about
+ * the board's shape, and the rows it judges are fetched three lines down.
+ */
+export function placesOnBoard(rows: ScoreRow[], score: number): boolean {
+  const tenth = rows[BOARD_PLACES - 1];
+  return tenth === undefined || score > tenth.score;
+}
+
 const TIMEOUT_MS = 6000;
 
 /** Shared by the validate layer; components still go through query hooks. */
