@@ -379,6 +379,27 @@
   html.touchless .dpad, html.touchless .touch-only { display: none; }
   html.touch .kb-only { display: none; }
 
+  /* A pad announces itself and the page changes register: the hint line talks
+     in buttons, and the focus ring comes on. The ring is the whole reason a
+     controller can drive this page at all, so it is sized to be read from a
+     sofa rather than from a desk, and it is deliberately NOT the browser's
+     default outline, which disappears against the dark panel. */
+  .pad-only { display: none; }
+  html.padded .pad-only { display: inline; }
+  html.padded .kb-only, html.padded .touch-only { display: none; }
+  html.padded .dpad { display: none; }
+  html.padded button:focus, html.padded input:focus {
+    outline: 3px solid var(--food);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  /* and for anyone arriving by keyboard, on any device: a page with no focus
+     ring at all was only ever navigable by pointer */
+  button:focus-visible, input:focus-visible {
+    outline: 3px solid var(--food);
+    outline-offset: 3px;
+  }
+
   /* A fine-pointer machine has no pad below the board, so the column stops
      pretending to be a phone: its width follows the viewport HEIGHT (board
      plus header, hint and gaps, about 200px of chrome), never narrower than
@@ -982,6 +1003,10 @@
       <span class="kb-only"><b>SPACE</b> pause</span>
       <span class="kb-only"><b>M</b> mute</span>
       <span class="touch-only"><b>SWIPE</b> or <b>D-PAD</b> move</span>
+      <span class="pad-only"><b>D-PAD</b> / <b>STICK</b> move</span>
+      <span class="pad-only"><b>&#9312;</b> select</span>
+      <span class="pad-only"><b>&#9313;</b> back</span>
+      <span class="pad-only"><b>START</b> pause</span>
       <span><b>&#9881;</b> for settings</span>
     </div>
 
@@ -2448,6 +2473,7 @@
     lastTick = now;
     if (dt > MAX_DT) dt = MAX_DT;
     else if (dt < 0) dt = 0;
+    padPoll(now);          // before the sim, so a pad press lands on this frame
     if (state === 'countdown') {
       countClock += dt;
       if (countClock >= COUNT_TOTAL) state = 'playing';   // kick off
@@ -3079,6 +3105,7 @@
     best = bestByMode[ruleMode()] || 0;
     bestEl.textContent = best;
     markOverflow();
+    padRehome();      // this pass may have hidden whatever held the focus ring
   }
 
   // A small board cannot always hold a five-mode list; when it cannot, the
@@ -4074,6 +4101,207 @@
   dpad.addEventListener('lostpointercapture', padEnd);
   dpad.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  // ---- gamepads: one more device, never a second set of rules ----
+  // The Gamepad API has no press events, so a pad is polled once a frame out
+  // of loop(). Everything it produces then goes exactly where a key or a
+  // thumb goes: a direction through dirInput (rule 12), a menu press through
+  // the same click() the pointer fires. That is what makes a DualShock on an
+  // iPhone, an Xbox pad on a Steam machine and a TV remote all one input.
+  //
+  // The point is not only the pad. It is that the whole page becomes
+  // drivable with four directions and a button, which is the only vocabulary
+  // a television remote or a handheld has. A screen you cannot reach without
+  // a pointer is a screen that does not ship to those places.
+  //
+  // navigator.getGamepads() builds its array on every call and there is no
+  // evented alternative, so this is the one sanctioned per-frame allocation:
+  // rule 4 governs the draw path, and this runs before it, once, over at most
+  // four slots.
+  const PAD_DEAD = 0.55;        // stick past this is a direction
+  const PAD_RELEASE = 0.3;      // and back under this before it counts again
+  const PAD_REPEAT_FIRST = 380; // a held direction in a MENU waits this long
+  const PAD_REPEAT_MS = 140;    // and then repeats at this rate
+  let padDpadPrev = 0, padBtnPrev = 0, padStick = 0, padRepeatAt = 0, padHeld = null;
+  let padMenuWas = false;
+
+  // visible, enabled and actually laid out; the wedges are the snake's, never
+  // the menu's, and a hidden panel's buttons are not on this screen
+  function padUsable(el) {
+    if (!el || el.disabled || el.hidden || el.classList.contains('wedge')) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+  // whatever surface is on top owns the focus ring: a modal, else the overlay
+  function padScope() {
+    if (!settingsModal.hidden) return settingsModal;
+    if (!profileModal.hidden) return profileModal;
+    return overlay.classList.contains('hidden') ? null : overlay;
+  }
+  function padControls() {
+    const root = padScope();
+    if (!root) return [];
+    const out = [];
+    for (const el of root.querySelectorAll('button, input')) if (padUsable(el)) out.push(el);
+    return out;
+  }
+  // The primary of whatever screen is up, so a pad always has somewhere to
+  // land. Scope first: mid-round the overlay is only visually hidden, so its
+  // buttons still measure and would otherwise look like live targets.
+  function padPrimary() {
+    if (!padScope()) return null;
+    for (const b of [modeGoBtn, vsCreateBtn, settingsClose, startBtn]) if (padUsable(b)) return b;
+    return padControls()[0] || null;
+  }
+  // Opening a panel hides whatever held the ring, and focus falls to <body>,
+  // which no direction can move off. So every UI change re-homes it. Safe to
+  // call from anywhere: the class it gates on is only ever set by
+  // padPresent, which cannot run before this whole script has evaluated.
+  function padRehome() {
+    if (!document.documentElement.classList.contains('padded')) return;
+    const list = padControls();
+    if (!list.length || list.indexOf(document.activeElement) >= 0) return;
+    const p = padPrimary();
+    if (p) p.focus();
+  }
+  // Spatial, not tab order: score every candidate by how far it lies in the
+  // pressed direction plus a heavy penalty for drifting off that axis, so
+  // straight ahead beats diagonally near. Reads layout, but only on a press.
+  function padMoveFocus(dx, dy) {
+    const list = padControls();
+    if (!list.length) return;
+    const active = document.activeElement;
+    // nothing focused yet: the first press spends itself landing on the
+    // primary, which is where a pad user wanted to be anyway
+    if (list.indexOf(active) < 0) { (padPrimary() || list[0]).focus(); return; }
+    const a = active.getBoundingClientRect();
+    const fx = a.left + a.width / 2, fy = a.top + a.height / 2;
+    let best = null, bestScore = Infinity;
+    for (const el of list) {
+      if (el === active) continue;
+      const r = el.getBoundingClientRect();
+      const ax = r.left + r.width / 2 - fx, ay = r.top + r.height / 2 - fy;
+      const along = dx ? ax * dx : ay * dy;
+      if (along <= 1) continue;                      // not the way we are going
+      const off = dx ? Math.abs(ay) : Math.abs(ax);
+      const score = along + off * 3;
+      if (score < bestScore) { bestScore = score; best = el; }
+    }
+    if (best) best.focus();
+  }
+  // A round takes turns; anything else takes focus. One funnel, one gate.
+  function padDir(x, y) {
+    if (state === 'playing' || state === 'countdown') dirInput(x, y);
+    else padMoveFocus(x, y);
+  }
+  function padConfirm() {
+    if (state === 'playing' || state === 'countdown') return;
+    const el = document.activeElement;
+    if (padUsable(el) && padControls().indexOf(el) >= 0) {
+      if (el.tagName === 'INPUT') el.focus(); else el.click();
+      return;
+    }
+    const p = padPrimary();
+    if (p) p.focus();
+  }
+  function padBack() {
+    if (state === 'playing') { togglePause(); return; }
+    if (!settingsModal.hidden) { settingsClose.click(); return; }
+    for (const b of [modeBackBtn, vsBackBtn, tBackBtn]) if (padUsable(b)) { b.click(); return; }
+  }
+  function padStartBtn() {
+    if (state === 'playing' || state === 'paused') { togglePause(); return; }
+    const p = padPrimary();
+    if (p) p.click();
+  }
+
+  function padPoll(now) {
+    if (!navigator.getGamepads) return;
+    // A screen arriving with nothing focused strands a pad: no direction can
+    // move off <body>. Rather than chase every place that shows the overlay,
+    // watch the transition here. Both reads are properties, not layout, so
+    // the steady-state cost is nil and the measuring only happens on the edge.
+    const menuUp = !overlay.classList.contains('hidden') || !settingsModal.hidden || !profileModal.hidden;
+    if (menuUp !== padMenuWas) { padMenuWas = menuUp; if (menuUp) padRehome(); }
+
+    const pads = navigator.getGamepads();
+    let gp = null;
+    for (let i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) { gp = pads[i]; break; }
+    if (!gp) { padDpadPrev = 0; padBtnPrev = 0; padStick = 0; padHeld = null; return; }
+    const b = gp.buttons, ax = gp.axes;
+    const down = (i) => !!b[i] && (b[i].pressed || b[i].value > 0.5);
+
+    // the d-pad reads like a key: edge-triggered, one turn per press
+    const dp = (down(12) ? 1 : 0) | (down(13) ? 2 : 0) | (down(14) ? 4 : 0) | (down(15) ? 8 : 0);
+    const fresh = dp & ~padDpadPrev;
+    padDpadPrev = dp;
+    if (fresh & 1) padDir(0, -1);
+    if (fresh & 2) padDir(0, 1);
+    if (fresh & 4) padDir(-1, 0);
+    if (fresh & 8) padDir(1, 0);
+
+    // the stick needs a release band, or a thumb resting on the rim fires for
+    // ever; it engages past PAD_DEAD and only re-arms back under PAD_RELEASE
+    const lx = ax.length > 0 ? ax[0] : 0, ly = ax.length > 1 ? ax[1] : 0;
+    let s = 0;
+    if (Math.abs(lx) > Math.abs(ly)) { if (lx <= -PAD_DEAD) s = 3; else if (lx >= PAD_DEAD) s = 4; }
+    else { if (ly <= -PAD_DEAD) s = 1; else if (ly >= PAD_DEAD) s = 2; }
+    if (s === 0 && Math.max(Math.abs(lx), Math.abs(ly)) < PAD_RELEASE) padStick = 0;
+    else if (s && s !== padStick) {
+      padStick = s;
+      padDir(s === 3 ? -1 : s === 4 ? 1 : 0, s === 1 ? -1 : s === 2 ? 1 : 0);
+    }
+
+    // Menus repeat a held direction, because walking a list one press at a
+    // time is miserable on a sofa. A ROUND never repeats: there, one press is
+    // one turn, and setDir would filter the repeat anyway.
+    const menu = state !== 'playing' && state !== 'countdown';
+    const hx = (dp & 4 ? -1 : 0) + (dp & 8 ? 1 : 0) || (padStick === 3 ? -1 : padStick === 4 ? 1 : 0);
+    const hy = (dp & 1 ? -1 : 0) + (dp & 2 ? 1 : 0) || (padStick === 1 ? -1 : padStick === 2 ? 1 : 0);
+    if (menu && (hx || hy)) {
+      if (!padHeld || padHeld.x !== hx || padHeld.y !== hy) {
+        padHeld = { x: hx, y: hy };
+        padRepeatAt = now + PAD_REPEAT_FIRST;
+      } else if (now >= padRepeatAt) {
+        padMoveFocus(hx, hy);
+        padRepeatAt = now + PAD_REPEAT_MS;
+      }
+    } else {
+      padHeld = null;
+    }
+
+    // A/cross confirms, B/circle backs out, Start starts and pauses. Those
+    // three are in the same place on every pad worth supporting.
+    const btn = (down(0) ? 1 : 0) | (down(1) ? 2 : 0) | (down(9) ? 4 : 0);
+    const btnFresh = btn & ~padBtnPrev;
+    padBtnPrev = btn;
+    if (btnFresh & 1) padConfirm();
+    if (btnFresh & 2) padBack();
+    if (btnFresh & 4) padStartBtn();
+  }
+
+  // A pad announces itself, and the page says so: the hint line swaps to the
+  // pad's own verbs and the focus ring turns on, because until a pad is here
+  // a ring on every click would just be noise to a mouse.
+  function padPresent(on) {
+    document.documentElement.classList.toggle('padded', on);
+    // a pad takes the touch d-pad off the screen and gives the board that
+    // height back; this shell is height-driven, so the canvas must be rebuilt
+    // or it keeps the size it had under the old layout
+    resizeQueued = true;
+    // membership, not usability: with nothing focused the active element is
+    // <body>, which is perfectly usable and not a control, so testing
+    // usability alone would decide the ring already had a home and skip this
+    if (!on || padControls().indexOf(document.activeElement) >= 0) return;
+    const p = padPrimary();
+    if (p) p.focus();
+  }
+  window.addEventListener('gamepadconnected', () => padPresent(true));
+  window.addEventListener('gamepaddisconnected', () => {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (let i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) return;
+    padPresent(false);
+  });
+
   // speed and walls apply to the NEXT round; the controls are locked in-round,
   // so from the player's view nothing ever changes mid-game
   document.querySelectorAll('.speed-row button').forEach(b => {
@@ -4134,8 +4362,8 @@
     lockHint.style.display = inRound ? 'block' : 'none';
     syncMpQuit();
   }
-  gearBtn.addEventListener('click', () => { refreshSettingsUI(); settingsModal.hidden = false; });
-  settingsClose.addEventListener('click', () => { settingsModal.hidden = true; });
+  gearBtn.addEventListener('click', () => { refreshSettingsUI(); settingsModal.hidden = false; padRehome(); });
+  settingsClose.addEventListener('click', () => { settingsModal.hidden = true; padRehome(); });
   settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.hidden = true; });
 
   // ---- player chip + profile sheet ----
@@ -4243,11 +4471,12 @@
     buildCountries();
     refreshProfileSheet(true);
     profileModal.hidden = false;
+    padRehome();
   }
 
   whoBtn.addEventListener('click', openProfile);
   document.getElementById('authNudge').addEventListener('click', openProfile);
-  profileClose.addEventListener('click', () => { profileModal.hidden = true; });
+  profileClose.addEventListener('click', () => { profileModal.hidden = true; padRehome(); });
   profileModal.addEventListener('click', (e) => { if (e.target === profileModal) profileModal.hidden = true; });
 
   // same wash the server applies, mirrored so the field shows what will stick
