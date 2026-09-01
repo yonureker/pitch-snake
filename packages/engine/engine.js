@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 18;  // 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 19;  // 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -651,6 +651,7 @@ export function createGame(cfg = {}) {
       role: S.ghosts.length % 5,
       moveAt: S.clockMs + GHOST_MS, stepMs: GHOST_MS,
       majX: c.x, majY: c.y,        // majority cell one quantum ago (rule 24)
+      crossed: true,               // standing where it is: nothing in flight to hold
     });
   }
 
@@ -819,6 +820,7 @@ export function createGame(cfg = {}) {
   const cloneGhost = g => ({
     x: g.x, y: g.y, px: g.px, py: g.py, dir: { x: g.dir.x, y: g.dir.y },
     warped: g.warped, role: g.role, moveAt: g.moveAt, stepMs: g.stepMs, majX: g.majX, majY: g.majY,
+    crossed: g.crossed,
   });
 
   // one ghost moves at a time, so the step search shares this scratch
@@ -827,6 +829,7 @@ export function createGame(cfg = {}) {
 
   function moveGhost(g) {
     g.px = g.x; g.py = g.y;                    // remember where we came from (smooth render)
+    g.crossed = false;                         // a fresh step has not passed the line yet
     // a ghost in either window spends this move coming out of the other,
     // keeping its heading, but only when the far side is clear, and never
     // straight back out of the window that has just put it down
@@ -904,6 +907,19 @@ export function createGame(cfg = {}) {
     for (const g of S.ghosts) {
       if (S.clockMs >= g.moveAt) { moveGhost(g); g.stepMs = stepMs; g.moveAt = S.clockMs + stepMs; }
     }
+  }
+
+  // Whether any living head is standing in this cell: the one it is entering
+  // (held from the first quantum of the glide, not from the halfway flip) or
+  // the one it is still leaving. The two cells a head is drawn across.
+  function headHolds(x, y) {
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (!p.alive) continue;
+      if (p.snake[0].x === x && p.snake[0].y === y) return true;
+      if (p.headFrom.x === x && p.headFrom.y === y) return true;
+    }
+    return false;
   }
 
   // The cell a ghost visually occupies right now: its render position
@@ -1292,16 +1308,57 @@ export function createGame(cfg = {}) {
         else if (!whistle) { die(p, reason); p.doom = d; }
       }
     }
+    // ---- the hold (rule 24) ----
+    // A ghost never crosses into a cell a head is standing in. ghostBlocked
+    // already stops one CHOOSING such a cell, but a step is committed up to a
+    // whole GHOST_MS before it lands and a head crosses two to five cells in
+    // that time, so the cell can fill up under a glide already in flight.
+    // That glide stops just short of the majority line and its clock is held
+    // there: the ghost is drawn nosing into the cell without ever occupying
+    // it, and when the head moves on the step finishes on the time it had
+    // left. Rule 24 stays exactly true throughout, because short of the line
+    // the cell the ghost is drawn in really is still the one it came from.
+    //
+    // A head holds BOTH cells it is drawn across: the one it is entering,
+    // from the very first quantum of the glide rather than from the halfway
+    // flip, and the one it is still leaving. That is what makes every ghost
+    // death one the player steered into. It is the same principle rule 21
+    // already applies to a window's far end, now applied to ordinary steps.
+    //
+    // Only a glide that has not yet passed the line can be held: once a ghost
+    // is legitimately majority-in a cell it owns it, and a head walking in
+    // there dies, which is the whole remaining way a ghost kills. A ghost
+    // that did not move (boxed in) has nothing in flight and is skipped.
+    //
+    // The hold runs here, after every head has taken its step and after the
+    // doom window has resolved, so it reads this quantum's final positions
+    // and lands immediately before contact is judged on them.
+    if (anyAlive()) {
+      for (const gh of S.ghosts) {
+        if (gh.crossed) continue;
+        if (gh.x === gh.px && gh.y === gh.py) continue;
+        const span = gh.stepMs || GHOST_MS;
+        if ((gh.moveAt - S.clockMs) * 2 > span) continue;   // still short of the line
+        if (headHolds(gh.x, gh.y)) {
+          // the largest gap that still leaves it short, on the quantum grid so
+          // every peer computes the identical number
+          gh.moveAt = S.clockMs + Math.ceil(span / 2 / SIM_DT) * SIM_DT + SIM_DT;
+        } else {
+          gh.crossed = true;                                // the cell was free: it is in
+        }
+      }
+    }
     // ---- contact (rule 24) ----
     // Every mover is exactly where it is drawn. A head's one cell is the
     // cell it left until its glide passes half, then the cell it is entering;
     // a ghost's is ghostAt (render position rounded, hops snap at the same
-    // half). Contact is those cells coinciding, tested every quantum, so a
-    // ghost sliding majority-onto a head kills between snake steps and a
-    // near-miss that never overlaps majorities is survivable. Two movers
-    // exchanging cells inside one quantum crossed paths: that is contact too.
-    // Snakes are tested against ghosts only: two heads sharing a cell is a
-    // race, not a wreck.
+    // half). Contact is those cells coinciding, tested every quantum. The
+    // hold above means the ghost can no longer be the one that closes that
+    // gap, so what remains is a head moving onto a ghost already standing
+    // there, and a near-miss that never overlaps majorities stays survivable.
+    // Two movers exchanging cells inside one quantum crossed paths: that is
+    // contact too. Snakes are tested against ghosts only: two heads sharing a
+    // cell is a race, not a wreck.
     if (anyAlive()) {
       for (const p of players) {
         if (!p.alive) continue;

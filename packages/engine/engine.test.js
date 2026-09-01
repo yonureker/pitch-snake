@@ -1444,22 +1444,116 @@ test('survival versus: the last snake standing clinches by outliving the field',
   assert.deepEqual(g.log.finalScores, g.players.map(p => p.score), 'the record carries both times');
 });
 
-test('contact: a ghost sliding majority-onto the head kills between snake steps', () => {
+test('the hold: a ghost stops at the line rather than sliding onto a head', () => {
   // SLOW tick (200): head at (5,5) heading right steps at 200ms. A ghost is
-  // mid-glide from (5,4) into (5,5); its majority cell flips there at 250ms,
-  // when the head has ALREADY stepped to (6,5) in state but is still drawn
-  // majority-in (5,5) (its trailing half). The old cell-entry check saw
-  // nothing; the majority rule is a hit at exactly that quantum.
+  // mid-glide from (5,4) into (5,5) and would flip its majority there at
+  // 250ms, when the head has ALREADY stepped to (6,5) in state but is still
+  // drawn majority-in (5,5), its trailing half. That flip used to be the
+  // kill. Now the head holds both cells it is drawn across, so the ghost is
+  // held short of the line and nobody dies of it.
   const g = quietGame({ tickMs: 200 });
   foodFar(g);
   setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
   g.ghosts.push({ x: 5, y: 5, px: 5, py: 4, dir: { x: 0, y: 1 }, warped: false, role: 0,
-                  moveAt: g.clockMs + 500 });
+                  moveAt: g.clockMs + 500, crossed: false });
+  const gh = g.ghosts[0];
   g.advanceQuanta(24);
-  assert.equal(g.alive, true, 'at 240ms the ghost is still minority in the cell: no contact');
+  assert.equal(g.alive, true, 'at 240ms the ghost is still short of the line');
   g.advanceQuanta(1);
-  assert.equal(g.alive, false, 'at 250ms both majorities sit in (5,5)');
+  assert.equal(g.alive, true, 'at 250ms it would have flipped onto the head: held instead');
+  let at = g.ghostAt(gh);
+  assert.deepEqual({ x: at.x, y: at.y }, { x: 5, y: 4 }, 'it is still drawn in the cell it came from');
+  assert.equal(gh.crossed, false, 'and it has not taken the contested cell');
+
+  // it stays held while the head is still drawn across (5,5), which lasts
+  // until the head's NEXT step at 400ms carries its trailing half to (6,5)
+  g.advanceQuanta(14);
+  assert.equal(g.alive, true, 'still alive at 390ms, still held');
+  at = g.ghostAt(gh);
+  assert.deepEqual({ x: at.x, y: at.y }, { x: 5, y: 4 }, 'still short of the line at 390ms');
+
+  // At 400ms the head's next step carries its trailing half to (6,5) and
+  // (5,5) is free. The ghost takes it at once, because a hold is a pause and
+  // not a cancellation: it is never shoved backwards and never gives up the
+  // cell it was walking to.
+  g.advanceQuanta(2);
+  at = g.ghostAt(gh);
+  assert.deepEqual({ x: at.x, y: at.y }, { x: 5, y: 5 }, 'released, it takes the cell it was headed for');
+  assert.equal(gh.crossed, true, 'and it owns that cell now');
+  assert.equal(g.alive, true, 'the snake it never touched is still running');
+});
+
+test('the hold: walking into a ghost that already owns its cell still kills', () => {
+  // The other half of the rule. A ghost standing still owns its cell from the
+  // start, so it is never held out of it, and a head that steps in dies at the
+  // majority flip exactly as before. This is the whole remaining way a ghost
+  // kills, and it is one the player steered into.
+  const g = quietGame({ tickMs: 200 });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.ghosts.push({ x: 6, y: 5, px: 6, py: 5, dir: { x: 0, y: 0 }, warped: false, role: 0,
+                  moveAt: g.clockMs + 1e9, crossed: true });
+  g.advanceQuanta(29);
+  assert.equal(g.alive, true, 'at 290ms the head is drawn majority-in the cell it left');
+  g.advanceQuanta(1);
+  assert.equal(g.alive, false, 'at 300ms its majority reaches the ghost');
   assert.equal(g.deadReason, 'ghost');
+});
+
+test('the hold: over a busy minute, no ghost ever crosses onto a living head', () => {
+  // The invariant the whole rule exists for, checked against a real round
+  // rather than a set piece: a ghost's drawn cell may only CHANGE into a cell
+  // no living head is drawn across. It may already share a cell with a head,
+  // because that is what a head walking into a ghost looks like for the half
+  // tick before its majority arrives; what it may never do is be the one that
+  // closes the gap.
+  // the busy-minute pattern: a full pack, and the pilot put back on its feet
+  // whenever it falls, so a whole minute of ghost walking gets watched
+  const g = createGame({ seed: 4242 });
+  g.score = 95;                                              // the ghost ladder fully unlocked
+  const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  let seen = new Map(), turns = 0, crossings = 0;
+  for (let q = 0; q < 6000; q++) {
+    if (!g.alive) {
+      setSnake(g, [[8, 10], [7, 10], [6, 10]], 1, 0);
+      g.alive = true; g.deadReason = null;
+    }
+    g.advanceQuanta(1);
+    for (let n = 0; n < g.ghosts.length; n++) {
+      const at = g.ghostAt(g.ghosts[n]);
+      const cell = K(at.x, at.y), was = seen.get(n);
+      if (was !== undefined && was !== cell) {
+        crossings++;
+        for (const p of g.players) {
+          if (!p.alive) continue;
+          assert.notEqual(cell, K(p.snake[0].x, p.snake[0].y),
+            `q${g.quanta}: a ghost crossed onto the cell a head is entering`);
+          assert.notEqual(cell, K(p.headFrom.x, p.headFrom.y),
+            `q${g.quanta}: a ghost crossed onto the cell a head is still leaving`);
+        }
+      }
+      seen.set(n, cell);
+    }
+    if (g.quanta % 9 === 0) { const d = dirs[(turns++) % 4]; g.setDir(d[0], d[1]); }
+  }
+  assert.ok(crossings > 200, `the ghosts really did walk (${crossings} crossings watched)`);
+});
+
+test('the hold: a held ghost is delayed, never parked', () => {
+  // A hold is one cell and one glide, not a standing immunity and not a
+  // stall: the blocked step completes as soon as the head is gone and the
+  // ghost walks on at its own pace. Guarding the pace matters, because a hold
+  // that failed to release would leave a ghost frozen for the whole round.
+  const g = quietGame({ tickMs: 200 });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.ghosts.push({ x: 5, y: 5, px: 5, py: 4, dir: { x: 0, y: 1 }, warped: false, role: 0,
+                  moveAt: g.clockMs + 500, crossed: false });
+  const gh = g.ghosts[0];
+  const seen = new Set();
+  for (let n = 0; n < 40; n++) { g.advanceQuanta(5); seen.add(K(gh.x, gh.y)); }
+  assert.ok(seen.size >= 3, `the ghost kept walking (visited ${seen.size} cells in two seconds)`);
+  assert.ok(gh.moveAt - g.clockMs <= GHOST_MS, 'and its step clock is an ordinary one');
 });
 
 test('contact: brushing past ahead of the flip is a survivable near miss', () => {
@@ -1576,11 +1670,14 @@ test('ghosts route through portals on purpose, and never through spent ones', ()
 // to what today's engine deterministically makes of them. They began as the
 // proof that one snake on the multi-snake machine IS the old machine, and
 // they have been re-pinned by every rules change since: v7's ghost burial,
-// v8's doom window, and now v10, where ghosts walk the board instead of
-// flying over it. That last one moved all three: a recorded log is a fixed
+// v8's doom window, v10, where ghosts walk the board instead of flying over
+// it, and now v19's hold. v10 moved all three: a recorded log is a fixed
 // script, so once a ghost stands somewhere else the pilot is playing blind
-// and dies early. It is divergence, not difficulty. No log was ever
-// persisted, so no record was rewritten.
+// and dies early. It is divergence, not difficulty. v19 moved only speedrun,
+// and only by eight quanta: the pilot was saved from one ghost that used to
+// slide onto it, walked eighty more milliseconds, and died to a ghost anyway.
+// That is the change working, and its narrowness is the point. No log was
+// ever persisted, so no record was rewritten.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -1687,10 +1784,12 @@ test('multi-snake: snakes pass through each other; ghosts still kill their own',
   foodFar(h);
   setPlayerSnake(h, 0, [[2, 15], [1, 15], [0, 15]], 1, 0);
   setPlayerSnake(h, 1, [[5, 5], [4, 5], [3, 5]], 1, 0);
-  h.ghosts.push({ x: 5, y: 5, px: 5, py: 4, dir: { x: 0, y: 1 }, warped: false, role: 0,
-                  moveAt: h.clockMs + 500 });
-  h.advanceQuanta(25);
-  assert.equal(h.players[1].alive, false, 'the ghost took the snake it was on');
+  // a ghost standing in the second snake's path: it owns that cell, so it is
+  // never held out of it, and snake 1 walks straight into it (the hold)
+  h.ghosts.push({ x: 6, y: 5, px: 6, py: 5, dir: { x: 0, y: 0 }, warped: false, role: 0,
+                  moveAt: h.clockMs + 1e9, crossed: true });
+  h.advanceQuanta(30);
+  assert.equal(h.players[1].alive, false, 'the ghost took the snake that walked into it');
   assert.equal(h.players[1].deadReason, 'ghost');
   assert.equal(h.players[0].alive, true, 'and nobody else');
   assert.equal(h.alive, true, 'the round goes on without the fallen');
