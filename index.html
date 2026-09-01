@@ -1500,11 +1500,19 @@
     nameInput.value = sbProfile && sbProfile.name ? sbProfile.name : '';
     // a tournament board only takes entries while its window is open
     const canEnter = mode !== 'tourney' || tourneyState() === 'open';
-    entryWanted = g.score > 0 && canEnter;
+    // A tournament is a small named field where every entry belongs, so it
+    // asks at once. The world boards hold ten places, and whether this round
+    // reaches one is only knowable from the standings, so their form waits for
+    // askIfItPlaces to read the tenth row off the board being fetched anyway.
+    const worldBoard = mode !== 'tourney';
+    entryWanted = g.score > 0 && canEnter && !worldBoard;
     saveNote.hidden = true;
+    saveNote.className = 'save-note';
     showModes = false;
     savePersonalBest();          // the round is over; that best is worth keeping
-    renderStandings();
+    const gen = ++deathGen;
+    if (g.score > 0 && worldBoard) askIfItPlaces(gen, g.score);
+    else renderStandings();
     refreshModeUI();
     overlay.classList.remove('hidden');
     refreshSettingsUI();
@@ -2760,7 +2768,11 @@
 
   // renders race when the backend is slow (die() fires one without awaiting, a
   // quick save fires another); the generation counter lets only the newest
-  // render win, so a stale list can't overwrite the saved one
+  // render win, so a stale list can't overwrite the saved one. Returns the
+  // list it drew, so the caller that needs the tenth row (askIfItPlaces) reads
+  // it off the render instead of asking the server a second time; a render
+  // that lost the race returns nothing, which is also the answer "do not
+  // decide anything from this".
   let standingsGen = 0;
   async function renderStandings(highlightKey) {
     if (mode === 'versus') {          // room results are rendered by the room
@@ -2781,7 +2793,7 @@
       li.className = 'empty';
       li.textContent = 'No scores yet';
       standingsEl.appendChild(li);
-      return;
+      return list;                  // an empty board is a board with room
     }
     list.forEach((e, i) => {
       const li = document.createElement('li');
@@ -2792,6 +2804,43 @@
       li.append(rk, nm, sc);
       standingsEl.appendChild(li);
     });
+    return list;
+  }
+
+  // ---- who gets asked for a name ----
+  // A world board has ten places, so a round that cannot reach one has nowhere
+  // to save into and is never asked. The gate is the tenth row of the very
+  // standings the death screen fetches anyway: no second call, no cutoff
+  // cached somewhere to drift out of date, and the board a round is judged
+  // against is the one the player is looking at while it is judged.
+  //
+  // Ten rows and the board orders by score desc, created_at asc, so matching
+  // the tenth is not reaching it: an equal score sorts behind the older one.
+  // It has to be beaten. A board with room takes anyone, which is also the
+  // offline answer, since a short local list is the board the row lands on.
+  function placesOnBoard(list, sc) {
+    return list.length < MAX_ENTRIES || sc > list[MAX_ENTRIES - 1].score;
+  }
+
+  // The form waits for that answer rather than opening on every death. Bumping
+  // deathGen retires a decision still in the air, so a restart, a mode switch
+  // or a save that lands first can never be overruled by a late board.
+  let deathGen = 0;
+  function retireEntry() { deathGen++; entryWanted = false; }
+  async function askIfItPlaces(gen, sc) {
+    const list = await renderStandings();
+    if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
+    if (!list) return;                   // a newer render owns the screen
+    if (placesOnBoard(list, sc)) {
+      entryWanted = true;
+      refreshModeUI();
+      setTimeout(() => nameInput.focus(), 60);
+      return;
+    }
+    // a miss is worth a number: what it would have taken is the next target
+    saveNote.textContent = 'Top 10 starts at ' + list[MAX_ENTRIES - 1].score + '.';
+    saveNote.className = 'save-note soft';
+    saveNote.hidden = false;
   }
 
   // BEST is the player's own best, kept in this browser. It used to be the top
@@ -2843,6 +2892,7 @@
       saveBtn.disabled = false;
       nameInput.disabled = false;
       saveNote.textContent = 'Could not reach the leaderboard. Try again.';
+      saveNote.className = 'save-note';   // a real error wears the red again
       saveNote.hidden = false;
     }
   }
@@ -3062,7 +3112,8 @@
     else {
       // the finished round belongs to the mode it was played under: switching
       // now retires its entry form and shows the new mode's board instead
-      entryWanted = false;
+      retireEntry();
+      saveNote.hidden = true;
       renderStandings();
     }
     refreshModeUI();
@@ -3153,7 +3204,7 @@
     tourney = null;
     tCreating = false;
     persistModeState();
-    if (state === 'dead') { entryWanted = false; renderStandings(); }
+    if (state === 'dead') { retireEntry(); saveNote.hidden = true; renderStandings(); }
     refreshModeUI();
   });
 
