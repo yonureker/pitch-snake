@@ -721,6 +721,26 @@
     background: rgba(33,30,26,0.5); border-radius: 8px;
     border: 1px solid rgba(194,162,90,0.4);
   }
+  /* One flag rule for every surface. The sprite is a 16-wide grid of 60x45
+     cells; drawn at 20x15 that is a third, so the background is scaled to
+     320x240 and each cell lands on a whole pixel. */
+  .flag {
+    width: 20px; height: 15px; flex: 0 0 20px;
+    background-image: url(assets/flags.png);
+    background-size: 320px 240px;
+    background-repeat: no-repeat;
+    border-radius: 2px;
+    align-self: center;
+  }
+  .flag[hidden] { display: none; }
+  /* on the chip the flag sits inline with the name rather than in a column */
+  .chip-flag { flex: 0 0 20px; }
+  /* the option list is text (an <option> can hold nothing else), so the
+     chosen flag is shown for real right beside the control */
+  .country-row { display: flex; align-items: center; gap: 9px; }
+  .country-row select { flex: 1 1 auto; min-width: 0; }
+  /* a row with no flag still lines its names up with the rows that have one */
+  .standings .fl-gap { width: 20px; flex: 0 0 20px; }
   .standings li {
     display: flex; align-items: baseline; gap: 10px;
     font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 14px;
@@ -1069,7 +1089,7 @@
       <div class="modal profile">
         <div class="modal-title" id="profTitle">Player</div>
         <div class="entry wide"><input id="profName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false"></div>
-        <div class="entry wide" id="profCountryRow"><select id="profCountry"><option value="">NO FLAG</option></select></div>
+        <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag" hidden></span><select id="profCountry"><option value="">NO FLAG</option></select></div>
         <button class="btn small" id="profSaveBtn">SAVE</button>
         <div class="prof-auth" id="profAuthAnon" hidden>
           <p class="vs-hint">Your name, flag and scores will work on any device.</p>
@@ -2785,9 +2805,13 @@
   // carry a key rather than a timestamp now, since a remote row is identified by
   // its id and a local one by when it was written.
   const asList = v => Array.isArray(v) ? v : [];
+  // A country only ever arrives as a two-letter code or nothing: a stored
+  // junk value must render as no flag, never as whatever codepoints the
+  // arithmetic in flagOf would land on.
+  const cc = v => (typeof v === 'string' && /^[A-Za-z]{2}$/.test(v)) ? v.toUpperCase() : null;
   const asLocal = list => asList(list)
     .filter(e => e && typeof e.score === 'number')
-    .map(e => ({ key: 'l' + e.ts, name: String(e.name || 'YOU'), score: e.score, ts: e.ts }));
+    .map(e => ({ key: 'l' + e.ts, name: String(e.name || 'YOU'), score: e.score, ts: e.ts, country: cc(e.country) }));
 
   async function loadLocalStandings() {
     const key = localBoardKey();
@@ -2829,13 +2853,13 @@
           boardIsLocal = false;
           return asList(rows)
             .filter(r => r && typeof r.score === 'number')
-            .map(r => ({ key: 'n:' + String(r.name || 'YOU'), name: String(r.name || 'YOU'), score: r.score }));
+            .map(r => ({ key: 'n:' + String(r.name || 'YOU'), name: String(r.name || 'YOU'), score: r.score, country: cc(r.country) }));
         }
         const rows = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: ruleMode() });
         boardIsLocal = false;
         return asList(rows)
           .filter(r => r && typeof r.score === 'number')
-          .map(r => ({ key: 'r' + r.id, name: String(r.name || 'YOU'), score: r.score }));
+          .map(r => ({ key: 'r' + r.id, name: String(r.name || 'YOU'), score: r.score, country: cc(r.country) }));
       } catch (e) {
         boardIsLocal = true;      // fall through and show what we have
       }
@@ -2922,9 +2946,17 @@
       const li = document.createElement('li');
       if (highlightKey && e.key === highlightKey) li.className = 'me';
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      // The flag gets its own fixed column rather than riding on the name, so
+      // ten names still start on one line whether or not their players have
+      // picked a country. On Windows, which ships no flag glyphs, the pair
+      // degrades to the two letters, which is legible and still tells you
+      // where they are from.
+      const fl = document.createElement('span'); fl.className = 'flag fl-gap';
+      paintFlag(fl, e.country);
+      if (fl.hidden) { fl.hidden = false; fl.style.backgroundImage = 'none'; }
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = e.score;
-      li.append(rk, nm, sc);
+      li.append(rk, fl, nm, sc);
       standingsEl.appendChild(li);
     });
     return list;
@@ -3568,7 +3600,7 @@
           // presence dies with the old join on every reconnect: track again
           room.lastTrackAt = Date.now();
           room.trackDirty = false;
-          void channel.track({ name: room.name, ts: room.joinedTs, host: room.host, ready: room.ready });
+          void channel.track({ name: room.name, cc: vsCountry(), ts: room.joinedTs, host: room.host, ready: room.ready });
           if (vs === room) { vsSetNote(''); vsRefreshPanel(); }
         } else {
           room.up = false;
@@ -3647,7 +3679,7 @@
       // whichever source spoke last about this seat wins, by its own counter
       const held = vs.readyBy.get(key);
       const ready = held && held.rseq > (m.rseq | 0) ? held.ready : !!m.ready;
-      list.push({ ref: key, name: String(m.name || 'YOU'), ts: m.ts || 0, host: !!m.host, ready });
+      list.push({ ref: key, name: String(m.name || 'YOU'), country: cc(m.cc), ts: m.ts || 0, host: !!m.host, ready });
       if (key !== vs.ref && !vs.knownRefs.has(key)) { vs.knownRefs.add(key); fresh = true; }
     }
     // A newcomer reads readiness out of presence, which can be up to a pacing
@@ -3694,10 +3726,14 @@
   // local state instantly and the wire write is paced: sent at once when the
   // budget allows, else marked dirty and flushed by the room's 10s ticker.
   const VS_TRACK_GAP_MS = 6100;
+  // Our own flag, from the profile that already holds it. Presence carries it
+  // rather than a second lookup per seat: it is one more field on a write the
+  // room already makes, so a roster of five costs nothing extra on the wire.
+  function vsCountry() { return (sbProfile && cc(sbProfile.country)) || null; }
   function vsTrack() {
     vs.lastTrackAt = Date.now();
     vs.trackDirty = false;
-    void vs.channel.track({ name: vs.name, ts: vs.joinedTs, host: vs.host, ready: vs.ready, rseq: vs.rseq });
+    void vs.channel.track({ name: vs.name, cc: vsCountry(), ts: vs.joinedTs, host: vs.host, ready: vs.ready, rseq: vs.rseq });
   }
   function vsTrackSoon() {
     if (Date.now() - vs.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
@@ -3979,9 +4015,12 @@
       const li = document.createElement('li');
       if (p.ref === vs.ref) li.className = 'me';
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = vsMyReady(p) ? '✓' : '·';
+      const fl = document.createElement('span'); fl.className = 'flag fl-gap';
+      paintFlag(fl, p.country);
+      if (fl.hidden) { fl.hidden = false; fl.style.backgroundImage = 'none'; }
       const nm = document.createElement('span'); nm.className = 'nm';
       nm.textContent = p.name + (i === 0 ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
-      li.append(rk, nm);
+      li.append(rk, fl, nm);
       if (seriesOn) {
         const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆 ' + vsWinsOf(p.name);
         li.append(vw);
@@ -4486,6 +4525,7 @@
   const profName = document.getElementById('profName');
   const profCountryRow = document.getElementById('profCountryRow');
   const profCountry = document.getElementById('profCountry');
+  const profFlag = document.getElementById('profFlag');
   const profSaveBtn = document.getElementById('profSaveBtn');
   const profAuthAnon = document.getElementById('profAuthAnon');
   const profAuthOn = document.getElementById('profAuthOn');
@@ -4497,8 +4537,41 @@
   const profSignOut = document.getElementById('profSignOut');
   const profStatus = document.getElementById('profStatus');
 
-  function flagOf(c) {
-    return String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65, 0x1f1e6 + c.charCodeAt(1) - 65);
+  // ---- flags: drawn, not typed ----
+  // A regional-indicator pair is only a flag if the platform ships flag
+  // glyphs, and Windows never has: there the pair degrades to two letters,
+  // so the same board looked different depending on who was reading it. The
+  // flags are artwork now (assets/flags.png, 250 of them from flag-icons,
+  // MIT, see assets/flags.LICENSE.txt), which renders identically on every
+  // platform including the ones
+  // that have no emoji at all: a television, a Steam machine, a phone with
+  // the emoji font stripped.
+  //
+  // The sprite is a 16-wide grid of 60x45 cells in alphabetical code order,
+  // so the index IS the position and no lookup table has to be shipped or
+  // kept in step with the art. FLAG_CODES is that order, two characters per
+  // country; a code that is not in it simply has no flag, which is the same
+  // answer as before for anything unknown.
+  const FLAG_CODES = 'ADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW';
+  const FLAG_COLS = 16, FLAG_W = 20, FLAG_H = 15;
+  // Read the pairs into a map once rather than searching the string. Not a
+  // micro-optimisation: indexOf finds the FIRST occurrence, and 98 of the 250
+  // codes also appear straddling two of their neighbours ('UG' sits inside
+  // 'GU'+'GW' long before Uganda's own slot), so a search would answer with
+  // somebody else's flag or, once guarded against that, with none at all.
+  const FLAG_AT = new Map();
+  for (let i = 0; i < FLAG_CODES.length; i += 2) FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
+  function flagIndex(c) {
+    const i = c ? FLAG_AT.get(c) : undefined;
+    return i === undefined ? -1 : i;
+  }
+  // Paint a span as one flag. Nothing is created per call and the sprite is
+  // one request for the whole set, shared by every board and every roster.
+  function paintFlag(el, c) {
+    const i = flagIndex(c);
+    if (i < 0) { el.style.backgroundImage = ''; el.hidden = true; return; }
+    el.hidden = false;
+    el.style.backgroundPosition = `${-(i % FLAG_COLS) * FLAG_W}px ${-((i / FLAG_COLS) | 0) * FLAG_H}px`;
   }
 
   // the chip states who you are wherever a name is known; the silhouette
@@ -4507,7 +4580,14 @@
     let name = (sbProfile && sbProfile.name) || '';
     if (!name) { try { name = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {} }
     const c = sbProfile && sbProfile.country;
-    whoBtn.textContent = name ? ((c ? flagOf(c) + ' ' : '') + name) : '\u{1F464}';
+    // the chip is a flag element plus a text node, not one string, because
+    // the flag is painted art now and art cannot live in textContent
+    whoBtn.textContent = '';
+    if (!name) { whoBtn.append('\u{1F464}'); refreshModeUI(); return; }
+    const fl = document.createElement('span');
+    fl.className = 'flag chip-flag';
+    paintFlag(fl, cc(c));
+    whoBtn.append(fl, name);
     refreshModeUI();
   }
 
@@ -4515,7 +4595,13 @@
   // browser's own region names and keep the ones that mean somewhere, minus
   // CLDR's handful of non-countries. No 250-line list to hand-maintain, and
   // new countries arrive with browser updates.
-  const NOT_COUNTRIES = new Set(['AC','AN','BU','CP','CS','DD','DG','EA','EU','EZ','FX','IC','NT','QO','SU','TA','TP','UN','XA','XB','YD','YU','ZR','ZZ']);
+  // The blocklist also drops deprecated ALIASES, which is a bug the flag work
+  // surfaced: CLDR still resolves DY, HV, NH, RH and VD to Benin, Burkina
+  // Faso, Vanuatu, Zimbabwe and Vietnam, and UK to the United Kingdom, so the
+  // picker was quietly offering six countries twice. CQ (Sark) goes too: it
+  // resolves, but no flag set carries it, and an entry that can never show a
+  // flag is worse than no entry.
+  const NOT_COUNTRIES = new Set(['AC','AN','BU','CP','CQ','CS','DD','DG','DY','EA','EU','EZ','FX','HV','IC','NH','NT','QO','RH','SU','TA','TP','UK','UN','VD','XA','XB','YD','YU','ZR','ZZ']);
   let countriesBuilt = false;
   function buildCountries() {
     if (countriesBuilt) return;
@@ -4535,7 +4621,7 @@
     for (const [code, label] of opts) {
       const o = document.createElement('option');
       o.value = code;
-      o.textContent = flagOf(code) + ' ' + label;
+      o.textContent = label;
       profCountry.appendChild(o);
     }
   }
@@ -4555,6 +4641,7 @@
     try { localName = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {}
     profName.value = (sbProfile && sbProfile.name) || localName;
     profCountry.value = (sbProfile && sbProfile.country) || '';
+    paintFlag(profFlag, cc(profCountry.value));
     profCountryRow.style.display = sbToken ? '' : 'none';
     profAuthAnon.hidden = !(sbToken && sbAnon());
     profAuthOn.hidden = !(sbToken && sbUser && !sbUser.is_anonymous);
@@ -4597,6 +4684,8 @@
     if (profName.value !== w) profName.value = w;
   });
 
+  // the preview answers the moment you change the choice, not on save
+  profCountry.addEventListener('change', () => { paintFlag(profFlag, cc(profCountry.value)); });
   profSaveBtn.addEventListener('click', async () => {
     const name = (profName.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
     if (!name) { profSay('Pick a name first.'); return; }

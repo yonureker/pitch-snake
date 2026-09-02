@@ -15,6 +15,8 @@ export interface ScoreRow {
   id: number;
   name: string;
   score: number;
+  /** ISO2, or null when the player has set no flag (or predates identity). */
+  country: string | null;
 }
 
 /** How many places a world board has. One source for the ten. */
@@ -69,6 +71,44 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
+/** A country is a two-letter code or it is nothing; junk renders no flag. */
+function isCountry(v: unknown): v is string {
+  return typeof v === 'string' && /^[a-z]{2}$/i.test(v);
+}
+
+/**
+ * Flags are artwork, not emoji. A regional-indicator pair is only a flag if
+ * the platform ships flag glyphs, and several do not, so the same board
+ * looked different depending on who read it. assets/flags.png is a 16-wide
+ * grid of 60x45 cells in alphabetical code order (250 flags, flag-icons,
+ * MIT), which means the index IS the position and no lookup table has to be
+ * shipped or kept in step with the art.
+ */
+// no-secrets sees 500 opaque characters and high entropy, which is exactly
+// what it is meant to catch. This is the public ISO-3166 alpha-2 list in
+// alphabetical order, one country per two characters, and its shape IS the
+// sprite's layout: it cannot be broken up or reordered without moving every
+// flag. Disabled here deliberately rather than disguised.
+export const FLAG_CODES =
+  // eslint-disable-next-line no-secrets/no-secrets
+  'ADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW';
+/** Cells per row in the sprite; the grid is 16 wide by 16 tall. */
+export const FLAG_COLS = 16;
+
+// Read the pairs into a map once rather than searching the string. Not a
+// micro-optimisation: indexOf finds the FIRST occurrence, and 98 of the 250
+// codes also appear straddling two of their neighbours ('UG' sits inside
+// 'GU' + 'GW' long before Uganda's own slot), so a search would answer with
+// somebody else's flag or, once guarded against that, with none at all.
+const FLAG_AT = new Map<string, number>();
+for (let i = 0; i < FLAG_CODES.length; i += 2) FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
+
+/** Grid position of a country in the sprite, or -1 when it has no flag. */
+export function flagIndex(code: string | null): number {
+  if (code === null) return -1;
+  return FLAG_AT.get(code) ?? -1;
+}
+
 /** The global top N for one rule mode, best first; server-ordered, server-limited. */
 export async function fetchTopScores(limit = 10, mode: RuleMode = 'classic'): Promise<ScoreRow[]> {
   const rows = await rpc('pitch_snake_top_scores', { limit_count: limit, p_mode: mode });
@@ -77,9 +117,9 @@ export async function fetchTopScores(limit = 10, mode: RuleMode = 'classic'): Pr
   const out: ScoreRow[] = [];
   for (const r of list) {
     if (!isRecord(r)) continue;
-    const { id, name, score } = r;
+    const { id, name, score, country } = r;
     if (typeof id === 'number' && typeof name === 'string' && typeof score === 'number') {
-      out.push({ id, name, score });
+      out.push({ id, name, score, country: isCountry(country) ? country.toUpperCase() : null });
     }
   }
   return out;
@@ -106,6 +146,8 @@ export interface TournamentRow {
 export interface TournamentScoreRow {
   name: string;
   score: number;
+  /** The flag of whoever holds this name's best, or null. */
+  country: string | null;
 }
 
 function asTournament(r: unknown): TournamentRow | null {
@@ -155,8 +197,10 @@ export async function fetchTournamentTop(code: string, limit = 10): Promise<Tour
   const out: TournamentScoreRow[] = [];
   for (const r of list) {
     if (!isRecord(r)) continue;
-    const { name, score } = r;
-    if (typeof name === 'string' && typeof score === 'number') out.push({ name, score });
+    const { name, score, country } = r;
+    if (typeof name === 'string' && typeof score === 'number') {
+      out.push({ name, score, country: isCountry(country) ? country.toUpperCase() : null });
+    }
   }
   return out;
 }

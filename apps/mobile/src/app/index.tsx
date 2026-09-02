@@ -8,6 +8,7 @@ import { SPEEDS } from '@pitch-snake/engine';
 import { Image } from 'expo-image';
 
 import atlasSource from '@/assets/food-atlas.png';
+import flagSheet from '@/assets/flags.png';
 import appleIcon from '@/assets/icon-apple.png';
 import skullIcon from '@/assets/icon-skull.png';
 import starIcon from '@/assets/icon-star.png';
@@ -20,7 +21,7 @@ import { useSubmitScore } from '@/hooks/queries/use-submit-score';
 import { useSubmitTournamentScore } from '@/hooks/queries/use-submit-tournament-score';
 import { useTopScores } from '@/hooks/queries/use-top-scores';
 import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
-import { BOARD_PLACES, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
+import { BOARD_PLACES, FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
@@ -77,9 +78,37 @@ function fmtWhen(iso: string): string {
   });
 }
 
+// drawn at a third of the sprite's 60x45 cells, so every cell lands whole
+const FLAG_W = 20;
+const FLAG_H = 15;
+
 const ANTON = 'Anton_400Regular';
 const BARLOW = 'Barlow_600SemiBold';
 const BARLOW_BOLD = 'Barlow_700Bold';
+
+/**
+ * One country flag, cut out of the shared sprite. A fixed-size window with
+ * the sheet inside it, offset so the wanted cell lands in view: RN has no
+ * background-position, so the crop is the overflow of a positioned child.
+ * Renders a blank of the same width when the player has no flag, which is
+ * what keeps names in a column.
+ */
+function Flag({ code }: { code: string | null }) {
+  const i = flagIndex(code);
+  if (i < 0) return <View style={styles.flag} />;
+  return (
+    <View style={styles.flag}>
+      <Image
+        source={flagSheet}
+        style={[
+          styles.flagSheet,
+          { marginLeft: -(i % FLAG_COLS) * FLAG_W, marginTop: -Math.floor(i / FLAG_COLS) * FLAG_H },
+        ]}
+        contentFit="fill"
+      />
+    </View>
+  );
+}
 
 /** One scoring legend row, matching the web overlay's list. */
 function LegendRow({
@@ -623,6 +652,7 @@ export default function Index() {
                               >
                                 {i + 1}
                               </Text>
+                              <Flag code={row.country} />
                               <Text
                                 style={[styles.boardName, row.name === submittedName && styles.boardMine]}
                               >
@@ -663,6 +693,7 @@ export default function Index() {
                               <Text style={[styles.boardRank, row.id === submittedId && styles.boardMine]}>
                                 {i + 1}
                               </Text>
+                              <Flag code={row.country} />
                               <Text style={[styles.boardName, row.id === submittedId && styles.boardMine]}>
                                 {row.name}
                               </Text>
@@ -1085,6 +1116,10 @@ const styles = StyleSheet.create({
   boardList: { maxHeight: 150 },
   boardRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 1 },
   boardRank: { fontFamily: BARLOW, fontSize: 12, color: GameColors.gold, width: 16, textAlign: 'right' },
+  // a fixed column, not a prefix on the name: ten names start on one line
+  // whether or not their players have picked a flag
+  flag: { width: FLAG_W, height: FLAG_H, overflow: 'hidden', borderRadius: 2, alignSelf: 'center' },
+  flagSheet: { width: FLAG_W * FLAG_COLS, height: FLAG_H * 16 },
   boardName: { flex: 1, fontFamily: BARLOW, fontSize: 13, color: '#e9e0cd', letterSpacing: 1 },
   boardScore: { fontFamily: ANTON, fontSize: 13, color: '#e9e0cd' },
   boardMine: { color: GameColors.goldBright },

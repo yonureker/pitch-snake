@@ -76,17 +76,33 @@ revoke all on table public.pitch_snake_tournaments from anon, authenticated;
 revoke all on table public.pitch_snake_tournament_scores from anon, authenticated;
 
 -- ---------------------------------------------------------------- read ----
+-- The board carries the flag as well as the name. Country is JOINED from the
+-- player's profile rather than stamped onto the score row, which is the
+-- difference between a flag that describes the row and one that describes
+-- the PLAYER: set your flag today and every score you have ever set shows
+-- it, change countries and they all follow. Stamping would have frozen each
+-- row at the moment it was written and needed a column to do it.
+--
+-- Left join on purpose. Rows from before identity existed carry a null
+-- user_id, and a player who never picked a flag has a null country; both
+-- come back as null and simply render without one. A missing flag is never
+-- a missing row.
+--
+-- The return type changes, so the old signature has to go first: Postgres
+-- will not replace a function with one that returns a different shape.
 drop function if exists public.pitch_snake_top_scores(integer);
+drop function if exists public.pitch_snake_top_scores(integer, text);
 
 create or replace function public.pitch_snake_top_scores(limit_count integer default 10, p_mode text default 'classic')
-returns table (id bigint, name text, score integer, created_at timestamptz)
+returns table (id bigint, name text, score integer, country text, created_at timestamptz)
 language sql
 security definer
 set search_path = ''
 stable
 as $$
-  select s.id, s.name, s.score, s.created_at
+  select s.id, s.name, s.score, p.country, s.created_at
   from public.pitch_snake_scores s
+  left join public.pitch_snake_profiles p on p.user_id = s.user_id
   where s.mode = coalesce(p_mode, 'classic')
   order by s.score desc, s.created_at asc
   limit least(greatest(coalesce(limit_count, 10), 1), 100);
@@ -183,21 +199,26 @@ $$;
 -- (earliest on a tie), and the outer order ranks those bests.
 drop function if exists public.pitch_snake_tournament_top(text, integer);
 
+-- The flag here belongs to whoever set that particular best, which is the
+-- only honest answer on a board keyed by NAME rather than by user: two
+-- players called MAX share a row, and the row shows the flag of the one who
+-- actually holds it.
 create or replace function public.pitch_snake_tournament_top(p_code text, limit_count integer default 10)
-returns table (name text, score integer, created_at timestamptz)
+returns table (name text, score integer, country text, created_at timestamptz)
 language sql
 security definer
 set search_path = ''
 stable
 as $$
-  select b.name, b.score, b.created_at
+  select b.name, b.score, p.country, b.created_at
   from (
-    select distinct on (s.name) s.name, s.score, s.created_at
+    select distinct on (s.name) s.name, s.score, s.created_at, s.user_id
     from public.pitch_snake_tournament_scores s
     join public.pitch_snake_tournaments t on t.id = s.tournament_id
     where t.code = upper(trim(coalesce(p_code, '')))
     order by s.name, s.score desc, s.created_at asc
   ) b
+  left join public.pitch_snake_profiles p on p.user_id = b.user_id
   order by b.score desc, b.created_at asc
   limit least(greatest(coalesce(limit_count, 10), 1), 100);
 $$;
