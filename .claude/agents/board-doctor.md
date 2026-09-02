@@ -60,6 +60,32 @@ A healthy room reports `stalled_ms` near zero. Sustained `giveups > 0` means
 the lag give-up is firing, which is the netcode protecting the room from one
 outmatched device: that is the fix working, not a fault.
 
+## The evidence trail on a score
+
+Every validated round since the trail shipped keeps its `log` plus the timing
+features computed during that same replay: `presses`, `gap_mean`, `gap_sd`,
+`gap_min`, `align_top`, `apm`. Only rounds that REACHED a board are stored,
+because only those submit.
+
+Calibration, measured through the real keyboard path against synthetic bots
+at tick 130:
+
+| | gap_sd | align_top |
+|---|---|---|
+| real play | 10.02 | 0.125 |
+| bot on the cell boundary | 0.00 | 1.000 |
+| bot with timing jitter | 2.23 | 0.154 |
+
+So `gap_sd` near zero is the strongest single tell and `align_top` near 1 is
+the naive one. **Neither is proof.** Report a suspicion with the numbers and
+the round ids; never call an account a bot, and never propose deleting a row.
+A false positive that removes a brilliant player is unrecoverable.
+
+Two traps. The v4 golden fixtures look wildly aligned because a SCRIPTED
+pilot recorded them, so they are not a human baseline. And with no known bots
+in the data, every threshold is a guess: describe the distribution rather
+than asserting a cutoff.
+
 ## The shape of the system
 
 A score may only enter a board against a server-minted seed. The page pockets

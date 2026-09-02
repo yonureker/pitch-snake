@@ -33,6 +33,81 @@ const KNOBS: Record<string, unknown> = {
   ghostEveryMs: 0, bombEveryMs: 0, boltEveryMs: 0,
 };
 
+// ---- the evidence trail ----
+// The validator closes fabricated scores, edited memory, sped-up clients,
+// replayed logs and seed shopping. It cannot close a bot that plays honestly
+// well: that round IS real and IS honestly submitted. Catching one is a
+// question about HOW it was played, and input timing is where the answer is.
+//
+// These are derived from the log this function already has in hand, so they
+// cost nothing beyond the arithmetic, and they are stored as plain columns so
+// the question can be asked in SQL without pulling logs back out.
+//
+// Nothing here judges. It records. Thresholds tuned against a population with
+// no known bots in it would be guesses, and a published heuristic is a
+// specification for evading it. The classifier comes later, from data.
+//
+// Measured before shipping, driving the real page through the real keyboard
+// path against two synthetic bots (tick 130, so 13 quanta):
+//
+//                    gap_sd   align_top
+//   real play         10.02       0.125
+//   boundary bot       0.00       1.000
+//   jittered bot       2.23       0.154
+//
+// So align_top catches only the naive bot, and gap_sd catches both. Neither
+// is proof and both are one signal among several: a bot that jitters its
+// timing AND its phase defeats this pair, and would need the path-repetition
+// analysis that keeping the raw log makes possible later.
+//
+// One warning for whoever calibrates this. The v4 golden fixtures look
+// wildly aligned (align_top near 1.0) because they were recorded by a
+// SCRIPTED pilot advancing tick by tick, not by a person. They are not a
+// human baseline and must never be used as one.
+function timingFeatures(log: Record<string, unknown>) {
+  const inputs = (log.inputs ?? []) as number[][];
+  const tickQuanta = Math.max(1, Math.round((log.tickMs as number) / 10));
+  const presses = inputs.length;
+  if (presses === 0) {
+    return { presses: 0, gap_mean: null, gap_sd: null, gap_min: null, align_top: null, apm: 0 };
+  }
+
+  // Where in the tick cycle each press landed. A human presses at arbitrary
+  // wall-clock moments and spreads across every phase; a program driving
+  // turns fires at a fixed offset from the cell boundary and piles onto one.
+  const phase = new Array(tickQuanta).fill(0);
+  let gapSum = 0, gapMin = Infinity, prev = -1, gaps = 0;
+  for (const row of inputs) {
+    const q = row[0];
+    phase[((q % tickQuanta) + tickQuanta) % tickQuanta]++;
+    if (prev >= 0) {
+      const gap = q - prev;
+      gapSum += gap; gaps++;
+      if (gap < gapMin) gapMin = gap;
+    }
+    prev = q;
+  }
+  const mean = gaps ? gapSum / gaps : 0;
+  // second pass for the spread: humans are jittery, machines are not
+  let varSum = 0; prev = -1;
+  for (const row of inputs) {
+    if (prev >= 0) { const d = row[0] - prev - mean; varSum += d * d; }
+    prev = row[0];
+  }
+  const sd = gaps ? Math.sqrt(varSum / gaps) : 0;
+  const top = Math.max(...phase) / presses;
+  const seconds = ((log.end as number) * 10) / 1000;
+
+  return {
+    presses,
+    gap_mean: gaps ? +mean.toFixed(2) : null,
+    gap_sd: gaps ? +sd.toFixed(2) : null,
+    gap_min: gaps ? gapMin : null,
+    align_top: +top.toFixed(4),
+    apm: seconds > 0 ? +((presses / seconds) * 60).toFixed(2) : 0,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return refuse('POST only', 405);
@@ -116,6 +191,10 @@ Deno.serve(async (req) => {
   // same name wash the SQL always applied
   const clean = String(name ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';
 
+  // only computed for a round that PASSED: a refused log is not evidence of
+  // anything except a refused log, and it is never stored
+  const feat = timingFeatures(log);
+
   if (typeof code === 'string' && code) {
     const { data: t } = await service
       .from('pitch_snake_tournaments')
@@ -137,7 +216,7 @@ Deno.serve(async (req) => {
 
   const { data: row, error } = await service
     .from('pitch_snake_scores')
-    .insert({ name: clean, score, mode, user_id: uid, seed: Number(issued.seed) })
+    .insert({ name: clean, score, mode, user_id: uid, seed: Number(issued.seed), log, ...feat })
     .select('id')
     .single();
   if (error || !row) return refuse('insert failed', 500);

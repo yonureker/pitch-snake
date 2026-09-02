@@ -35,6 +35,37 @@ alter table public.pitch_snake_scores add column if not exists mode    text not 
 alter table public.pitch_snake_scores add column if not exists seed    bigint;
 alter table public.pitch_snake_scores add column if not exists user_id uuid;
 
+-- ------------------------------------------------------ the evidence trail ----
+-- The validator closes fabricated scores, edited memory, sped-up clients,
+-- replayed logs and seed shopping. It cannot close a bot that plays honestly
+-- well, and it never will: that round is a real round, honestly submitted.
+-- Catching one is a question about HOW it was played, and the answer lives in
+-- the input timing.
+--
+-- The log was already uploaded and already replayed; it was simply discarded
+-- afterwards. Keeping it costs disk and not bandwidth (nothing reads it back
+-- to a client), and it cannot be collected retroactively, which is why it is
+-- kept now rather than when a classifier exists. The features beside it are
+-- computed during that same replay, so the questions can be asked in SQL
+-- without a byte leaving the database.
+--
+-- Only rounds that REACH a board are stored at all, because only those submit
+-- since the top-ten gate. That is the population worth watching: a bot is
+-- trying to reach the leaderboard, so its rounds are exactly the ones kept.
+alter table public.pitch_snake_scores add column if not exists log       jsonb;
+alter table public.pitch_snake_scores add column if not exists presses   integer;
+alter table public.pitch_snake_scores add column if not exists gap_mean  real;
+alter table public.pitch_snake_scores add column if not exists gap_sd    real;
+alter table public.pitch_snake_scores add column if not exists gap_min   integer;
+alter table public.pitch_snake_scores add column if not exists align_top real;
+alter table public.pitch_snake_scores add column if not exists apm       real;
+
+comment on column public.pitch_snake_scores.align_top is
+  'Share of presses landing in the most common phase of the tick cycle. A human presses at arbitrary moments and spreads across every phase, so this sits near 1/tickQuanta. A program driving turns fires at a fixed offset from the cell boundary and drives it toward 1.';
+
+create index if not exists pitch_snake_scores_forensics_idx
+  on public.pitch_snake_scores (created_at desc) include (user_id, score, mode);
+
 drop index if exists public.pitch_snake_scores_board_idx;
 create index if not exists pitch_snake_scores_mode_board_idx
   on public.pitch_snake_scores (mode, score desc, created_at asc);
