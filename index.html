@@ -1046,7 +1046,18 @@
                 <button class="btn small" id="vsJoinBtn">JOIN</button>
               </div>
               <p class="vs-hint">Or join a friend with their room code.</p>
+              <button class="btn small ghostbtn" id="vsLadderBtn">LADDER</button>
             </div>
+          </div>
+          <div class="tourney" id="vsLadder" hidden>
+            <div class="t-code">LADDER</div>
+            <!-- ONE line of chrome above the list, and it is your own
+                 standing: that is what a player opens this screen for, and
+                 anything below the list scrolls out of sight. The legend
+                 goes under the board, where it is optional reading. -->
+            <div class="t-meta" id="vsLadderMeta"></div>
+            <ol class="standings lad" id="vsLadderList"></ol>
+            <p class="vs-hint" id="vsLadderHint"></p>
           </div>
           <div class="tourney" id="vsRoom" hidden>
             <div class="t-code" id="vsRoomCode"></div>
@@ -1135,6 +1146,9 @@
               <span id="modeGoMain">START</span><span class="start-sub" id="modeGoSub">CLASSIC</span>
             </button>
             <button class="btn modes" id="modeBackBtn">BACK</button>
+          </div>
+          <div class="btn-row" id="ladderFooter" hidden>
+            <button class="btn modes" id="vsLadderBack">BACK</button>
           </div>
           <div class="btn-row" id="vsFooter" hidden>
             <button class="btn configure" id="vsCreateBtn">CREATE ROOM</button>
@@ -3800,6 +3814,14 @@
   const mpHud = document.getElementById('mpHud');
   const vsPanel = document.getElementById('vsPanel');
   const vsSetup = document.getElementById('vsSetup');
+  const vsLadder = document.getElementById('vsLadder');
+  const vsLadderBtn = document.getElementById('vsLadderBtn');
+  const vsLadderBack = document.getElementById('vsLadderBack');
+  const ladderFooter = document.getElementById('ladderFooter');
+  const vsLadderList = document.getElementById('vsLadderList');
+  const vsLadderMeta = document.getElementById('vsLadderMeta');
+  const vsLadderHint = document.getElementById('vsLadderHint');
+  let ladderOpen = false;
   const vsFooter = document.getElementById('vsFooter');
   const vsQuickBtn = document.getElementById('vsQuickBtn');
   const vsJoinBtn = document.getElementById('vsJoinBtn');
@@ -4514,11 +4536,23 @@
 
   function vsRefreshPanel() {
     const inRoom = !!vs;
-    vsSetup.hidden = inRoom;
+    // three screens share this panel now: the doors in, a room, and the
+    // ladder. The ladder only ever stands in for the doors, never for a room
+    // you are already sitting in, and it never survives leaving multiplayer:
+    // left set, it would greet the next visitor with a board instead of the
+    // way in. vsPanel.hidden is assigned immediately before this call, so it
+    // catches every exit (a mode change, BACK, and the MODES toggle alike).
+    if (inRoom || vsPanel.hidden) ladderOpen = false;
+    vsSetup.hidden = inRoom || ladderOpen;
+    vsLadder.hidden = inRoom || !ladderOpen;
     vsRoom.hidden = !inRoom;
     // the footer lives in the overlay's pinned foot, so it has to be told
     // about screens the panel itself never sees
-    vsFooter.hidden = vsPanel.hidden || inRoom;
+    vsFooter.hidden = vsPanel.hidden || inRoom || ladderOpen;
+    // The ladder's way out is PINNED, not in the panel. Its list is longer
+    // than the body and scrolls; a BACK that scrolls with it is a dead end,
+    // because this screen hides the shared footer and MODES alike.
+    ladderFooter.hidden = !ladderOpen || inRoom || vsPanel.hidden;
     // The who-row shares the overlay's head with every other screen, so left
     // to itself it followed you onto the pitch and into a room. That made
     // CHANGE a trap: it hands over to a name input that lives inside the
@@ -4531,7 +4565,9 @@
       const named = !!vsTypedName();
       const editing = vsEditingName || !named;
       vsNameRow.hidden = !editing;
-      vsWho.hidden = editing || vsPanel.hidden;
+      // ladderOpen for the same reason the comment above gives: CHANGE opens
+      // an input that lives in the setup panel, and the ladder has replaced it
+      vsWho.hidden = editing || vsPanel.hidden || ladderOpen;
       if (!editing) vsWhoName.textContent = vsTypedName();
       vsQuickBtn.disabled = vsBusy || !named;
       vsCreateBtn.disabled = vsBusy || !named;
@@ -4648,6 +4684,89 @@
   });
   vsReadyBtn.addEventListener('click', vsToggleReady);
   vsStartBtn.addEventListener('click', () => { void vsStart(); });
+  // ---- the ladder screen ----
+  // Rated rounds only ever come from quick match, so the ladder lives on the
+  // multiplayer screen rather than beside the score boards: a player who has
+  // never opened a room has no business being told they are unranked.
+  //
+  // Two reads, both optional. Either can come back empty and the screen still
+  // says something true, because "nobody has ten rounds yet" and "you have
+  // not played a rated round" are both ordinary states on a young ladder and
+  // neither is an error.
+  // The RULESET a room plays, which is what its ratings are filed under, and
+  // NOT ruleMode(), which answers 'versus' here. Rooms spread no mode into
+  // createGame (see vsBegin), so they play classic; the validator reaches the
+  // same answer from the other end by reading the log's own knobs. Asking for
+  // a 'versus' ladder returns an empty board, which is how this was found.
+  // If a room ever picks a mode, this and vsBegin move together.
+  const ROOM_RULES = 'classic';
+
+  let ladderGen = 0;
+  async function showLadder() {
+    const gen = ++ladderGen;
+    vsLadderList.innerHTML = '';
+    vsLadderMeta.textContent = 'QUICK MATCH ONLY';
+    vsLadderHint.textContent = '';
+    let board = null, mine = null;
+    try {
+      [board, mine] = await Promise.all([
+        sbRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
+        sbToken ? sbRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
+      ]);
+    } catch (e) { /* offline, or no board tier: say so below */ }
+    if (gen !== ladderGen) return;
+
+    const rows = Array.isArray(board) ? board : [];
+    if (!rows.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = board ? 'No rated rounds yet' : 'Ladder unavailable';
+      vsLadderList.appendChild(li);
+    }
+    vsLadderList.classList.toggle('dense', rows.length > 4);
+    rows.forEach((r, i) => {
+      const li = document.createElement('li');
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const fl = document.createElement('span'); fl.className = 'flag fl-gap';
+      paintFlag(fl, r.country);
+      if (fl.hidden) { fl.hidden = false; fl.style.backgroundImage = 'none'; }
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name || 'YOU';
+      const sc = document.createElement('span'); sc.className = 'sc';
+      sc.append(String(r.rating));
+      if (r.provisional) {
+        const p = document.createElement('span');
+        p.className = 'prov'; p.textContent = 'P';
+        p.title = 'Provisional: fewer than 10 rated rounds';
+        sc.appendChild(p);
+      }
+      li.append(rk, fl, nm, sc);
+      vsLadderList.appendChild(li);
+    });
+
+    const own = mine && mine[ROOM_RULES];
+    vsLadderMeta.textContent = own
+      ? 'YOU ' + own.rating + (own.provisional ? ' P' : '') + ' \u00b7 '
+        + own.rounds + (own.rounds === 1 ? ' ROUND' : ' ROUNDS')
+      : 'QUICK MATCH ONLY';
+    vsLadderHint.textContent = own && own.provisional
+      ? 'P until ten rated rounds settle it.'
+      : own ? '' : 'Quick match a stranger to get a rating.';
+    markOverflow();
+  }
+
+  vsLadderBtn.addEventListener('click', () => {
+    ladderOpen = true;
+    vsRefreshPanel();
+    void showLadder();
+    padRehome();
+  });
+  vsLadderBack.addEventListener('click', () => {
+    ladderOpen = false;
+    ladderGen++;             // a reply still in flight must not paint a screen that left
+    vsRefreshPanel();
+    padRehome();
+  });
+
   vsLeaveBtn.addEventListener('click', vsLeave);
   vsBackBtn.addEventListener('click', () => { tScreen = false; refreshModeUI(); });
 
