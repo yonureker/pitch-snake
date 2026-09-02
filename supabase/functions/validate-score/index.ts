@@ -211,10 +211,25 @@ function modeFromKnobs(log: Record<string, unknown>): string | null {
 // Exactly the order the room itself showed its players: score descending,
 // then whoever lasted longer. A rating that disagrees with the results screen
 // the players just read is a rating nobody will believe.
+//
+// `place` is carried explicitly rather than left as the position in the
+// array, because EQUAL SCORES ON THE SAME QUANTUM ARE A DRAW and must rate
+// as one. Two snakes walking into the same wall on the same tick with the
+// same score is not a rare curiosity here: it is what an untouched room does
+// within seven seconds. Ranking by array position would hand that to
+// whichever seat sorted first, which is a coin toss the loser can see.
+// Competition ranking, so a shared first place is followed by third.
 function placingsOf(game: { players: { idx: number; score: number; diedAt: number }[] }) {
-  return game.players
-    .map((p) => ({ seat: p.idx, score: p.score, diedAt: p.diedAt }))
+  const rows = game.players
+    .map((p) => ({ seat: p.idx, score: p.score, diedAt: p.diedAt, place: 1 }))
     .sort((a, b) => b.score - a.score || b.diedAt - a.diedAt || a.seat - b.seat);
+  for (let i = 0; i < rows.length; i++) {
+    const prev = i > 0 ? rows[i - 1] : null;
+    rows[i].place = prev && prev.score === rows[i].score && prev.diedAt === rows[i].diedAt
+      ? prev.place
+      : i + 1;
+  }
+  return rows;
 }
 
 // One pass over the events the replay kept. `drainEvents` returns everything
@@ -420,9 +435,16 @@ async function roomRound(
   if (players !== rnd.players) return refuse('seat count does not match the room');
   if (((log.seed as number) >>> 0) !== Number(rnd.seed)) return refuse('wrong seed');
 
+  // FOUR, not three. The engine stamps a solo turn as [quantum, x, y] and a
+  // room turn as [quantum, x, y, player], because a room has to say whose
+  // turn it was. Copying the solo shape here refused every real room round
+  // with 'malformed inputs', and nothing but a live round could have shown
+  // it: a synthetic placings blob never goes near the log.
   const inputs = log.inputs;
   if (!Array.isArray(inputs) || inputs.length > 60000 ||
-      !inputs.every((r) => Array.isArray(r) && r.length === 3 && r.every(Number.isInteger))) {
+      !inputs.every((r) =>
+        Array.isArray(r) && r.length === 4 && r.every(Number.isInteger) &&
+        r[3] >= 0 && r[3] < (players as number))) {
     return refuse('malformed inputs');
   }
   if (!Number.isInteger(log.end) || (log.end as number) <= 0 || (log.end as number) > 720000) {

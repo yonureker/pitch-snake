@@ -275,9 +275,13 @@ begin
     return 0;
   end if;
 
+  -- The validator carries `place` on each entry rather than leaving it to be
+  -- read off the array position, because two snakes can finish level and a
+  -- draw has to rate as one; ordinality is the fallback for a placings blob
+  -- written before that was true. Equal places take the 0.5 branch below.
   for s in
     select sh.seat, sh.user_id,
-           (select ord::integer
+           (select coalesce((pl.v->>'place')::integer, pl.ord::integer)
             from jsonb_array_elements(agreed_placings) with ordinality pl(v, ord)
             where (pl.v->>'seat')::integer = sh.seat) as place
     from public.pitch_snake_seats sh
