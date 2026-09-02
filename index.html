@@ -2956,7 +2956,10 @@
     return t;
   }
 
-  async function sbValidate(seedId, name) {
+  // The one door to the referee. Both shapes of round go through it: a solo
+  // round against a seed minted for this player, and a room round against the
+  // seed the server minted for the whole room.
+  async function sbValidatePost(payload) {
     const ac = new AbortController();
     // a replay plus an insert deserves more patience than a plain RPC
     const timer = setTimeout(() => ac.abort(), 12000);
@@ -2968,13 +2971,7 @@
           apikey: SB_KEY,
           Authorization: 'Bearer ' + (sbToken || SB_KEY),
         },
-        body: JSON.stringify({
-          seedId,
-          mode: ruleMode(),
-          name,
-          code: mode === 'tourney' && tourney ? tourney.code : undefined,
-          log: g.log,
-        }),
+        body: JSON.stringify(payload),
         signal: ac.signal,
       });
       if (res.status >= 400 && res.status < 500) {
@@ -2988,6 +2985,16 @@
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  function sbValidate(seedId, name) {
+    return sbValidatePost({
+      seedId,
+      mode: ruleMode(),
+      name,
+      code: mode === 'tourney' && tourney ? tourney.code : undefined,
+      log: g.log,
+    });
   }
 
   // The one name, everywhere. With a profile, its name feeds both the score
@@ -4214,6 +4221,7 @@
     }
     vs.roster = m.roster;
     vs.myIdx = idx;
+    vsTakeSeat();               // on the record before a single input exists
     vs.over = false;
     vs.spectating = false;
     vs.stalled = false;
@@ -4312,8 +4320,37 @@
     } catch (e) { /* a game never fails because a report did */ }
   }
 
+  // ---- the ladder ----
+  // A rated round seats its players at KICKOFF, not at full time. At full
+  // time the loser could claim the winner's seat; at kickoff nobody yet knows
+  // which seat that is, so there is nothing to gain by lying about it. The
+  // seat is claimed by this client's own session and can name nobody else.
+  //
+  // Fire and forget, both halves. The ladder is a bonus tier exactly like
+  // identity is: a room that cannot reach it plays the same round and simply
+  // is not rated. Nothing here may ever delay a whistle.
+  function vsTakeSeat() {
+    if (!sbOn() || !sbToken || !vs || !(vs.myIdx >= 0) || !vs.code) return;
+    const seat = vs.myIdx;
+    const who = (vs.roster && vs.roster[seat] && vs.roster[seat].name) || '';
+    void sbRpc('pitch_snake_take_seat', {
+      p_code: vs.code, p_start_n: vs.startN, p_seat: seat, p_name: who,
+    }).catch(() => {});
+  }
+
+  // The finished round, reported by whoever played it. Every peer sends its
+  // own copy of the same deterministic log, which is the point: the server
+  // rates the log a majority of the seats agree on, so one peer fabricating a
+  // round it wins is outvoted by the room it claims to have played in.
+  function vsReportRound() {
+    if (!sbOn() || !sbToken || !vs || !vs.code || !g || !g.log) return;
+    void sbValidatePost({ room: { code: vs.code, n: vs.startN }, log: g.log })
+      .catch(() => {});
+  }
+
   function vsRoundOver() {
     reportNet('round');        // before the session is let go: its stats go with it
+    vsReportRound();           // and the round itself, for the ladder
     vs.over = true;
     state = 'dead';
     syncScoreDom();

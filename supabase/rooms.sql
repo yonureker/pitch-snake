@@ -6,6 +6,11 @@
 -- dropped by signature and recreated, and the cron job re-schedules itself
 -- by name.
 --
+-- RUN rating.sql FIRST. Since rounds became rateable, pitch_snake_room_start
+-- writes the round of record into pitch_snake_rounds at kickoff, and that
+-- table is defined there. Run this file against a database without it and
+-- every kickoff raises.
+--
 -- Same shape as the boards: the table is never exposed to the Data API (RLS
 -- on, no policies, no grants), and the SECURITY DEFINER functions below are
 -- the only doors. What a room row adds over the phase-2 serverless rooms is
@@ -42,6 +47,15 @@ alter table public.pitch_snake_rooms add column if not exists wins jsonb not nul
 -- a searcher with neighbors first, but a thin pool still fills any room.
 -- Friend rooms (CREATE) carry null and rank with the strangers.
 alter table public.pitch_snake_rooms add column if not exists region text;
+
+-- How this room came to exist: 'quick' if quick match made it, 'code' if a
+-- person pressed CREATE. Stamped by the server and by no one else, because
+-- it is what decides whether the round can touch the ladder (rating.sql):
+-- pairwise Elo against five accounts you picked is a printing press, and
+-- quick match is the one seating a player does not choose. room_create is a
+-- public door and always writes 'code'; only quickmatch, below, writes
+-- 'quick', so a client cannot ask to be rated.
+alter table public.pitch_snake_rooms add column if not exists origin text not null default 'code';
 
 alter table public.pitch_snake_rooms enable row level security;
 revoke all on table public.pitch_snake_rooms from anon, authenticated;
@@ -105,6 +119,13 @@ $$;
 -- keeps two simultaneous searchers off the same row. The old zero-argument
 -- signature is dropped and the argument defaults, so pages from before the
 -- region ride the same door with no preference.
+--
+-- Quick match now offers quick-match rooms and nothing else. It used to
+-- offer any waiting room, which meant a stranger could be seated into a
+-- private room two friends had made with CREATE: surprising on its own, and
+-- fatal once rounds are rated, because a rated round would then contain
+-- players who chose each other. The two pools are separate, and each is
+-- better for it.
 drop function if exists public.pitch_snake_room_quickmatch();
 drop function if exists public.pitch_snake_room_quickmatch(text);
 
@@ -122,6 +143,7 @@ begin
   select r.code into found_code
   from public.pitch_snake_rooms r
   where r.status = 'waiting'
+    and r.origin = 'quick'
     and r.player_count between 1 and 4
     and r.last_seen > now() - interval '25 seconds'
   order by coalesce(r.region = reg, false) desc, r.player_count desc, r.created_at desc
@@ -133,7 +155,8 @@ begin
     return;
   end if;
   select public.pitch_snake_room_create() into found_code;
-  update public.pitch_snake_rooms set region = reg where public.pitch_snake_rooms.code = found_code;
+  update public.pitch_snake_rooms set region = reg, origin = 'quick'
+  where public.pitch_snake_rooms.code = found_code;
   return query select found_code, true;
 end;
 $$;
@@ -182,7 +205,7 @@ begin
 
   insert into public.pitch_snake_rooms (code) values (clean_code)
   on conflict (code) do nothing;
-  select id, status, started_at into r
+  select id, status, started_at, origin into r
   from public.pitch_snake_rooms where public.pitch_snake_rooms.code = clean_code
   for update;
   if r.status = 'playing' and r.started_at > now() - interval '15 minutes' then
@@ -196,6 +219,16 @@ begin
   where id = r.id
   returning public.pitch_snake_rooms.start_n, public.pitch_snake_rooms.seed,
             public.pitch_snake_rooms.wins into n, sd, w;
+
+  -- The round of record, written before a single input exists. The seed, the
+  -- seat count and whether this room was quick-matched are therefore settled
+  -- facts by the time anybody plays, rather than things a client reports
+  -- afterwards about a round it has already seen the result of. rating.sql
+  -- owns the table and must have been run first. Code rooms are recorded too
+  -- and simply never rated: the row is the evidence either way.
+  insert into public.pitch_snake_rounds (code, start_n, seed, players, origin, started_at)
+  values (clean_code, n, sd, jsonb_array_length(clean_roster), coalesce(r.origin, 'code'), now())
+  on conflict (code, start_n) do nothing;
 
   -- The kickoff carries the room's running series, so a late joiner or a
   -- reloaded tab inherits the tally with the same message that seats them.

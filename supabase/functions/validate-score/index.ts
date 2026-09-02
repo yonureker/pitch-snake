@@ -151,6 +151,72 @@ interface Ctx {
   saves: number; hops: number; zaps: number; tnts: number; eats: number; bonuses: number;
 }
 
+// ---- room rounds ----
+// A rated round is one the SERVER set up, seated and scored. rooms.sql mints
+// the seed and writes the round of record at kickoff; each peer claims its own
+// seat by auth.uid() while nobody yet knows who will win; and the finishing
+// order below comes from a replay rather than from anyone's word for it.
+//
+// Nothing here writes a score row. A room result is not a solo board score and
+// must never become one: the boards are per-player rounds against a seed minted
+// for that player, and a five-way race is a different thing that happens to
+// produce numbers.
+
+// A stable fingerprint of the round, computed from what the round IS rather
+// than from how it was serialised: two peers holding the same deterministic
+// round agree here even if their JSON does not. This is what lets the ladder
+// require corroboration, which is the only defence against a peer fabricating
+// a different log against the same real seed, in which it wins.
+function logFingerprint(log: Record<string, unknown>): number {
+  const inputs = (log.inputs ?? []) as number[][];
+  let h = 2166136261 >>> 0;
+  const mix = (v: number) => {
+    h ^= v >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  };
+  mix(log.seed as number);
+  mix(log.tickMs as number);
+  mix((log.players ?? 1) as number);
+  mix(log.end as number);
+  mix(log.wallsEnabled ? 1 : 0);
+  // The knobs, not only the inputs. Agreement has to cover the RULES the
+  // round was played under, or the same presses submitted under a different
+  // ruleset would corroborate the real round while being rated in another
+  // pool. Booleans and numbers alike, in the fixed order KNOBS declares.
+  for (const [k, dflt] of Object.entries(KNOBS)) {
+    const v = log[k] ?? dflt;
+    mix(typeof v === 'boolean' ? (v ? 1 : 0) : Number(v));
+  }
+  for (const row of inputs) for (const v of row) mix(v);
+  // Postgres has no unsigned integer, and the column is bigint: keep it
+  // positive rather than letting the sign flip on the way across.
+  return h;
+}
+
+// Which mode a room played, read off the log's own knobs instead of taken
+// from the caller. A room's mode was never sent to the server, and asking the
+// client for it now would be asking the loser to describe the match.
+function modeFromKnobs(log: Record<string, unknown>): string | null {
+  for (const [name, m] of Object.entries(MODES as Record<string, Record<string, unknown>>)) {
+    if (name === 'versus') continue;
+    let fits = true;
+    for (const [k, dflt] of Object.entries(KNOBS)) {
+      if ((log[k] ?? dflt) !== (m[k] ?? dflt)) { fits = false; break; }
+    }
+    if (fits) return name;
+  }
+  return null;
+}
+
+// Exactly the order the room itself showed its players: score descending,
+// then whoever lasted longer. A rating that disagrees with the results screen
+// the players just read is a rating nobody will believe.
+function placingsOf(game: { players: { idx: number; score: number; diedAt: number }[] }) {
+  return game.players
+    .map((p) => ({ seat: p.idx, score: p.score, diedAt: p.diedAt }))
+    .sort((a, b) => b.score - a.score || b.diedAt - a.diedAt || a.seat - b.seat);
+}
+
 // One pass over the events the replay kept. `drainEvents` returns everything
 // that happened, because a replay never drains as it goes.
 function roundContext(game: Record<string, unknown>, mode: string): Ctx {
@@ -184,10 +250,9 @@ Deno.serve(async (req) => {
   const mode = body.mode;
   const name = body.name;
   const code = body.code;
+  const room = body.room as { code?: unknown; n?: unknown } | undefined;
   const log = body.log as Record<string, unknown> | null;
-  if (!Number.isInteger(seedId) || typeof mode !== 'string' || !log || typeof log !== 'object') {
-    return refuse('bad request');
-  }
+  if (!log || typeof log !== 'object') return refuse('bad request');
 
   const service = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -199,6 +264,13 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await service.auth.getUser(jwt);
   if (userErr || !userData?.user) return refuse('no session', 401);
   const uid = userData.user.id;
+
+  if (room) return await roomRound(service, uid, room, log);
+
+  // A solo or tournament round from here: it needs the seed ticket minted for
+  // this player and the mode it claims to have been played under. A room
+  // round has neither, which is why the branch above comes first.
+  if (!Number.isInteger(seedId) || typeof mode !== 'string') return refuse('bad request');
 
   // claim the seed: mine, unused, under two hours old, spent atomically.
   // A failed validation after this point burns it: one shot per seed.
@@ -292,6 +364,110 @@ Deno.serve(async (req) => {
   const earned = await grantAchievements(service, uid, mode, game, row.id);
   return reply({ id: row.id, score, earned }, 200);
 });
+
+/**
+ * A finished room round, reported by one of the people who played it.
+ *
+ * The shape of the trust here is different from a solo score and worth
+ * stating. Solo: the server minted a seed for THIS player, so a valid log
+ * against it can only have come from them. Room: the server minted one seed
+ * for the whole room and recorded the round before kickoff, so a valid log
+ * proves the round happened but not who is reporting it. That gap is closed
+ * from two directions, neither of which is this function's replay:
+ *
+ *   the seat, claimed at kickoff by each player's own session, before anyone
+ *   knows which seat is going to win; and
+ *
+ *   corroboration, since every peer holds a byte-identical copy of a
+ *   deterministic round, so pitch_snake_seal_round rates only the log a
+ *   majority of the seats reported.
+ *
+ * What this function contributes is the finishing order, computed from a
+ * replay, and a fingerprint of the log it computed it from.
+ */
+async function roomRound(
+  service: ReturnType<typeof createClient>,
+  uid: string,
+  room: { code?: unknown; n?: unknown },
+  log: Record<string, unknown>,
+) {
+  const code = typeof room.code === 'string' ? room.code.toUpperCase().trim() : '';
+  const startN = typeof room.n === 'number' ? room.n : NaN;
+  if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/.test(code) || !Number.isInteger(startN)) {
+    return refuse('bad room round');
+  }
+
+  // The round the SERVER wrote at kickoff. Nothing the caller says can
+  // conjure one: no row, no rating, and no argument about it.
+  const { data: found } = await service
+    .from('pitch_snake_rounds')
+    .select('id, seed, players, started_at, sealed_at')
+    .eq('code', code)
+    .eq('start_n', startN)
+    .maybeSingle();
+  // The client carries no generated database types, so a select's row type
+  // collapses to never; name the shape here rather than reaching into it.
+  const rnd = found as unknown as {
+    id: number; seed: number; players: number; started_at: string; sealed_at: string | null;
+  } | null;
+  if (!rnd) return refuse('no such round');
+  if (rnd.sealed_at) return refuse('round already sealed');
+
+  const players = log.players;
+  if (!Number.isInteger(players) || (players as number) < 2 || (players as number) > 5) {
+    return refuse('not a room round');
+  }
+  if (players !== rnd.players) return refuse('seat count does not match the room');
+  if (((log.seed as number) >>> 0) !== Number(rnd.seed)) return refuse('wrong seed');
+
+  const inputs = log.inputs;
+  if (!Array.isArray(inputs) || inputs.length > 60000 ||
+      !inputs.every((r) => Array.isArray(r) && r.length === 3 && r.every(Number.isInteger))) {
+    return refuse('malformed inputs');
+  }
+  if (!Number.isInteger(log.end) || (log.end as number) <= 0 || (log.end as number) > 720000) {
+    return refuse('implausible length');
+  }
+  if (!Object.values(SPEEDS).includes(log.tickMs)) return refuse('unknown speed');
+  if (typeof log.wallsEnabled !== 'boolean') return refuse('bad walls flag');
+
+  const mode = modeFromKnobs(log);
+  if (!mode) return refuse('knobs match no mode');
+
+  // Same wall-clock floor the solo path uses, against the room's own kickoff
+  // rather than a personal seed: the round simulated end * 10ms and both
+  // clocks are the server's. A bot cannot simulate faster than time.
+  const elapsed = Date.now() - Date.parse(rnd.started_at);
+  if (elapsed + 500 < (log.end as number) * 10) return refuse('round faster than time itself');
+
+  let played;
+  try { played = replay(log); } catch { return refuse('log does not replay'); }
+  const game = played as unknown as {
+    alive: boolean; quanta: number;
+    players: { idx: number; score: number; diedAt: number }[];
+  };
+  if (game.alive) return refuse('round never ended');
+  if (game.quanta !== log.end) return refuse('length mismatch');
+
+  // Same reason as the select above: no generated types, so rpc's argument
+  // type collapses to undefined. One narrow cast beats `any` on the client.
+  const rpc = service.rpc.bind(service) as unknown as
+    (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+  const placings = placingsOf(game);
+  const { data: verdict, error } = await rpc('pitch_snake_record_round', {
+    p_round: rnd.id,
+    p_user: uid,
+    p_mode: mode,
+    p_placings: placings,
+    p_hash: logFingerprint(log),
+  });
+  if (error) return refuse('record failed', 500);
+  // 'no seat' is the ordinary answer for a player who was signed out at
+  // kickoff, and not an error worth surfacing in a game: the round happened,
+  // it simply does not count towards a ladder nobody entered.
+  if (verdict !== 'ok') return reply({ rated: false, reason: verdict }, 200);
+  return reply({ rated: true, mode, placings }, 200);
+}
 
 async function grantAchievements(
   service: ReturnType<typeof createClient>,

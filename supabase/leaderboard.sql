@@ -9,6 +9,13 @@
 -- tables are created if missing, columns are added if missing, and functions
 -- are dropped by their old signatures before the current ones are created.
 --
+-- ON A COMPLETELY EMPTY PROJECT, RUN THIS FILE TWICE, with auth.sql between:
+-- the board readers join pitch_snake_profiles for the flag, and that table
+-- belongs to auth.sql, which in turn reads pitch_snake_scores from here. The
+-- pair is circular by one column and the second run costs nothing. Full
+-- order for a new project: leaderboard, auth, leaderboard, rating, rooms,
+-- telemetry, validate.
+--
 -- The shape is deliberate: no table here is ever exposed to the Data API.
 -- RLS is on with no policies and the anon role holds no grants, so a browser
 -- cannot read, write, or page through any of them. The only doors are the

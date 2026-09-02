@@ -45,6 +45,13 @@ create table if not exists public.pitch_snake_profiles (
   updated_at timestamptz not null default now()
 );
 
+-- Onboarding progress: the finished lesson IDS rather than a count, so
+-- lessons can be reordered or inserted without wiping anyone. The reasoning
+-- lives with pitch_snake_set_levels below; the column is declared up here
+-- because the profile readers a few lines down select it, and on a database
+-- that has never run this file those readers are created first.
+alter table public.pitch_snake_profiles add column if not exists levels text[];
+
 alter table public.pitch_snake_profiles enable row level security;
 
 -- ------------------------------------------------- profile read / write ----
@@ -162,9 +169,8 @@ $$;
 -- Level IDS rather than a count, so lessons can be reordered or inserted
 -- without wiping anyone. Deliberately NOT validated: a lesson pays nothing,
 -- so there is nothing to forge. The moment a level awards coins this has to
--- move to the validator like everything else that pays.
-alter table public.pitch_snake_profiles add column if not exists levels text[];
-
+-- move to the validator like everything else that pays. (The column itself is
+-- declared with the table, because the profile readers select it.)
 comment on column public.pitch_snake_profiles.levels is
   'Finished onboarding level ids. Client-reported on purpose: levels pay nothing, so there is nothing to forge. If a level ever awards coins this must move to the validator.';
 
