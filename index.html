@@ -697,6 +697,19 @@
      game, and an account is the one place a player wants the wording every
      other app already taught them. "Not now" is a real, equal-weight choice,
      never a greyed-out afterthought: nothing here may ever gate play. */
+  /* what the round just earned. Gold, because it is a reward and not a
+     warning, and above the account offer because it is the reason to want
+     an account in the first place. */
+  .badges {
+    display: flex; flex-direction: column; gap: 4px; align-items: center;
+    max-width: 280px; text-align: center;
+  }
+  .badges[hidden] { display: none; }
+  .badges b {
+    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 12px;
+    letter-spacing: 1.2px; color: var(--gold-bright);
+  }
+  .badges span { font-family: 'Barlow', sans-serif; font-size: 12px; color: #b7ac93; }
   .acct {
     display: flex; flex-direction: column; align-items: center; gap: 8px;
     max-width: 280px; text-align: center;
@@ -1041,6 +1054,7 @@
           <button class="btn small" id="saveBtn">SAVE</button>
         </div>
         <div class="save-note" id="saveNote" hidden></div>
+        <div class="badges" id="badgeNote" hidden></div>
         <div class="acct" id="authNudge" hidden>
           <p class="acct-line" id="acctLine">Create an account to save your scores.</p>
           <div class="acct-row">
@@ -1183,6 +1197,7 @@
   const saveNote = document.getElementById('saveNote');
   const profTitle = document.getElementById('profTitle');
   const authNudge = document.getElementById('authNudge');
+  const badgeNote = document.getElementById('badgeNote');
   const acctLine = document.getElementById('acctLine');
   const acctGo = document.getElementById('acctGo');
   const acctLater = document.getElementById('acctLater');
@@ -1665,6 +1680,7 @@
     if (passed && LEVELS[levelIdx + 1]) levelIdx += 1;
 
     savedThisRound = false;
+    badgeNote.hidden = true;
     entryWanted = false;                 // a lesson never enters a board
     saveNote.hidden = true;
     saveNote.className = 'save-note';
@@ -1695,6 +1711,8 @@
       ? `${how}You survived ${g.score} seconds.`
       : `${how}You scored ${g.score}.`;
     savedThisRound = false;
+    badgeNote.hidden = true;      // last round's rewards are not this round's
+    lastEarned = null;
     saveBtn.disabled = false;
     nameInput.disabled = false;
     // a profile means the name is already known: asked once, never again
@@ -2719,6 +2737,49 @@
   function refuseNudge() {
     try { localStorage.setItem(NUDGE_KEY, String(nudgeRefusals() + 1)); } catch (e) {}
   }
+  // ---- what the round earned ----
+  // The server decides this, exactly as it decides the score, because
+  // achievements are about to carry coins and tickets and a client that can
+  // award itself currency can print money. The page only shows what came
+  // back, and only ever the NEW ones: announcing the same badge every round
+  // is noise, not a reward.
+  function showBadges(earned) {
+    badgeNote.innerHTML = '';
+    if (!Array.isArray(earned) || !earned.length) { badgeNote.hidden = true; return; }
+    for (const a of earned) {
+      const row = document.createElement('div');
+      const nm = document.createElement('b');
+      nm.textContent = a.name || a.id;
+      const note = document.createElement('span');
+      note.textContent = ' ' + (a.note || '');
+      row.append(nm, note);
+      badgeNote.appendChild(row);
+    }
+    badgeNote.hidden = false;
+  }
+
+  // A round that cannot reach the board is still a round that happened, and
+  // achievements are earned by PLAYING rather than by placing. So it goes to
+  // the validator anyway, silently: no name asked, no board row shown, the
+  // seed spent exactly once either way. This is the half the top-ten gate
+  // used to swallow, and only the leaderboard ever wanted it swallowed.
+  async function submitSilently() {
+    const ticket = roundTicket;
+    if (!sbOn() || !sbToken || !ticket || savedThisRound) return;
+    // Clearing the ticket is the whole guard: the seed is single use, so a
+    // spent one cannot be submitted twice. savedThisRound deliberately stays
+    // FALSE, because it means "this round went on the board" and is what the
+    // account offer reads; setting it here announced "you made the world
+    // board" to every player who just missed it.
+    roundTicket = null;
+    try {
+      const name = (sbProfile && sbProfile.name) || 'YOU';
+      const r = await sbValidate(ticket.id, name);
+      showBadges(r && r.earned);
+      if (mode !== 'levels') refreshModeUI();
+    } catch (e) { /* a lesson in humility, not an error the player should see */ }
+  }
+
   // reached the world board, or beat the best, while still a guest
   function nudgeDue() {
     if (!sbOn() || !sbToken || !sbAnon()) return false;
@@ -2812,6 +2873,7 @@
   // still plays and still saves, on this device.
   let seedPocket = null;    // { id, seed, at }: the next round's ticket
   let roundTicket = null;   // the ticket of the round in g, spent by saveScore
+  let lastEarned = null;    // achievements the last submit came back with
   async function fetchSeed() {
     if (!sbOn() || !sbToken || seedPocket) return;
     try {
@@ -3024,6 +3086,7 @@
     if (sbOn() && sbToken && ticket) {
       try {
         const r = await sbValidate(ticket.id, name);
+        lastEarned = r && r.earned;
         if (mode === 'tourney' && tourney) return 'n:' + name;
         return 'r' + r.id;
       } catch (e) {
@@ -3128,6 +3191,7 @@
     saveNote.textContent = 'Top 10 starts at ' + list[MAX_ENTRIES - 1].score + '.';
     saveNote.className = 'save-note soft';
     saveNote.hidden = false;
+    submitSilently();          // it earned no place, but it may have earned a badge
   }
 
   // BEST is the player's own best, kept in this browser. It used to be the top
@@ -3169,6 +3233,7 @@
     saveNote.hidden = true;
     try {
       const key = await saveScore(name, g.score);
+      showBadges(lastEarned);
       await renderStandings(key);
       entryWanted = false;
       refreshModeUI();

@@ -127,3 +127,41 @@ select cron.schedule(
   '23 4 * * *',
   $$delete from public.pitch_snake_net_events where created_at < now() - interval '30 days'$$
 );
+
+-- ---------------------------------------------------------- achievements ----
+-- Granted by the validator and nowhere else, because they are about to carry
+-- coins and competitive tickets: a client that can award itself currency is a
+-- client that can print money. The catalogue (what each one IS) lives in the
+-- validator rather than here or in the engine, so adding one is a redeploy
+-- rather than an ENGINE_VERSION bump and a re-pin.
+create table if not exists public.pitch_snake_achievements (
+  user_id     uuid        not null,
+  achievement text        not null,
+  score_id    bigint,
+  earned_at   timestamptz not null default now(),
+  primary key (user_id, achievement)   -- earned once, and once only
+);
+
+create index if not exists pitch_snake_achievements_user_idx
+  on public.pitch_snake_achievements (user_id, earned_at desc);
+
+alter table public.pitch_snake_achievements enable row level security;
+revoke all on table public.pitch_snake_achievements from anon, authenticated;
+
+drop function if exists public.pitch_snake_my_achievements();
+
+create or replace function public.pitch_snake_my_achievements()
+returns json
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select coalesce(json_agg(json_build_object(
+           'id', a.achievement, 'at', a.earned_at) order by a.earned_at), '[]'::json)
+  from public.pitch_snake_achievements a
+  where a.user_id = auth.uid() and auth.uid() is not null;
+$$;
+
+revoke all on function public.pitch_snake_my_achievements() from public;
+grant execute on function public.pitch_snake_my_achievements() to anon, authenticated;

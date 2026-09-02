@@ -111,6 +111,67 @@ function timingFeatures(log: Record<string, unknown>) {
   };
 }
 
+// ---- achievements ----
+// Granted HERE and nowhere else. They are about to carry coins and
+// competitive tickets, which makes them currency, and a client that can award
+// itself currency is a client that can print money. So the same rule as the
+// score: the server replays the round and decides what happened.
+//
+// The catalogue lives in this file rather than the engine on purpose. Putting
+// it in the engine would chain every new achievement to an ENGINE_VERSION
+// bump and a re-pin of this very import, which is absurd for what is content.
+// Nothing here affects a replay, so adding one is a redeploy and nothing else.
+//
+// `test` reads a context built once from the round the validator has already
+// replayed: the finished game, and the event stream the replay retained.
+// Counting is therefore free.
+const ACHIEVEMENTS: { id: string; name: string; note: string; test: (c: Ctx) => boolean }[] = [
+  { id: 'first-whistle', name: 'FIRST WHISTLE', note: 'You finished a round.',
+    test: () => true },
+  { id: 'ten-up', name: 'TEN UP', note: 'Ten in a single round.',
+    test: (c) => c.mode !== 'survival' && c.score >= 10 },
+  { id: 'half-century', name: 'HALF CENTURY', note: 'Fifty in a single round.',
+    test: (c) => c.mode !== 'survival' && c.score >= 50 },
+  { id: 'last-ditch', name: 'LAST DITCH', note: 'You flew into a wall and turned out of it.',
+    test: (c) => c.saves >= 1 },
+  { id: 'through-the-window', name: 'THROUGH THE WINDOW', note: 'You took a teleport trip.',
+    test: (c) => c.hops >= 1 },
+  { id: 'hat-trick', name: 'HAT-TRICK', note: 'Three window trips in one round.',
+    test: (c) => c.hops >= 3 },
+  { id: 'struck', name: 'STRUCK', note: 'You took a thunderbolt and dragged the pack with it.',
+    test: (c) => c.zaps >= 1 },
+  { id: 'clean-sheet', name: 'CLEAN SHEET', note: 'Fifteen without touching a single TNT.',
+    test: (c) => c.mode !== 'survival' && c.score >= 15 && c.tnts === 0 },
+  { id: 'the-full-ninety', name: 'THE FULL NINETY', note: 'Ninety seconds of survival.',
+    test: (c) => c.mode === 'survival' && c.score >= 90 },
+];
+
+interface Ctx {
+  mode: string; score: number; quanta: number; reason: string;
+  saves: number; hops: number; zaps: number; tnts: number; eats: number; bonuses: number;
+}
+
+// One pass over the events the replay kept. `drainEvents` returns everything
+// that happened, because a replay never drains as it goes.
+function roundContext(game: Record<string, unknown>, mode: string): Ctx {
+  const events = (game.drainEvents as () => Record<string, unknown>[])();
+  const c: Ctx = {
+    mode, score: game.score as number, quanta: game.quanta as number,
+    reason: String(game.deadReason ?? ''),
+    saves: 0, hops: 0, zaps: 0, tnts: 0, eats: 0, bonuses: 0,
+  };
+  for (const e of events) {
+    switch (e.t) {
+      case 'save': c.saves++; break;
+      case 'hop': c.hops++; break;
+      case 'zap': c.zaps++; break;
+      case 'tnt': c.tnts++; break;
+      case 'eat': c.eats++; if (e.bonus) c.bonuses++; break;
+    }
+  }
+  return c;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return refuse('POST only', 405);
@@ -223,5 +284,44 @@ Deno.serve(async (req) => {
     .select('id')
     .single();
   if (error || !row) return refuse('insert failed', 500);
-  return reply({ id: row.id, score }, 200);
+
+  // Achievements last, and never fatal. The score is already written and a
+  // player must never lose a validated round because the badge write had a
+  // bad day; a missed achievement is recoverable on the next round, a lost
+  // score is not.
+  const earned = await grantAchievements(service, uid, mode, game, row.id);
+  return reply({ id: row.id, score, earned }, 200);
 });
+
+async function grantAchievements(
+  service: ReturnType<typeof createClient>,
+  uid: string,
+  mode: string,
+  game: Record<string, unknown>,
+  scoreId: number,
+) {
+  try {
+    const ctx = roundContext(game, mode);
+    const hit = ACHIEVEMENTS.filter((a) => a.test(ctx));
+    if (hit.length === 0) return [];
+
+    // What they already have, so 'earned' means NEWLY earned: the primary key
+    // would swallow a repeat anyway, but the page announces what comes back
+    // and announcing the same badge every round is noise, not a reward.
+    const { data: had } = await service
+      .from('pitch_snake_achievements')
+      .select('achievement')
+      .eq('user_id', uid)
+      .in('achievement', hit.map((a) => a.id));
+    const already = new Set((had ?? []).map((r: { achievement: string }) => r.achievement));
+    const fresh = hit.filter((a) => !already.has(a.id));
+    if (fresh.length === 0) return [];
+
+    await service.from('pitch_snake_achievements').insert(
+      fresh.map((a) => ({ user_id: uid, achievement: a.id, score_id: scoreId })),
+    );
+    return fresh.map((a) => ({ id: a.id, name: a.name, note: a.note }));
+  } catch {
+    return [];
+  }
+}
