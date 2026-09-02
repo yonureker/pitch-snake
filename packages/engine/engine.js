@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 19;  // 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 20;  // 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -270,11 +270,75 @@ function layoutSnake(n, laneY, solo) {
   return cells.slice(0, n);
 }
 
+// ---- levels: onboarding, not a campaign ----
+// This game's loop is score chasing: one more run, beat your best, reach the
+// board. A level campaign is a DIFFERENT loop, and pretending otherwise makes
+// a worse version of both. So levels here do one job: teach the five things
+// the pitch will otherwise kill you with, and hand the player to the endless
+// modes competent rather than confused.
+//
+// A level is a config and nothing else, exactly like a mode, which is why
+// this table is here and not in a shell. It is ordered, and the order IS the
+// teaching order: each level introduces one hazard and nothing else, so a
+// death always has one obvious cause. `id` is stable and is what progression
+// is stored against, so levels may be reordered or inserted without wiping
+// anybody's progress; never reuse an id for different content.
+//
+// Every level carries its own seed, so the board is the same for everyone and
+// a hint about a level is true for the person reading it.
+export const LEVELS = [
+  {
+    id: 'first-touch',
+    name: 'FIRST TOUCH',
+    teach: 'Steer with the arrows, WASD, a swipe, the pad or a controller.',
+    goal: 'Eat 3.',
+    cfg: { seed: 1101, wallsEnabled: false, goalScore: 3 },
+  },
+  {
+    id: 'keep-your-shape',
+    name: 'KEEP YOUR SHAPE',
+    teach: 'You grow with every bite, and your own body is solid.',
+    goal: 'Eat 4 without folding into yourself.',
+    cfg: { seed: 1102, wallsEnabled: false, startLen: 14, goalScore: 4 },
+  },
+  {
+    id: 'the-walls',
+    name: 'THE WALLS COME UP',
+    teach: 'Walls flash before they bite. Fly into one and you have a heartbeat to turn out.',
+    // The food is a trap here and the wording says so: a greedy player grows,
+    // boxes itself in and dies to its own tail rather than to the thing this
+    // level is about. Verified both ways, a food-chasing policy dies at three
+    // seconds and a survival one reaches the whistle.
+    goal: 'Survive 25 seconds. Forget the food.',
+    cfg: { seed: 1103, wallsEnabled: true, durationMs: 25_000 },
+  },
+  {
+    id: 'man-marking',
+    name: 'MAN MARKING',
+    teach: 'A ghost hunts you, but it can never cross onto you: every ghost death is one you steered into.',
+    goal: 'Eat 4 with a ghost on the pitch.',
+    cfg: { seed: 1104, wallsEnabled: false, startGhosts: 1, goalScore: 4 },
+  },
+  {
+    id: 'danger-on-the-pitch',
+    name: 'DANGER ON THE PITCH',
+    teach: 'TNT is not food. It costs you five points and five of your length.',
+    goal: 'Eat 4 and leave the TNT alone.',
+    cfg: { seed: 1105, wallsEnabled: false, startBombs: 3, bombFirstMs: 2500, goalScore: 4 },
+  },
+];
+
 export function createGame(cfg = {}) {
   const seed = (cfg.seed ?? 1) >>> 0;
   const tickMs = cfg.tickMs ?? SPEEDS.normal;
   const wallsEnabled = cfg.wallsEnabled ?? true;
   const durationMs = cfg.durationMs ?? 0;   // 0 = endless
+  // A round that can be WON rather than merely survived. 0 means there is no
+  // goal, which is every mode the game shipped with; a level sets it and the
+  // round ends the moment the score reaches it. Levels are the only caller,
+  // and 'survive N seconds' needs nothing new at all: durationMs already ends
+  // a round, and for a level that whistle IS the win.
+  const goalScore = cfg.goalScore ?? 0;
   const startGhosts = cfg.startGhosts ?? 0; // survival: personalities present at kickoff
   const startBombs = cfg.startBombs ?? 0;   // survival: TNT wave size floored here for ever
   const bombFirstMs = cfg.bombFirstMs ?? 0; // how long the board stays clear of that first wave
@@ -392,7 +456,7 @@ export function createGame(cfg = {}) {
     // snake goes down; a multi-snake log carries every score and death time.
     log: { v: ENGINE_VERSION, seed, tickMs, wallsEnabled, durationMs, startGhosts, startBombs, bombFirstMs,
            scoreByTime, startLen, eatGrowth, bonusGrowth, tntGrowth, portalGrowth,
-           ghostEveryMs, bombEveryMs, boltEveryMs,
+           ghostEveryMs, bombEveryMs, boltEveryMs, goalScore,
            players: playerCount, inputs: [], end: 0, finalScore: 0 },
   };
 
@@ -1381,6 +1445,26 @@ export function createGame(cfg = {}) {
       // which skips the dead, so a snake taken above needs no final write
       for (const p of players) if (p.alive) { p.headMajX = p._majX; p.headMajY = p._majY; }
     }
+    // ---- the goal ----
+    // A level is won by reaching a score, and that is judged here rather than
+    // where the point is awarded, for the whistle's reason: after everything
+    // else in the quantum, so the apple that wins it counts. It sits AFTER
+    // contact deliberately, so a ghost taking the head on the same quantum
+    // still takes it. Death outranks reward everywhere else in this engine
+    // (rule 20: a trip that kills you pays nothing) and a goal is a reward.
+    //
+    // Before the whistle, so a round that is both timed and winnable is won
+    // rather than merely finished.
+    if (goalScore && anyAlive()) {
+      for (const p of players) {
+        if (!p.alive || p.score < goalScore) continue;
+        p.alive = false;
+        p.deadReason = 'won';
+        p.diedAt = S.quanta;
+        emit({ t: 'die', player: p.idx, reason: 'won' });
+      }
+      if (!anyAlive()) stampEnd();
+    }
     // ---- the whistle ----
     // A timed round ends at exactly durationMs, after everything else in the
     // quantum, so a point scored on the final tick counts. 'time' is an end,
@@ -1646,6 +1730,8 @@ export function replay(log) {
     eatGrowth: log.eatGrowth ?? 1, bonusGrowth: log.bonusGrowth ?? 5, tntGrowth: log.tntGrowth ?? -5,
     portalGrowth: log.portalGrowth ?? 0,
     ghostEveryMs: log.ghostEveryMs ?? 0, bombEveryMs: log.bombEveryMs ?? 0, boltEveryMs: log.boltEveryMs ?? 0,
+    // a level's goal, absent in every log written before levels existed
+    goalScore: log.goalScore ?? 0,
     players: log.players ?? 1,
   });
   const inputs = log.inputs;

@@ -1665,6 +1665,90 @@ test('ghosts route through portals on purpose, and never through spent ones', ()
   assert.ok(hopped, 'the chaser walked into the window and surfaced beside the head');
 });
 
+// --------------------------------------------------------------- levels
+test('a level is won by reaching its goal, and the winning point counts', () => {
+  // goalScore is the only thing levels needed that the engine did not have:
+  // 'survive N seconds' is already durationMs, and 'won' already exists as an
+  // end. The goal is judged where the whistle is, so the apple that wins it
+  // counts rather than falling into the next quantum.
+  const g = quietGame({ goalScore: 2 });
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  g.food = { x: 6, y: 5, bonus: false, kind: 0 };
+  g.advanceQuanta(200);
+  assert.equal(g.score, 1, 'one apple down, and the round is still running');
+  assert.equal(g.alive, true);
+  g.food = { x: g.snake[0].x + g.dir.x, y: g.snake[0].y + g.dir.y, bonus: false, kind: 0 };
+  g.advanceQuanta(200);
+  assert.equal(g.alive, false, 'the goal ended it');
+  assert.equal(g.deadReason, 'won');
+  assert.equal(g.score, 2, 'and the point that won it is on the board');
+});
+
+test('a level with no goal is exactly the game it always was', () => {
+  // The knob defaults to 0, which is every mode that shipped before levels.
+  // This is what lets the golden fixtures stand unmoved.
+  const a = createGame({ seed: 4242, wallsEnabled: false });
+  const b = createGame({ seed: 4242, wallsEnabled: false, goalScore: 0 });
+  a.advanceQuanta(1500);
+  b.advanceQuanta(1500);
+  assert.equal(a.score, b.score);
+  assert.equal(a.quanta, b.quanta);
+  assert.deepEqual(a.snake, b.snake);
+});
+
+test('a snake that died cannot then win its level', () => {
+  // The goal is judged after contact and skips the fallen, so a round is
+  // never won by a snake that is already down. The tempting stronger claim,
+  // that a ghost standing on the winning apple beats the goal, is NOT true
+  // and should not be asserted: food is an entry test and ghost contact is a
+  // majority test (rule 24), so the apple is eaten half a tick before the
+  // ghost is touched. Winning there is correct, and the player earned it.
+  const g = quietGame({ goalScore: 1, tickMs: 200 });
+  setSnake(g, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  foodFar(g);
+  g.alive = false; g.deadReason = 'wall';      // already gone
+  g.players[0].score = 99;                      // and well past the goal
+  g.advanceQuanta(50);
+  assert.equal(g.deadReason, 'wall', 'the death stands; the goal does not overwrite it');
+});
+
+test('a level round replays to the identical end', () => {
+  // The knob has to ride in the log AND be read back out of it, which is the
+  // half that is easy to miss: the goal was in the log from the first attempt
+  // and replay ignored it, so a level log replayed as an endless round and
+  // finished nowhere near where it was played.
+  //
+  // The round has to be won through SEEDED food to prove anything. Hand
+  // placing g.food during play makes a round that cannot replay by
+  // construction, because the log carries inputs and the food comes from the
+  // PRNG; that is the determinism contract working, not a fault.
+  const g = createGame({ seed: 777, wallsEnabled: false, goalScore: 3 });
+  for (let n = 0; g.alive && n < 20000; n++) {
+    const head = g.snake[0], food = g.food;
+    if (food) {
+      let dx = food.x - head.x, dy = food.y - head.y;
+      if (dx > GRID / 2) dx -= GRID;
+      if (dx < -GRID / 2) dx += GRID;
+      if (dy > GRID / 2) dy -= GRID;
+      if (dy < -GRID / 2) dy += GRID;
+      let x = 0, y = 0;
+      if (Math.abs(dx) >= Math.abs(dy) && dx !== 0) x = Math.sign(dx);
+      else if (dy !== 0) y = Math.sign(dy);
+      if (!(x === -g.dir.x && y === -g.dir.y)) g.setDir(x, y);
+    }
+    g.advanceQuanta(13);
+  }
+  assert.equal(g.deadReason, 'won', 'the seeker reached the goal');
+  assert.equal(g.score, 3);
+  assert.equal(g.log.goalScore, 3, 'the goal rides in the log');
+
+  const r = replay(g.log);
+  assert.equal(r.score, g.score, 'same score');
+  assert.equal(r.quanta, g.quanta, 'same length');
+  assert.equal(r.deadReason, g.deadReason, 'same end');
+  assert.deepEqual(r.snake, g.snake, 'same final body');
+});
+
 // ------------------------------------------------------------ golden fixtures
 // Rounds recorded by the v4 (single-snake) engine, committed as JSON, pinned
 // to what today's engine deterministically makes of them. They began as the

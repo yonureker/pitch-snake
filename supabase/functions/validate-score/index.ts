@@ -31,6 +31,9 @@ const KNOBS: Record<string, unknown> = {
   scoreByTime: false, startLen: START_LEN,
   eatGrowth: 1, bonusGrowth: 5, tntGrowth: -5, portalGrowth: 0,
   ghostEveryMs: 0, bombEveryMs: 0, boltEveryMs: 0,
+  // levels are the only rounds with a goal and they never submit, so a
+  // submitted round claiming a board mode must carry none
+  goalScore: 0,
 };
 
 // ---- the evidence trail ----
