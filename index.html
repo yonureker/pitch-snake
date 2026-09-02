@@ -817,6 +817,11 @@
   .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 42px; text-align: right; }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
+  /* A long board buys back a row or two of its own height rather than making
+     the player scroll for them. Past four, which is what makes a full
+     five-player room fit with nothing to scroll for at all. */
+  .standings.dense { padding: 7px 14px; }
+  .standings.dense li { padding: 1px 0; }
   /* The rating a rated round moved, and which way. It takes the SERIES
      COLUMN'S place rather than adding a fifth or wrapping to a second line:
      the board is 230px, and a five-player room on a phone has no room for
@@ -3222,11 +3227,19 @@
       : (boardIsLocal ? 'Top 10 on this device' : 'Top 10 worldwide') +
         (ruleMode() === 'classic' ? '' : ' \u00b7 ' + RULE_LABELS[ruleMode()]);
     standingsEl.innerHTML = '';
+    // A ten-row board does not fit a phone and never has; it scrolls, which
+    // is fine, but only if the player can tell. The fade that says so is
+    // measured by markOverflow, and refreshModeUI ran it BEFORE this function
+    // awaited the board: it measured an empty list, found nothing to scroll,
+    // and cleared the fade for the one screen that most needed it. Every exit
+    // from here re-measures now that the rows actually exist.
+    standingsEl.classList.toggle('dense', list.length > 4);
     if (!list.length) {
       const li = document.createElement('li');
       li.className = 'empty';
       li.textContent = 'No scores yet';
       standingsEl.appendChild(li);
+      markOverflow();
       return list;                  // an empty board is a board with room
     }
     list.forEach((e, i) => {
@@ -3246,6 +3259,7 @@
       li.append(rk, fl, nm, sc);
       standingsEl.appendChild(li);
     });
+    markOverflow();
     return list;
   }
 
@@ -4420,6 +4434,7 @@
       }
       li.appendChild(rt);
     }
+    markOverflow();     // the rows just changed height; re-judge the fade
   }
 
   function vsRoundOver() {
@@ -4450,6 +4465,7 @@
     }).catch(() => {});
     boardHead.textContent = 'ROOM ' + vs.code + ' · ROUND ' + vs.startN;
     standingsEl.innerHTML = '';
+    standingsEl.classList.toggle('dense', rows.length > 4);
     rows.forEach((row, i) => {
       const li = document.createElement('li');
       if (row.me) li.className = 'me';
