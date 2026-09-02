@@ -7,6 +7,7 @@ A monorepo (npm workspaces), deployed to GitHub Pages from `main` at the repo ro
 - `apps/mobile/` - the Expo app (React Native + Skia planned), same engine import. Conventions follow the False9 app (`~/Desktop/false9`): TanStack Query for server data, Zustand for UI state only, strict TS.
 - `assets/` - art the page loads at runtime. `flags.png` is 250 country flags in one 16-wide grid of 60x45 cells, alphabetical by ISO-3166 alpha-2, so a flag's grid position IS its index in that order. Both clients carry the same code list and derive the position from it, which means the sprite and those two lists are one artefact in three places: regenerate them together or flags silently point at the wrong countries. Flags are drawn rather than typed because a regional-indicator pair is only a flag where the platform ships flag glyphs, and Windows never has; artwork is the only answer that looks the same on a phone, a television and a Steam machine. Attribution in `assets/flags.LICENSE.txt` (flag-icons, MIT).
 - `supabase/` - schema and RPCs; git is the source of truth, never the dashboard.
+- `.claude/` - the agents and skills this repo ships with. **Agents:** `engine-guard` (reviews a diff against the determinism contract and the numbered rules), `perf-warden` (audits the hot path against the performance rules), `board-doctor` (read-only diagnosis of the live Supabase project). **Skills:** `verify-and-ship` (the whole verify-then-ship loop, since there is no CI), `engine-version-bump` (the ENGINE_VERSION / golden fixture / validator pin sequence, which silently kills the world board if half-done), `flag-sprite` (regenerating the sprite and the two code lists that index it). Reach for them rather than rediscovering the procedure.
 
 ## Determinism (the engine's reason to exist)
 
@@ -80,6 +81,67 @@ The board is global when `SB_URL` and `SB_KEY` are set in `index.html`, and loca
 4. BEST is the player's own best per mode in `localStorage`, not the top of the standings. Those were the same thing while the board was local and are not once it is global.
 5. **Identity is anonymous-first** (`supabase/auth.sql`): every client silently signs in anonymously at boot (web: auth-js pinned from jsDelivr like realtime-js; app: auth-js over AsyncStorage, built lazily inside an effect because expo-router's static render imports modules in node where storage does not exist). Every RPC then carries the session token and the submit functions stamp `auth.uid()` into the `user_id` columns; signed-out clients keep working exactly as before, stamping null. One profile row per user (`pitch_snake_profiles`: 5-char washed name + ISO2 country for the flag; deliberately NOT unique, user_id is the identity) feeds the score-entry prefill and the versus name; the first name typed anywhere becomes it. The login surface is the profile sheet behind the player chip (top left of the pitch, plus one quiet line after a world-board save): name, flag (set_profile country contract: null keeps, '' clears, a code sets), and email by 6-digit code, where updateUser + verifyOtp 'email_change' links the email onto the SAME user_id, an address that answers 422 email_exists flips to signInWithOtp + verifyOtp 'email' and switches the device to that account, and sign-out immediately signs back in anonymously so the invisible tier never lapses; both mail templates (Magic Link, Change Email Address) must carry {{ .Token }}, and real volume needs custom SMTP. Linking a real identity later (Apple/Google/email OTP) keeps the same user_id, which is the whole design; both dashboard switches ("Allow anonymous sign-ins", "Allow manual linking") must be ON or auth degrades silently to the pre-identity behaviour. Auth is a bonus tier, never a dependency: nothing may ever gate play on it.
 6. **The server decides every score** (validate.sql + `supabase/functions/validate-score/index.ts`, deployed by pasting into the dashboard's function editor, Verify JWT ON). A round may only enter a board against a seed the server minted: `pitch_snake_issue_seed` (session required, which every client silently has; 40 per user per 10 minutes) hands out single-use seeds with a two-hour shelf life, the page pockets one ahead of each real round (`newRound(true)` spends it, preview boards never do), and `saveScore` submits the finished round's LOG, never a number. The function claims the seed atomically, checks the log's knobs match the claimed mode exactly, checks at least `end * 10ms` of real wall time passed since minting (both clocks the server's own, 500ms slack; a bot cannot simulate faster than time), replays the log with the engine and inserts the score IT computed, with seed and user id attached. Refusals burn the seed and the page falls back to the device board (`showLocalBoardOnce`), so degradation is visible, never wrong. The function imports the engine from jsDelivr pinned to the commit that last touched `engine.js`: on every `ENGINE_VERSION` bump, update that pin and re-paste the function, or new logs refuse and pages fall back local. The client-score RPCs are dropped by all three SQL files and must never return. What remains open is bots that play honestly well: the stored (seed, user_id, log-timing) trail is the material for that fight, not this function.
+
+## Code conventions
+
+These are repo-wide. The engine and performance rules above outrank them everywhere they overlap.
+
+### Naming
+
+**Spelled-out names, no abbreviations.** `victimOf` not `vOf`, `portalBusy` not `pBusy`, `country` not `cc` at a call site. The exceptions are deliberate and few: `p` for a player and `g`/`gh` for a ghost inside the engine's tight loops (they appear hundreds of times and the surrounding comments carry the meaning), `i`/`n` for loop counters, and the `_`-prefixed scratch objects (`_rp`, `_ga`, `_behind`) whose prefix is itself the signal "reused, do not hold a reference". A new abbreviation needs a reason better than typing speed.
+
+Booleans read as assertions: `portalBusy`, `savedThisRound`, `beatBest`, `nudgeDue()`. Functions that answer a question are named as the question: `placesOnBoard`, `headHolds`, `nudgeDue`.
+
+### Comments and doc blocks
+
+This codebase's comments explain **why**, not what, and that is the house style worth protecting. A comment that restates the code is noise; a comment recording a decision, a rejected alternative, or a bug that was already hit once is the most valuable thing in the file. The engine is full of the second kind and they are the reason rules survive refactors.
+
+- Every module opens with a block saying what it owns and what it must never do.
+- Every exported function carries a doc comment. TypeScript files use JSDoc with `@module` at the top; `.js` and the page use plain block comments in the same spirit.
+- When you fix a subtle bug, leave the reason in the comment. "indexOf finds the FIRST occurrence, and 98 of the 250 codes straddle their neighbours" prevents the next person reintroducing it.
+
+Current state: 17 of 28 files under `apps/mobile/src` carry `@module`. New and touched files close that gap; nobody has to backfill the rest in one go.
+
+### Server data
+
+- **The app:** every read goes through a TanStack Query hook in `apps/mobile/src/hooks/queries/`. Components never call `lib/leaderboard.ts` directly. Zustand and `useState` are for UI state only, never for server data. Invalidate with `queryClient.invalidateQueries` after a mutation, prefix-matching when several variants must drop.
+- **The page:** has no query library. Every call goes through `sbRpc` with its abort timer, and every path falls back to the local board. That asymmetry is intentional, not debt: the page is buildless and a client library is a dependency it does not carry.
+- **Both:** identity is a bonus tier. Nothing may gate play on auth, ever.
+
+Query options are part of the contract, not incidental. `useTopScores` turns off `refetchOnWindowFocus` and `refetchOnReconnect` deliberately, because the FULL TIME board is a snapshot of the moment a round ended and a board that reshuffles under a player re-judges a round already decided.
+
+### File organisation and size
+
+| Path | Ceiling | When it is exceeded |
+|---|---|---|
+| `apps/mobile/src/app/**/*.tsx` | 400 | Extract logic into hooks, sections into components |
+| `apps/mobile/src/components/**` | 500 | Split into composable pieces |
+| `apps/mobile/src/hooks/**` | 400 | Split into single-responsibility hooks |
+| `apps/mobile/src/lib/**`, `src/game/**` | 500 | Split by domain |
+| `packages/engine/engine.js` | none | One file is the point: the rules live in one place or they drift |
+| `index.html` | none | Buildless and self-contained by design; it is the deployment unit |
+
+Two of these are already over and both are known: `apps/mobile/src/app/index.tsx` is **1126 lines** against a 400 ceiling, and `src/game/renderer.ts` is 761 against 500. Refactor them before adding to them. The engine and the page are exempted on purpose, not by neglect: the engine is one file so the rules cannot drift apart, and the page is one file because it is deployed by copying it.
+
+### TypeScript (the app)
+
+Ported from the False9 conventions this app already follows:
+
+- **No `any`.** A new exception needs an inline disable and a one-line reason.
+- **Type guards over assertions.** `function isCountry(v: unknown): v is string` and an `if`, never `as string`. Casting lies to the compiler; a guard tells it something true.
+- **`as const satisfies` for lookup catalogs**, so `keyof typeof X` is the literal union rather than `string`.
+- **React Compiler is on.** No `useMemo`, `useCallback` or `React.memo` — they are lint errors, and the message says why.
+- **`StyleSheet.create`, never inline styles.** Enforced.
+- Strict flags including `noUncheckedIndexedAccess`, which is what forces the `?? null` on any indexed read.
+
+### Performance beyond the frame loop
+
+The numbered rules above govern the hot path. Away from it:
+
+- Prefer one round trip to several. The top-ten gate reads the board once at death and uses that same response to decide whether to ask for a name, rather than fetching a cutoff separately.
+- Derive over store when the source is already authoritative. A personal best is `max(score)` on the board, not a second column that can disagree with it.
+- Bundle art rather than fetching it per item: one 67KB flag sprite, not 250 requests.
+- Every network call carries an abort timer and a fallback. A dead network degrades the board, never the game.
 
 ## Verify before shipping
 

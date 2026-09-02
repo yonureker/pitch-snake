@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(node --check *)",
+      "Bash(node --test *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(gh api repos/yonureker/pitch-snake/*)"
+    ]
+  },
+  "enabledMcpjsonServers": ["supabase"]
+}
