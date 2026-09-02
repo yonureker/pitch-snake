@@ -117,6 +117,40 @@ begin
 end;
 $$;
 
+-- ------------------------------------------------------------ your bests ----
+-- The sheet offers to save your scores, so the scores have to follow you.
+-- Before this, they did not: BEST lived in one browser's localStorage and a
+-- player signing in on a second device was met with a row of zeroes under a
+-- promise that they would not be.
+--
+-- Nothing new is stored to make this true. A player's best in a mode is
+-- already on the board: the highest score the VALIDATOR wrote against their
+-- user id. Deriving it rather than keeping a second copy means the number can
+-- never disagree with the board it came from, and means it cannot be written
+-- by a client, which a stored personal best could have been.
+--
+-- Returns an object keyed by mode ({"classic": 77, ...}), modes with no rows
+-- simply absent, and an empty object for a signed-out or brand-new caller, so
+-- the page can merge without branching on nulls.
+drop function if exists public.pitch_snake_my_bests();
+
+create or replace function public.pitch_snake_my_bests()
+returns json
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select coalesce(json_object_agg(t.mode, t.best), '{}'::json)
+  from (
+    select s.mode, max(s.score) as best
+    from public.pitch_snake_scores s
+    where s.user_id = auth.uid()
+      and auth.uid() is not null
+    group by s.mode
+  ) t;
+$$;
+
 -- -------------------------------------- the boards learn whose score it is ----
 -- RETIRED: this file used to redefine the two submit functions so rows
 -- carried auth.uid(). Validated scoring (validate.sql + the validate-score
@@ -131,6 +165,8 @@ drop function if exists public.pitch_snake_tournament_submit(text, text, integer
 -- then hand it to exactly the two roles the publishable key can become.
 revoke all on function public.pitch_snake_get_profile()                from public;
 revoke all on function public.pitch_snake_set_profile(text, text)      from public;
+revoke all on function public.pitch_snake_my_bests()                   from public;
 
 grant execute on function public.pitch_snake_get_profile()             to anon, authenticated;
 grant execute on function public.pitch_snake_set_profile(text, text)   to anon, authenticated;
+grant execute on function public.pitch_snake_my_bests()                to anon, authenticated;

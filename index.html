@@ -691,6 +691,31 @@
      `soft` rather than `hint`, which is already the control legend's class
      under the board and would drag its flex layout in here. */
   .save-note.soft { color: #b7ac93; font-weight: 600; }
+  /* The account offer. It sits where the round just ended rather than behind
+     the player chip, because that is where the thing worth keeping just
+     happened. Plain words on purpose: the game's own voice belongs to the
+     game, and an account is the one place a player wants the wording every
+     other app already taught them. "Not now" is a real, equal-weight choice,
+     never a greyed-out afterthought: nothing here may ever gate play. */
+  .acct {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    max-width: 280px; text-align: center;
+  }
+  .acct[hidden] { display: none; }
+  .acct-line {
+    margin: 0; font-family: 'Barlow', sans-serif; font-size: 13px; font-weight: 600;
+    color: #d8d0bd; line-height: 1.35;
+  }
+  /* Gold, not red. Red on this pitch means play, and the whistle button is
+     always the loudest thing on the screen; an offer that shouts as loud as
+     REMATCH is an offer competing with the game. */
+  .acct-row { display: flex; align-items: center; gap: 12px; }
+  .acct-later {
+    background: none; border: 0; padding: 4px 2px; cursor: pointer;
+    font-family: 'Barlow', sans-serif; font-size: 12px; font-weight: 600;
+    color: #b7ac93; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .acct-later:hover { color: var(--text); }
   .standings {
     list-style: none; margin: 2px 0; padding: 10px 14px; width: 230px;
     background: rgba(33,30,26,0.5); border-radius: 8px;
@@ -966,7 +991,13 @@
           <button class="btn small" id="saveBtn">SAVE</button>
         </div>
         <div class="save-note" id="saveNote" hidden></div>
-        <button class="save-note soft linkline" id="authNudge" hidden>KEEP YOUR BESTS ON EVERY DEVICE &rsaquo; SIGN IN</button>
+        <div class="acct" id="authNudge" hidden>
+          <p class="acct-line" id="acctLine">Create an account to save your scores.</p>
+          <div class="acct-row">
+            <button class="btn small modes" id="acctGo">CREATE ACCOUNT</button>
+            <button class="acct-later" id="acctLater">Not now</button>
+          </div>
+        </div>
         <div class="board-head" id="boardHead" style="display:none">Top 10</div>
         <ol class="standings" id="standings" style="display:none"></ol>
         <div class="mode-caption" id="modeCaption"></div>
@@ -1036,20 +1067,20 @@
 
     <div class="modal-backdrop" id="profileModal" hidden>
       <div class="modal profile">
-        <div class="modal-title">Player</div>
+        <div class="modal-title" id="profTitle">Player</div>
         <div class="entry wide"><input id="profName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false"></div>
         <div class="entry wide" id="profCountryRow"><select id="profCountry"><option value="">NO FLAG</option></select></div>
         <button class="btn small" id="profSaveBtn">SAVE</button>
         <div class="prof-auth" id="profAuthAnon" hidden>
-          <p class="vs-hint">Add your email and your name, flag and scores follow you onto any phone or computer.</p>
+          <p class="vs-hint">Your name, flag and scores will work on any device.</p>
           <div class="entry wide"><input id="profEmail" class="prof-email" type="email" placeholder="EMAIL" autocomplete="email" autocapitalize="off" spellcheck="false"></div>
           <div class="entry wide" id="profCodeRow" hidden>
             <input id="profCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="CODE" spellcheck="false">
           </div>
-          <button class="btn small" id="profSendBtn">SEND CODE</button>
+          <button class="btn small" id="profSendBtn">CREATE ACCOUNT</button>
         </div>
         <div class="prof-auth" id="profAuthOn" hidden>
-          <p class="vs-hint">SIGNED IN AS <b id="profWhoEmail"></b></p>
+          <p class="vs-hint">Signed in as <b id="profWhoEmail"></b></p>
           <button class="btn small ghostbtn" id="profSignOut">SIGN OUT</button>
         </div>
         <p class="save-note" id="profStatus" hidden></p>
@@ -1100,6 +1131,11 @@
   const standingsEl = document.getElementById('standings');
   const boardHead = document.getElementById('boardHead');
   const saveNote = document.getElementById('saveNote');
+  const profTitle = document.getElementById('profTitle');
+  const authNudge = document.getElementById('authNudge');
+  const acctLine = document.getElementById('acctLine');
+  const acctGo = document.getElementById('acctGo');
+  const acctLater = document.getElementById('acctLater');
   const legend = document.getElementById('legend');
 
   let cell = 20;
@@ -1172,6 +1208,7 @@
   // (its seed makes the score submittable); preview boards behind menus
   // never do, or browsing the modes would drain the pocket.
   function newRound(forReal) {
+    beatBest = false;          // each round earns its own moment
     roundTicket = null;
     let seed;
     const ticket = forReal ? takeTicket() : null;
@@ -1208,7 +1245,9 @@
     // BEST is a solo statistic; a versus score rides a shared, leader-driven
     // board and would not mean the same thing
     if (!inVs) {
-      if (sc > best) { best = sc; bestByMode[ruleMode()] = best; }
+      // a round that passes the standing best is the moment worth asking on:
+      // it is the thing a player would actually lose with the device
+      if (sc > best) { best = sc; bestByMode[ruleMode()] = best; beatBest = true; }
       bestEl.textContent = best;
     } else {
       syncMpHud();
@@ -2524,6 +2563,31 @@
 
   let memStandings = [];
   let savedThisRound = false;
+  // ---- when the game asks you to keep an account ----
+  // Not "whenever you are anonymous", which is nagging. Only on a round that
+  // earned something losable: one that reached the world board, or one that
+  // passed your standing best. Everything else stays silent.
+  //
+  // The cap matters more than the trigger. An ask that comes back every round
+  // stops being an offer and becomes furniture, so it shows at most once a
+  // session and gives up entirely after NUDGE_LIMIT refusals, remembered
+  // across visits. Play is never gated on any of it.
+  let beatBest = false;          // this round passed the standing best
+  let nudgedThisSession = false;
+  const NUDGE_KEY = 'snakeAcctNo';
+  const NUDGE_LIMIT = 3;
+  function nudgeRefusals() {
+    return parseInt(localStorage.getItem(NUDGE_KEY), 10) || 0;
+  }
+  function refuseNudge() {
+    try { localStorage.setItem(NUDGE_KEY, String(nudgeRefusals() + 1)); } catch (e) {}
+  }
+  // reached the world board, or beat the best, while still a guest
+  function nudgeDue() {
+    if (!sbOn() || !sbToken || !sbAnon()) return false;
+    if (nudgedThisSession || nudgeRefusals() >= NUDGE_LIMIT) return false;
+    return (savedThisRound && !boardIsLocal) || beatBest;
+  }
   const MAX_ENTRIES = 10;
 
   // One call shape for both functions. Every call carries its own abort timer,
@@ -2580,7 +2644,7 @@
       if (!session) session = (await sbAuth.signInAnonymously()).data.session;
       sbToken = session ? session.access_token : null;
       sbUser = session ? session.user : null;
-      if (sbToken) await syncProfile();
+      if (sbToken) { await syncProfile(); syncBests(); }
       refreshWho();
       fetchSeed();
     } catch (e) { /* no identity today; the game does not care */ }
@@ -2671,6 +2735,39 @@
       if (local) sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: local, p_country: null });
       refreshWho();
     } catch (e) { /* same rule: identity never blocks anything */ }
+  }
+
+  // ---- your bests follow the account, not the browser ----
+  // The sheet offers to save your scores, so the scores have to travel. They
+  // did not: BEST was one browser's localStorage, and signing in on a second
+  // device showed a row of zeroes under a promise that it would not.
+  //
+  // Nothing new is stored to fix that. A best is already on the board, as the
+  // highest score the VALIDATOR wrote against this user id, so the server
+  // derives it and this merges it with whatever the device remembers, keeping
+  // whichever is higher. That direction matters: a signed-in player who plays
+  // offline, or before a round is validated, must never watch their BEST fall
+  // to a smaller server number. The merge only ever raises.
+  //
+  // Anonymous callers get {} and lose nothing; identity stays a bonus tier.
+  async function syncBests() {
+    if (!sbOn() || !sbToken) return;
+    try {
+      const rows = await sbRpc('pitch_snake_my_bests', {});
+      if (!rows || typeof rows !== 'object') return;
+      let raised = false;
+      for (const m of ['classic', 'speedrun', 'survival']) {
+        const theirs = parseInt(rows[m], 10);
+        if (Number.isFinite(theirs) && theirs > (bestByMode[m] || 0)) {
+          bestByMode[m] = theirs;
+          raised = true;
+        }
+      }
+      if (!raised) return;
+      savePersonalBest();
+      best = bestByMode[ruleMode()] || 0;
+      bestEl.textContent = best;
+    } catch (e) { /* the board is a bonus; a device best is still a best */ }
   }
 
   // a name the player just committed anywhere becomes the profile name
@@ -3053,7 +3150,15 @@
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     // one quiet line, at the one moment the pitch sells itself: a score just
     // went onto the world board and the identity under it is still anonymous
-    document.getElementById('authNudge').hidden = !(deadPanels && savedThisRound && sbAnon());
+    // the offer, on an earned moment only, and it says which one it was
+    const askNow = deadPanels && nudgeDue();
+    if (askNow) {
+      nudgedThisSession = true;
+      acctLine.textContent = (savedThisRound && !boardIsLocal)
+        ? 'You made the world board. Create an account to save your scores.'
+        : 'New best. Create an account to save your scores.';
+    }
+    authNudge.hidden = !askNow;
     // the caption carries only what the START button cannot: which
     // tournament or room, and whether it is open
     const showCaption = onMenu && !modesOpen &&
@@ -4454,6 +4559,9 @@
     profAuthAnon.hidden = !(sbToken && sbAnon());
     profAuthOn.hidden = !(sbToken && sbUser && !sbUser.is_anonymous);
     if (!profAuthOn.hidden) profWhoEmail.textContent = sbUser.email || '';
+    // the sheet names what it is for: an offer while a guest, a settings
+    // panel once there is an account behind it
+    profTitle.textContent = profAuthAnon.hidden ? 'Player' : 'Create account';
     if (reset) {
       profCodeRow.hidden = true;
       profCode.value = '';
@@ -4462,7 +4570,7 @@
       autoVerified = false;
       if (resendTimer) { clearInterval(resendTimer); resendTimer = null; }
       profSendBtn.disabled = false;
-      profSendBtn.textContent = 'SEND CODE';
+      profSendBtn.textContent = 'CREATE ACCOUNT';
       profSay('');
     }
   }
@@ -4475,7 +4583,11 @@
   }
 
   whoBtn.addEventListener('click', openProfile);
-  document.getElementById('authNudge').addEventListener('click', openProfile);
+  acctGo.addEventListener('click', openProfile);
+  acctLater.addEventListener('click', () => {
+    refuseNudge();                 // asked and answered; ask less from here
+    authNudge.hidden = true;
+  });
   profileClose.addEventListener('click', () => { profileModal.hidden = true; padRehome(); });
   profileModal.addEventListener('click', (e) => { if (e.target === profileModal) profileModal.hidden = true; });
 
@@ -4527,11 +4639,11 @@
     if (resendTimer) clearInterval(resendTimer);
     resendTimer = setInterval(() => {
       left -= 1;
-      if (left > 0) { profSendBtn.textContent = 'RESEND ' + left; return; }
+      if (left > 0) { profSendBtn.textContent = 'RESEND IN ' + left; return; }
       clearInterval(resendTimer);
       resendTimer = null;
       profSendBtn.disabled = false;
-      profSendBtn.textContent = 'RESEND';
+      profSendBtn.textContent = 'RESEND CODE';
     }, 1000);
   }
 
@@ -4546,7 +4658,7 @@
       if (r.error && (r.error.code === 'email_exists' || r.error.status === 422)) {
         otpKind = 'signin';
         r = await sbAuth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-        if (!r.error) profSay('That email already has an account, so this code signs you into it.', true);
+        if (!r.error) profSay('That email already has an account. This code signs you in.', true);
       } else if (!r.error) {
         otpKind = 'link';
         profSay('Code sent. Check your inbox.', true);
@@ -4561,7 +4673,7 @@
     } catch (e) {
       profSay(authWords(e));
       profSendBtn.disabled = false;
-      profSendBtn.textContent = otpEmail ? 'RESEND' : 'SEND CODE';
+      profSendBtn.textContent = otpEmail ? 'RESEND CODE' : 'CREATE ACCOUNT';
     }
   }
 
@@ -4582,10 +4694,11 @@
       const switched = otpKind === 'signin';
       if (switched) sbProfile = null;   // that account's own name outranks this device's
       await syncProfile(switched);
+      await syncBests();       // the account's bests arrive with the account
       seedPocket = null;                // tickets belong to an identity; remint
       fetchSeed();
       refreshProfileSheet(true);
-      profSay(switched ? 'Signed in. This device is yours now.' : 'Done. Your progress follows this email onto any device.', true);
+      profSay(switched ? 'Signed in. Your scores are here.' : 'Account created. Your scores are saved.', true);
     } catch (e) {
       profSay(authWords(e));
     }
