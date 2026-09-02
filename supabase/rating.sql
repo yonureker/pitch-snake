@@ -184,6 +184,19 @@ begin
   set log_hash = p_hash, mode = p_mode, placings = p_placings
   where round_id = p_round and user_id = p_user;
   if not found then return 'no seat'; end if;   -- never took one at kickoff
+
+  -- Seal the moment the room is complete instead of waiting out the sweep.
+  -- Every seat has reported, so there is nothing left to wait FOR, and the
+  -- players are still sitting on the results screen where the number means
+  -- something. A rating that lands ninety seconds after everyone has clicked
+  -- REMATCH is a rating nobody ever sees. The sweep stays as the fallback for
+  -- the round somebody closed the tab on.
+  if not exists (
+    select 1 from public.pitch_snake_seats sh
+    where sh.round_id = p_round and sh.log_hash is null
+  ) then
+    perform public.pitch_snake_seal_round(p_round);
+  end if;
   return 'ok';
 end;
 $$;
@@ -419,24 +432,52 @@ as $$
   ) t;
 $$;
 
--- The ladder itself. Provisional players are left off: ten rounds is where
--- the number stops being a guess, and a board full of 1200s that have played
--- once tells a reader nothing.
+-- The ladder itself. Provisional players are LISTED AND MARKED rather than
+-- withheld, which is the convention chess settled on long ago and the right
+-- one for a board starting from nobody: hiding everyone under ten rounds
+-- means an empty box for weeks, and an empty box on a competitive screen
+-- reads as broken rather than as new. The P is the honesty; the absence
+-- would just have been silence.
 drop function if exists public.pitch_snake_top_rated(text, integer);
 
 create or replace function public.pitch_snake_top_rated(p_mode text, p_limit integer default 10)
-returns table (name text, country text, rating integer, rounds integer, wins integer)
+returns table (name text, country text, rating integer, rounds integer, wins integer, provisional boolean)
 language sql
 security definer
 set search_path = ''
 stable
 as $$
-  select coalesce(p.name, 'YOU'), p.country, rt.rating, rt.rounds, rt.wins
+  select coalesce(p.name, 'YOU'), p.country, rt.rating, rt.rounds, rt.wins, rt.rounds < 10
   from public.pitch_snake_ratings rt
   left join public.pitch_snake_profiles p on p.user_id = rt.user_id
-  where rt.mode = p_mode and rt.rounds >= 10
-  order by rt.rating desc, rt.updated_at
+  where rt.mode = p_mode
+  order by rt.rating desc, rt.rounds desc, rt.updated_at
   limit least(greatest(coalesce(p_limit, 10), 1), 50);
+$$;
+
+-- What one room's round did to everybody's rating, for the results screen
+-- that round produced. Only ever answers for a SEALED round and only for
+-- seats that were actually rated, so a code room, an uncorroborated round
+-- and a room of signed-out players all return nothing and the screen simply
+-- shows no ratings rather than an explanation.
+drop function if exists public.pitch_snake_round_ratings(text, integer);
+
+create or replace function public.pitch_snake_round_ratings(p_code text, p_start_n integer)
+returns table (seat smallint, name text, place smallint, delta integer,
+               rating integer, rounds integer, provisional boolean)
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select s.seat, s.name, s.place, s.delta, rt.rating, rt.rounds, rt.rounds < 10
+  from public.pitch_snake_seats s
+  join public.pitch_snake_rounds r on r.id = s.round_id
+  left join public.pitch_snake_ratings rt
+         on rt.user_id = s.user_id and rt.mode = r.mode
+  where r.code = upper(trim(coalesce(p_code, ''))) and r.start_n = p_start_n
+    and r.sealed_at is not null and s.delta is not null
+  order by s.place, s.seat;
 $$;
 
 -- Postgres grants EXECUTE to PUBLIC on every new function; take it back, then
@@ -449,7 +490,9 @@ revoke all on function public.pitch_snake_seal_round(bigint)                    
 revoke all on function public.pitch_snake_seal_due()                                  from public;
 revoke all on function public.pitch_snake_my_rating()                                 from public;
 revoke all on function public.pitch_snake_top_rated(text, integer)                    from public;
+revoke all on function public.pitch_snake_round_ratings(text, integer)                from public;
 
 grant execute on function public.pitch_snake_take_seat(text, integer, integer, text)  to anon, authenticated;
 grant execute on function public.pitch_snake_my_rating()                              to anon, authenticated;
 grant execute on function public.pitch_snake_top_rated(text, integer)                 to anon, authenticated;
+grant execute on function public.pitch_snake_round_ratings(text, integer)             to anon, authenticated;

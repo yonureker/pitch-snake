@@ -817,6 +817,26 @@
   .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 42px; text-align: right; }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
+  /* The rating a rated round moved, and which way. It takes the SERIES
+     COLUMN'S place rather than adding a fifth or wrapping to a second line:
+     the board is 230px, and a five-player room on a phone has no room for
+     either. Losing the trophy there costs almost nothing, because a rated
+     round is a quick-match room, which means strangers, which means a
+     running series against them is a tally of one. */
+  .standings li .rt {
+    min-width: 66px; text-align: right; white-space: nowrap;
+    font-size: 11px; font-weight: 700; color: #b7ac93; letter-spacing: 0.3px;
+  }
+  .standings li .rt .up   { color: #6fbf73; }
+  .standings li .rt .down { color: var(--red, #e2483d); }
+  /* P for provisional, the chess convention: the number is real, it just has
+     too few rounds behind it to be read as settled. Marked rather than
+     withheld, or a new board is an empty box for weeks. */
+  .rt .prov, .lad .prov {
+    font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
+    color: var(--bg-deep, #211e1a); background: var(--gold);
+    border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
+  }
 
   /* ---- on-screen D-pad: wide pad split into four triangular wedges ---- */
   /* A rounded rectangle divided by an X (both diagonals) into four triangles:
@@ -4348,6 +4368,60 @@
       .catch(() => {});
   }
 
+  // What the round did to everybody's rating, painted onto the standings the
+  // room is already looking at. The server seals as the LAST seat reports,
+  // which is normally a second or two after full time, so this polls briefly
+  // rather than asking once; the sweep is only for a round somebody closed
+  // the tab on, and by then this screen is long gone.
+  //
+  // Silent from end to end. An unrated round (a code room, a room nobody else
+  // reported, a table of signed-out players) simply never answers, and the
+  // board stays exactly as it was rather than explaining itself.
+  async function vsShowRatings(room, code, startN) {
+    for (let tries = 0; tries < 6; tries++) {
+      await new Promise(r => setTimeout(r, tries ? 1500 : 800));
+      // the room moved on: a rematch, a new room, or the tab left versus
+      if (vs !== room || !vs.over || vs.startN !== startN) return;
+      let rows;
+      try { rows = await sbRpc('pitch_snake_round_ratings', { p_code: code, p_start_n: startN }); }
+      catch (e) { return; }
+      if (!Array.isArray(rows) || !rows.length) continue;   // not sealed yet
+      if (vs !== room || !vs.over || vs.startN !== startN) return;
+      vsPaintRatings(rows);
+      return;
+    }
+  }
+
+  // "1220 P +20": the number, the chess P when it has fewer than ten rounds
+  // behind it, and the move that just happened. A seat with no rating (nobody
+  // signed in there) gets no line rather than a zero.
+  function vsPaintRatings(rows) {
+    for (const row of rows) {
+      const li = standingsEl.querySelector('[data-seat="' + row.seat + '"]');
+      if (!li || typeof row.rating !== 'number' || li.querySelector('.rt')) continue;
+      // the ladder takes the series column: see the note on .rt
+      const vw = li.querySelector('.vw');
+      if (vw) vw.remove();
+      const rt = document.createElement('span');
+      rt.className = 'rt';
+      rt.append(String(row.rating));
+      if (row.provisional) {
+        const p = document.createElement('span');
+        p.className = 'prov';
+        p.textContent = 'P';
+        p.title = 'Provisional: fewer than 10 rated rounds';
+        rt.appendChild(p);
+      }
+      if (typeof row.delta === 'number') {
+        const d = document.createElement('span');
+        d.className = row.delta > 0 ? 'up' : row.delta < 0 ? 'down' : '';
+        d.textContent = '  ' + (row.delta > 0 ? '+' : '') + row.delta;
+        rt.appendChild(d);
+      }
+      li.appendChild(rt);
+    }
+  }
+
   function vsRoundOver() {
     reportNet('round');        // before the session is let go: its stats go with it
     vsReportRound();           // and the round itself, for the ladder
@@ -4379,6 +4453,7 @@
     rows.forEach((row, i) => {
       const li = document.createElement('li');
       if (row.me) li.className = 'me';
+      li.dataset.seat = row.idx;      // the ladder paints back onto these
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = row.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = row.score;
@@ -4386,6 +4461,7 @@
       li.append(rk, nm, sc, vw);
       standingsEl.appendChild(li);
     });
+    void vsShowRatings(vs, vs.code, vs.startN);
     savedThisRound = true;      // versus results stay in the room, not on the boards
     entryWanted = false;
     showModes = false;
