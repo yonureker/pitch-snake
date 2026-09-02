@@ -3901,7 +3901,43 @@
     })).sort((a, b) => b.score - a.score || b.diedAt - a.diedAt || (a.me ? -1 : 1));
   }
 
+  // ---- net telemetry: the one failure the server cannot see ----
+  // Broadcast is not logged per message, and both multiplayer failures die in
+  // this tab: a desync draws CONNECTION LOST and a stall draws WAITING. So a
+  // lag report could be neither confirmed nor measured, and a fix could not
+  // be told apart from a coincidence. This says the shape of what happened
+  // and nothing else: no message contents, no inputs, no board, nothing a
+  // player typed.
+  //
+  // Fire and forget, always. Telemetry that can stall a game is worse than no
+  // telemetry, so nothing here is awaited and every failure is swallowed. It
+  // reports at most one row per multiplayer round.
+  function netClient() {
+    if (window.storage) return 'app';
+    return document.documentElement.classList.contains('touch') ? 'web-mobile' : 'web-desktop';
+  }
+  function reportNet(kind, extra) {
+    if (!sbOn() || !sbToken) return;
+    const st = (vs && vs.session && vs.session.stats) || null;
+    try {
+      sbRpc('pitch_snake_log_net_event', {
+        p_kind: kind,
+        p_code: (vs && vs.code) || null,
+        p_reason: (extra && extra.reason) || null,
+        p_peers: (vs && vs.present && vs.present.length) || null,
+        p_quanta: (g && g.quanta) || 0,
+        p_stalled_ms: st ? Math.round(st.stalledMs) : 0,
+        p_longest_ms: st ? Math.round(st.longestStallMs) : 0,
+        p_giveups: st ? st.lagGiveUps : 0,
+        p_rollbacks: st ? st.rollbacks : 0,
+        p_resends: st ? st.resends : 0,
+        p_client: netClient(),
+      }).catch(() => {});
+    } catch (e) { /* a game never fails because a report did */ }
+  }
+
   function vsRoundOver() {
+    reportNet('round');        // before the session is let go: its stats go with it
     vs.over = true;
     state = 'dead';
     syncScoreDom();
@@ -3946,6 +3982,7 @@
   }
 
   function vsDesync(why) {
+    reportNet('desync', { reason: why });   // read the stats before dropping the session
     vs.session = null;
     vs.game = null;
     vs.over = true;

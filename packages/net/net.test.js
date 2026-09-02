@@ -259,6 +259,38 @@ test('a hiccup is not a hostage: a peer that recovers keeps the room', () => {
   assert.ok(g0.quanta > 1200, 'and the room kept running throughout');
 });
 
+test('the session reports the freeze it caused, so the shell can tell someone', () => {
+  // A frozen room is the one failure a player FEELS and the one the server
+  // cannot see: broadcast is not logged per message and a stall is drawn in
+  // the HUD and nowhere else. So the session counts its own, and the shell
+  // reports it. This test guards the numbers those reports carry.
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  let slow = 0;
+  const step = (now, rate) => { slow += rate; bus.pump(now); s0.frame(now); s1.frame(slow); };
+
+  for (let now = 0; now <= 3000; now += 10) step(now, 10);
+  assert.equal(s0.stats.stalledMs, 0, 'a healthy room freezes for nothing');
+  assert.equal(s0.stats.lagGiveUps, 0, 'and gives up on nobody');
+
+  // one peer at a third of real time, talking the whole way
+  for (let now = 3010; now <= 30000; now += 10) step(now, 10 / 3);
+
+  assert.ok(s0.stats.stalledMs > 0, 'the freeze was counted');
+  assert.ok(s0.stats.longestStallMs > 0, 'and so was the worst single run');
+  assert.ok(s0.stats.longestStallMs <= s0.stats.stalledMs,
+    'the worst run cannot exceed the total');
+  assert.equal(s0.stats.lagGiveUps, 1, 'exactly one peer was given up on, counted once');
+
+  // the give-up is what bounds the pain: the total must stay near the budget
+  // rather than growing with the length of the round
+  assert.ok(s0.stats.stalledMs < LAG_GIVEUP_MS * 2,
+    `the freeze stayed bounded (${s0.stats.stalledMs}ms over 27s of bad peer)`);
+});
+
 test('a dead rival going quiet never leashes the survivor', () => {
   const bus = loopbackBus(2, { latency: 10 });
   const g0 = createGame({ ...QUIET, players: 2 });

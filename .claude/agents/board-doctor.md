@@ -18,22 +18,47 @@ needs a write, describe it and hand it back.
 
 ## Know what is observable before you start
 
-This is the most important thing about this system, and the thing that wastes
-the most time when forgotten:
+- **`pitch_snake_net_events` is where multiplayer failures live.** One row per
+  multiplayer round (`kind = 'round'`) plus one per desync
+  (`kind = 'desync'`), written by the client because the server cannot see
+  either. Columns that matter: `stalled_ms` (total frozen), `longest_ms` (the
+  worst single freeze, which is what a player actually feels), `giveups`
+  (peers dropped from the leash for sustained lag), `code`, `peers`, `client`.
+  **Start here for any lag or desync report.**
+- **Realtime Broadcast is still not logged per message.** `realtime_logs`
+  carries tenant lifecycle only: connect, disconnect, replication slots,
+  janitor. No latency, no delivery, no drops. So per-message questions remain
+  unanswerable; per-round ones are now answerable.
+- **The telemetry is a sample, not a census.** It only exists for clients on a
+  version that reports, only when Supabase is reachable, and it is rate
+  limited to 60 rows per user per ten minutes. Absence of rows is not
+  evidence of absence of trouble.
 
-- **Desyncs and stalls are invisible.** `vsDesync` in `index.html` shows
-  "CONNECTION LOST" in the browser and reports nothing anywhere. A stall shows
-  `WAITING…` in the HUD and is likewise never sent.
-- **Realtime Broadcast is not logged per message.** `realtime_logs` carries
-  tenant lifecycle only: connect, disconnect, replication slots, janitor. No
-  latency, no delivery, no drops.
-- **So a lag or desync report cannot be confirmed from logs.** Say that
-  plainly rather than constructing a story that fits. Then look at what IS
-  observable, and say what telemetry would settle it.
-
-What you CAN see: every REST call in `edge_logs` (path, status, country),
-edge function invocations in `function_edge_logs`, Postgres in
+What you CAN also see: every REST call in `edge_logs` (path, status,
+country), edge function invocations in `function_edge_logs`, Postgres in
 `postgres_logs`, and the tables themselves.
+
+### The queries worth running first
+
+```sql
+-- is anything freezing, and how badly
+select date_trunc('hour', created_at) h, count(*) rounds,
+       round(avg(stalled_ms)) avg_frozen, max(longest_ms) worst,
+       sum(giveups) giveups
+from public.pitch_snake_net_events where kind = 'round'
+group by h order by h desc;
+
+-- does one client class or one room account for it
+select client, count(*), round(avg(longest_ms)) worst_avg
+from public.pitch_snake_net_events where kind = 'round' group by client;
+
+select code, count(*), max(longest_ms) from public.pitch_snake_net_events
+where code is not null group by code order by 3 desc limit 10;
+```
+
+A healthy room reports `stalled_ms` near zero. Sustained `giveups > 0` means
+the lag give-up is firing, which is the netcode protecting the room from one
+outmatched device: that is the fix working, not a fault.
 
 ## The shape of the system
 

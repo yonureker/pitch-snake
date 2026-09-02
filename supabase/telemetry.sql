@@ -1,0 +1,129 @@
+-- Pitch Snake: net telemetry. The one thing the server cannot see.
+--
+-- Run this in the SQL editor after leaderboard.sql and auth.sql (idempotent).
+--
+-- Why this file exists. Multiplayer runs on Supabase Realtime Broadcast,
+-- which is not logged per message: realtime_logs carries tenant lifecycle and
+-- nothing about delivery or latency. And the two failures players actually
+-- report die in the browser: vsDesync draws "CONNECTION LOST" and sends
+-- nothing, a stall draws "WAITING" and sends nothing. So a lag report could
+-- be neither confirmed nor measured, and a fix could not be told from a
+-- coincidence. This table is the missing half of that loop.
+--
+-- What it deliberately does NOT hold: no message contents, no inputs, no
+-- board state, no addresses, nothing typed by a player. A row is a shape of a
+-- failure, not a recording of a session.
+--
+-- Same access shape as everything else here: RLS on, no policies, no grants,
+-- and one SECURITY DEFINER function as the only door.
+
+create table if not exists public.pitch_snake_net_events (
+  id          bigint generated always as identity primary key,
+  user_id     uuid,                    -- who saw it; null for a signed-out client
+  kind        text        not null,    -- 'round' | 'desync'
+  code        text,                    -- room code, so one bad room is visible as one room
+  reason      text,                    -- desync only: 'behind' | 'hash' | ...
+  peers       smallint,                -- seats in the room
+  quanta      integer,                 -- how far the round had run
+  stalled_ms  integer,                 -- total time frozen
+  longest_ms  integer,                 -- worst single freeze: what a player feels
+  giveups     smallint,                -- peers dropped from the leash for sustained lag
+  rollbacks   integer,
+  resends     integer,
+  client      text,                    -- coarse class only: 'web-desktop' | 'web-mobile' | 'app'
+  created_at  timestamptz not null default now()
+);
+
+-- the two questions this table exists to answer: what happened lately, and
+-- does one room or one client account for it
+create index if not exists pitch_snake_net_events_recent_idx
+  on public.pitch_snake_net_events (created_at desc);
+create index if not exists pitch_snake_net_events_code_idx
+  on public.pitch_snake_net_events (code, created_at desc);
+
+alter table public.pitch_snake_net_events enable row level security;
+revoke all on table public.pitch_snake_net_events from anon, authenticated;
+
+-- ------------------------------------------------------------- the door ----
+-- Fire and forget from the client's side: it returns void and the page never
+-- waits on it. Telemetry that can slow a game down is worse than no
+-- telemetry, and this is a game.
+--
+-- Everything is clamped or discarded rather than trusted. A client that
+-- reports nonsense should write a harmless row or none at all, never a row
+-- that poisons the numbers the next fix is judged by.
+--
+-- Rate limited per user, because the failure being measured is exactly the
+-- one that could loop: a client desyncing over and over must not be able to
+-- write a thousand rows about it.
+drop function if exists public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text);
+
+create or replace function public.pitch_snake_log_net_event(
+  p_kind       text,
+  p_code       text default null,
+  p_reason     text default null,
+  p_peers      integer default null,
+  p_quanta     integer default null,
+  p_stalled_ms integer default null,
+  p_longest_ms integer default null,
+  p_giveups    integer default null,
+  p_rollbacks  integer default null,
+  p_resends    integer default null,
+  p_client     text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  recent int;
+begin
+  if p_kind is null or p_kind not in ('round', 'desync') then
+    return;                            -- unknown shape: drop it, do not raise
+  end if;
+
+  -- Sixty rows in ten minutes is far more than honest play produces (a room
+  -- writes one row per round) and far less than a desync loop would.
+  if auth.uid() is not null then
+    select count(*) into recent from public.pitch_snake_net_events
+    where user_id = auth.uid() and created_at > now() - interval '10 minutes';
+    if recent >= 60 then
+      return;
+    end if;
+  end if;
+
+  insert into public.pitch_snake_net_events (
+    user_id, kind, code, reason, peers, quanta,
+    stalled_ms, longest_ms, giveups, rollbacks, resends, client
+  ) values (
+    auth.uid(),
+    p_kind,
+    -- a room code is six characters from a known alphabet or it is nothing
+    case when p_code ~ '^[A-Z0-9]{6}$' then p_code else null end,
+    left(regexp_replace(coalesce(p_reason, ''), '[^a-z]', '', 'g'), 16),
+    least(greatest(coalesce(p_peers, 0), 0), 8),
+    least(greatest(coalesce(p_quanta, 0), 0), 2000000),
+    least(greatest(coalesce(p_stalled_ms, 0), 0), 3600000),
+    least(greatest(coalesce(p_longest_ms, 0), 0), 3600000),
+    least(greatest(coalesce(p_giveups, 0), 0), 8),
+    least(greatest(coalesce(p_rollbacks, 0), 0), 1000000),
+    least(greatest(coalesce(p_resends, 0), 0), 1000000),
+    case when p_client in ('web-desktop', 'web-mobile', 'app') then p_client else null end
+  );
+end;
+$$;
+
+revoke all on function public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text) from public;
+grant execute on function public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text) to anon, authenticated;
+
+-- ---------------------------------------------------------- housekeeping ----
+-- These rows answer "what is happening lately"; they are not a record worth
+-- keeping. Thirty days is long enough to see a pattern and to tell a fix from
+-- a coincidence.
+create extension if not exists pg_cron;
+select cron.schedule(
+  'pitch-snake-net-events-sweep',
+  '23 4 * * *',
+  $$delete from public.pitch_snake_net_events where created_at < now() - interval '30 days'$$
+);

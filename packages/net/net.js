@@ -109,6 +109,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   const gone = new Array(N).fill(false);               // peer left: never stall on them
   const lagCost = new Array(N).fill(0);                // ms the room has frozen on each peer
   const _behind = new Uint8Array(N);                   // scratch: under the leash this frame
+  const _gaveUp = new Uint8Array(N);                   // counted once per peer, for the record
   const needAt = new Array(N).fill(0);                 // resend-request throttle
   const snaps = [];                                    // {q, s, h?} ascending by q
   const myHist = [];                                   // my own sends, for resend
@@ -117,7 +118,18 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   let deadSince = -1;                                  // when the board first went still
   let ended = false, dead = false;                     // dead = desynced/aborted
   let stalled = false;
-  const stats = { rollbacks: 0, resimmed: 0, needsSent: 0, resends: 0, patched: 0 };
+  // Counters the session keeps about its own health. rollbacks/resimmed and
+  // the repair counts were always here for tests; the stall figures exist
+  // because a frozen room is the one failure a player FEELS and the one the
+  // server cannot see. Nothing here is sent from this module: it is offered,
+  // and the shell decides whether to report it.
+  const stats = {
+    rollbacks: 0, resimmed: 0, needsSent: 0, resends: 0, patched: 0,
+    stalledMs: 0,        // total time this room spent frozen
+    longestStallMs: 0,   // the worst single freeze, which is what is felt
+    lagGiveUps: 0,       // peers dropped from the leash for sustained lag
+  };
+  let stallRunMs = 0;    // the freeze in progress
 
   const fail = (why) => {
     if (dead || ended) return;
@@ -311,7 +323,10 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       // the oscillation because it never resets.
       if (aged < game.quanta - STALL_AT) {
         _behind[p] = 1;
-        if (lagCost[p] > LAG_GIVEUP_MS) continue;    // patience spent
+        if (lagCost[p] > LAG_GIVEUP_MS) {
+          if (!_gaveUp[p]) { _gaveUp[p] = 1; stats.lagGiveUps++; }
+          continue;                                    // patience spent
+        }
       }
       // The leash reads the same aged estimate. Holding a whole room because
       // one client's beat went missing is the worse failure by far: freezing
@@ -327,6 +342,17 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     // peer under the leash in a room that is still running has cost nobody
     // anything, and must not be billed for it.
     if (stalled) for (let p = 0; p < N; p++) if (_behind[p]) lagCost[p] += dt;
+    // Measure the freeze as the player experiences it: one run, not a sum of
+    // quanta. A room that stutters ten times for 200ms is a different
+    // complaint from one that stops dead for two seconds, and only the second
+    // is worth waking anyone up for.
+    if (stalled) {
+      stallRunMs += dt;
+      stats.stalledMs += dt;
+      if (stallRunMs > stats.longestStallMs) stats.longestStallMs = stallRunMs;
+    } else {
+      stallRunMs = 0;
+    }
     if (!stalled) {
       const lead = maxPeer === -Infinity ? 0 : maxPeer - game.quanta;
       const rate = lead > SLEW_HARD ? 1.15 : lead > SLEW_BAND ? 1.05
