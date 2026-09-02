@@ -30,6 +30,18 @@ export const BEAT_MS = 500;       // heartbeat cadence: loss and clock signals t
 // flight); silence older than this is a vanished client, and the room plays
 // on with their snake on the rails. Dead peers never hold the room at all.
 export const STALL_GIVEUP_MS = 10_000;
+// The same mercy, for a peer that is behind rather than absent. The window
+// above expires SILENCE, and a client that keeps beating while falling
+// further behind never trips it: every beat refreshes lastHeard, so a device
+// that simply cannot hold real time held the entire room for as long as it
+// stayed in it, with everyone else watching WAITING. Being behind therefore
+// expires too. Five seconds, because a peer that CAN keep up recovers in
+// about three: the room is frozen while it catches up, so it closes a full
+// STALL_AT of gap against a standing clock. Past that it is not unlucky, it
+// is outmatched, and four other players should not pay for it indefinitely.
+// Well inside the rollback horizon either way, so their turns still land if
+// they arrive late, and a peer that recovers starts leashing again at once.
+export const LAG_GIVEUP_MS = 5000;
 // A finished board stays provisional this long before FULL TIME is declared:
 // a rival's final-instant turn still in flight may roll the ending back, so
 // the whistle waits out one comfortable round trip.
@@ -95,6 +107,8 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   const peerQAt = new Array(N).fill(0);                // ...and when that report reached us
   const lastHeard = new Array(N).fill(-1e15);          // frame-clock time of their last message
   const gone = new Array(N).fill(false);               // peer left: never stall on them
+  const lagCost = new Array(N).fill(0);                // ms the room has frozen on each peer
+  const _behind = new Uint8Array(N);                   // scratch: under the leash this frame
   const needAt = new Array(N).fill(0);                 // resend-request throttle
   const snaps = [];                                    // {q, s, h?} ascending by q
   const myHist = [];                                   // my own sends, for resend
@@ -259,6 +273,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     // the slowest peer still in the room sets the leash; the fastest sets a
     // gentle slew so everyone converges on one clock without a server
     let minPeer = Infinity, maxPeer = -Infinity;
+    _behind.fill(0);
     for (let p = 0; p < N; p++) {
       if (p === myIdx || gone[p]) continue;
       if (lastHeard[p] < -1e14) continue;   // never heard from: no clock signal yet
@@ -279,6 +294,25 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       // give-up window the room plays on and their snake rides the rails.
       if (!game.players[p].alive) continue;
       if (nowMs - lastHeard[p] > STALL_GIVEUP_MS) continue;
+      // Behind expires as well as absent, but the thing that expires is the
+      // HARM, not the lateness. Timing "how long have they been behind" does
+      // not work and the test that proves it is in the suite: a stalled room
+      // stops advancing, so the slow peer closes the gap against a standing
+      // clock, climbs back over the leash, and the timer resets. The room
+      // then runs, they fall behind again, and it stalls again. Nothing ever
+      // accumulates and the room simply oscillates, dragged to the slowest
+      // client's pace, which is what "everyone is lagging" actually looks
+      // like from the inside.
+      //
+      // So each peer carries the time the room has spent frozen ON THEIR
+      // ACCOUNT (charged below, once the verdict is in). A dip that never
+      // freezes anything is free, however often it happens; only actually
+      // costing four other people their game runs the meter, and it survives
+      // the oscillation because it never resets.
+      if (aged < game.quanta - STALL_AT) {
+        _behind[p] = 1;
+        if (lagCost[p] > LAG_GIVEUP_MS) continue;    // patience spent
+      }
       // The leash reads the same aged estimate. Holding a whole room because
       // one client's beat went missing is the worse failure by far: freezing
       // your game because somebody else's wifi blipped is the classic
@@ -289,6 +323,10 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       if (aged < minPeer) minPeer = aged;
     }
     stalled = minPeer !== Infinity && minPeer < game.quanta - STALL_AT;
+    // Charge the freeze to whoever caused it. Only while actually stalled: a
+    // peer under the leash in a room that is still running has cost nobody
+    // anything, and must not be billed for it.
+    if (stalled) for (let p = 0; p < N; p++) if (_behind[p]) lagCost[p] += dt;
     if (!stalled) {
       const lead = maxPeer === -Infinity ? 0 : maxPeer - game.quanta;
       const rate = lead > SLEW_HARD ? 1.15 : lead > SLEW_BAND ? 1.05

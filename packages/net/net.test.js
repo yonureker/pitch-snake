@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, MODES, SIM_DT } from '../engine/engine.js';
-import { createSession, loopbackBus, foldHash, SNAP_KEEP, SNAP_EVERY, FRESH_MS, STALL_AT } from './net.js';
+import { createSession, loopbackBus, foldHash, SNAP_KEEP, SNAP_EVERY, FRESH_MS, STALL_AT, LAG_GIVEUP_MS, STALL_GIVEUP_MS } from './net.js';
 
 const QUIET = { seed: 90210, tickMs: 100, wallsEnabled: false };
 
@@ -200,6 +200,63 @@ test('a silent peer stalls the sim; dropPeer releases it', () => {
   for (let now = 12010; now <= 13000; now += 10) { bus.pump(now); s0.frame(now); }
   assert.equal(s0.stalled, false, 'a departed peer no longer holds the room');
   assert.ok(g0.quanta > qAtSilence + 300, 'the sim runs again, their snake on rails');
+});
+
+test('a peer that is behind but still talking loses the room, eventually', () => {
+  // The hostage case, and the one the silence window cannot catch. Peer 1
+  // keeps beating the whole time, so lastHeard never goes stale, but its
+  // clock runs at a third of real time: a device that cannot execute the sim
+  // fast enough. Before LAG_GIVEUP_MS this held the room on WAITING for as
+  // long as that client stayed in it.
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  let slow = 0;
+  let slowState = 'running';
+  const step = (now, rate) => { slow += rate; bus.pump(now); s0.frame(now); slowState = s1.frame(slow); };
+
+  for (let now = 0; now <= 3000; now += 10) step(now, 10);
+  assert.equal(s0.stalled, false, 'a healthy room does not stall');
+
+  // peer 1 drops to a third of real time, still talking every beat
+  let sawStall = false;
+  for (let now = 3010; now <= 12000; now += 10) {
+    step(now, 10 / 3);
+    if (s0.stalled) sawStall = true;
+  }
+  assert.equal(sawStall, true, 'the room does hold once that peer falls behind the leash');
+
+  // the window expires and the room stops waiting for a peer it cannot wait for
+  const qBefore = g0.quanta;
+  for (let now = 12010; now <= 12000 + LAG_GIVEUP_MS + 6000; now += 10) step(now, 10 / 3);
+  assert.equal(s0.stalled, false, 'the room stopped waiting');
+  assert.ok(g0.quanta > qBefore + 200, `and the sim ran on (${g0.quanta - qBefore} quanta)`);
+  // crucially without silence: the OLD window never fired, which is the bug
+  assert.equal(slowState, 'running', 'and the slow peer never went silent: the OLD window never fired');
+});
+
+test('a hiccup is not a hostage: a peer that recovers keeps the room', () => {
+  // The other half of the rule. A peer that falls behind and then catches
+  // back up must not be written off, so the lag clock resets the moment it
+  // climbs over the leash rather than accumulating across separate dips.
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  let slow = 0;
+  // three seconds healthy, three seconds limping, then healthy again, twice
+  // over: each dip is shorter than the window, so none of them may add up
+  let limpState = 'running';
+  for (let now = 0; now <= 24000; now += 10) {
+    const phase = Math.floor(now / 3000) % 2;
+    slow += phase === 1 ? 10 / 3 : 10;      // limp, then keep pace
+    bus.pump(now); s0.frame(now); limpState = s1.frame(slow);
+  }
+  assert.equal(limpState, 'running', 'the limping peer is still in the room');
+  assert.ok(g0.quanta > 1200, 'and the room kept running throughout');
 });
 
 test('a dead rival going quiet never leashes the survivor', () => {
