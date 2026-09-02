@@ -1228,6 +1228,7 @@
   const LEVELS_KEY = 'snakeLevelsDone';
   let levelIdx = 0;                        // which level is loaded
   let lvScreen = false;                    // inside the chooser: the level list
+  let lastLessonPassed = false;            // did the round that just ended pass?
   let levelsDone = new Set();
   try {
     const v = JSON.parse(localStorage.getItem(LEVELS_KEY));
@@ -1235,6 +1236,28 @@
   } catch (e) {}
   function saveLevels() {
     try { localStorage.setItem(LEVELS_KEY, JSON.stringify([...levelsDone])); } catch (e) {}
+    pushLevels();
+  }
+  // The account offer at the end says it keeps your progress, so it has to.
+  // The server MERGES rather than replaces, so two devices that each finished
+  // different lessons end up with both instead of whichever synced last.
+  // Fire and forget: a lesson is never held up by the network.
+  function pushLevels() {
+    if (!sbOn() || !sbToken || !levelsDone.size) return;
+    sbRpc('pitch_snake_set_levels', { p_levels: [...levelsDone] })
+      .then(list => { if (Array.isArray(list)) takeLevels(list); })
+      .catch(() => {});
+  }
+  // and the other direction: what the account already knows, folded in on
+  // sign-in, so a new device picks up where the old one stopped
+  function takeLevels(list) {
+    let grew = false;
+    for (const id of list) {
+      if (typeof id === 'string' && !levelsDone.has(id)) { levelsDone.add(id); grew = true; }
+    }
+    if (!grew) return;
+    try { localStorage.setItem(LEVELS_KEY, JSON.stringify([...levelsDone])); } catch (e) {}
+    if (mode === 'levels') { levelIdx = firstUnfinished(); refreshModeUI(); }
   }
   function currentLevel() { return LEVELS[Math.min(levelIdx, LEVELS.length - 1)]; }
   // Unlocked means done, or the first one that is not: the player walks the
@@ -1663,6 +1686,7 @@
   function levelOver(reason) {
     const lv = currentLevel();
     const passed = reason === 'won' || reason === 'time';
+    lastLessonPassed = passed;
     if (passed && !levelsDone.has(lv.id)) { levelsDone.add(lv.id); saveLevels(); }
     const finished = passed && onboardingDone();
 
@@ -2935,6 +2959,7 @@
   async function syncProfile(takeTheirs) {
     try {
       const prof = await sbRpc('pitch_snake_get_profile', {});
+      if (prof && Array.isArray(prof.levels)) takeLevels(prof.levels);
       if (prof && prof.name) {
         sbProfile = prof;
         if (takeTheirs || !vsNameInput.value) {
@@ -3428,8 +3453,13 @@
     // says which it is holding
     document.getElementById('scoreLabel').textContent = ruleMode() === 'survival' ? 'Seconds' : 'Score';
     const deadPanels = state === 'dead' && !modesOpen;
-    standingsEl.style.display = deadPanels ? 'block' : 'none';
-    boardHead.style.display = deadPanels ? 'block' : 'none';
+    // A lesson has nothing to do with the leaderboard, so it shows no board:
+    // an empty TOP 10 box sat in the middle of every tutorial result screen,
+    // which is worse than useless because it invites the player to wonder
+    // what they were supposed to have scored.
+    const showBoard = deadPanels && mode !== 'levels';
+    standingsEl.style.display = showBoard ? 'block' : 'none';
+    boardHead.style.display = showBoard ? 'block' : 'none';
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     // one quiet line, at the one moment the pitch sells itself: a score just
     // went onto the world board and the identity under it is still anonymous
@@ -3465,16 +3495,29 @@
     // for everyone, then the acting host's REMATCH once the room has ticked.
     const vsDead = mode === 'versus' && state === 'dead' && !!(vs && vs.over);
     const vsReadyStatsNow = vsDead ? vsReadyStats() : null;
+    // A lesson is a sequence, so the button has to say where it goes. It read
+    // REMATCH / CLASSIC after finishing level one: wrong twice over, since it
+    // plays the NEXT lesson and 'classic' is only what ruleMode answers for a
+    // mode that has no ruleset of its own. Nobody would have guessed that
+    // button was the way forward.
+    const onLevel = mode === 'levels';
+    // what the button DOES, not what the player has ever done: after a pass
+    // levelIdx has already moved on, so it plays the next lesson (NEXT);
+    // after a failure it replays this one (AGAIN). Reading levelsDone instead
+    // said NEXT on a screen that had just told the player they lost.
+    const lessonDone = onLevel && state === 'dead' && lastLessonPassed;
     startMain.textContent =
       state === 'paused' ? 'RESUME'
       : vsDead ? (!vs.ready ? 'READY UP'
                  : vsHostNow() && vsReadyStatsNow.all ? 'REMATCH'
                  : 'UNREADY')
       : mode === 'versus' ? 'REMATCH'
+      : onLevel ? (state === 'dead' ? (lessonDone && !onboardingDone() ? 'NEXT' : 'AGAIN') : 'START')
       : state === 'dead' && runKey() === lastRunKey ? 'REMATCH'
       : 'START';
     startSub.textContent = vsDead
       ? `${vsReadyStatsNow.ready}/${vsReadyStatsNow.seats} READY`
+      : onLevel ? currentLevel().name
       : RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
     // no dead ends on a results screen: READY UP, UNREADY and REMATCH are all
