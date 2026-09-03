@@ -1292,6 +1292,27 @@
     margin-left: auto; padding-left: 8px;
     font-family: 'Anton', sans-serif; font-size: 13px; color: var(--gold-deep);
   }
+  /* ---- the shop ---- */
+  .modal.shop .shelf-head { width: 100%; }
+  .wallet-row { justify-content: flex-start; align-items: center; gap: 10px; }
+  .wallet-row b { margin-left: auto; }
+  .wallet-row .btn.small { padding: 7px 14px; font-size: 12px; }
+  /* No inner scroller, the shelf's own touch-trap rule: the modal scrolls */
+  .shop-list { list-style: none; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .shop-list li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 9px; border-radius: 7px;
+    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.10);
+  }
+  .shop-list li.worn { background: rgba(194,162,90,0.16); border-color: rgba(194,162,90,0.5); }
+  .shop-prev { flex: 0 0 64px; width: 64px; height: 28px; }
+  .shop-txt { flex: 1; min-width: 0; text-align: left; }
+  .shop-txt .nm { display: block; font-weight: 700; font-size: 12px; letter-spacing: 1px; color: var(--text); }
+  .shop-txt .st { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .shop-list .btn.small { flex: 0 0 auto; padding: 8px 12px; font-size: 12.5px; min-width: 86px; }
+  /* WEARING wears the gold it is: pressing it again undresses */
+  .shop-list .btn.small.worn-btn { background: var(--gold); color: #211e1a; box-shadow: 0 4px 0 var(--gold-deep); }
+  .shop-list .btn.small:disabled { opacity: 0.45; cursor: default; }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
   /* A long board buys back a row or two of its own height rather than making
@@ -1777,13 +1798,29 @@
              even at zero so a new player learns coins exist. The shop that
              spends them is the next piece. -->
         <div class="shelf" id="profWallet" hidden>
-          <div class="shelf-head"><span>COINS</span><b id="walletCoins"></b></div>
+          <div class="shelf-head wallet-row"><span>COINS</span><b id="walletCoins"></b><button class="btn small" id="shopOpen">SHOP</button></div>
         </div>
         <div class="shelf" id="profShelf" hidden>
           <div class="shelf-head"><span>ACHIEVEMENTS</span><b id="shelfCount"></b></div>
           <ol class="shelf-list" id="shelfList"></ol>
         </div>
         <button class="btn small" id="profileClose">DONE</button>
+      </div>
+    </div>
+
+    <!-- The shop: the spend side of the economy. Catalogue and prices are
+         the server's word (pitch_snake_shop), every purchase and change of
+         clothes repaints from the wallet the server hands back, and the
+         previews draw with the SAME ramps and hat art the pitch uses, so a
+         preview cannot lie. Later in the DOM than the profile sheet on
+         purpose: it opens above it and DONE lands you back on the sheet. -->
+    <div class="modal-backdrop" id="shopModal" hidden>
+      <div class="modal shop">
+        <div class="modal-title">SHOP</div>
+        <div class="shelf-head"><span>COINS</span><b id="shopCoins"></b></div>
+        <ol class="shop-list" id="shopList"></ol>
+        <p class="save-note soft" id="shopNote" hidden></p>
+        <button class="btn small" id="shopClose">DONE</button>
       </div>
     </div>
 
@@ -2434,6 +2471,7 @@
     savedThisRound = false;
     badgeNote.hidden = true;      // last round's rewards are not this round's
     lastEarned = null;
+    lastCoins = 0;
     saveBtn.disabled = false;
     nameInput.disabled = false;
     // a profile means the name is already known: asked once, never again
@@ -2628,49 +2666,130 @@
     ctx.drawImage(spikeCanvas, Math.round(x - spikeW / 2), Math.round(y + cell * 0.26));
   }
 
-  // ---- the hat: a first look at a real skin ----
+  // ---- the hats ----
   // Drawn rather than lettered, unlike the flag: there is no standalone
   // cowboy hat in the emoji set (the one that exists is a whole face), and
   // art beats a glyph for a skin anyway, since it depends on no platform's
-  // font and the phone can draw the same shapes. Baked once per resize like
-  // every other repeated thing, so a frame costs one drawImage (rule 7).
-  // Wear it with ?hat=on, take it off with ?hat=off.
+  // font and the phone can draw the same shapes. Baked once per resize or
+  // hat change, so a frame costs one drawImage (rule 7).
+  //
+  // A catalogue now, keyed by pitch_snake_items ids like the skins: the
+  // felt classic is what a bare hat slot has always worn, the other three
+  // are bought. Each entry is its footprint (in cells), where it sits
+  // relative to the head's centre, and how to draw it; the shop reuses the
+  // same draw calls for its previews, so the preview cannot lie.
+  // ?hat=off still undresses for screenshots.
+  const HATS = {
+    classic: {
+      wf: 1.5, hf: 0.95,
+      dy: (cellPx, h) => -cellPx * 0.42 - h * 0.62,
+      draw(c, w, h) {
+        const midX = w / 2;
+        const brimY = h * 0.72;             // where the brim sits in the sprite
+        // the crown: a tapered shape with the dented top a felt hat has
+        c.fillStyle = '#8a5a2b';
+        c.beginPath();
+        c.moveTo(midX - w * 0.20, brimY);
+        c.lineTo(midX - w * 0.165, h * 0.30);
+        c.quadraticCurveTo(midX - w * 0.10, h * 0.11, midX - w * 0.045, h * 0.20);
+        c.quadraticCurveTo(midX, h * 0.30, midX + w * 0.045, h * 0.20);
+        c.quadraticCurveTo(midX + w * 0.10, h * 0.11, midX + w * 0.165, h * 0.30);
+        c.lineTo(midX + w * 0.20, brimY);
+        c.closePath();
+        c.fill();
+        // the band, where the crown meets the brim
+        c.fillStyle = '#42291a';
+        c.fillRect(midX - w * 0.205, brimY - h * 0.16, w * 0.41, h * 0.13);
+        // the brim: wide, and curling up at the tips, which is the whole
+        // silhouette of the thing at this size
+        c.fillStyle = '#9a6631';
+        c.beginPath();
+        c.moveTo(midX - w * 0.5, brimY - h * 0.06);
+        c.quadraticCurveTo(midX, brimY + h * 0.26, midX + w * 0.5, brimY - h * 0.06);
+        c.quadraticCurveTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.06);
+        c.closePath();
+        c.fill();
+      },
+    },
+    'hat-band': {
+      wf: 1.06, hf: 0.3,
+      // across the forehead, not above it: a sweatband is worn, not perched
+      dy: (cellPx) => -cellPx * 0.38,
+      draw(c, w, h) {
+        c.fillStyle = '#e6402a';
+        c.beginPath();
+        c.moveTo(h / 2, 0); c.lineTo(w - h / 2, 0);
+        c.arc(w - h / 2, h / 2, h / 2, -Math.PI / 2, Math.PI / 2);
+        c.lineTo(h / 2, h);
+        c.arc(h / 2, h / 2, h / 2, Math.PI / 2, -Math.PI / 2);
+        c.closePath();
+        c.fill();
+        c.fillStyle = '#f6efde';
+        c.fillRect(w * 0.14, h * 0.38, w * 0.72, h * 0.24);
+      },
+    },
+    'hat-cap': {
+      wf: 1.35, hf: 0.62,
+      dy: (cellPx, h) => -cellPx * 0.38 - h * 0.58,
+      draw(c, w, h) {
+        // the terrace flat cap, face on: a low tweed dome over a slim brim
+        c.fillStyle = '#6b5b45';
+        c.beginPath();
+        c.moveTo(w * 0.06, h * 0.78);
+        c.quadraticCurveTo(w * 0.10, h * 0.10, w * 0.5, h * 0.08);
+        c.quadraticCurveTo(w * 0.90, h * 0.10, w * 0.94, h * 0.78);
+        c.closePath();
+        c.fill();
+        // the button on the crown
+        c.fillStyle = '#57482f';
+        c.fillRect(w * 0.46, h * 0.02, w * 0.08, h * 0.10);
+        // the brim, a darker sliver curling across the front
+        c.fillStyle = '#4c3f2c';
+        c.beginPath();
+        c.moveTo(w * 0.04, h * 0.76);
+        c.quadraticCurveTo(w * 0.5, h * 1.02, w * 0.96, h * 0.76);
+        c.quadraticCurveTo(w * 0.5, h * 0.80, w * 0.04, h * 0.76);
+        c.closePath();
+        c.fill();
+      },
+    },
+    'hat-crown': {
+      wf: 1.1, hf: 0.72,
+      dy: (cellPx, h) => -cellPx * 0.40 - h * 0.52,
+      draw(c, w, h) {
+        // three points, jewelled tips, a solid base band: royalty at 20px
+        c.fillStyle = '#f0c440';
+        c.beginPath();
+        c.moveTo(w * 0.08, h * 0.92);
+        c.lineTo(w * 0.08, h * 0.30);
+        c.lineTo(w * 0.28, h * 0.58);
+        c.lineTo(w * 0.5, h * 0.06);
+        c.lineTo(w * 0.72, h * 0.58);
+        c.lineTo(w * 0.92, h * 0.30);
+        c.lineTo(w * 0.92, h * 0.92);
+        c.closePath();
+        c.fill();
+        c.fillStyle = '#a87d1e';
+        c.fillRect(w * 0.08, h * 0.78, w * 0.84, h * 0.14);
+        c.fillStyle = '#e6402a';
+        c.beginPath();
+        c.arc(w * 0.5, h * 0.10, w * 0.05, 0, Math.PI * 2);
+        c.fill();
+      },
+    },
+  };
   const hatCanvas = document.createElement('canvas');
   const hatCtx = hatCanvas.getContext('2d');
   let hatW = 0, hatH = 0;
+  let HAT = HATS.classic;
   const hatParam = new URLSearchParams(location.search).get('hat');
   const hatOn = hatParam !== 'off';
   function buildHatSprite() {
     if (!hatOn) { hatW = 0; return; }
-    hatW = Math.ceil(cell * 1.5);
-    hatH = Math.ceil(cell * 0.95);
+    hatW = Math.ceil(cell * HAT.wf);
+    hatH = Math.ceil(cell * HAT.hf);
     hatCanvas.width = hatW; hatCanvas.height = hatH;
-    const c = hatCtx;
-    const midX = hatW / 2;
-    const brimY = hatH * 0.72;              // where the brim sits in the sprite
-    // the crown: a tapered shape with the dented top a felt hat has
-    c.fillStyle = '#8a5a2b';
-    c.beginPath();
-    c.moveTo(midX - hatW * 0.20, brimY);
-    c.lineTo(midX - hatW * 0.165, hatH * 0.30);
-    c.quadraticCurveTo(midX - hatW * 0.10, hatH * 0.11, midX - hatW * 0.045, hatH * 0.20);
-    c.quadraticCurveTo(midX, hatH * 0.30, midX + hatW * 0.045, hatH * 0.20);
-    c.quadraticCurveTo(midX + hatW * 0.10, hatH * 0.11, midX + hatW * 0.165, hatH * 0.30);
-    c.lineTo(midX + hatW * 0.20, brimY);
-    c.closePath();
-    c.fill();
-    // the band, where the crown meets the brim
-    c.fillStyle = '#42291a';
-    c.fillRect(midX - hatW * 0.205, brimY - hatH * 0.16, hatW * 0.41, hatH * 0.13);
-    // the brim: wide, and curling up at the tips, which is the whole
-    // silhouette of the thing at this size
-    c.fillStyle = '#9a6631';
-    c.beginPath();
-    c.moveTo(midX - hatW * 0.5, brimY - hatH * 0.06);
-    c.quadraticCurveTo(midX, brimY + hatH * 0.26, midX + hatW * 0.5, brimY - hatH * 0.06);
-    c.quadraticCurveTo(midX, brimY + hatH * 0.02, midX - hatW * 0.5, brimY - hatH * 0.06);
-    c.closePath();
-    c.fill();
+    HAT.draw(hatCtx, hatW, hatH);
   }
 
   // The hat rides the head, upright whichever way the snake is going: this is
@@ -2680,7 +2799,7 @@
     if (!hatW) return;
     const x = wrapf(cxCell) * cell + cell / 2;
     const y = wrapf(cyCell) * cell + cell / 2;
-    ctx.drawImage(hatCanvas, Math.round(x - hatW / 2), Math.round(y - cell * 0.42 - hatH * 0.62));
+    ctx.drawImage(hatCanvas, Math.round(x - hatW / 2), Math.round(y + HAT.dy(cell, hatH)));
   }
 
   // The wall shape is static for its whole phase, so it is rendered once to an
@@ -3298,23 +3417,60 @@
   // rides every segment, and whatever crest the head wears. Nothing here
   // reaches the engine: a skin is paint, so it can never touch a rule or a
   // replay. Classic, the pitch's own gold, is what a snake wears by default;
-  // ?skin=viper is the blue one with the crest.
+  // ?skin=viper stays the blue curio with the crest.
+  //
+  // The purchasable skins key on their pitch_snake_items ids ON PURPOSE: the
+  // server sells ids and prices, the client owns the art, and an id this
+  // page has never heard of renders as classic, which is what lets the
+  // catalogue grow by SQL without stranding old clients. Rivals in rooms
+  // keep their VS_COLORS: those are identity, and this is clothing.
   const SKINS = {
-    classic: { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
-               spikes: null, spikesAlt: null },
-    viper:   { head: [ 88, 168, 246], tail: [ 24,  74, 150], line: 'rgba(150,110,235,0.75)',
-               spikes: '#9a5cf0', spikesAlt: '#7b3fd6' },
+    classic:     { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
+                   spikes: null, spikesAlt: null },
+    viper:       { head: [ 88, 168, 246], tail: [ 24,  74, 150], line: 'rgba(150,110,235,0.75)',
+                   spikes: '#9a5cf0', spikesAlt: '#7b3fd6' },
+    'skin-away':  { head: [248, 248, 252], tail: [172, 194, 222], line: 'rgba(70,110,180,0.65)',
+                    spikes: null, spikesAlt: null },
+    'skin-volt':  { head: [250, 240, 104], tail: [172, 142, 24],  line: 'rgba(64,60,36,0.6)',
+                    spikes: null, spikesAlt: null },
+    'skin-rosa':  { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)',
+                    spikes: null, spikesAlt: null },
+    'skin-night': { head: [226, 231, 241], tail: [ 36,  42,  56], line: 'rgba(122,132,160,0.55)',
+                    spikes: null, spikesAlt: null },
+    'skin-gilt':  { head: [252, 232, 152], tail: [194, 150, 56],  line: 'rgba(140,100,30,0.7)',
+                    spikes: null, spikesAlt: null },
   };
-  const skinParam = (new URLSearchParams(location.search).get('skin') || 'classic').toLowerCase();
-  const SKIN = SKINS[skinParam] ?? SKINS.classic;
+  const skinParam = (new URLSearchParams(location.search).get('skin') || '').toLowerCase();
+  let SKIN = SKINS[skinParam] ?? SKINS.classic;
 
-  // body shades from head to tail, precomputed once
+  // body shades from head to tail, precomputed once per skin change (rule 5:
+  // the per-frame loop reads this table and never builds a string)
   const SNAKE_SHADES = 64;
-  const SNAKE_LUT = Array.from({ length: SNAKE_SHADES }, (_, i) => {
-    const t = i / (SNAKE_SHADES - 1);
-    const h = SKIN.head, l = SKIN.tail;
-    return `rgb(${(h[0] + (l[0] - h[0]) * t) | 0}, ${(h[1] + (l[1] - h[1]) * t) | 0}, ${(h[2] + (l[2] - h[2]) * t) | 0})`;
-  });
+  function buildSnakeLut() {
+    return Array.from({ length: SNAKE_SHADES }, (_, i) => {
+      const t = i / (SNAKE_SHADES - 1);
+      const h = SKIN.head, l = SKIN.tail;
+      return `rgb(${(h[0] + (l[0] - h[0]) * t) | 0}, ${(h[1] + (l[1] - h[1]) * t) | 0}, ${(h[2] + (l[2] - h[2]) * t) | 0})`;
+    });
+  }
+  let SNAKE_LUT = buildSnakeLut();
+
+  // ---- what is worn ----
+  // The profile's skin and hat columns are the truth and my_wallet carries
+  // them; localStorage keeps the outfit for instant boots and offline days.
+  // applyWorn is the ONE door: it swaps the palettes and rebuilds the baked
+  // art, always at menu time (boot, a wallet response, an equip), never from
+  // the frame loop. URL params stay senior, as the dev doors they are.
+  let worn = { skin: null, hat: null };
+  try { worn = { ...worn, ...JSON.parse(localStorage.getItem('snakeWorn') || '{}') }; } catch (e) {}
+  function applyWorn(skinId, hatId) {
+    worn = { skin: skinId || null, hat: hatId || null };
+    try { localStorage.setItem('snakeWorn', JSON.stringify(worn)); } catch (e) {}
+    if (!(skinParam && SKINS[skinParam])) SKIN = SKINS[worn.skin] ?? SKINS.classic;
+    HAT = HATS[worn.hat] ?? HATS.classic;
+    SNAKE_LUT = buildSnakeLut();
+    if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
+  }
 
   // wall status banner: DOM only on phase change; the blink is CSS
   let wallBannerState = '';
@@ -3469,10 +3625,11 @@
   // award itself currency can print money. The page only shows what came
   // back, and only ever the NEW ones: announcing the same badge every round
   // is noise, not a reward.
-  function showBadges(earned) {
+  function showBadges(earned, roundCoins) {
     badgeNote.innerHTML = '';
-    if (!Array.isArray(earned) || !earned.length) { badgeNote.hidden = true; return; }
-    for (const a of earned) {
+    const rows = Array.isArray(earned) ? earned : [];
+    if (!rows.length && !(roundCoins > 0)) { badgeNote.hidden = true; return; }
+    for (const a of rows) {
       const row = document.createElement('div');
       row.className = 'bg-row';
       const pip = document.createElement('span');
@@ -3496,6 +3653,25 @@
       }
       badgeNote.appendChild(row);
     }
+    // the round's own pay, one quiet line under the badges: the loop the
+    // whole economy exists for, played back at the whistle
+    if (roundCoins > 0) {
+      const row = document.createElement('div');
+      row.className = 'bg-row';
+      const pip = document.createElement('span');
+      pip.className = 'bg-pip';
+      pip.textContent = '+';
+      const txt = document.createElement('span');
+      txt.className = 'bg-txt';
+      const nm = document.createElement('b');
+      nm.textContent = '+' + roundCoins + ' COINS';
+      const note = document.createElement('span');
+      note.className = 'bg-note';
+      note.textContent = 'For the round. One per five points.';
+      txt.append(nm, note);
+      row.append(pip, txt);
+      badgeNote.appendChild(row);
+    }
     badgeNote.hidden = false;
   }
 
@@ -3516,7 +3692,7 @@
     try {
       const name = (sbProfile && sbProfile.name) || 'YOU';
       const r = await sbValidate(ticket.id, name);
-      showBadges(r && r.earned);
+      showBadges(r && r.earned, r && r.coins);
       if (mode !== 'levels') refreshModeUI();
     } catch (e) { /* a lesson in humility, not an error the player should see */ }
   }
@@ -3615,6 +3791,7 @@
   let seedPocket = null;    // { id, seed, at }: the next round's ticket
   let roundTicket = null;   // the ticket of the round in g, spent by saveScore
   let lastEarned = null;    // achievements the last submit came back with
+  let lastCoins = 0;        // and what it paid for the round itself
   async function fetchSeed() {
     if (!sbOn() || !sbToken || seedPocket) return;
     try {
@@ -3681,6 +3858,12 @@
   // whatever this device had typed; on a plain boot the device name only
   // fills gaps.
   async function syncProfile(takeTheirs) {
+    // the outfit rides the wallet: fetched beside the profile on every boot
+    // and account switch, applied through applyWorn, the one door. Fire and
+    // forget: a dead network keeps the cached outfit, never blocks the game.
+    sbRpc('pitch_snake_my_wallet', {})
+      .then(w => { if (w && typeof w.coins === 'number') applyWorn(w.skin, w.hat); })
+      .catch(() => {});
     try {
       const prof = await sbRpc('pitch_snake_get_profile', {});
       if (prof && Array.isArray(prof.levels)) takeLevels(prof.levels);
@@ -3836,6 +4019,7 @@
       try {
         const r = await sbValidate(ticket.id, name);
         lastEarned = r && r.earned;
+        lastCoins = (r && r.coins) || 0;
         if (mode === 'tourney' && tourney) return 'n:' + name;
         return 'r' + r.id;
       } catch (e) {
@@ -4011,7 +4195,7 @@
     saveNote.hidden = true;
     try {
       const key = await saveScore(name, g.score);
-      showBadges(lastEarned);
+      showBadges(lastEarned, lastCoins);
       await renderStandings(key);
       entryWanted = false;
       refreshModeUI();
@@ -6296,6 +6480,192 @@
       { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  // ---- the shop ----
+  // The spend side. The catalogue and its prices are the server's word,
+  // fetched once a session; the wallet is fetched fresh on every open; and
+  // every purchase or change of clothes repaints from the wallet the SERVER
+  // hands back, so this screen can never disagree with the ledger. Buying
+  // asks twice (BUY, then SURE?) because coins take rounds to earn and one
+  // stray tap should not spend them; buying also wears the thing at once,
+  // since buying paint and not wearing it is a support ticket. All of it
+  // menu-time DOM work; nothing here is reachable from the frame loop.
+  const shopModal = document.getElementById('shopModal');
+  const shopList = document.getElementById('shopList');
+  const shopCoins = document.getElementById('shopCoins');
+  const shopNote = document.getElementById('shopNote');
+  const shopClose = document.getElementById('shopClose');
+  const shopOpen = document.getElementById('shopOpen');
+  let shopCatalog = null;   // [{id, kind, name, price}], the server's word
+  let shopWallet = null;    // the last wallet json the server handed back
+  let shopBusy = false;
+  let armedBuy = null;      // the item whose BUY waits for its SURE?
+  let armTimer = 0;
+
+  const SHOP_ERRS = {
+    'not enough coins': 'Not enough coins yet. Rounds and badges pay them.',
+    'no such item': 'That item is no longer sold.',
+    'already owned': 'Already yours.',
+    'skin not owned': 'Not yours yet.',
+    'hat not owned': 'Not yours yet.',
+    'no session': 'Sign-in has not settled. Try again in a moment.',
+  };
+
+  // one wallet, every reader: the shop's number, the sheet's number, and the
+  // snake's clothes all repaint from the same server answer
+  function takeWallet(w) {
+    shopWallet = w;
+    shopCoins.textContent = w.coins;
+    walletCoins.textContent = w.coins;
+    profWallet.hidden = false;
+    applyWorn(w.skin, w.hat);
+  }
+
+  // Previews are drawn with the very ramps and hat art the pitch uses, so a
+  // preview cannot lie about what the money buys.
+  function paintSkinPrev(cv, id) {
+    const s = SKINS[id] ?? SKINS.classic;
+    const c = cv.getContext('2d');
+    c.clearRect(0, 0, cv.width, cv.height);
+    const n = 5, r = 9, y = cv.height / 2;
+    c.lineWidth = 1.5;
+    c.strokeStyle = s.line;
+    for (let i = n - 1; i >= 0; i--) {          // tail first, the head over it
+      const t = i / (n - 1);
+      const cx = cv.width - 11 - i * 10.5;
+      c.fillStyle = `rgb(${(s.head[0] + (s.tail[0] - s.head[0]) * t) | 0}, ${(s.head[1] + (s.tail[1] - s.head[1]) * t) | 0}, ${(s.head[2] + (s.tail[2] - s.head[2]) * t) | 0})`;
+      c.beginPath(); c.arc(cx, y, r, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+  }
+  function paintHatPrev(cv, id) {
+    const def = HATS[id] ?? HATS.classic;
+    const c = cv.getContext('2d');
+    c.clearRect(0, 0, cv.width, cv.height);
+    const cellPx = 17, cx = cv.width / 2, cy = cv.height / 2 + 5;
+    c.fillStyle = 'rgb(244,236,216)';
+    c.strokeStyle = 'rgba(194,162,90,0.65)';
+    c.lineWidth = 1.5;
+    c.beginPath(); c.arc(cx, cy, 8.5, 0, Math.PI * 2); c.fill(); c.stroke();
+    const w = Math.ceil(cellPx * def.wf), h = Math.ceil(cellPx * def.hf);
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    def.draw(tmp.getContext('2d'), w, h);
+    c.drawImage(tmp, Math.round(cx - w / 2), Math.round(cy + def.dy(cellPx, h)));
+  }
+
+  function renderShop() {
+    shopCoins.textContent = shopWallet ? shopWallet.coins : '\u2014';
+    shopList.innerHTML = '';
+    const cat = shopCatalog || [];
+    if (!cat.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'Fetching the catalogue…';
+      shopList.appendChild(li);
+      return;
+    }
+    const ownedSet = new Set((shopWallet && shopWallet.items) || []);
+    for (const item of cat) {
+      const li = document.createElement('li');
+      const prev = document.createElement('canvas');
+      prev.className = 'shop-prev';
+      prev.width = 64; prev.height = 28;
+      (item.kind === 'skin' ? paintSkinPrev : paintHatPrev)(prev, item.id);
+      const txt = document.createElement('span');
+      txt.className = 'shop-txt';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = item.name;
+      const st = document.createElement('span'); st.className = 'st';
+      const worn = !!shopWallet && (shopWallet.skin === item.id || shopWallet.hat === item.id);
+      st.textContent = worn ? 'On the pitch now.'
+        : ownedSet.has(item.id) ? 'Yours.'
+        : item.price + ' coins';
+      txt.append(nm, st);
+      const btn = document.createElement('button');
+      btn.className = 'btn small';
+      if (worn) { btn.textContent = 'WEARING'; btn.classList.add('worn-btn'); li.classList.add('worn'); }
+      else if (ownedSet.has(item.id)) btn.textContent = 'WEAR';
+      else if (armedBuy === item.id) btn.textContent = 'SURE?';
+      else {
+        btn.textContent = 'BUY ' + item.price;
+        btn.disabled = !!shopWallet && shopWallet.coins < item.price;
+      }
+      if (!shopWallet || shopBusy) btn.disabled = true;   // browse-only until the wallet answers
+      btn.addEventListener('click', () => shopAct(item));
+      li.append(prev, txt, btn);
+      shopList.appendChild(li);
+    }
+  }
+
+  async function shopAct(item) {
+    if (shopBusy || !shopWallet) return;
+    const owned = new Set(shopWallet.items || []).has(item.id);
+    const worn = shopWallet.skin === item.id || shopWallet.hat === item.id;
+    // the two-tap buy: arming is free and disarms itself
+    if (!owned && armedBuy !== item.id) {
+      armedBuy = item.id;
+      clearTimeout(armTimer);
+      armTimer = setTimeout(() => { armedBuy = null; renderShop(); }, 3500);
+      renderShop();
+      return;
+    }
+    armedBuy = null;
+    clearTimeout(armTimer);
+    shopBusy = true;
+    shopNote.hidden = true;
+    renderShop();
+    try {
+      let w;
+      if (!owned) {
+        w = await sbRpc('pitch_snake_buy_item', { p_item: item.id });
+        // owned and paid is real the moment the buy answers, even if the
+        // wear below has a bad day
+        if (w && !w.error && typeof w.coins === 'number') takeWallet(w);
+      }
+      if (!w || !w.error) {
+        // wearing: a fresh buy goes straight on; a WEARING tap comes off
+        const off = owned && worn;
+        const id = off ? '' : item.id;
+        w = await sbRpc('pitch_snake_equip',
+          item.kind === 'skin' ? { p_skin: id, p_hat: null } : { p_skin: null, p_hat: id });
+      }
+      if (w && w.error) {
+        shopNote.textContent = SHOP_ERRS[w.error] || 'The shop said no: ' + w.error;
+        shopNote.hidden = false;
+      } else if (w && typeof w.coins === 'number') takeWallet(w);
+    } catch (e) {
+      shopNote.textContent = 'Could not reach the shop. Check the wallet before retrying.';
+      shopNote.hidden = false;
+    }
+    shopBusy = false;
+    renderShop();
+  }
+
+  async function openShop() {
+    shopModal.hidden = false;
+    shopNote.hidden = true;
+    armedBuy = null;
+    renderShop();
+    if (!sbOn()) {
+      shopNote.textContent = 'The shop needs the world board configured.';
+      shopNote.hidden = false;
+      return;
+    }
+    try {
+      const [cat, w] = await Promise.all([
+        shopCatalog ? Promise.resolve(shopCatalog) : sbRpc('pitch_snake_shop', {}),
+        sbRpc('pitch_snake_my_wallet', {}),
+      ]);
+      if (Array.isArray(cat) && cat.length) shopCatalog = cat;
+      if (w && typeof w.coins === 'number') takeWallet(w);
+    } catch (e) {
+      shopNote.textContent = 'Could not reach the shop.';
+      shopNote.hidden = false;
+    }
+    renderShop();
+  }
+
+  shopOpen.addEventListener('click', openShop);
+  shopClose.addEventListener('click', () => { shopModal.hidden = true; });
+
   function openProfile() {
     buildCountries();
     refreshProfileSheet(true);
@@ -6530,6 +6900,7 @@ $ `;
 
   resize();
   newRound();
+  applyWorn(worn.skin, worn.hat);   // the cached outfit, before the first draw
   refreshSettingsUI();
   loadPersonalBest();
   refreshModeUI();
