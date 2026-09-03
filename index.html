@@ -1335,8 +1335,14 @@
     font-family: 'Barlow', sans-serif; font-size: 13px;
     font-weight: 700; letter-spacing: 1.2px; color: #d8d0bd;
   }
-  /* the purse sits under the player chip, same pill, gold number */
-  .gear.purse { top: 54px; font-size: 14px; }
+  /* the chip row owns the top-left corner; its pills stop positioning
+     themselves and sit in the flow, purse beside chip whatever the name */
+  .chip-row {
+    position: absolute; top: 8px; left: 8px; z-index: 6;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .chip-row .gear { position: static; }
+  .gear.purse { font-size: 14px; }
   .gear.purse #purseCoins {
     font-family: 'Anton', sans-serif; font-weight: 400;
     font-size: 14px; letter-spacing: 0.5px; color: var(--gold-bright);
@@ -1434,11 +1440,15 @@
            top ten only when your round places on it, so browsing the boards
            needed its own door, one that works on every screen and width. -->
       <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">&#127942;</button>
-      <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
-      <!-- The purse: the balance beside the player chip, and the door to the
-           shop. Coins stopped being a section buried in the profile sheet
-           because a currency you cannot see is a currency you forget. -->
-      <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden>&#129689;<span id="purseCoins"></span></button>
+      <!-- The chip row: the player chip and the purse side by side, one
+           flex row so the purse rides the chip's width whatever the name.
+           Coins stopped being a section buried in the profile sheet because
+           a currency you cannot see is a currency you forget; the purse is
+           the door to the shop. -->
+      <div class="chip-row">
+        <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
+        <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden>&#129689;<span id="purseCoins"></span></button>
+      </div>
       <div class="overlay" id="overlay">
         <div class="ov-head">
           <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
