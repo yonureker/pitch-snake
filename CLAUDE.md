@@ -104,6 +104,14 @@ The board is global when `SB_URL` and `SB_KEY` are set in `index.html`, and loca
 
 Nothing may gate play on any of it. A room that cannot reach the ladder plays the identical round and simply is not rated, exactly like identity.
 
+## The economy
+
+`supabase/economy.sql`, governed by one sentence the way the boards are: **coins are minted by the validator and nowhere else.** A coin is currency, a client that can award itself currency can print money, and the validator is the one place that already knows what a round truthfully contained, because it replayed it. It pays a one-time bounty per achievement (the amounts live beside the badges in the validator's catalogue and mirror to the shelf) and one coin per five points per validated round, capped at forty, both non-fatal after the score is written and both idempotent by the ledger's unique `(user, reason, ref)`: a badge pays once per badge id, a round once per seed, a purchase once per item, and any retry collapses into the row that already exists.
+
+The ledger is append-only and the balance IS the sum ("derive over store" applied to money); there is no cached balance column to drift from its own history. Prices live in `pitch_snake_items` and never in a client; the ART lives in the clients keyed by item id, so an id a client does not know renders as the default skin and the catalogue can grow by SQL alone. What is worn rides the profile row (`skin`, `hat`) under set_profile's contract (null keeps, '' clears, an id sets), and `pitch_snake_equip` UPSERTS that row, which is `set_levels`' lesson verbatim: an anonymous player can buy a skin before ever typing a name, and a plain UPDATE sends the outfit nowhere, silently. `pitch_snake_buy_item` computes the balance under a per-user advisory lock, or two racing purchases overspend. After ANY change to the file, run the `has_function_privilege` audit from leaderboard.sql rule 1: the four client doors (shop, my_wallet, buy_item, equip) stay open to anon and authenticated, the sync stays service-role only.
+
+Coins buy cosmetics and nothing else: never gameplay, never a gate on play, never an engine knob. Signed-out clients get the empty wallet, not an error. Tickets for competitive play are deliberately absent until something exists to spend them on; when they arrive they are reasons in this same ledger, not a second one. The one economy rule the future must not forget is already written in the determinism section: the moment a LEVEL awards coins, level completion moves into the validator like everything else that pays.
+
 ## Code conventions
 
 These are repo-wide. The engine and performance rules above outrank them everywhere they overlap.

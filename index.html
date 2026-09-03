@@ -1107,6 +1107,11 @@
     display: block; font-family: 'Barlow', sans-serif; font-weight: 500;
     font-size: 10.5px; letter-spacing: 0; color: #b7ac93; margin-top: 1px;
   }
+  /* the bounty the badge just paid, pinned to the row's right edge */
+  .badges .bg-coins {
+    margin-left: auto; padding-left: 10px;
+    font-family: 'Anton', sans-serif; font-size: 15px; color: var(--gold-bright);
+  }
   .badges[hidden] { display: none; }
   .badges b {
     font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 12px;
@@ -1281,6 +1286,12 @@
   .shelf-list li.got .nm { color: var(--gold-deep); }
   .shelf-list .dt { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
   .shelf-list li.got .dt { color: var(--text); }
+  /* what a badge pays: the incentive on a locked row, the receipt on an
+     earned one */
+  .shelf-list .coins {
+    margin-left: auto; padding-left: 8px;
+    font-family: 'Anton', sans-serif; font-size: 13px; color: var(--gold-deep);
+  }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
   /* A long board buys back a row or two of its own height rather than making
@@ -1761,6 +1772,13 @@
              you are here rather than part of a round. Shows the LOCKED ones
              too: a list of only what you already have says nothing about
              what the game rewards, which is most of why badges exist. -->
+        <!-- The wallet. Coins are minted by the validator for badges and
+             validated rounds; this is the read side, one line, and it shows
+             even at zero so a new player learns coins exist. The shop that
+             spends them is the next piece. -->
+        <div class="shelf" id="profWallet" hidden>
+          <div class="shelf-head"><span>COINS</span><b id="walletCoins"></b></div>
+        </div>
         <div class="shelf" id="profShelf" hidden>
           <div class="shelf-head"><span>ACHIEVEMENTS</span><b id="shelfCount"></b></div>
           <ol class="shelf-list" id="shelfList"></ol>
@@ -3469,6 +3487,13 @@
       note.textContent = a.note || '';
       txt.append(nm, note);
       row.append(pip, txt);
+      // the bounty the validator just paid for it, when it pays
+      if (a.coins > 0) {
+        const c = document.createElement('span');
+        c.className = 'bg-coins';
+        c.textContent = '+' + a.coins;
+        row.appendChild(c);
+      }
       badgeNote.appendChild(row);
     }
     badgeNote.hidden = false;
@@ -6086,6 +6111,8 @@
   const profShelf = document.getElementById('profShelf');
   const shelfList = document.getElementById('shelfList');
   const shelfCount = document.getElementById('shelfCount');
+  const profWallet = document.getElementById('profWallet');
+  const walletCoins = document.getElementById('walletCoins');
 
   // ---- flags: drawn, not typed ----
   // A regional-indicator pair is only a flag if the platform ships flag
@@ -6219,11 +6246,20 @@
   let shelfGen = 0;
   async function loadShelf() {
     const gen = ++shelfGen;
-    if (!sbOn() || !sbToken) { profShelf.hidden = true; return; }
-    let list;
-    try { list = await sbRpc('pitch_snake_my_achievements', {}); }
-    catch (e) { profShelf.hidden = true; return; }
-    if (gen !== shelfGen || !Array.isArray(list) || !list.length) { profShelf.hidden = true; return; }
+    if (!sbOn() || !sbToken) { profShelf.hidden = true; profWallet.hidden = true; return; }
+    let list = null, wallet = null;
+    [list, wallet] = await Promise.all([
+      sbRpc('pitch_snake_my_achievements', {}).catch(() => null),
+      sbRpc('pitch_snake_my_wallet', {}).catch(() => null),
+    ]);
+    if (gen !== shelfGen) return;
+    // the wallet line shows even at zero, so a new player learns coins exist;
+    // it hides only when the server cannot say
+    if (wallet && typeof wallet.coins === 'number') {
+      walletCoins.textContent = wallet.coins;
+      profWallet.hidden = false;
+    } else profWallet.hidden = true;
+    if (!Array.isArray(list) || !list.length) { profShelf.hidden = true; return; }
     const got = list.filter(a => a.at).length;
     shelfCount.textContent = got + ' / ' + list.length;
     shelfList.innerHTML = '';
@@ -6241,6 +6277,14 @@
       dt.textContent = a.at ? shelfWhen(a.at) : (a.note || '');
       txt.append(nm, dt);
       li.append(pip, txt);
+      // what it pays: on a locked row that is the incentive, on an earned
+      // one the receipt
+      if (a.coins > 0) {
+        const c = document.createElement('span');
+        c.className = 'coins';
+        c.textContent = '+' + a.coins;
+        li.appendChild(c);
+      }
       shelfList.appendChild(li);
     }
     profShelf.hidden = false;
