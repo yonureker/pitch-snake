@@ -330,6 +330,11 @@
      sit in the same place on every screen, and only what is underneath
      changes when a panel opens. */
   .overlay {
+    /* the size question every wide layout below asks is about THIS box, not
+       the window: it is square and tracks the arena, so a 1512x900 laptop
+       gets 656px of it and a 1440p screen gets 1196 */
+    container-type: inline-size;
+    container-name: ov;
     position: absolute;
     inset: 6px;
     border-radius: 9px;
@@ -495,6 +500,45 @@
   html.touch .overlay p.mode-desc { font-size: 10.5px; min-height: 2.5em; }
   html.touch .ov-head { gap: 6px; }
   html.touch #modeFooter .btn, html.touch #vsFooter .btn { padding: 10px 18px; font-size: 16px; }
+  /* ---- two columns, only where the panel can hold them ----
+     620px is where a 300px column each side stops being cramped: a 1512x900
+     laptop (656) qualifies, a 1280x800 one (556) does not and keeps the
+     single column, and no touch device ever comes close. The head and the
+     foot keep spanning, so the title and the actions do not move; only the
+     body splits, which is why the change reads as the board moving beside
+     the result rather than as a different screen. */
+  @container ov (min-width: 620px) {
+    .ov-body.two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 26px;
+      row-gap: 0;
+      align-items: start;
+      justify-content: stretch;
+      align-content: start;
+      width: 100%;
+      max-width: 660px;
+      text-align: center;
+    }
+    /* left column: the result and everything that speaks about YOUR round */
+    .ov-body.two-col > .res-col {
+      display: flex; flex-direction: column; align-items: stretch;
+      grid-column: 1; grid-row: 1; min-width: 0;
+    }
+    .ov-body.two-col .result { display: block; }
+    .ov-body.two-col .entry,
+    .ov-body.two-col .save-note,
+    .ov-body.two-col .badges,
+    .ov-body.two-col .acct { margin-top: 12px; }
+    /* right column: the board, which is the reason for the second column */
+    .ov-body.two-col > .board-head { grid-column: 2; grid-row: 1; align-self: start; }
+    .ov-body.two-col > .standings {
+      grid-column: 2; grid-row: 1; align-self: start;
+      width: 100%; margin: 24px 0 0;
+    }
+    /* the caption belongs to neither, so it sits under both */
+    .ov-body.two-col > .mode-caption { grid-column: 1 / -1; grid-row: 2; }
+  }
   /* a panel taller than its board says so, instead of looking guillotined */
   .ov-body.is-scrollable {
     -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), rgba(0,0,0,0.12));
@@ -815,6 +859,32 @@
   .standings li .nm { flex: 1; text-align: left; }
   .standings li .sc { font-family: 'Anton', sans-serif; }
   .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 42px; text-align: right; }
+  /* ---- the wide result screen ----
+     The overlay is always SQUARE, because it covers the square arena: 656px
+     on a laptop, 836 at 1080p, 1196 at 1440p, 323 on a phone. So the question
+     "is there room for two columns" is about the panel, never the window,
+     which is what a container query is for. Below the threshold every screen
+     keeps the single column it has always had, and the phone never sees any
+     of this. */
+  .res-col { display: contents; }
+  .result { display: none; text-align: left; width: 100%; }
+  .res-tag {
+    font-family: 'Barlow', sans-serif; font-weight: 700;
+    font-size: 11px; letter-spacing: 3px; color: var(--gold);
+  }
+  .res-score {
+    font-family: 'Anton', sans-serif; font-size: 96px; line-height: 0.9;
+    color: #f6efde; text-shadow: 4px 4px 0 var(--gold); margin-top: 4px;
+  }
+  .res-note { font-size: 14px; color: #b7ac93; margin-top: 12px; line-height: 1.35; }
+  .res-note b { color: var(--gold-bright); font-weight: 700; }
+  .res-rows { margin-top: 18px; display: flex; flex-direction: column; gap: 9px; width: 100%; }
+  .res-rows div {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; color: #8e8672; padding-bottom: 8px;
+    border-bottom: 1px solid rgba(194,162,90,0.15);
+  }
+  .res-rows b { font-family: 'Anton', sans-serif; font-size: 18px; color: #e9e0cd; letter-spacing: 0.5px; }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
   /* A long board buys back a row or two of its own height rather than making
@@ -1112,6 +1182,22 @@
           <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
         </div>
+        <!-- The left column of the wide result screen. `display: contents`
+             by default, so on a narrow panel this wrapper does not exist as
+             far as layout is concerned and every screen keeps the single
+             column it has always had. It only becomes a box inside the
+             container query, which is what makes the two sides real columns
+             instead of items taking a grid row each. -->
+        <div class="res-col" id="resCol">
+        <!-- The result, on the wide screens that have room for it beside the
+             board. Everything in here is already known at death; nothing new
+             is computed and nothing is fetched. -->
+        <div class="result" id="resultPanel" hidden>
+          <p class="res-tag">YOU SCORED</p>
+          <div class="res-score" id="resScore">0</div>
+          <p class="res-note" id="resNote"></p>
+          <dl class="res-rows" id="resRows"></dl>
+        </div>
         <div class="entry" id="entry" style="display:none">
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
           <button class="btn small" id="saveBtn">SAVE</button>
@@ -1125,6 +1211,7 @@
             <button class="acct-later" id="acctLater">Not now</button>
           </div>
         </div>
+        </div><!-- /res-col -->
         <div class="brief" id="levelBrief" hidden>
           <p class="brief-eyebrow" id="briefEyebrow">NEXT</p>
           <p class="brief-name" id="briefName"></p>
@@ -1402,6 +1489,10 @@
   // never do, or browsing the modes would drain the pocket.
   function newRound(forReal) {
     beatBest = false;          // each round earns its own moment
+    // the number to beat, captured before the round can move it: syncScoreDom
+    // raises `best` mid-round, so by the time the result screen reads it the
+    // previous best is already gone
+    bestAtStart = bestByMode[ruleMode()] || 0;
     roundTicket = null;
     // A level is its own board: fixed seed so a hint about it is true for
     // everyone, its own knobs, and no ticket, because a lesson never enters a
@@ -1800,6 +1891,47 @@
     refreshSettingsUI();
   }
 
+  // The result, written from what the round already knows. Nothing here is
+  // fetched and nothing is computed that the screen did not already have: it
+  // is the same facts the old single line carried, given room to be read.
+  // Only the wide layout shows it, but it is filled either way, because
+  // whether it is visible is the container query's business and not this
+  // function's.
+  const SURVIVAL_UNIT = (n) => n === 1 ? '1 second' : n + ' seconds';
+  function fillResult(score, reason) {
+    const seconds = ruleMode() === 'survival';
+    resScore.textContent = score;
+    const prev = bestAtStart;
+    resNote.textContent = '';
+    if (beatBest && prev > 0) {
+      const by = score - prev;
+      resNote.append(by === 1 ? 'One clear of your best. ' : by + ' clear of your best. ');
+      const b = document.createElement('b'); b.textContent = 'New personal best.';
+      resNote.appendChild(b);
+    } else if (beatBest) {
+      const b = document.createElement('b'); b.textContent = 'Your first best.';
+      resNote.appendChild(b);
+    } else if (prev > 0) {
+      const off = prev - score;
+      resNote.textContent = off === 0 ? 'Level with your best.'
+        : (seconds ? SURVIVAL_UNIT(off) : off + (off === 1 ? ' point' : ' points')) + ' off your best.';
+    }
+    resRows.innerHTML = '';
+    const row = (k, v, gold) => {
+      if (v === null || v === undefined) return;
+      const d = document.createElement('div');
+      const s1 = document.createElement('span'); s1.textContent = k;
+      const s2 = document.createElement('b'); s2.textContent = v;
+      if (gold) s2.style.color = 'var(--gold-bright)';
+      d.append(s1, s2); resRows.appendChild(d);
+    };
+    row(beatBest ? 'Previous best' : 'Your best', prev > 0 ? prev : '\u2014');
+    row('Mode', RULE_LABELS[ruleMode()]);
+    row('Ended', reason === 'wall' ? 'THE WALLS' : reason === 'ghost' ? 'A GHOST'
+              : reason === 'tnt' ? 'TNT' : reason === 'time' ? 'FULL TIME'
+              : reason === 'self' ? 'YOURSELF' : '\u2014');
+  }
+
   function onDeath(reason) {
     state = 'dead';
     syncScoreDom();
@@ -1832,6 +1964,7 @@
     saveNote.className = 'save-note';
     showModes = false;
     savePersonalBest();          // the round is over; that best is worth keeping
+    fillResult(g.score, reason);
     const gen = ++deathGen;
     if (g.score > 0 && worldBoard) askIfItPlaces(gen, g.score);
     else renderStandings();
@@ -2831,6 +2964,7 @@
   // session and gives up entirely after NUDGE_LIMIT refusals, remembered
   // across visits. Play is never gated on any of it.
   let beatBest = false;          // this round passed the standing best
+  let bestAtStart = 0;           // what BEST was before this round started
   let nudgedThisSession = false;
   const NUDGE_KEY = 'snakeAcctNo';
   const NUDGE_LIMIT = 3;
@@ -3587,6 +3721,12 @@
     const showBoard = deadPanels && mode !== 'levels';
     standingsEl.style.display = showBoard ? 'block' : 'none';
     boardHead.style.display = showBoard ? 'block' : 'none';
+    // Two columns exactly when there is a board to put in the second one.
+    // The class only ARMS the layout; whether it actually splits is the
+    // container query's call, so a narrow panel silently keeps one column
+    // and no JS anywhere has to know how wide the arena is.
+    ovBody.classList.toggle('two-col', showBoard);
+    resultPanel.hidden = !showBoard;
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     // one quiet line, at the one moment the pitch sells itself: a score just
     // went onto the world board and the identity under it is still anonymous
@@ -3671,6 +3811,10 @@
   // panel fades at the bottom edge so the swipe is discoverable. Measured
   // after layout, never during a frame (rule 8).
   const ovBody = document.querySelector('.ov-body');
+  const resultPanel = document.getElementById('resultPanel');
+  const resScore = document.getElementById('resScore');
+  const resNote = document.getElementById('resNote');
+  const resRows = document.getElementById('resRows');
   function markOverflow() {
     requestAnimationFrame(() => {
       ovBody.classList.toggle('is-scrollable', ovBody.scrollHeight > ovBody.clientHeight + 2);

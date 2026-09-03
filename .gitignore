@@ -6,3 +6,10 @@ dist/
 
 # per-machine Claude Code overrides; the shared config is .claude/settings.json
 .claude/settings.local.json
+
+# third-party agent skills installed with `npx skills add`. Kept out of the
+# repo because they are someone else's material on their own release cycle;
+# the skills this project OWNS live in .claude/skills and are committed.
+.agents/
+.claude/skills/game-ui-design
+skills-lock.json
