@@ -783,6 +783,91 @@
       margin-top: 8px; line-height: 1.4;
     }
   }
+  /* ---- the wide multiplayer doors ----
+     Same split, fourth screen: the three ways in become cards (quick match
+     wearing multiplayer's green as the hero, since it is the door the game
+     wants taken and the only rated one) and the rail answers the one
+     question this screen never answered anywhere: what is my rating, who is
+     above me, and the fact that only quick match counts. The room and
+     ladder sub-screens keep their own layouts. */
+  @container ov (min-width: 520px) {
+    /* the panel wrapper is content-sized everywhere else; the grid needs
+       the full body or its right column runs off the edge */
+    .overlay.vs-open #vsPanel { width: 100%; max-width: 900px; }
+    .overlay.vs-open .vs-setup {
+      display: grid;
+      /* minmax(0, ...) because the code input's intrinsic width otherwise
+         sets a min-content floor that shoves the rail off the panel */
+      grid-template-columns: minmax(0, 1fr) clamp(206px, 32cqw, 320px);
+      column-gap: clamp(20px, 3.6cqw, 34px);
+      align-items: start;
+      align-content: center;
+      width: 100%;
+      max-width: 900px;
+      text-align: left;
+    }
+    .overlay.vs-open .vs-setup > #vsNameRow { grid-column: 1; width: auto; max-width: none; }
+    .overlay.vs-open .vs-setup > .vs-actions {
+      grid-column: 1; width: auto; max-width: none; min-width: 0;
+      gap: clamp(10px, 1.8cqw, 16px);
+    }
+    .overlay.vs-open .vs-card {
+      display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+      border: 1px solid rgba(194,162,90,0.25); border-radius: 9px;
+      padding: clamp(12px, 2.2cqw, 18px);
+      background: rgba(33,30,26,0.34);
+      text-align: left;
+    }
+    .overlay.vs-open .vs-card.hero { border-color: #7dbf5c; background: rgba(125,191,92,0.08); }
+    .overlay.vs-open .vs-card.hero .btn {
+      background: #7dbf5c; color: #1a281e; box-shadow: 0 6px 0 #4e7d38;
+    }
+    .overlay.vs-open .vs-card .vs-hint { margin: 0; text-align: left; }
+    /* JOIN is an ordinary door, not a whistle: gold in the card, and the
+       ladder door keeps its ghost clothes at full width */
+    .overlay.vs-open .vs-card .entry .btn {
+      background: var(--gold); color: #211e1a;
+      box-shadow: 0 6px 0 var(--gold-deep);
+    }
+    /* the narrow list has always given this ghost a red ledge (a later
+       .btn.small rule outranks .ghostbtn); at full card width that ledge
+       reads as a wound, so the wide door dresses like BACK instead */
+    .overlay.vs-open #vsLadderBtn {
+      box-shadow: none; border: 2px solid var(--gold); color: var(--gold-bright);
+    }
+    .overlay.vs-open .h-n { display: none; }
+    .overlay.vs-open .h-w { display: contents; }
+    .overlay.vs-open .vs-setup > .vs-rail {
+      display: flex; flex-direction: column; align-items: flex-start;
+      grid-column: 2; grid-row: 1 / span 2;
+      align-self: stretch; text-align: left;
+      border-left: 1px solid rgba(194,162,90,0.28);
+      padding-left: clamp(20px, 3.6cqw, 32px);
+    }
+    .vs-rate-card {
+      display: flex; align-items: center; gap: clamp(10px, 2cqw, 16px);
+      margin-top: clamp(8px, 1.6cqw, 14px);
+      border: 1px solid rgba(194,162,90,0.25); border-radius: 9px;
+      padding: clamp(10px, 2cqw, 16px);
+      background: rgba(33,30,26,0.34);
+      width: 100%;
+    }
+    .vs-rate {
+      font-family: 'Anton', sans-serif; font-weight: 400;
+      font-size: clamp(28px, 5cqw, 42px); line-height: 1; color: #f6efde;
+      text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
+                   color-mix(in srgb, var(--gold) 55%, #12180f);
+    }
+    .vs-rate-note {
+      font-size: clamp(10.5px, 1.7cqw, 12.5px); color: #8e8672; line-height: 1.35;
+    }
+    .vs-rail-gap { margin-top: clamp(14px, 2.6cqw, 22px); }
+    .vs-rail .standings.vs-mini { width: 100%; margin: 8px 0 0; }
+    .vs-rail-foot {
+      font-size: clamp(10px, 1.6cqw, 12px); color: #8e8672;
+      margin-top: 10px; line-height: 1.4;
+    }
+  }
   /* a panel taller than its board says so, instead of looking guillotined */
   .ov-body.is-scrollable {
     -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), rgba(0,0,0,0.12));
@@ -930,6 +1015,12 @@
   .entry.wide { width: min(300px, 84%); }
   .entry.wide input { width: 100%; }
   .vs-setup { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  /* The doors screen's furniture exists only where the wide layout builds
+     it: the card wrappers and the narrow hint texts leave no box behind,
+     the wide hint texts and the rail render as nothing at all. */
+  .vs-card, .h-n { display: contents; }
+  .h-w { display: none; }
+  .vs-rail { display: none; }
   /* three ways into a game, each one button, none of them hidden behind a
      choice you have to make first */
   .vs-actions {
@@ -1212,7 +1303,7 @@
   /* P for provisional, the chess convention: the number is real, it just has
      too few rounds behind it to be read as settled. Marked rather than
      withheld, or a new board is an empty box for weeks. */
-  .rt .prov, .lad .prov {
+  .rt .prov, .lad .prov, .vs-rate .prov {
     font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
     color: var(--bg-deep, #211e1a); background: var(--gold);
     border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
@@ -1424,19 +1515,41 @@
           <p class="vs-hint" id="levelHint"></p>
         </div>
         <div class="tourney" id="vsPanel" hidden>
+          <!-- The card wrappers and the second hint texts render as nothing
+               on a narrow panel (display: contents / none), so the phone
+               keeps its exact stack; the wide doors screen turns them into
+               the quick-match hero and the join card beside the rating
+               rail. -->
           <div class="vs-setup" id="vsSetup">
             <div class="entry wide" id="vsNameRow">
               <input id="vsName" maxlength="5" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
             </div>
             <div class="vs-actions">
-              <button class="btn" id="vsQuickBtn">QUICK MATCH</button>
-              <p class="vs-hint">Play whoever is waiting.</p>
-              <div class="entry" id="vsCodeRow">
-                <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
-                <button class="btn small" id="vsJoinBtn">JOIN</button>
+              <div class="vs-card hero">
+                <button class="btn" id="vsQuickBtn">QUICK MATCH</button>
+                <p class="vs-hint"><span class="h-n">Play whoever is waiting.</span><span class="h-w">Seated with whoever is waiting near you. Rated.</span></p>
               </div>
-              <p class="vs-hint">Or join a friend with their room code.</p>
+              <div class="vs-card">
+                <div class="entry" id="vsCodeRow">
+                  <input id="vsCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+                  <button class="btn small" id="vsJoinBtn">JOIN</button>
+                </div>
+                <p class="vs-hint"><span class="h-n">Or join a friend with their room code.</span><span class="h-w">Their five-character room code. Not rated.</span></p>
+              </div>
               <button class="btn small ghostbtn" id="vsLadderBtn">LADDER</button>
+            </div>
+            <!-- The doors screen's rating rail, wide panels only. Filled by
+                 fillVsRail; the full ladder screen keeps its own fresh
+                 read. -->
+            <div class="vs-rail" id="vsRail">
+              <p class="res-tag">YOUR RATING</p>
+              <div class="vs-rate-card">
+                <b class="vs-rate" id="vsRailRating"></b>
+                <span class="vs-rate-note" id="vsRailNote"></span>
+              </div>
+              <p class="res-tag vs-rail-gap">LADDER &middot; TOP FIVE</p>
+              <ol class="standings lad vs-mini" id="vsRailList"></ol>
+              <p class="vs-rail-foot">Only quick match counts. P means under ten rounds.</p>
             </div>
           </div>
           <div class="tourney" id="vsLadder" hidden>
@@ -4047,15 +4160,22 @@
     // the list screen: every mode, what the highlighted one is, and the two
     // buttons that either play it or take the choice back to the pitch
     const listScreen = modesOpen && !tScreen && !lvScreen;
-    // The chooser is its own screen and says so. The round's title (KICK
-    // OFF, FULL TIME, WELL PLAYED...) belongs to the round state and is set
-    // by events this function cannot recompute, so it is parked and put back
-    // rather than rebuilt.
-    if (listScreen && overlayTitle.textContent !== 'MODES') {
-      titleBehindModes = [overlayTitle.textContent, overlayTitle.className];
-      overlayTitle.textContent = 'MODES';
+    // The chooser and the multiplayer doors title themselves. The round's
+    // title (KICK OFF, FULL TIME, WELL PLAYED...) belongs to the round state
+    // and is set by events this function cannot recompute, so it is parked
+    // and put back rather than rebuilt; a current title that is neither menu
+    // name is the round's truth and re-parks, because vsLeave and its kin
+    // write it directly underneath an open menu. The multiplayer title stays
+    // ready-only so a room's FULL TIME result keeps its whistle.
+    const menuTitle = listScreen ? 'MODES'
+      : (modesOpen && tScreen && mode === 'versus' && state === 'ready') ? 'MULTIPLAYER'
+      : null;
+    if (menuTitle) {
+      const cur = overlayTitle.textContent;
+      if (cur !== 'MODES' && cur !== 'MULTIPLAYER') titleBehindModes = [cur, overlayTitle.className];
+      overlayTitle.textContent = menuTitle;
       overlayTitle.className = '';
-    } else if (!listScreen && titleBehindModes) {
+    } else if (titleBehindModes) {
       overlayTitle.textContent = titleBehindModes[0];
       overlayTitle.className = titleBehindModes[1];
       titleBehindModes = null;
@@ -4383,8 +4503,9 @@
     showModes = !showModes;
     tScreen = false;
     lvScreen = false;
-    // a board read that failed gets one fresh try per visit, not a loop
+    // a read that failed gets one fresh try per visit, not a loop
     for (const k in railTops) if (railTops[k] === false) delete railTops[k];
+    if (railLadder === false) railLadder = undefined;
     refreshModeUI();
   });
 
@@ -5249,6 +5370,12 @@
     vsSetup.hidden = inRoom || ladderOpen;
     vsLadder.hidden = inRoom || !ladderOpen;
     vsRoom.hidden = !inRoom;
+    // the wide doors screen: cards beside the rating rail. The container
+    // query decides whether any of it renders; this only says which of the
+    // three screens is up.
+    const doors = !vsPanel.hidden && !inRoom && !ladderOpen;
+    overlay.classList.toggle('vs-open', doors);
+    if (doors) fillVsRail();
     // the footer lives in the overlay's pinned foot, so it has to be told
     // about screens the panel itself never sees
     vsFooter.hidden = vsPanel.hidden || inRoom || ladderOpen;
@@ -5404,6 +5531,76 @@
   // If a room ever picks a mode, this and vsBegin move together.
   const ROOM_RULES = 'classic';
 
+  // one rated row, one shape: rank, flag, name, rating with its P. The full
+  // ladder and the doors screen's top-five rail both build from this.
+  function ladderRow(r, i) {
+    const li = document.createElement('li');
+    const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+    const fl = document.createElement('span'); fl.className = 'flag fl-gap';
+    paintFlag(fl, r.country);
+    if (fl.hidden) { fl.hidden = false; fl.style.backgroundImage = 'none'; }
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name || 'YOU';
+    const sc = document.createElement('span'); sc.className = 'sc';
+    sc.append(String(r.rating));
+    if (r.provisional) {
+      const p = document.createElement('span');
+      p.className = 'prov'; p.textContent = 'P';
+      p.title = 'Provisional: fewer than 10 rated rounds';
+      sc.appendChild(p);
+    }
+    li.append(rk, fl, nm, sc);
+    return li;
+  }
+
+  // ---- the doors screen's rating rail ----
+  // Filled whenever the doors are up, shown only where the container query
+  // has room. One read per session for the board and the own rating
+  // together; the full ladder screen keeps its own fresh read. Degrades
+  // silently, and the 7-to-90 rule holds: one number you own, five rows of
+  // who is above, one sentence of the rule that feeds them.
+  const vsRailRating = document.getElementById('vsRailRating');
+  const vsRailNote = document.getElementById('vsRailNote');
+  const vsRailList = document.getElementById('vsRailList');
+  let railLadder;    // undefined = not asked, null = in flight, false = failed
+  function fillVsRail() {
+    let r = railLadder;
+    if (r === undefined && sbOn() && overlay.clientWidth >= 540) {
+      railLadder = null;
+      Promise.all([
+        sbRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
+        sbToken ? sbRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
+      ]).then(([board, mine]) => { railLadder = { board: asList(board), mine }; })
+        .catch(() => { railLadder = false; })
+        .then(() => {
+          // a stale settle repaints only the screen it was fetched for
+          if (overlay.classList.contains('vs-open')) fillVsRail();
+        });
+      r = null;
+    }
+    const own = r && r.mine && r.mine[ROOM_RULES];
+    vsRailRating.textContent = '';
+    vsRailRating.append(own ? String(own.rating) : '\u2014');
+    if (own && own.provisional) {
+      const p = document.createElement('span');
+      p.className = 'prov'; p.textContent = 'P';
+      p.title = 'Provisional: fewer than 10 rated rounds';
+      vsRailRating.appendChild(p);
+    }
+    vsRailNote.textContent = own
+      ? own.rounds + (own.rounds === 1 ? ' rated round' : ' rated rounds')
+        + (own.provisional ? '. Ten settles it.' : '.')
+      : 'Quick match a stranger to get one.';
+    vsRailList.innerHTML = '';
+    const rows = r && r.board ? r.board.slice(0, 5) : [];
+    if (!rows.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = r === null ? '\u2026'
+        : r && r.board ? 'No rated rounds yet' : 'Ladder unavailable';
+      vsRailList.appendChild(li);
+    } else rows.forEach((row, i) => vsRailList.appendChild(ladderRow(row, i)));
+  }
+
   let ladderGen = 0;
   async function showLadder() {
     const gen = ++ladderGen;
@@ -5427,24 +5624,7 @@
       vsLadderList.appendChild(li);
     }
     vsLadderList.classList.toggle('dense', rows.length > 4);
-    rows.forEach((r, i) => {
-      const li = document.createElement('li');
-      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
-      const fl = document.createElement('span'); fl.className = 'flag fl-gap';
-      paintFlag(fl, r.country);
-      if (fl.hidden) { fl.hidden = false; fl.style.backgroundImage = 'none'; }
-      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name || 'YOU';
-      const sc = document.createElement('span'); sc.className = 'sc';
-      sc.append(String(r.rating));
-      if (r.provisional) {
-        const p = document.createElement('span');
-        p.className = 'prov'; p.textContent = 'P';
-        p.title = 'Provisional: fewer than 10 rated rounds';
-        sc.appendChild(p);
-      }
-      li.append(rk, fl, nm, sc);
-      vsLadderList.appendChild(li);
-    });
+    rows.forEach((r, i) => vsLadderList.appendChild(ladderRow(r, i)));
 
     const own = mine && mine[ROOM_RULES];
     vsLadderMeta.textContent = own
