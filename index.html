@@ -131,11 +131,24 @@
     color: #211e1a;
   }
   .stack-choice button:disabled { opacity: 0.45; cursor: default; }
-  #modeRow button[data-mode="classic"]  { --accent: #c9a961; }
-  #modeRow button[data-mode="speedrun"] { --accent: #4fc3d9; }
-  #modeRow button[data-mode="survival"] { --accent: #e2803a; }
-  #modeRow button[data-mode="versus"]   { --accent: #7dbf5c; }
-  #modeRow button[data-mode="tourney"]  { --accent: #a878d8; }
+  /* The tile's furniture (glyph, blurb) and the side rail exist only where
+     the wide chooser lays them out. On a narrow panel the extra spans leave
+     no box behind (`display: contents` for the name, none for the rest), so
+     the button renders its label exactly as the bare text always did. */
+  .stack-choice .m-g, .stack-choice .m-d { display: none; }
+  .stack-choice .m-txt, .stack-choice .m-t { display: contents; }
+  .mode-rail { display: none; }
+  /* One colour per mode, written once: the row's button and the chooser's
+     side rail read the same custom property. LEARN THE PITCH had no accent
+     at all and fell back to the panel gold, which made it read as disabled
+     next to five coloured siblings; the cool blue is deliberate, one calm
+     thing among five warm ones. */
+  #modeRow button[data-mode="classic"],  #modeRail[data-mode="classic"]  { --accent: #c9a961; }
+  #modeRow button[data-mode="speedrun"], #modeRail[data-mode="speedrun"] { --accent: #4fc3d9; }
+  #modeRow button[data-mode="survival"], #modeRail[data-mode="survival"] { --accent: #e2803a; }
+  #modeRow button[data-mode="versus"],   #modeRail[data-mode="versus"]   { --accent: #7dbf5c; }
+  #modeRow button[data-mode="levels"],   #modeRail[data-mode="levels"]   { --accent: #8fa8c8; }
+  #modeRow button[data-mode="tourney"],  #modeRail[data-mode="tourney"]  { --accent: #a878d8; }
 
   /* the tournament panel's chips stay chips */
   .t-chips button {
@@ -538,6 +551,112 @@
     }
     /* the caption belongs to neither, so it sits under both */
     .ov-body.two-col > .mode-caption { grid-column: 1 / -1; grid-row: 2; }
+  }
+  /* ---- the wide chooser ----
+     Same threshold, same reasoning as the result screen above: the panel is
+     square and tracks the arena, so only a panel that can genuinely hold two
+     columns gets them. The six modes become tiles in a two-column grid and a
+     side rail says what the lit one is and what you would be playing: your
+     best, the door into the top ten, walls, speed. Every size in here rides
+     cqw so a 656px laptop panel and a 1196px television get the same
+     composition, not the same pixels. On a narrow panel none of this exists
+     and the stack renders exactly as it always has. */
+  @container ov (min-width: 620px) {
+    /* the rail says what the mode is; the line under the title said it twice */
+    .overlay.modes-open .ov-head .mode-desc { display: none; }
+    .ov-body.modes-grid {
+      display: grid;
+      grid-template-columns: 1fr clamp(206px, 32cqw, 320px);
+      column-gap: clamp(20px, 3.6cqw, 34px);
+      align-items: start;
+      align-content: center;
+      width: 100%;
+      max-width: 900px;
+      text-align: left;
+    }
+    .ov-body.modes-grid > .mode-row {
+      width: auto; max-width: none;
+      /* stretch to the rail's height and share it out, so the two columns
+         end together instead of the grid leaving a hole under itself */
+      align-self: stretch;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: repeat(3, 1fr);
+      gap: clamp(10px, 1.8cqw, 16px);
+    }
+    /* The tile: the mode's own border and ledge, the name wearing the slab
+       treatment (Anton in cream with a hard offset shadow in the mode's own
+       colour, the MODES title's own clothes), and one line of what it is.
+       Selected fills with the accent and the slab flips dark, which is the
+       narrow list's fill rule wearing the same costume. */
+    .ov-body.modes-grid .stack-choice button {
+      display: flex; align-items: center; text-align: left;
+      gap: clamp(10px, 1.8cqw, 16px);
+      min-height: clamp(64px, 12.5cqw, 112px);
+      padding: clamp(8px, 1.6cqw, 14px) clamp(12px, 2.2cqw, 20px);
+      border-radius: 9px;
+      background: rgba(33,30,26,0.34);
+      box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 55%, #12180f);
+    }
+    .ov-body.modes-grid .stack-choice button:not(.active):hover {
+      background: color-mix(in srgb, var(--accent, var(--gold)) 14%, transparent);
+    }
+    /* restated because the tile rule above outranks the narrow list's
+       .active fill; without this the lit tile went dark-on-dark */
+    .ov-body.modes-grid .stack-choice button.active {
+      background: var(--accent, var(--gold));
+      box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
+    }
+    .ov-body.modes-grid .m-g {
+      display: grid; place-items: center; flex: 0 0 auto;
+      width: clamp(30px, 5.4cqw, 44px); height: clamp(30px, 5.4cqw, 44px);
+      border-radius: 8px; border: 1px solid var(--accent, var(--gold));
+      background: rgba(33,30,26,0.55);
+      font-size: clamp(15px, 2.9cqw, 22px); line-height: 1;
+    }
+    .ov-body.modes-grid button.active .m-g {
+      background: rgba(26,40,30,0.26); border-color: rgba(26,40,30,0.4);
+    }
+    .ov-body.modes-grid .m-txt {
+      display: flex; flex-direction: column;
+      gap: clamp(2px, 0.5cqw, 5px); min-width: 0;
+    }
+    .ov-body.modes-grid .m-t {
+      display: block;
+      font-size: clamp(14px, 2.5cqw, 21px);
+      letter-spacing: 1.2px; line-height: 1.05;
+      color: #f6efde;
+      text-shadow: clamp(2px, 0.35cqw, 3px) clamp(2px, 0.35cqw, 3px) 0 var(--accent, var(--gold));
+    }
+    .ov-body.modes-grid button.active .m-t {
+      color: #1a281e; text-shadow: clamp(2px, 0.35cqw, 3px) clamp(2px, 0.35cqw, 3px) 0 rgba(18,24,15,0.22);
+    }
+    .ov-body.modes-grid .m-d {
+      display: block;
+      font-family: 'Barlow', sans-serif; font-weight: 500;
+      font-size: clamp(10.5px, 1.75cqw, 13.5px);
+      letter-spacing: 0.3px; text-transform: none; line-height: 1.25;
+      color: #8e8672;
+    }
+    .ov-body.modes-grid button.active .m-d { color: rgba(26,40,30,0.72); }
+    /* the rail: what is lit, in full, with the facts a player can act on */
+    .ov-body.modes-grid > .mode-rail {
+      display: flex; flex-direction: column; align-items: flex-start;
+      align-self: stretch; text-align: left;
+      border-left: 1px solid rgba(194,162,90,0.28);
+      padding-left: clamp(20px, 3.6cqw, 32px);
+    }
+    .rail-name {
+      font-family: 'Anton', sans-serif; font-weight: 400; text-transform: uppercase;
+      font-size: clamp(26px, 4.6cqw, 40px); line-height: 1;
+      color: #f6efde; text-shadow: 3px 3px 0 var(--accent, var(--gold));
+      margin: 6px 0 0;
+    }
+    .rail-desc {
+      font-size: clamp(12px, 1.9cqw, 15.5px); line-height: 1.5;
+      color: #b7ac93; margin: clamp(8px, 1.6cqw, 14px) 0 0;
+    }
+    .mode-rail .res-rows { margin-top: clamp(14px, 2.6cqw, 24px); }
   }
   /* a panel taller than its board says so, instead of looking guillotined */
   .ov-body.is-scrollable {
@@ -1147,13 +1266,28 @@
           <p class="vs-who" id="vsWho" hidden>PLAYING AS <b id="vsWhoName"></b> <button id="vsChangeBtn">CHANGE</button></p>
         </div>
         <div class="ov-body">
+        <!-- Each button is a plain label on a narrow panel and a tile on a
+             wide one: the glyph and the blurb only exist inside the container
+             query, and the name's span leaves no box (`display: contents`),
+             so the phone renders these exactly as it did when they were bare
+             text. The glyph carries the identity that colour cannot: six
+             modes told apart by hue alone fail 8% of men. -->
         <div class="mode-row stack-choice" id="modeRow">
-          <button data-mode="classic" class="active">CLASSIC</button>
-          <button data-mode="speedrun">SPEED RUN</button>
-          <button data-mode="survival">SURVIVAL</button>
-          <button data-mode="versus">MULTIPLAYER</button>
-          <button data-mode="levels">LEARN THE PITCH</button>
-          <button data-mode="tourney">TOURNAMENTS</button>
+          <button data-mode="classic" class="active"><span class="m-g">&#9917;</span><span class="m-txt"><span class="m-t">CLASSIC</span><span class="m-d">No time limit. Chase the top ten.</span></span></button>
+          <button data-mode="speedrun"><span class="m-g">&#9201;&#65039;</span><span class="m-txt"><span class="m-t">SPEED RUN</span><span class="m-d">Sixty seconds. Score fast.</span></span></button>
+          <button data-mode="survival"><span class="m-g">&#128293;</span><span class="m-txt"><span class="m-t">SURVIVAL</span><span class="m-d">The clock is the score.</span></span></button>
+          <button data-mode="versus"><span class="m-g">&#128101;</span><span class="m-txt"><span class="m-t">MULTIPLAYER</span><span class="m-d">Five snakes, one seed.</span></span></button>
+          <button data-mode="levels"><span class="m-g">&#127891;</span><span class="m-txt"><span class="m-t">LEARN THE PITCH</span><span class="m-d">Five lessons, then you are off.</span></span></button>
+          <button data-mode="tourney"><span class="m-g">&#127942;</span><span class="m-txt"><span class="m-t">TOURNAMENTS</span><span class="m-d">A code, a window, one board.</span></span></button>
+        </div>
+        <!-- The chooser's side rail, wide panels only (the container query is
+             what shows it; narrow panels never see it). Filled by
+             fillModeRail whenever the list is on screen. -->
+        <div class="mode-rail" id="modeRail" data-mode="classic">
+          <p class="res-tag">SELECTED</p>
+          <h3 class="rail-name" id="railName">CLASSIC</h3>
+          <p class="rail-desc" id="railDesc"></p>
+          <dl class="res-rows" id="modeFacts"></dl>
         </div>
         <div class="tourney" id="levelPanel" hidden>
           <ol class="levels" id="levelList"></ol>
@@ -1963,6 +2097,16 @@
   // whether it is visible is the container query's business and not this
   // function's.
   const SURVIVAL_UNIT = (n) => n === 1 ? '1 second' : n + ' seconds';
+  // one fact, one row: label left, value right in Anton. The result panel
+  // and the chooser's rail both speak this shape.
+  function factRow(dl, k, v, gold) {
+    if (v === null || v === undefined) return;
+    const d = document.createElement('div');
+    const s1 = document.createElement('span'); s1.textContent = k;
+    const s2 = document.createElement('b'); s2.textContent = v;
+    if (gold) s2.style.color = 'var(--gold-bright)';
+    d.append(s1, s2); dl.appendChild(d);
+  }
   function fillResult(score, reason) {
     const seconds = ruleMode() === 'survival';
     resScore.textContent = score;
@@ -1982,14 +2126,7 @@
         : (seconds ? SURVIVAL_UNIT(off) : off + (off === 1 ? ' point' : ' points')) + ' off your best.';
     }
     resRows.innerHTML = '';
-    const row = (k, v, gold) => {
-      if (v === null || v === undefined) return;
-      const d = document.createElement('div');
-      const s1 = document.createElement('span'); s1.textContent = k;
-      const s2 = document.createElement('b'); s2.textContent = v;
-      if (gold) s2.style.color = 'var(--gold-bright)';
-      d.append(s1, s2); resRows.appendChild(d);
-    };
+    const row = (k, v, gold) => factRow(resRows, k, v, gold);
     row(beatBest ? 'Previous best' : 'Your best', prev > 0 ? prev : '\u2014');
     row('Mode', RULE_LABELS[ruleMode()]);
     row('Ended', reason === 'wall' ? 'THE WALLS' : reason === 'ghost' ? 'A GHOST'
@@ -3676,6 +3813,7 @@
   let tCreating = false;
   let tBusy = false;
   let showModes = false;
+  let titleBehindModes = null;   // [text, className] parked while the chooser titles itself
   let lastRunKey = null;     // which fixture the finished round belonged to
   let tScreen = false;       // inside the chooser: the tournament step instead of the list
   let entryWanted = false;   // the death screen decided an entry belongs; refreshModeUI applies it
@@ -3725,7 +3863,26 @@
     // the list screen: every mode, what the highlighted one is, and the two
     // buttons that either play it or take the choice back to the pitch
     const listScreen = modesOpen && !tScreen && !lvScreen;
-    modeRow.style.display = listScreen ? 'flex' : 'none';
+    // The chooser is its own screen and says so. The round's title (KICK
+    // OFF, FULL TIME, WELL PLAYED...) belongs to the round state and is set
+    // by events this function cannot recompute, so it is parked and put back
+    // rather than rebuilt.
+    if (listScreen && overlayTitle.textContent !== 'MODES') {
+      titleBehindModes = [overlayTitle.textContent, overlayTitle.className];
+      overlayTitle.textContent = 'MODES';
+      overlayTitle.className = '';
+    } else if (!listScreen && titleBehindModes) {
+      overlayTitle.textContent = titleBehindModes[0];
+      overlayTitle.className = titleBehindModes[1];
+      titleBehindModes = null;
+    }
+    // the stylesheet owns HOW the list renders (the stack, or the wide
+    // chooser's tile grid inside the container query); this line only says
+    // whether it is on screen at all
+    modeRow.style.display = listScreen ? '' : 'none';
+    ovBody.classList.toggle('modes-grid', listScreen);
+    overlay.classList.toggle('modes-open', listScreen);
+    if (listScreen) fillModeRail();
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     // The level screen borrows the chooser's footer: START plays the level
@@ -3894,11 +4051,91 @@
     });
   }
 
+  // ---- the chooser's side rail ----
+  // Only the wide chooser shows it, but it is filled whenever the list is on
+  // screen, because whether it is visible is the container query's business
+  // and not this function's (the result panel's rule). Everything local
+  // renders at once; the two rows that need the world board (the door into
+  // the top ten, and where your best stands) hold an ellipsis while one fetch
+  // per mode per session is in the air, and drop away if it fails: a dead
+  // network degrades the rail, never the game.
+  const modeRail = document.getElementById('modeRail');
+  const railName = document.getElementById('railName');
+  const railDesc = document.getElementById('railDesc');
+  const modeFacts = document.getElementById('modeFacts');
+  const railTops = {};   // ruleMode -> board rows; false is a fetch that failed
+  const speedLabel = () => {
+    const b = document.querySelector('.speed-row button.active');
+    return b ? b.textContent : 'NORMAL';
+  };
+  function fillModeRail() {
+    modeRail.dataset.mode = mode;
+    railName.textContent = MODE_LABELS[mode] || '';
+    railDesc.textContent = MODE_DESC[mode] || '';
+    const facts = [];
+    if (mode === 'versus') {
+      // rooms play fixed rules (vsBegin), so these rows tell the truth even
+      // when the settings sheet says otherwise
+      facts.push(['Players', '2 TO 5'], ['Rated', 'QUICK MATCH'], ['Walls', 'ON'], ['Speed', 'NORMAL']);
+    } else if (mode === 'tourney') {
+      if (tourney) {
+        const st = tourneyState();
+        facts.push(['Code', tourney.code], ['Mode', RULE_LABELS[tourney.mode]]);
+        facts.push([st === 'upcoming' ? 'Starts' : st === 'open' ? 'Ends' : 'Ended',
+          fmtWhen(st === 'upcoming' ? tourney.starts_at : tourney.ends_at)]);
+      } else {
+        facts.push(['Entry', 'BY CODE'], ['Board', 'BEST PER NAME'], ['Window', 'SET BY THE MAKER']);
+      }
+    } else if (mode !== 'levels') {
+      const rm = ruleMode();
+      const myBest = bestByMode[rm] || 0;
+      facts.push(['Your best', myBest > 0 ? myBest : '\u2014']);
+      let top = railTops[rm];
+      // the rail is this fetch's only reader, and a narrow panel never shows
+      // it, so a phone spends nothing here
+      if (top === undefined && sbOn() && overlay.clientWidth >= 620) {
+        railTops[rm] = null;
+        sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm })
+          .then(rows => { railTops[rm] = asList(rows).filter(r => r && typeof r.score === 'number'); })
+          .catch(() => { railTops[rm] = false; })
+          .then(() => {
+            // refill only if the list is still up; a stale settle must not
+            // repaint a screen the player has already left
+            if (ruleMode() === rm && modeRow.style.display === '') fillModeRail();
+          });
+        top = null;
+      }
+      if (Array.isArray(top)) {
+        // ten rows ordered score desc then age: an equal score sorts behind
+        // the older one, so the door into the board is the tenth row plus one
+        // (the same arithmetic as placesOnBoard)
+        facts.push(['Top ten starts at',
+          top.length < MAX_ENTRIES ? 'OPEN' : top[MAX_ENTRIES - 1].score + 1, true]);
+        if (myBest > 0) {
+          // a row equal to your best is read as your own, because a best
+          // that reached the board is on it; below the whole list, the row
+          // says nothing rather than guessing
+          const i = top.findIndex(r => r.score <= myBest);
+          const rank = i >= 0 ? i + 1 : (top.length < MAX_ENTRIES ? top.length + 1 : 0);
+          if (rank) facts.push(['World rank', '#' + rank]);
+        }
+      } else if (top === null) {
+        facts.push(['Top ten starts at', '\u2026']);
+        if (myBest > 0) facts.push(['World rank', '\u2026']);
+      }
+      facts.push(['Walls', pageWalls ? 'ON' : 'OFF'], ['Speed', speedLabel()]);
+    }
+    modeFacts.innerHTML = '';
+    for (const f of facts) factRow(modeFacts, f[0], f[1], f[2]);
+  }
+
   modesBtn.addEventListener('click', () => {
     if (state !== 'ready' && state !== 'dead') return;
     showModes = !showModes;
     tScreen = false;
     lvScreen = false;
+    // a board read that failed gets one fresh try per visit, not a loop
+    for (const k in railTops) if (railTops[k] === false) delete railTops[k];
     refreshModeUI();
   });
 
@@ -5334,6 +5571,7 @@
       document.querySelectorAll('.speed-row button').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       pageTickMs = parseInt(b.dataset.speed, 10);
+      refreshModeUI();   // the chooser's rail quotes this setting
     });
   });
 
@@ -5344,6 +5582,7 @@
     wallToggle.classList.toggle('on', pageWalls);
     wallToggle.setAttribute('aria-checked', String(pageWalls));
     wallStatus.textContent = pageWalls ? 'ON' : 'OFF';
+    refreshModeUI();   // the chooser's rail quotes this setting
   });
 
   // sound is the one setting free to change mid-round: it touches nothing
