@@ -684,6 +684,106 @@
     }
     .mode-rail .res-rows { margin-top: clamp(14px, 2.6cqw, 24px); }
   }
+  /* ---- the wide kickoff ----
+     The chooser's split applied to the ready screen, solo board modes only:
+     the legend grows a second line per row saying what the thing IS (the
+     narrow rows keep their single line untouched), and the right rail
+     answers the question the screen never did, what am I chasing: your
+     best, where it stands on the world board, your rating if you have one,
+     and the score the top ten starts at. */
+  @container ov (min-width: 520px) {
+    .ov-body.kick-grid {
+      display: grid;
+      grid-template-columns: 1fr clamp(206px, 32cqw, 320px);
+      column-gap: clamp(20px, 3.6cqw, 34px);
+      align-items: start;
+      align-content: center;
+      width: 100%;
+      max-width: 900px;
+      text-align: left;
+    }
+    .ov-body.kick-grid > .legend {
+      grid-column: 1; grid-row: 1;
+      width: auto; max-width: none; margin: 0; gap: 0;
+    }
+    /* a pseudo-element so applyLegend's children indexing stays untouched */
+    .ov-body.kick-grid .legend::before {
+      content: 'HOW IT SCORES';
+      font-family: 'Barlow', sans-serif; font-weight: 700;
+      font-size: 11px; letter-spacing: 3px; color: var(--gold);
+      margin-bottom: clamp(6px, 1.2cqw, 12px);
+    }
+    .ov-body.kick-grid .lg-row {
+      gap: clamp(12px, 2cqw, 18px);
+      padding: clamp(8px, 1.7cqw, 15px) 0;
+      border-bottom: 1px solid rgba(194,162,90,0.15);
+    }
+    .ov-body.kick-grid .lg-ic {
+      width: clamp(28px, 4.6cqw, 40px); height: clamp(28px, 4.6cqw, 40px);
+      font-size: clamp(18px, 3cqw, 26px);
+    }
+    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(15px, 2.4cqw, 20px); }
+    .ov-body.kick-grid .lg-ic.tnt { font-size: clamp(7px, 1.2cqw, 10px); }
+    .ov-body.kick-grid .lg-txt { display: none; }
+    .ov-body.kick-grid .lg-two {
+      display: flex; flex-direction: column; gap: 2px;
+      flex: 1; min-width: 0; text-align: left;
+    }
+    .lg-name {
+      font-size: clamp(13px, 2cqw, 17px); font-weight: 600; color: #e9e0cd;
+    }
+    .lg-sub {
+      font-size: clamp(10.5px, 1.7cqw, 13px); font-weight: 500;
+      color: #8e8672; letter-spacing: 0.2px; line-height: 1.3;
+    }
+    .ov-body.kick-grid .lg-val { font-size: clamp(17px, 2.8cqw, 22px); }
+    /* the rail: your numbers, and the door into the board at the foot */
+    .ov-body.kick-grid > .kick-rail {
+      display: flex; flex-direction: column; align-items: flex-start;
+      grid-column: 2; grid-row: 1;
+      align-self: stretch; text-align: left;
+      border-left: 1px solid rgba(194,162,90,0.28);
+      padding-left: clamp(20px, 3.6cqw, 32px);
+    }
+    .kick-nums {
+      display: flex; flex-wrap: wrap;
+      gap: clamp(14px, 3cqw, 28px);
+      margin-top: clamp(10px, 2cqw, 18px);
+    }
+    .kick-num b {
+      display: block; font-family: 'Anton', sans-serif; font-weight: 400;
+      font-size: clamp(30px, 5.4cqw, 46px); line-height: 1; color: #f6efde;
+      text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
+                   color-mix(in srgb, var(--gold) 55%, #12180f);
+    }
+    .kick-num .prov { vertical-align: clamp(8px, 1.8cqw, 16px); }
+    .kick-num > span {
+      display: block; margin-top: 5px;
+      font-family: 'Barlow', sans-serif; font-weight: 700;
+      font-size: 10px; letter-spacing: 2.5px; color: #8e8672;
+    }
+    .kick-door {
+      margin-top: auto;   /* the foot of the stretched rail, mockup's card */
+      width: 100%;
+      border: 1px solid rgba(194,162,90,0.25); border-radius: 9px;
+      padding: clamp(12px, 2.2cqw, 18px);
+      background: rgba(33,30,26,0.34);
+    }
+    /* the card is the rail's narrowest interior; the tag tightens so it
+       stays one line at the smallest qualifying panel */
+    .kick-door .res-tag { letter-spacing: 2px; font-size: 10.5px; }
+    .door-n {
+      font-family: 'Anton', sans-serif; font-weight: 400;
+      font-size: clamp(34px, 6cqw, 52px); line-height: 1;
+      color: var(--gold-bright); margin-top: 6px;
+      text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
+                   color-mix(in srgb, var(--gold) 45%, #12180f);
+    }
+    .door-s {
+      font-size: clamp(11px, 1.8cqw, 13.5px); color: #b7ac93;
+      margin-top: 8px; line-height: 1.4;
+    }
+  }
   /* a panel taller than its board says so, instead of looking guillotined */
   .ov-body.is-scrollable {
     -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), rgba(0,0,0,0.12));
@@ -747,6 +847,11 @@
     background: linear-gradient(135deg, rgba(42,212,255,0.3) 0 50%, rgba(197,97,255,0.3) 50%);
   }
   .lg-val { line-height: 1; }
+  /* The legend's two-line form and the kickoff's side rail exist only where
+     the wide kickoff lays them out; on a narrow panel the rows render
+     exactly the single line they always have. */
+  .lg-two { display: none; }
+  .kick-rail { display: none; }
   .lg-val.pos { color: var(--gold-bright); }
   .lg-val.neg { color: var(--food); }
   .lg-val.die { color: var(--food); font-size: 13px; letter-spacing: 1px; }
@@ -1108,7 +1213,7 @@
   /* P for provisional, the chess convention: the number is real, it just has
      too few rounds behind it to be read as settled. Marked rather than
      withheld, or a new board is an empty box for weeks. */
-  .rt .prov, .lad .prov {
+  .rt .prov, .lad .prov, .kick-num .prov {
     font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
     color: var(--bg-deep, #211e1a); background: var(--gold);
     border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
@@ -1392,11 +1497,27 @@
           <button class="btn small ghostbtn" id="tBackBtn">BACK</button>
         </div>
         <div class="legend" id="legend">
-          <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-val pos">+1</span></div>
-          <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-val pos">+5</span></div>
-          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-val neg">-5</span></div>
-          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-val pos">+5</span></div>
-          <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-val die">DIE</span></div>
+          <!-- Each row carries two forms of the same fact: lg-txt is the
+               single line the narrow screens have always shown, lg-two is
+               the wide kickoff's name-plus-explanation pair. applyLegend
+               fills both; only the container query decides which renders. -->
+          <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-two"><span class="lg-name">Emoji</span><span class="lg-sub">any of them, the ordinary meal</span></span><span class="lg-val pos">+1</span></div>
+          <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-two"><span class="lg-name">Ringed emoji</span><span class="lg-sub">every sixth, if the streak holds</span></span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-two"><span class="lg-name">TNT</span><span class="lg-sub">five points and five of your length</span></span><span class="lg-val neg">-5</span></div>
+          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-two"><span class="lg-name">Teleport window</span><span class="lg-sub">one paid trip a pair, both ways</span></span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-two"><span class="lg-name">Walls, ghosts, yourself</span><span class="lg-sub">the pitch bites back</span></span><span class="lg-val die">DIE</span></div>
+        </div>
+        <!-- The kickoff's side rail, wide panels only (the container query
+             is what shows it). Filled by fillKickRail whenever the ready
+             screen is up for a solo board mode. -->
+        <div class="kick-rail" id="kickRail">
+          <p class="res-tag" id="kickTag">YOUR CLASSIC</p>
+          <div class="kick-nums" id="kickNums"></div>
+          <div class="kick-door" id="kickDoor" hidden>
+            <p class="res-tag">TOP TEN STARTS AT</p>
+            <div class="door-n" id="kickDoorN"></div>
+            <p class="door-s" id="kickDoorS"></p>
+          </div>
         </div>
         <!-- The left column of the wide result screen. `display: contents`
              by default, so on a narrow panel this wrapper does not exist as
@@ -3859,22 +3980,26 @@
   // the TNT do, and its teleport trip pays nothing. Menu-time DOM writes only.
   function applyLegend() {
     const rows = legend.children;
-    const set = (i, txt, val, cls) => {
+    // txt is the narrow single line, unchanged for years; name and sub are
+    // the wide kickoff's pair, where there is room to say what a thing IS
+    const set = (i, txt, val, cls, name, sub) => {
       rows[i].querySelector('.lg-txt').textContent = txt;
       const v = rows[i].querySelector('.lg-val');
       v.textContent = val;
       v.className = 'lg-val ' + cls;
+      rows[i].querySelector('.lg-name').textContent = name;
+      rows[i].querySelector('.lg-sub').textContent = sub;
     };
     if (ruleMode() === 'survival') {
-      set(0, 'Emoji, one shorter', '-1', 'pos');
-      set(1, 'Emoji with a ring, 5 shorter', '-5', 'pos');
-      set(2, 'TNT block, 5 LONGER', '+5', 'neg');
-      set(3, 'Teleport, 5 shorter', '-5', 'pos');
+      set(0, 'Emoji, one shorter', '-1', 'pos', 'Emoji', 'eating trims you, and short lives longer');
+      set(1, 'Emoji with a ring, 5 shorter', '-5', 'pos', 'Ringed emoji', 'every sixth, a five segment trim');
+      set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', 'five longer, which is the trap here');
+      set(3, 'Teleport, 5 shorter', '-5', 'pos', 'Teleport window', 'one trip a pair, five shorter');
     } else {
-      set(0, 'Emoji', '+1', 'pos');
-      set(1, 'Emoji with a ring', '+5', 'pos');
-      set(2, 'TNT block, 5 shorter', '-5', 'neg');
-      set(3, 'Teleport, one trip', '+5', 'pos');
+      set(0, 'Emoji', '+1', 'pos', 'Emoji', 'any of them, the ordinary meal');
+      set(1, 'Emoji with a ring', '+5', 'pos', 'Ringed emoji', 'every sixth, if the streak holds');
+      set(2, 'TNT block, 5 shorter', '-5', 'neg', 'TNT', 'five points and five of your length');
+      set(3, 'Teleport, one trip', '+5', 'pos', 'Teleport window', 'one paid trip a pair, both ways');
     }
   }
 
@@ -3909,6 +4034,13 @@
     ovBody.classList.toggle('modes-grid', listScreen);
     overlay.classList.toggle('modes-open', listScreen);
     if (listScreen) fillModeRail();
+    // the kickoff's own split, solo board modes only: a tournament's ready
+    // screen has its caption and card, a room has its steps, and a lesson
+    // briefs instead of scoring
+    const kickScreen = state === 'ready' && !modesOpen &&
+      (mode === 'classic' || mode === 'speedrun' || mode === 'survival');
+    ovBody.classList.toggle('kick-grid', kickScreen);
+    if (kickScreen) fillKickRail();
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     // The level screen borrows the chooser's footer: START plays the level
@@ -4154,6 +4286,85 @@
     }
     modeFacts.innerHTML = '';
     for (const f of facts) factRow(modeFacts, f[0], f[1], f[2]);
+  }
+
+  // ---- the kickoff's side rail ----
+  // Same contract as the chooser's rail: filled whenever the ready screen is
+  // up for a solo board mode, visible only where the container query has
+  // room. The board read is the same one fetch per mode per session the
+  // chooser uses (railTops); the rating is one fetch per session for every
+  // mode at once. Both are held back on narrow panels, show nothing rather
+  // than guesses while in the air, and drop away on failure.
+  const kickTag = document.getElementById('kickTag');
+  const kickNums = document.getElementById('kickNums');
+  const kickDoor = document.getElementById('kickDoor');
+  const kickDoorN = document.getElementById('kickDoorN');
+  const kickDoorS = document.getElementById('kickDoorS');
+  let railRatings;   // undefined = not asked, null = in flight, false = failed
+  function fillKickRail() {
+    const rm = ruleMode();
+    const seconds = rm === 'survival';
+    kickTag.textContent = 'YOUR ' + (RULE_LABELS[rm] || '');
+    const myBest = bestByMode[rm] || 0;
+    const wide = overlay.clientWidth >= 540;
+    const refill = () => {
+      // a stale settle repaints only the screen it was fetched for
+      if (state === 'ready' && !showModes && ruleMode() === rm) fillKickRail();
+    };
+    let top = railTops[rm];
+    if (top === undefined && sbOn() && wide) {
+      railTops[rm] = null;
+      sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm })
+        .then(rows => { railTops[rm] = asList(rows).filter(r => r && typeof r.score === 'number'); })
+        .catch(() => { railTops[rm] = false; })
+        .then(refill);
+      top = null;
+    }
+    if (railRatings === undefined && sbOn() && sbToken && wide) {
+      railRatings = null;
+      sbRpc('pitch_snake_my_rating', {})
+        .then(rows => { railRatings = rows || false; })
+        .catch(() => { railRatings = false; })
+        .then(refill);
+    }
+    // the numerals: only what is known now, nothing invented and no
+    // placeholders, so the row simply grows as answers land
+    kickNums.innerHTML = '';
+    const num = (v, label, prov) => {
+      const d = document.createElement('div'); d.className = 'kick-num';
+      const b = document.createElement('b'); b.textContent = v;
+      if (prov) {
+        const p = document.createElement('span');
+        p.className = 'prov'; p.textContent = 'P';
+        p.title = 'Provisional: fewer than 10 rated rounds';
+        b.appendChild(p);
+      }
+      const s = document.createElement('span'); s.textContent = label;
+      d.append(b, s); kickNums.appendChild(d);
+    };
+    num(myBest > 0 ? myBest : '\u2014', 'BEST');
+    let rank = 0;
+    if (Array.isArray(top) && myBest > 0) {
+      // same reading as the chooser: an equal row is your own, because a
+      // best that reached the board is on it
+      const i = top.findIndex(r => r.score <= myBest);
+      rank = i >= 0 ? i + 1 : (top.length < MAX_ENTRIES ? top.length + 1 : 0);
+    }
+    if (rank) num('#' + rank, 'WORLD');
+    const own = railRatings && railRatings[rm];
+    if (own) num(String(own.rating), 'RATING', own.provisional);
+    // the door: the score that takes a place, and how far your best stands
+    if (Array.isArray(top)) {
+      kickDoor.hidden = false;
+      const entering = top.length < MAX_ENTRIES ? 0 : top[MAX_ENTRIES - 1].score + 1;
+      const gap = entering - myBest;
+      kickDoorN.textContent = entering ? entering : 'OPEN';
+      kickDoorS.textContent =
+        !entering ? 'The board has room. Any score enters.'
+        : myBest === 0 ? (seconds ? 'Survive ' + SURVIVAL_UNIT(entering) : 'Score ' + entering) + ' and you are on it.'
+        : gap <= 0 ? 'Your best already places. Raise it.'
+        : (seconds ? SURVIVAL_UNIT(gap) : gap + (gap === 1 ? ' point' : ' points')) + ' clear of your best. One good run.';
+    } else kickDoor.hidden = true;
   }
 
   modesBtn.addEventListener('click', () => {
