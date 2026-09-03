@@ -634,15 +634,25 @@
       display: flex; flex-direction: column;
       gap: clamp(2px, 0.5cqw, 5px); min-width: 0;
     }
+    /* A slab shadow only reads as depth when it sits closer to the
+       background than the letters do, and scales with the type. The MODES
+       title gets away with 4px because that is 7% of 56px type and gold is
+       far dimmer than cream; a raw accent at 3px on 15px names was 20% and
+       nearly as bright as the text, which read as misprinting. So the tile
+       shadow is the accent mixed most of the way into the tile's own dark,
+       at about a fifteenth of the type size; the colour identity stays in
+       the border, the glyph box and the fill. */
     .ov-body.modes-grid .m-t {
       display: block;
       font-size: clamp(14px, 2.5cqw, 21px);
       letter-spacing: 1.2px; line-height: 1.05;
       color: #f6efde;
-      text-shadow: clamp(2px, 0.35cqw, 3px) clamp(2px, 0.35cqw, 3px) 0 var(--accent, var(--gold));
+      text-shadow: clamp(1px, 0.16cqw, 2px) clamp(1px, 0.16cqw, 2px) 0
+                   color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
     }
     .ov-body.modes-grid button.active .m-t {
-      color: #1a281e; text-shadow: clamp(2px, 0.35cqw, 3px) clamp(2px, 0.35cqw, 3px) 0 rgba(18,24,15,0.22);
+      color: #1a281e;
+      text-shadow: clamp(1px, 0.16cqw, 2px) clamp(1px, 0.16cqw, 2px) 0 rgba(18,24,15,0.28);
     }
     .ov-body.modes-grid .m-d {
       display: block;
@@ -662,7 +672,10 @@
     .rail-name {
       font-family: 'Anton', sans-serif; font-weight: 400; text-transform: uppercase;
       font-size: clamp(26px, 4.6cqw, 40px); line-height: 1;
-      color: #f6efde; text-shadow: 3px 3px 0 var(--accent, var(--gold));
+      color: #f6efde;
+      /* same rule as the tiles: darkened accent, scaled to the type */
+      text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
+                   color-mix(in srgb, var(--accent, var(--gold)) 55%, #12180f);
       margin: 6px 0 0;
     }
     .rail-desc {
