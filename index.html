@@ -137,7 +137,6 @@
      the button renders its label exactly as the bare text always did. */
   .stack-choice .m-g, .stack-choice .m-d { display: none; }
   .stack-choice .m-txt, .stack-choice .m-t { display: contents; }
-  .corner-card { display: none; }
   /* One colour per mode. LEARN THE PITCH had no accent at all and fell
      back to the panel gold, which made it read as disabled next to five
      coloured siblings; the cool blue is deliberate, one calm thing among
@@ -549,7 +548,8 @@
      above. The six modes become glyph tiles, two columns, CENTERED: play
      testing tried them beside a facts rail and the half empty column read
      as clutter next to a game whose whole character is centered, so the
-     numbers live in the corner card now and the tiles keep the stage. On a
+     numbers live behind the trophy's boards sheet and the tiles keep the
+     stage. On a
      narrow panel none of this exists and the stack renders exactly as it
      always has. */
   @container ov (min-width: 520px) {
@@ -635,37 +635,12 @@
       color: #8e8672;
     }
     .ov-body.modes-grid button.active .m-d { color: rgba(26,40,30,0.72); }
-    /* ---- the corner card ----
-       Your numbers for the mode on screen, one line under the gear: BEST,
-       then your world rank when your best places or the top ten's door
-       when it does not, the chooser and kickoff simplification rules
-       intact. Absolute in the overlay's corner, so the centered body never
-       has to make room for it. */
-    .corner-card {
-      display: block; position: absolute;
-      top: 56px; right: 18px;
-      text-align: right; pointer-events: none;
-    }
-    .cc-tag {
-      font-family: 'Barlow', sans-serif; font-weight: 700;
-      font-size: 10px; letter-spacing: 2.5px; color: var(--gold);
-    }
-    .cc-line {
-      margin-top: 3px;
-      font-family: 'Barlow', sans-serif; font-weight: 700;
-      font-size: 11px; letter-spacing: 1.5px; color: #8e8672;
-    }
-    .cc-line b {
-      font-family: 'Anton', sans-serif; font-weight: 400;
-      font-size: 16px; letter-spacing: 0.5px; color: #e9e0cd;
-      padding-left: 2px;
-    }
   }
   /* ---- the wide kickoff ----
      The ready screen, solo board modes only. The legend stays the CENTERED
      hero it always was and grows a second line per row saying what the
      thing IS (the narrow rows keep their single line untouched); your
-     numbers moved to the corner card, because play testing put them in a
+     numbers moved behind the trophy, because play testing put them in a
      right rail first and the half empty column read as clutter. */
   @container ov (min-width: 520px) {
     .ov-body.kick-grid > .legend {
@@ -1234,9 +1209,6 @@
 
   /* ---- the shop ---- */
   .modal.shop .shelf-head { width: 100%; }
-  .wallet-row { justify-content: flex-start; align-items: center; gap: 10px; }
-  .wallet-row b { margin-left: auto; }
-  .wallet-row .btn.small { padding: 7px 14px; font-size: 12px; }
   /* No inner scroller, the shelf's own touch-trap rule: the modal scrolls */
   .shop-list { list-style: none; display: flex; flex-direction: column; gap: 6px; width: 100%; }
   .shop-list li {
@@ -1363,6 +1335,12 @@
     font-family: 'Barlow', sans-serif; font-size: 13px;
     font-weight: 700; letter-spacing: 1.2px; color: #d8d0bd;
   }
+  /* the purse sits under the player chip, same pill, gold number */
+  .gear.purse { top: 54px; font-size: 14px; }
+  .gear.purse #purseCoins {
+    font-family: 'Anton', sans-serif; font-weight: 400;
+    font-size: 14px; letter-spacing: 0.5px; color: var(--gold-bright);
+  }
   .modal.profile { gap: 11px; max-height: 86vh; overflow-y: auto; }
   .modal.profile .entry.wide { width: 100%; }
   .modal.profile select {
@@ -1457,17 +1435,11 @@
            needed its own door, one that works on every screen and width. -->
       <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">&#127942;</button>
       <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
+      <!-- The purse: the balance beside the player chip, and the door to the
+           shop. Coins stopped being a section buried in the profile sheet
+           because a currency you cannot see is a currency you forget. -->
+      <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden>&#129689;<span id="purseCoins"></span></button>
       <div class="overlay" id="overlay">
-        <!-- The corner card: your numbers for the mode on screen, one quiet
-             line under the gear, wide panels only. Play tested its way here:
-             the first wide layouts put these in a second column, and the
-             half empty rail read as clutter next to a game whose whole
-             character is centered. The body stays the hero; the numbers
-             watch from the corner. -->
-        <div class="corner-card" id="cornerCard" hidden>
-          <p class="cc-tag" id="cornerTag"></p>
-          <p class="cc-line" id="cornerLine"></p>
-        </div>
         <div class="ov-head">
           <h2 id="overlayTitle">KICK&nbsp;OFF</h2>
           <p id="overlayText">Eat to grow. Survive the pitch.</p>
@@ -1727,13 +1699,6 @@
              you are here rather than part of a round. Shows the LOCKED ones
              too: a list of only what you already have says nothing about
              what the game rewards, which is most of why badges exist. -->
-        <!-- The wallet. Coins are minted by the validator for badges and
-             validated rounds; this is the read side, one line, and it shows
-             even at zero so a new player learns coins exist. The shop that
-             spends them is the next piece. -->
-        <div class="shelf" id="profWallet" hidden>
-          <div class="shelf-head wallet-row"><span>COINS</span><b id="walletCoins"></b><button class="btn small" id="shopOpen">SHOP</button></div>
-        </div>
         <div class="shelf" id="profShelf" hidden>
           <div class="shelf-head"><span>ACHIEVEMENTS</span><b id="shelfCount"></b></div>
           <ol class="shelf-list" id="shelfList"></ol>
@@ -3861,7 +3826,7 @@
     // and account switch, applied through applyWorn, the one door. Fire and
     // forget: a dead network keeps the cached outfit, never blocks the game.
     sbRpc('pitch_snake_my_wallet', {})
-      .then(w => { if (w && typeof w.coins === 'number') applyWorn(w.skin, w.hat); })
+      .then(w => { if (w && typeof w.coins === 'number') takeWallet(w); })
       .catch(() => {});
     try {
       const prof = await sbRpc('pitch_snake_get_profile', {});
@@ -4409,11 +4374,11 @@
       // rules it sat over
       overlayText.textContent = STRAPLINES[mode] || STRAPLINES.classic;
     }
-    // your numbers ride the corner on both menu screens
-    fillCorner(listScreen || kickScreen);
-    // the trophy is menu furniture: mid-round it is a distraction next to
-    // the settings gear, which stays because pausing for settings is play
+    // the trophy and the purse are menu furniture: mid-round they distract
+    // next to the settings gear, which stays because pausing for settings
+    // is play; the purse also waits until it has a number to show
     boardsBtn.hidden = !onMenu;
+    purseBtn.hidden = !onMenu || !purseKnown;
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     // The level screen borrows the chooser's footer: START plays the level
@@ -4584,59 +4549,9 @@
     });
   }
 
-  // ---- the corner card ----
-  // Your numbers for the mode on screen, filled whenever the kickoff or the
-  // chooser is up and shown only where the container query has room. One
-  // tag and one line, the simplification rules intact: BEST, then your
-  // world rank when your best places OR the door into the top ten when it
-  // does not, never both. The board rows come from one fetch per mode per
-  // session, held back on narrow panels and degraded silently: a dead
-  // network shortens the line, never the game.
-  const railTops = {};   // ruleMode -> board rows; false is a fetch that failed
-  // Where a best stands on a fetched board: an equal row is read as your
-  // own, because a best that reached the board is on it. 0 = does not place.
-  function boardRank(top, myBest) {
-    if (!myBest) return 0;
-    const i = top.findIndex(r => r.score <= myBest);
-    return i >= 0 ? i + 1 : (top.length < MAX_ENTRIES ? top.length + 1 : 0);
-  }
-  const cornerCard = document.getElementById('cornerCard');
-  const cornerTag = document.getElementById('cornerTag');
-  const cornerLine = document.getElementById('cornerLine');
-  function fillCorner(show) {
-    const solo = mode === 'classic' || mode === 'speedrun' || mode === 'survival';
-    if (!show || !solo) { cornerCard.hidden = true; return; }
-    const rm = ruleMode();
-    const myBest = bestByMode[rm] || 0;
-    let top = railTops[rm];
-    if (top === undefined && sbOn() && overlay.clientWidth >= 540) {
-      railTops[rm] = null;
-      sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm })
-        .then(rows => { railTops[rm] = asList(rows).filter(r => r && typeof r.score === 'number'); })
-        .catch(() => { railTops[rm] = false; })
-        .then(() => {
-          // a stale settle repaints only a card that is still up
-          if (!cornerCard.hidden) refreshModeUI();
-        });
-      top = null;
-    }
-    cornerTag.textContent = 'YOUR ' + (RULE_LABELS[rm] || '');
-    cornerLine.textContent = '';
-    const put = (label, val) => {
-      if (cornerLine.childNodes.length) cornerLine.append(' \u00b7 ');
-      cornerLine.append(label + ' ');
-      const b = document.createElement('b');
-      b.textContent = val;
-      cornerLine.appendChild(b);
-    };
-    put('BEST', myBest > 0 ? myBest : '\u2014');
-    if (Array.isArray(top)) {
-      const rank = boardRank(top, myBest);
-      if (rank) put('WORLD', '#' + rank);
-      else put('TOP TEN AT', top.length < MAX_ENTRIES ? 'OPEN' : top[MAX_ENTRIES - 1].score + 1);
-    }
-    cornerCard.hidden = false;
-  }
+  // one board read per mode per session, shared by the trophy's boards
+  // sheet; false is a fetch that failed and retries on the next chooser visit
+  const railTops = {};
 
   modesBtn.addEventListener('click', () => {
     if (state !== 'ready' && state !== 'dead') return;
@@ -6228,8 +6143,6 @@
   const profShelf = document.getElementById('profShelf');
   const shelfList = document.getElementById('shelfList');
   const shelfCount = document.getElementById('shelfCount');
-  const profWallet = document.getElementById('profWallet');
-  const walletCoins = document.getElementById('walletCoins');
 
   // ---- flags: drawn, not typed ----
   // A regional-indicator pair is only a flag if the platform ships flag
@@ -6363,19 +6276,11 @@
   let shelfGen = 0;
   async function loadShelf() {
     const gen = ++shelfGen;
-    if (!sbOn() || !sbToken) { profShelf.hidden = true; profWallet.hidden = true; return; }
-    let list = null, wallet = null;
-    [list, wallet] = await Promise.all([
-      sbRpc('pitch_snake_my_achievements', {}).catch(() => null),
-      sbRpc('pitch_snake_my_wallet', {}).catch(() => null),
-    ]);
+    if (!sbOn() || !sbToken) { profShelf.hidden = true; return; }
+    let list = null;
+    try { list = await sbRpc('pitch_snake_my_achievements', {}); }
+    catch (e) { list = null; }
     if (gen !== shelfGen) return;
-    // the wallet line shows even at zero, so a new player learns coins exist;
-    // it hides only when the server cannot say
-    if (wallet && typeof wallet.coins === 'number') {
-      walletCoins.textContent = wallet.coins;
-      profWallet.hidden = false;
-    } else profWallet.hidden = true;
     if (!Array.isArray(list) || !list.length) { profShelf.hidden = true; return; }
     const got = list.filter(a => a.at).length;
     shelfCount.textContent = got + ' / ' + list.length;
@@ -6427,7 +6332,9 @@
   const shopCoins = document.getElementById('shopCoins');
   const shopNote = document.getElementById('shopNote');
   const shopClose = document.getElementById('shopClose');
-  const shopOpen = document.getElementById('shopOpen');
+  const purseBtn = document.getElementById('purseBtn');
+  const purseCoins = document.getElementById('purseCoins');
+  let purseKnown = false;   // the purse waits until a wallet has answered
   let shopCatalog = null;   // [{id, kind, name, price}], the server's word
   let shopWallet = null;    // the last wallet json the server handed back
   let shopBusy = false;
@@ -6443,13 +6350,15 @@
     'no session': 'Sign-in has not settled. Try again in a moment.',
   };
 
-  // one wallet, every reader: the shop's number, the sheet's number, and the
-  // snake's clothes all repaint from the same server answer
+  // one wallet, every reader: the shop's number, the purse beside the
+  // player chip, and the snake's clothes all repaint from the same server
+  // answer
   function takeWallet(w) {
     shopWallet = w;
     shopCoins.textContent = w.coins;
-    walletCoins.textContent = w.coins;
-    profWallet.hidden = false;
+    purseCoins.textContent = w.coins;
+    purseKnown = true;
+    refreshModeUI();   // the purse shows once there is a number to show
     applyWorn(w.skin, w.hat);
   }
 
@@ -6596,14 +6505,14 @@
     renderShop();
   }
 
-  shopOpen.addEventListener('click', openShop);
+  purseBtn.addEventListener('click', openShop);
   shopClose.addEventListener('click', () => { shopModal.hidden = true; });
 
   // ---- the boards sheet ----
   // The world top tens on demand, behind the trophy: the death screen shows
   // a board only when your round places on it, so the curious needed a door
   // of their own. Feeds from the same one-fetch-per-mode session cache the
-  // corner card fills (railTops); unreachable falls back to this device's
+  // chooser retries refill (railTops); unreachable falls back to this device's
   // own list for the mode and says so.
   const boardsModal = document.getElementById('boardsModal');
   const boardsList = document.getElementById('boardsList');
