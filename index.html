@@ -526,36 +526,24 @@
      body splits, which is why the change reads as the board moving beside
      the result rather than as a different screen. */
   @container ov (min-width: 520px) {
+    /* One centered column, since play testing: the split put the board
+       beside the result on every death, and a board you are not on is
+       noise, so now it appears only when your round places (boardWanted)
+       and the boards live behind the trophy for the curious. The result
+       panel keeps the score as the centered hero. */
     .ov-body.two-col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      column-gap: 26px;
-      row-gap: 0;
-      align-items: start;
-      justify-content: stretch;
-      align-content: start;
       width: 100%;
-      max-width: 660px;
+      max-width: 480px;
       text-align: center;
     }
-    /* left column: the result and everything that speaks about YOUR round */
     .ov-body.two-col > .res-col {
-      display: flex; flex-direction: column; align-items: stretch;
-      grid-column: 1; grid-row: 1; min-width: 0;
+      display: flex; flex-direction: column; align-items: center;
     }
-    .ov-body.two-col .result { display: block; }
+    .ov-body.two-col .result { display: block; text-align: center; width: auto; }
     .ov-body.two-col .entry,
     .ov-body.two-col .save-note,
     .ov-body.two-col .badges,
     .ov-body.two-col .acct { margin-top: 12px; }
-    /* right column: the board, which is the reason for the second column */
-    .ov-body.two-col > .board-head { grid-column: 2; grid-row: 1; align-self: start; }
-    .ov-body.two-col > .standings {
-      grid-column: 2; grid-row: 1; align-self: start;
-      width: 100%; margin: 24px 0 0;
-    }
-    /* the caption belongs to neither, so it sits under both */
-    .ov-body.two-col > .mode-caption { grid-column: 1 / -1; grid-row: 2; }
   }
   /* ---- the wide chooser ----
      Same threshold and the same two measurement traps as the result screen
@@ -601,15 +589,19 @@
       background: var(--accent, var(--gold));
       box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
     }
+    /* A light chip behind every glyph, both states: half the emoji set is
+       dark art (the graduation cap, the trophy's base) and vanished on the
+       tile's own dark. line-height 0 kills the emoji font's leading, which
+       floated every glyph high of centre. */
     .ov-body.modes-grid .m-g {
       display: grid; place-items: center; flex: 0 0 auto;
       width: clamp(30px, 5.4cqw, 44px); height: clamp(30px, 5.4cqw, 44px);
       border-radius: 8px; border: 1px solid var(--accent, var(--gold));
-      background: rgba(33,30,26,0.55);
-      font-size: clamp(15px, 2.9cqw, 22px); line-height: 1;
+      background: rgba(244,236,216,0.92);
+      font-size: clamp(15px, 2.9cqw, 22px); line-height: 0;
     }
     .ov-body.modes-grid button.active .m-g {
-      background: rgba(26,40,30,0.26); border-color: rgba(26,40,30,0.4);
+      background: rgba(244,236,216,0.95); border-color: rgba(26,40,30,0.35);
     }
     .ov-body.modes-grid .m-txt {
       display: flex; flex-direction: column;
@@ -1173,13 +1165,6 @@
   }
   .res-note { font-size: 14px; color: #b7ac93; margin-top: 12px; line-height: 1.35; }
   .res-note b { color: var(--gold-bright); font-weight: 700; }
-  .res-rows { margin-top: 18px; display: flex; flex-direction: column; gap: 9px; width: 100%; }
-  .res-rows div {
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-size: 13px; color: #8e8672; padding-bottom: 8px;
-    border-bottom: 1px solid rgba(194,162,90,0.15);
-  }
-  .res-rows b { font-family: 'Anton', sans-serif; font-size: 18px; color: #e9e0cd; letter-spacing: 0.5px; }
   /* ---- the achievement shelf ---- */
   .shelf { width: 100%; text-align: left; }
   .shelf-head {
@@ -1223,6 +1208,27 @@
     margin-left: auto; padding-left: 8px;
     font-family: 'Anton', sans-serif; font-size: 13px; color: var(--gold-deep);
   }
+  /* ---- the boards sheet ---- */
+  .board-chips { display: flex; gap: 8px; justify-content: center; }
+  .board-chips button {
+    font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
+    font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.2);
+    color: var(--text);
+  }
+  .board-chips button.active { background: var(--gold); border-color: var(--gold); color: #211e1a; }
+  .boards-list { list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  .boards-list li {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 9px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.10);
+    color: var(--text);
+  }
+  .boards-list .rk { flex: 0 0 20px; color: var(--gold-deep); font-weight: 700; }
+  .boards-list .nm { flex: 1; text-align: left; letter-spacing: 1px; }
+  .boards-list .sc { font-family: 'Anton', sans-serif; font-size: 15px; letter-spacing: 0.5px; }
+  .boards-list .empty { justify-content: center; color: var(--muted); font-weight: 500; }
+
   /* ---- the shop ---- */
   .modal.shop .shelf-head { width: 100%; }
   .wallet-row { justify-content: flex-start; align-items: center; gap: 10px; }
@@ -1346,6 +1352,8 @@
   .speed-row button:disabled, .switch:disabled { opacity: 0.4; cursor: default; }
 
   /* ---- player chip + profile sheet ---- */
+  /* the trophy sits beside the gear; a slightly smaller glyph, the same coin */
+  .gear.boards { right: 54px; font-size: 16px; }
   .gear.who {
     left: 8px; right: auto; width: auto; min-width: 38px;
     padding: 0 12px; border-radius: 19px; gap: 5px;
@@ -1441,6 +1449,10 @@
       <div class="wall-banner bolt-banner" id="boltBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
+      <!-- The boards live behind the trophy now: the death screen shows the
+           top ten only when your round places on it, so browsing the boards
+           needed its own door, one that works on every screen and width. -->
+      <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">&#127942;</button>
       <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
       <div class="overlay" id="overlay">
         <!-- The corner card: your numbers for the mode on screen, one quiet
@@ -1597,7 +1609,6 @@
           <p class="res-tag">YOU SCORED</p>
           <div class="res-score" id="resScore">0</div>
           <p class="res-note" id="resNote"></p>
-          <dl class="res-rows" id="resRows"></dl>
         </div>
         <div class="entry" id="entry" style="display:none">
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
@@ -1734,6 +1745,23 @@
          previews draw with the SAME ramps and hat art the pitch uses, so a
          preview cannot lie. Later in the DOM than the profile sheet on
          purpose: it opens above it and DONE lands you back on the sheet. -->
+    <!-- The boards sheet: every mode's world top ten, browsable on demand
+         from the trophy button. The death screen stopped showing a board
+         you are not on; this is where the curious go instead. -->
+    <div class="modal-backdrop" id="boardsModal" hidden>
+      <div class="modal boards">
+        <div class="modal-title">TOP 10 WORLDWIDE</div>
+        <div class="board-chips" id="boardChips">
+          <button data-bmode="classic" class="active">CLASSIC</button>
+          <button data-bmode="speedrun">SPEED RUN</button>
+          <button data-bmode="survival">SURVIVAL</button>
+        </div>
+        <ol class="boards-list" id="boardsList"></ol>
+        <p class="save-note soft" id="boardsNote" hidden></p>
+        <button class="btn small" id="boardsClose">DONE</button>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="shopModal" hidden>
       <div class="modal shop">
         <div class="modal-title">SHOP</div>
@@ -2394,16 +2422,6 @@
   // whether it is visible is the container query's business and not this
   // function's.
   const SURVIVAL_UNIT = (n) => n === 1 ? '1 second' : n + ' seconds';
-  // one fact, one row: label left, value right in Anton. The result panel
-  // and the chooser's rail both speak this shape.
-  function factRow(dl, k, v, gold) {
-    if (v === null || v === undefined) return;
-    const d = document.createElement('div');
-    const s1 = document.createElement('span'); s1.textContent = k;
-    const s2 = document.createElement('b'); s2.textContent = v;
-    if (gold) s2.style.color = 'var(--gold-bright)';
-    d.append(s1, s2); dl.appendChild(d);
-  }
   function fillResult(score, reason) {
     const seconds = ruleMode() === 'survival';
     resScore.textContent = score;
@@ -2422,13 +2440,9 @@
       resNote.textContent = off === 0 ? 'Level with your best.'
         : (seconds ? SURVIVAL_UNIT(off) : off + (off === 1 ? ' point' : ' points')) + ' off your best.';
     }
-    resRows.innerHTML = '';
-    const row = (k, v, gold) => factRow(resRows, k, v, gold);
-    row(beatBest ? 'Previous best' : 'Your best', prev > 0 ? prev : '\u2014');
-    row('Mode', RULE_LABELS[ruleMode()]);
-    row('Ended', reason === 'wall' ? 'THE WALLS' : reason === 'ghost' ? 'A GHOST'
-              : reason === 'tnt' ? 'TNT' : reason === 'time' ? 'FULL TIME'
-              : reason === 'self' ? 'YOURSELF' : '\u2014');
+    // No fact rows any more: the mode is on the REMATCH button, how it
+    // ended is in the strapline, and the best context lives in the note
+    // above. Facts the screen already tells once do not get a table.
   }
 
   function onDeath(reason) {
@@ -2448,6 +2462,9 @@
     badgeNote.hidden = true;      // last round's rewards are not this round's
     lastEarned = null;
     lastCoins = 0;
+    // a tournament is a small named field where every entry belongs; the
+    // world boards wait for askIfItPlaces or a landed save to earn the space
+    boardWanted = mode === 'tourney';
     saveBtn.disabled = false;
     nameInput.disabled = false;
     // a profile means the name is already known: asked once, never again
@@ -4100,6 +4117,8 @@
     if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
     if (!list) return;                   // a newer render owns the screen
     if (placesOnBoard(list, sc)) {
+      // the round placed: the board earns its screen space, with your row
+      boardWanted = true;
       // a known name is never asked for again: the profile answered it, so
       // the round goes straight to the board under it
       if (sbProfile && sbProfile.name) { autoSubmit(gen); return; }
@@ -4172,6 +4191,7 @@
     try {
       const key = await saveScore(name, g.score);
       showBadges(lastEarned, lastCoins);
+      boardWanted = true;   // a saved row is a row worth showing
       await renderStandings(key);
       entryWanted = false;
       refreshModeUI();
@@ -4295,6 +4315,7 @@
   let lastRunKey = null;     // which fixture the finished round belonged to
   let tScreen = false;       // inside the chooser: the tournament step instead of the list
   let entryWanted = false;   // the death screen decided an entry belongs; refreshModeUI applies it
+  let boardWanted = false;   // the board shows on death only when this round placed on it
 
   function persistModeState() {
     try {
@@ -4449,15 +4470,17 @@
     } else {
       levelBrief.hidden = true;
     }
-    const showBoard = deadPanels && mode !== 'levels';
+    // The board earns its place on the death screen: it shows only when
+    // this round placed on it (or a save just landed a row), because ten
+    // rows you are not in is noise and the trophy button browses the boards
+    // on demand. A tournament board still always shows, since a small named
+    // field is one every entry belongs to.
+    const deadResult = deadPanels && mode !== 'levels';
+    const showBoard = deadResult && boardWanted;
     standingsEl.style.display = showBoard ? 'block' : 'none';
     boardHead.style.display = showBoard ? 'block' : 'none';
-    // Two columns exactly when there is a board to put in the second one.
-    // The class only ARMS the layout; whether it actually splits is the
-    // container query's call, so a narrow panel silently keeps one column
-    // and no JS anywhere has to know how wide the arena is.
-    ovBody.classList.toggle('two-col', showBoard);
-    resultPanel.hidden = !showBoard;
+    ovBody.classList.toggle('two-col', deadResult);
+    resultPanel.hidden = !deadResult;
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     // one quiet line, at the one moment the pitch sells itself: a score just
     // went onto the world board and the identity under it is still anonymous
@@ -4545,7 +4568,6 @@
   const resultPanel = document.getElementById('resultPanel');
   const resScore = document.getElementById('resScore');
   const resNote = document.getElementById('resNote');
-  const resRows = document.getElementById('resRows');
   function markOverflow() {
     requestAnimationFrame(() => {
       ovBody.classList.toggle('is-scrollable', ovBody.scrollHeight > ovBody.clientHeight + 2);
@@ -4634,8 +4656,10 @@
     if (state === 'ready') newRound();   // the clock preview and the next round follow the mode
     else {
       // the finished round belongs to the mode it was played under: switching
-      // now retires its entry form and shows the new mode's board instead
+      // retires its entry form, and the new mode gets no board, because no
+      // round of yours just placed there (the trophy browses on demand)
       retireEntry();
+      boardWanted = false;
       saveNote.hidden = true;
       renderStandings();
     }
@@ -6564,6 +6588,87 @@
 
   shopOpen.addEventListener('click', openShop);
   shopClose.addEventListener('click', () => { shopModal.hidden = true; });
+
+  // ---- the boards sheet ----
+  // The world top tens on demand, behind the trophy: the death screen shows
+  // a board only when your round places on it, so the curious needed a door
+  // of their own. Feeds from the same one-fetch-per-mode session cache the
+  // corner card fills (railTops); unreachable falls back to this device's
+  // own list for the mode and says so.
+  const boardsModal = document.getElementById('boardsModal');
+  const boardsList = document.getElementById('boardsList');
+  const boardsNote = document.getElementById('boardsNote');
+  const boardChips = document.getElementById('boardChips');
+  const boardsBtn = document.getElementById('boardsBtn');
+  const boardsClose = document.getElementById('boardsClose');
+  let boardsMode = 'classic';
+  function localListFor(rm) {
+    try {
+      const key = rm === 'classic' ? 'snakeStandings' : 'snakeStandings.' + rm;
+      return asLocal(JSON.parse(localStorage.getItem(key) || '[]'));
+    } catch (e) { return []; }
+  }
+  async function renderBoards() {
+    for (const b of boardChips.querySelectorAll('button')) {
+      b.classList.toggle('active', b.dataset.bmode === boardsMode);
+    }
+    const rm = boardsMode;
+    boardsNote.hidden = true;
+    let rows = railTops[rm];
+    if (!Array.isArray(rows)) {
+      boardsList.innerHTML = '';
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = '\u2026';
+      boardsList.appendChild(li);
+      if (sbOn()) {
+        try {
+          const got = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm });
+          rows = asList(got).filter(r => r && typeof r.score === 'number');
+          railTops[rm] = rows;
+        } catch (e) { rows = null; }
+      }
+      // the sheet moved on while this was in the air: its render owns the list
+      if (boardsMode !== rm || boardsModal.hidden) return;
+    }
+    boardsList.innerHTML = '';
+    let note = '';
+    if (!Array.isArray(rows)) {
+      rows = localListFor(rm).slice(0, MAX_ENTRIES);
+      note = 'Could not reach the world board. Showing this device.';
+    }
+    if (!rows.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'No scores yet. The board has room.';
+      boardsList.appendChild(li);
+    }
+    rows.forEach((e, i) => {
+      const li = document.createElement('li');
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const fl = document.createElement('span'); fl.className = 'flag fl-gap';
+      paintFlag(fl, e.country);
+      if (fl.hidden) { fl.hidden = false; fl.style.backgroundImage = 'none'; }
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name;
+      const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = e.score;
+      li.append(rk, fl, nm, sc);
+      boardsList.appendChild(li);
+    });
+    if (note) { boardsNote.textContent = note; boardsNote.hidden = false; }
+  }
+  boardsBtn.addEventListener('click', () => {
+    const rm = ruleMode();
+    boardsMode = (rm === 'classic' || rm === 'speedrun' || rm === 'survival') ? rm : 'classic';
+    boardsModal.hidden = false;
+    renderBoards();
+  });
+  boardChips.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    boardsMode = b.dataset.bmode;
+    renderBoards();
+  });
+  boardsClose.addEventListener('click', () => { boardsModal.hidden = true; });
 
   function openProfile() {
     buildCountries();
