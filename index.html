@@ -1852,6 +1852,62 @@
   import { createSession, channelTransport } from './packages/net/net.js';
   import { ENGINE_VERSION } from './packages/engine/engine.js';
 
+  // ---- the move to pitchsnake.com ----
+  // Changing origins strands localStorage, and here that is not a cache: it
+  // is the anonymous auth session that OWNS a player's coins, badges and
+  // rating, plus their device bests and level progress. So the old origin
+  // hands its keys over exactly once, client to client, in a URL fragment
+  // (never sent to any server, stripped from history on arrival).
+  //
+  // The exporter runs only on the old github.io origin, and only once the
+  // new home actually answers, so shipping it before the DNS exists is
+  // safe: the probe fails and nothing moves. ?stay=1 is the escape hatch
+  // for probes and harnesses that need the old origin to hold still.
+  //
+  // The importer runs FIRST, before anything below reads storage, and only
+  // into a fresh browser: a visitor who already has bests on the new origin
+  // keeps them, and the stale import is dropped rather than merged.
+  const MIG_OLD_HOST = 'yonureker.github.io';
+  const MIG_NEW_HOME = 'https://pitchsnake.com/';
+  (() => {
+    try {
+      if (location.hash.startsWith('#mig=')) {
+        // the URL is cleaned FIRST, so even a bad payload leaves no token in
+        // the address bar or history; atob demands its padding back (it
+        // throws on lengths off the multiple of four, silently eaten by the
+        // catch below, which is exactly how this shipped broken to the test)
+        let b64 = location.hash.slice(5).replace(/-/g, '+').replace(/_/g, '/');
+        history.replaceState(null, '', location.pathname + location.search);
+        b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+        const payload = JSON.parse(atob(b64));
+        if (payload && typeof payload === 'object' && !localStorage.getItem('snakeBestModes')) {
+          for (const [k, v] of Object.entries(payload)) {
+            if (typeof k === 'string' && k.startsWith('snake') && typeof v === 'string') {
+              localStorage.setItem(k, v);
+            }
+          }
+        }
+      }
+    } catch (e) { /* a bad payload is a fresh start, never a broken boot */ }
+  })();
+  if (location.hostname === MIG_OLD_HOST &&
+      !new URLSearchParams(location.search).has('stay') && window === window.top) {
+    // fire and forget: the page boots normally underneath, and only a live
+    // answer from the new home turns the visit into a move
+    fetch(MIG_NEW_HOME + 'packages/engine/engine.js', { method: 'HEAD', signal: AbortSignal.timeout(4000) })
+      .then((r) => {
+        if (!r.ok) return;
+        const bag = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('snake')) bag[k] = localStorage.getItem(k);
+        }
+        const b64 = btoa(JSON.stringify(bag)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        location.replace(MIG_NEW_HOME + '#mig=' + b64);
+      })
+      .catch(() => {});
+  }
+
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const overlay = document.getElementById('overlay');
