@@ -554,10 +554,10 @@
      always has. */
   @container ov (min-width: 520px) {
     .ov-body.modes-grid > .mode-row {
-      /* one column, stacked, since play testing: six wide rows with the
-         glyph and the sentence read top to bottom the way the narrow list
-         always has, and nothing sits beside anything */
-      width: min(100%, 480px); max-width: none;
+      /* one column, stacked, and BARELY wider than the narrow list: the
+         same compact pills the phone has always had, dressed with the
+         glyph and the sentence. 480 was tried and read as stretched. */
+      width: min(100%, 340px); max-width: none;
       display: grid;
       grid-template-columns: 1fr;
       grid-auto-rows: 1fr;
