@@ -744,9 +744,28 @@
   /* what the round just earned. Gold, because it is a reward and not a
      warning, and above the account offer because it is the reason to want
      an account in the first place. */
+  /* Four at once is not the rare case, it is what a good round looks like,
+     and four centred sentences wrapping mid-phrase read as an error log
+     rather than a reward. One row each, left aligned, the mark carrying the
+     "earned" so the name does not have to. */
   .badges {
-    display: flex; flex-direction: column; gap: 4px; align-items: center;
-    max-width: 280px; text-align: center;
+    display: flex; flex-direction: column; gap: 4px; align-items: stretch;
+    max-width: 300px; text-align: left;
+  }
+  .badges .bg-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 9px; border-radius: 6px;
+    background: rgba(194,162,90,0.14); border: 1px solid rgba(194,162,90,0.4);
+  }
+  .badges .bg-pip {
+    flex: 0 0 16px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); color: #1a281e;
+    display: grid; place-items: center; font-size: 9px; font-weight: 800;
+  }
+  .badges .bg-txt { min-width: 0; }
+  .badges .bg-note {
+    display: block; font-family: 'Barlow', sans-serif; font-weight: 500;
+    font-size: 10.5px; letter-spacing: 0; color: #b7ac93; margin-top: 1px;
   }
   .badges[hidden] { display: none; }
   .badges b {
@@ -885,6 +904,43 @@
     border-bottom: 1px solid rgba(194,162,90,0.15);
   }
   .res-rows b { font-family: 'Anton', sans-serif; font-size: 18px; color: #e9e0cd; letter-spacing: 0.5px; }
+  /* ---- the achievement shelf ---- */
+  .shelf { width: 100%; text-align: left; }
+  .shelf-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px;
+    letter-spacing: 2px; color: var(--muted); margin-bottom: 7px;
+  }
+  .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--gold-deep); letter-spacing: 1px; }
+  /* No scroller of its own: the profile sheet already scrolls (max-height
+     86vh), and a scroll area inside a scroll area is a trap on touch, where
+     the inner one swallows the drag that was meant to move the sheet. */
+  .shelf-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+  .shelf-list li {
+    display: flex; align-items: flex-start; gap: 9px;
+    padding: 7px 9px; border-radius: 7px;
+    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.10);
+  }
+  /* earned reads as gold and lit; locked keeps the same shape so the shelf
+     is a set with gaps rather than two different lists */
+  .shelf-list li.got { background: rgba(194,162,90,0.16); border-color: rgba(194,162,90,0.5); }
+  .shelf-list .pip {
+    flex: 0 0 20px; width: 20px; height: 20px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 11px; font-weight: 700;
+    background: rgba(33,30,26,0.10); color: var(--muted);
+    border: 1px solid rgba(33,30,26,0.18);
+  }
+  .shelf-list li.got .pip {
+    background: var(--gold); color: #fff; border-color: var(--gold-deep);
+  }
+  .shelf-list .txt { flex: 1; min-width: 0; }
+  .shelf-list .nm {
+    display: block; font-family: 'Barlow', sans-serif; font-weight: 700;
+    font-size: 11.5px; letter-spacing: 1.2px; color: var(--muted);
+  }
+  .shelf-list li.got .nm { color: var(--gold-deep); }
+  .shelf-list .dt { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .shelf-list li.got .dt { color: var(--text); }
   .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
   .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
   /* A long board buys back a row or two of its own height rather than making
@@ -1307,6 +1363,15 @@
           <button class="btn small ghostbtn" id="profSignOut">SIGN OUT</button>
         </div>
         <p class="save-note" id="profStatus" hidden></p>
+        <!-- The shelf. Behind the player chip because that is where a player
+             looks for their own things, and because a badge is part of who
+             you are here rather than part of a round. Shows the LOCKED ones
+             too: a list of only what you already have says nothing about
+             what the game rewards, which is most of why badges exist. -->
+        <div class="shelf" id="profShelf" hidden>
+          <div class="shelf-head"><span>ACHIEVEMENTS</span><b id="shelfCount"></b></div>
+          <ol class="shelf-list" id="shelfList"></ol>
+        </div>
         <button class="btn small" id="profileClose">DONE</button>
       </div>
     </div>
@@ -2985,11 +3050,19 @@
     if (!Array.isArray(earned) || !earned.length) { badgeNote.hidden = true; return; }
     for (const a of earned) {
       const row = document.createElement('div');
+      row.className = 'bg-row';
+      const pip = document.createElement('span');
+      pip.className = 'bg-pip';
+      pip.textContent = '\u2713';
+      const txt = document.createElement('span');
+      txt.className = 'bg-txt';
       const nm = document.createElement('b');
       nm.textContent = a.name || a.id;
       const note = document.createElement('span');
-      note.textContent = ' ' + (a.note || '');
-      row.append(nm, note);
+      note.className = 'bg-note';
+      note.textContent = a.note || '';
+      txt.append(nm, note);
+      row.append(pip, txt);
       badgeNote.appendChild(row);
     }
     badgeNote.hidden = false;
@@ -5344,6 +5417,9 @@
   const profWhoEmail = document.getElementById('profWhoEmail');
   const profSignOut = document.getElementById('profSignOut');
   const profStatus = document.getElementById('profStatus');
+  const profShelf = document.getElementById('profShelf');
+  const shelfList = document.getElementById('shelfList');
+  const shelfCount = document.getElementById('shelfCount');
 
   // ---- flags: drawn, not typed ----
   // A regional-indicator pair is only a flag if the platform ships flag
@@ -5470,9 +5546,51 @@
     }
   }
 
+  // The shelf. Every badge in the catalogue, the ones you hold lit and dated,
+  // the rest shown locked so the list says what the game rewards rather than
+  // only what you happen to have. Fire and forget like everything else that
+  // touches the server here: no shelf is a quieter sheet, never an error.
+  let shelfGen = 0;
+  async function loadShelf() {
+    const gen = ++shelfGen;
+    if (!sbOn() || !sbToken) { profShelf.hidden = true; return; }
+    let list;
+    try { list = await sbRpc('pitch_snake_my_achievements', {}); }
+    catch (e) { profShelf.hidden = true; return; }
+    if (gen !== shelfGen || !Array.isArray(list) || !list.length) { profShelf.hidden = true; return; }
+    const got = list.filter(a => a.at).length;
+    shelfCount.textContent = got + ' / ' + list.length;
+    shelfList.innerHTML = '';
+    for (const a of list) {
+      const li = document.createElement('li');
+      if (a.at) li.className = 'got';
+      const pip = document.createElement('span');
+      pip.className = 'pip';
+      pip.textContent = a.at ? '\u2713' : '\u00b7';
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = a.name || a.id;
+      const dt = document.createElement('span'); dt.className = 'dt';
+      // the note is what it takes; the date is proof you did it
+      dt.textContent = a.at ? shelfWhen(a.at) : (a.note || '');
+      txt.append(nm, dt);
+      li.append(pip, txt);
+      shelfList.appendChild(li);
+    }
+    profShelf.hidden = false;
+  }
+  function shelfWhen(iso) {
+    const t = Date.parse(iso);
+    if (!t) return 'Earned.';
+    return 'Earned ' + new Date(t).toLocaleDateString(undefined,
+      { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
   function openProfile() {
     buildCountries();
     refreshProfileSheet(true);
+    profShelf.hidden = true;      // last visit's shelf is not this visit's
+    void loadShelf();
     profileModal.hidden = false;
     padRehome();
   }

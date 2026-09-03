@@ -484,10 +484,23 @@ $$;
 -- hand it out deliberately. Note what is NOT handed out: record_round and
 -- seal_round take a user id or decide a rating, so they belong to the service
 -- role and to cron, never to a browser.
+--
+-- REVOKING FROM PUBLIC IS NOT ENOUGH, and this was shipped wrong once.
+-- Supabase grants EXECUTE to anon and authenticated in their own right, so a
+-- function revoked only from PUBLIC stays callable with the publishable key
+-- that sits in the page. record_round takes p_user, which means any browser
+-- could have written a seat for ANY player and then sealed the round at a
+-- moment of its choosing. Name the two roles explicitly, every time.
 revoke all on function public.pitch_snake_take_seat(text, integer, integer, text)     from public;
 revoke all on function public.pitch_snake_record_round(bigint, uuid, text, jsonb, bigint) from public;
 revoke all on function public.pitch_snake_seal_round(bigint)                          from public;
 revoke all on function public.pitch_snake_seal_due()                                  from public;
+revoke execute on function public.pitch_snake_record_round(bigint, uuid, text, jsonb, bigint) from anon, authenticated;
+revoke execute on function public.pitch_snake_seal_round(bigint)  from anon, authenticated;
+revoke execute on function public.pitch_snake_seal_due()          from anon, authenticated;
+grant execute on function public.pitch_snake_record_round(bigint, uuid, text, jsonb, bigint) to service_role;
+grant execute on function public.pitch_snake_seal_round(bigint) to service_role, postgres;
+grant execute on function public.pitch_snake_seal_due()         to service_role, postgres;
 revoke all on function public.pitch_snake_my_rating()                                 from public;
 revoke all on function public.pitch_snake_top_rated(text, integer)                    from public;
 revoke all on function public.pitch_snake_round_ratings(text, integer)                from public;

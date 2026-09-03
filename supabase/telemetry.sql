@@ -163,5 +163,67 @@ as $$
   where a.user_id = auth.uid() and auth.uid() is not null;
 $$;
 
-revoke all on function public.pitch_snake_my_achievements() from public;
-grant execute on function public.pitch_snake_my_achievements() to anon, authenticated;
+-- ------------------------------------------------- the catalogue mirror ----
+-- What each badge IS, so a player can see the ones they have NOT earned:
+-- a shelf that shows only what you already have tells you nothing about what
+-- the game rewards, which is most of the point of having badges at all.
+--
+-- The validator owns the real catalogue and this table is its MIRROR, pushed
+-- on every grant pass. That is deliberate: a second hand-maintained copy is
+-- the flag-sprite mistake (one artefact in three places, silently drifting),
+-- whereas a copy the authoritative source refreshes cannot drift for longer
+-- than one validated round. Display only; nothing here decides a grant.
+create table if not exists public.pitch_snake_achievement_catalogue (
+  id   text     primary key,
+  name text     not null,
+  note text     not null,
+  sort smallint not null default 0
+);
+
+alter table public.pitch_snake_achievement_catalogue enable row level security;
+revoke all on table public.pitch_snake_achievement_catalogue from anon, authenticated;
+
+drop function if exists public.pitch_snake_sync_achievements(jsonb);
+
+create or replace function public.pitch_snake_sync_achievements(p_list jsonb)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into public.pitch_snake_achievement_catalogue (id, name, note, sort)
+  select e.value->>'id', e.value->>'name', e.value->>'note', e.ordinality
+  from jsonb_array_elements(coalesce(p_list, '[]'::jsonb)) with ordinality e
+  where e.value->>'id' ~ '^[a-z0-9-]{1,40}$'
+  on conflict (id) do update
+    set name = excluded.name, note = excluded.note, sort = excluded.sort;
+$$;
+
+-- Every badge, with the date on the ones this player has. Ordered by the
+-- catalogue's own order so the shelf reads the way the validator lists them.
+drop function if exists public.pitch_snake_my_achievements();
+
+create or replace function public.pitch_snake_my_achievements()
+returns json
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select coalesce(json_agg(json_build_object(
+           'id', c.id, 'name', c.name, 'note', c.note, 'at', a.earned_at
+         ) order by c.sort, c.id), '[]'::json)
+  from public.pitch_snake_achievement_catalogue c
+  left join public.pitch_snake_achievements a
+         on a.achievement = c.id and a.user_id = auth.uid() and auth.uid() is not null;
+$$;
+
+revoke all on function public.pitch_snake_my_achievements()      from public;
+revoke all on function public.pitch_snake_sync_achievements(jsonb) from public;
+grant execute on function public.pitch_snake_my_achievements()   to anon, authenticated;
+-- Sync belongs to the validator's service role and to nobody else. Revoking
+-- from PUBLIC does not achieve that on its own: Supabase grants anon and
+-- authenticated separately, so a browser holding the publishable key could
+-- otherwise rewrite every badge's name and note.
+revoke execute on function public.pitch_snake_sync_achievements(jsonb) from anon, authenticated;
+grant  execute on function public.pitch_snake_sync_achievements(jsonb) to service_role;

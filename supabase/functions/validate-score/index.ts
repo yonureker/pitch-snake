@@ -499,6 +499,18 @@ async function grantAchievements(
   scoreId: number,
 ) {
   try {
+    // Mirror the catalogue for the shelf. The page has to be able to show
+    // the badges you have NOT earned, and a hand-kept second copy of this
+    // list is the flag-sprite mistake: one artefact in two places, drifting
+    // in silence. Pushed from the source of truth instead, so the mirror is
+    // never more than one validated round stale. Display only; nothing over
+    // there decides a grant, and a failure here must not cost a score.
+    const rpcSync = service.rpc.bind(service) as unknown as
+      (fn: string, args: Record<string, unknown>) => Promise<unknown>;
+    await rpcSync('pitch_snake_sync_achievements', {
+      p_list: ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, note: a.note })),
+    });
+
     const ctx = roundContext(game, mode);
     const hit = ACHIEVEMENTS.filter((a) => a.test(ctx));
     if (hit.length === 0) return [];
