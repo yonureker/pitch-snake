@@ -514,13 +514,19 @@
   html.touch .ov-head { gap: 6px; }
   html.touch #modeFooter .btn, html.touch #vsFooter .btn { padding: 10px 18px; font-size: 16px; }
   /* ---- two columns, only where the panel can hold them ----
-     620px is where a 300px column each side stops being cramped: a 1512x900
-     laptop (656) qualifies, a 1280x800 one (556) does not and keeps the
-     single column, and no touch device ever comes close. The head and the
+     520px is where a 250px column each side genuinely fits. Two traps sized
+     this number, both learned the hard way. The query measures the overlay's
+     CONTENT box, 20px narrower than the visible panel. And a real browser
+     window is shorter than its screen: fullscreen MacBook Chrome is a
+     1512x813 viewport, which makes the square panel 549px of content, not
+     the 636 a chrome-less 900-tall test viewport gives. The first ship used
+     620 and the laptop this was designed on never saw it. Measured content
+     widths: MacBook fullscreen 549, 1080p fullscreen 731, a 1280x800
+     laptop 476 (stays single column), phones 330 to 430. The head and the
      foot keep spanning, so the title and the actions do not move; only the
      body splits, which is why the change reads as the board moving beside
      the result rather than as a different screen. */
-  @container ov (min-width: 620px) {
+  @container ov (min-width: 520px) {
     .ov-body.two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -553,15 +559,18 @@
     .ov-body.two-col > .mode-caption { grid-column: 1 / -1; grid-row: 2; }
   }
   /* ---- the wide chooser ----
-     Same threshold, same reasoning as the result screen above: the panel is
-     square and tracks the arena, so only a panel that can genuinely hold two
-     columns gets them. The six modes become tiles in a two-column grid and a
-     side rail says what the lit one is and what you would be playing: your
-     best, the door into the top ten, walls, speed. Every size in here rides
-     cqw so a 656px laptop panel and a 1196px television get the same
-     composition, not the same pixels. On a narrow panel none of this exists
-     and the stack renders exactly as it always has. */
-  @container ov (min-width: 620px) {
+     Same threshold, same reasoning and the same two measurement traps as
+     the result screen above: the panel is square and tracks the arena, so
+     only a panel that can genuinely hold two columns gets them. The six
+     modes become tiles beside a side rail that says what the lit one is and
+     what you would be playing: your best, the door into the top ten, walls,
+     speed. The tile area picks its own column count (auto-fit at 190px), so
+     a 549px fullscreen laptop panel gets one clean column of tiles and 660
+     and up get the two-column grid. Every size in here rides cqw so those
+     and a 1196px television get the same composition, not the same pixels.
+     On a narrow panel none of this exists and the stack renders exactly as
+     it always has. */
+  @container ov (min-width: 520px) {
     /* the rail says what the mode is; the line under the title said it twice */
     .overlay.modes-open .ov-head .mode-desc { display: none; }
     .ov-body.modes-grid {
@@ -577,11 +586,13 @@
     .ov-body.modes-grid > .mode-row {
       width: auto; max-width: none;
       /* stretch to the rail's height and share it out, so the two columns
-         end together instead of the grid leaving a hole under itself */
+         end together instead of the grid leaving a hole under itself; the
+         1fr auto rows are what share it, whether six tiles land in one
+         column or three rows of two */
       align-self: stretch;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      grid-auto-rows: 1fr;
       gap: clamp(10px, 1.8cqw, 16px);
     }
     /* The tile: the mode's own border and ledge, the name wearing the slab
@@ -592,7 +603,9 @@
     .ov-body.modes-grid .stack-choice button {
       display: flex; align-items: center; text-align: left;
       gap: clamp(10px, 1.8cqw, 16px);
-      min-height: clamp(64px, 12.5cqw, 112px);
+      /* a floor, not the size: the stretched 1fr rows above set the real
+         height, three ways or six ways depending on the column count */
+      min-height: 48px;
       padding: clamp(8px, 1.6cqw, 14px) clamp(12px, 2.2cqw, 20px);
       border-radius: 9px;
       background: rgba(33,30,26,0.34);
@@ -4092,8 +4105,9 @@
       facts.push(['Your best', myBest > 0 ? myBest : '\u2014']);
       let top = railTops[rm];
       // the rail is this fetch's only reader, and a narrow panel never shows
-      // it, so a phone spends nothing here
-      if (top === undefined && sbOn() && overlay.clientWidth >= 620) {
+      // it, so a phone spends nothing here (clientWidth carries the 20px of
+      // padding the container query's content box does not)
+      if (top === undefined && sbOn() && overlay.clientWidth >= 540) {
         railTops[rm] = null;
         sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm })
           .then(rows => { railTops[rm] = asList(rows).filter(r => r && typeof r.score === 'number'); })
