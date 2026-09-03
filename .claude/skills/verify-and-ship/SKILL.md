@@ -102,18 +102,29 @@ Poll the build by commit SHA:
 gh api repos/yonureker/pitch-snake/pages/builds --jq '.[0] | .status + " " + .commit[0:7]'
 ```
 
-Then confirm content with a no-cache header and check `last-modified`:
+Then confirm content with a no-cache header, on BOTH origins. The game lives
+at https://pitchsnake.com (a Cloudflare Worker proxying Pages); the Pages
+origin stays live on purpose as the migration exporter, so one push must land
+on both:
 
 ```bash
-curl -s -H 'Cache-Control: no-cache' https://yonureker.github.io/pitch-snake/index.html -o /tmp/live.html
+curl -s -H 'Cache-Control: no-cache' https://yonureker.github.io/pitch-snake/index.html | shasum
+curl -s -H 'Cache-Control: no-cache' https://pitchsnake.com/index.html | shasum
+shasum index.html   # all three identical, or the deploy is not done
 ```
 
-Verify a marker unique to this change, and **always** verify that
-`packages/engine/engine.js` serves 200: the page cannot boot without it.
+If the domain will not resolve from this machine (a stale negative DNS cache
+from the migration day), pin an edge IP:
+`--resolve pitchsnake.com:443:$(dig +short pitchsnake.com @1.1.1.1 | head -1)`.
 
-The strongest confirmation is not a grep. Diff the served file against local
-(`shasum`) to prove the deployed bytes are the bytes you tested, or load the
-shipped module in the live page and read a constant back out of it.
+**Always** verify that `packages/engine/engine.js` serves 200 on the domain:
+the page cannot boot without it. And never set GitHub Pages' own
+custom-domain field: the Worker proxies github.io, and GitHub answering 301
+would loop it.
+
+The strongest confirmation is not a grep. The shasum triple above proves the
+deployed bytes are the bytes you tested; alternatively load the shipped
+module in the live page and read a constant back out of it.
 
 ## 7. Clean up
 

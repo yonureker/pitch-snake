@@ -1,6 +1,6 @@
 # Pitch Snake
 
-A monorepo (npm workspaces), deployed to GitHub Pages from `main` at the repo root; live at https://yonureker.github.io/pitch-snake/ .
+A monorepo (npm workspaces), deployed to GitHub Pages from `main` at the repo root; live at https://pitchsnake.com . The domain is a Cloudflare Worker (`cloudflare/pitchsnake-router.js`) proxying the Pages origin, which stays live at https://yonureker.github.io/pitch-snake/ on purpose: it is the always-on exporter for the localStorage migration (see "the move to pitchsnake.com" in index.html), because that storage holds the anonymous session that owns a player's coins, badges and rating. NEVER set GitHub Pages' own custom-domain field while the Worker proxies: github.io would answer 301 and the proxy would chase its own tail. One push serves both origins byte-identically.
 
 - `packages/engine/` - **the only copy of the rules.** Pure, seeded, deterministic ES module: no DOM, no canvas, no fetch, no timers, no `Math.random`. Imported raw by the web page, by the mobile app, and by the server-side replay validator. Its tests run with `node --test packages/engine/engine.test.js`.
 - `index.html` - the web game: renderer + app shell only, buildless, imports the engine as an ES module. Nothing in this file may decide gameplay.
@@ -179,4 +179,4 @@ The numbered rules above govern the hot path. Away from it:
 2. Page/module syntax: extract the script body to a `.mjs` and `node --check` it.
 3. Drive the page headless with a temporary `?vtest` hook (scratchpad `hook.py on/off`) plus the browser harness for render/UI, and a headless Chrome screenshot; remove the hook before committing (zero `vtest` references may remain).
 4. If the engine changed and mobile exists, `npx expo export` in `apps/mobile` must still bundle.
-5. Push to `main`, then poll the live URL for a marker unique to the change - including that `packages/engine/engine.js` itself serves 200 from Pages, since the page cannot boot without it.
+5. Push to `main`, then poll the Pages build by commit SHA and confirm BOTH origins (https://yonureker.github.io/pitch-snake/ and https://pitchsnake.com through the Worker) serve the same `shasum` as the local file - including that `packages/engine/engine.js` itself serves 200 on the domain, since the page cannot boot without it.
