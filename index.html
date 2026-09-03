@@ -2321,7 +2321,10 @@
     savePersonalBest();          // the round is over; that best is worth keeping
     fillResult(g.score, reason);
     const gen = ++deathGen;
-    if (g.score > 0 && worldBoard) askIfItPlaces(gen, g.score);
+    // the tournament entry under a known name submits itself too; the world
+    // board's version of this lives in askIfItPlaces, behind its ten-row gate
+    if (entryWanted && sbProfile && sbProfile.name) { entryWanted = false; autoSubmit(gen); }
+    else if (g.score > 0 && worldBoard) askIfItPlaces(gen, g.score);
     else renderStandings();
     refreshModeUI();
     overlay.classList.remove('hidden');
@@ -3799,6 +3802,9 @@
     if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
     if (!list) return;                   // a newer render owns the screen
     if (placesOnBoard(list, sc)) {
+      // a known name is never asked for again: the profile answered it, so
+      // the round goes straight to the board under it
+      if (sbProfile && sbProfile.name) { autoSubmit(gen); return; }
       entryWanted = true;
       refreshModeUI();
       setTimeout(() => nameInput.focus(), 60);
@@ -3809,6 +3815,23 @@
     saveNote.className = 'save-note soft';
     saveNote.hidden = false;
     submitSilently();          // it earned no place, but it may have earned a badge
+  }
+
+  // The form exists to ask a FIRST name, which becomes the profile; once a
+  // profile answers, a placing round submits itself under it and the screen
+  // says so in one quiet line. The player in the screenshot that forced
+  // this had a chip saying ONUR, a board row saying ONUR, and a form asking
+  // who they were. A failed save reopens the form through submitScore's own
+  // error path, so the retry stays a person's choice.
+  async function autoSubmit(gen) {
+    // the input is the name submitScore reads; the death-screen prefill can
+    // predate a profile that arrived late, so it is set here from the truth
+    nameInput.value = sbProfile.name;
+    await submitScore();
+    if (gen !== deathGen || state !== 'dead' || !savedThisRound) return;
+    saveNote.textContent = 'On the board as ' + sbProfile.name + '.';
+    saveNote.className = 'save-note soft';
+    saveNote.hidden = false;
   }
 
   // BEST is the player's own best, kept in this browser. It used to be the top
@@ -3856,10 +3879,14 @@
       refreshModeUI();
     } catch (e) {
       // a failed save must not lock the entry for the round; let them retry, and
-      // say why rather than leaving a button that silently did nothing
+      // say why rather than leaving a button that silently did nothing. The
+      // form is forced open because an autoSubmit failure arrives with it
+      // closed, and an error with no retry surface is a dead end.
       savedThisRound = false;
       saveBtn.disabled = false;
       nameInput.disabled = false;
+      entryWanted = true;
+      refreshModeUI();
       saveNote.textContent = 'Could not reach the leaderboard. Try again.';
       saveNote.className = 'save-note';   // a real error wears the red again
       saveNote.hidden = false;
