@@ -756,7 +756,6 @@
       text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
                    color-mix(in srgb, var(--gold) 55%, #12180f);
     }
-    .kick-num .prov { vertical-align: clamp(8px, 1.8cqw, 16px); }
     .kick-num > span {
       display: block; margin-top: 5px;
       font-family: 'Barlow', sans-serif; font-weight: 700;
@@ -1213,7 +1212,7 @@
   /* P for provisional, the chess convention: the number is real, it just has
      too few rounds behind it to be read as settled. Marked rather than
      withheld, or a new board is an empty box for weeks. */
-  .rt .prov, .lad .prov, .kick-num .prov {
+  .rt .prov, .lad .prov {
     font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
     color: var(--bg-deep, #211e1a); background: var(--gold);
     border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
@@ -1501,10 +1500,10 @@
                single line the narrow screens have always shown, lg-two is
                the wide kickoff's name-plus-explanation pair. applyLegend
                fills both; only the container query decides which renders. -->
-          <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-two"><span class="lg-name">Emoji</span><span class="lg-sub">any of them, the ordinary meal</span></span><span class="lg-val pos">+1</span></div>
-          <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-two"><span class="lg-name">Ringed emoji</span><span class="lg-sub">every sixth, if the streak holds</span></span><span class="lg-val pos">+5</span></div>
-          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-two"><span class="lg-name">TNT</span><span class="lg-sub">five points and five of your length</span></span><span class="lg-val neg">-5</span></div>
-          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-two"><span class="lg-name">Teleport window</span><span class="lg-sub">one paid trip a pair, both ways</span></span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-two"><span class="lg-name">Emoji</span><span class="lg-sub">snack on these to grow</span></span><span class="lg-val pos">+1</span></div>
+          <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-two"><span class="lg-name">Ringed emoji</span><span class="lg-sub">every sixth one, worth five</span></span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-two"><span class="lg-name">TNT</span><span class="lg-sub">five points gone, five shorter</span></span><span class="lg-val neg">-5</span></div>
+          <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-two"><span class="lg-name">Teleport window</span><span class="lg-sub">jump across the pitch, one trip</span></span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-two"><span class="lg-name">Walls, ghosts, yourself</span><span class="lg-sub">the pitch bites back</span></span><span class="lg-val die">DIE</span></div>
         </div>
         <!-- The kickoff's side rail, wide panels only (the container query
@@ -1802,6 +1801,13 @@
   const MODE_ACCENT = {
     versus: ['#7dbf5c', '#4e7d38'],
     tourney: ['#a878d8', '#6d4a90'],
+  };
+  // the ready screen's one-line promise, per mode, because a strapline that
+  // contradicts the legend under it reads as a broken screen
+  const STRAPLINES = {
+    classic: 'Eat to grow. Survive the pitch.',
+    speedrun: 'Sixty seconds. Eat fast.',
+    survival: 'Stay short. The clock is your score.',
   };
   const MODE_DESC = {
     classic: 'No time limit. Beat your best, take a top ten spot, brag about your snake skills.',
@@ -3991,15 +3997,15 @@
       rows[i].querySelector('.lg-sub').textContent = sub;
     };
     if (ruleMode() === 'survival') {
-      set(0, 'Emoji, one shorter', '-1', 'pos', 'Emoji', 'eating trims you, and short lives longer');
-      set(1, 'Emoji with a ring, 5 shorter', '-5', 'pos', 'Ringed emoji', 'every sixth, a five segment trim');
-      set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', 'five longer, which is the trap here');
-      set(3, 'Teleport, 5 shorter', '-5', 'pos', 'Teleport window', 'one trip a pair, five shorter');
+      set(0, 'Emoji, one shorter', '-1', 'pos', 'Emoji', 'one shorter. Shorter is safer');
+      set(1, 'Emoji with a ring, 5 shorter', '-5', 'pos', 'Ringed emoji', 'five shorter at once');
+      set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', 'five LONGER. Stay away');
+      set(3, 'Teleport, 5 shorter', '-5', 'pos', 'Teleport window', 'hop across, five shorter');
     } else {
-      set(0, 'Emoji', '+1', 'pos', 'Emoji', 'any of them, the ordinary meal');
-      set(1, 'Emoji with a ring', '+5', 'pos', 'Ringed emoji', 'every sixth, if the streak holds');
-      set(2, 'TNT block, 5 shorter', '-5', 'neg', 'TNT', 'five points and five of your length');
-      set(3, 'Teleport, one trip', '+5', 'pos', 'Teleport window', 'one paid trip a pair, both ways');
+      set(0, 'Emoji', '+1', 'pos', 'Emoji', 'snack on these to grow');
+      set(1, 'Emoji with a ring', '+5', 'pos', 'Ringed emoji', 'every sixth one, worth five');
+      set(2, 'TNT block, 5 shorter', '-5', 'neg', 'TNT', 'five points gone, five shorter');
+      set(3, 'Teleport, one trip', '+5', 'pos', 'Teleport window', 'jump across the pitch, one trip');
     }
   }
 
@@ -4040,7 +4046,13 @@
     const kickScreen = state === 'ready' && !modesOpen &&
       (mode === 'classic' || mode === 'speedrun' || mode === 'survival');
     ovBody.classList.toggle('kick-grid', kickScreen);
-    if (kickScreen) fillKickRail();
+    if (kickScreen) {
+      // the strapline tells the selected mode's truth: "Eat to grow" above
+      // survival's table, where eating shrinks you, contradicted the very
+      // rules it sat over
+      overlayText.textContent = STRAPLINES[mode] || STRAPLINES.classic;
+      fillKickRail();
+    }
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     // The level screen borrows the chooser's footer: START plays the level
@@ -4222,19 +4234,20 @@
   const railDesc = document.getElementById('railDesc');
   const modeFacts = document.getElementById('modeFacts');
   const railTops = {};   // ruleMode -> board rows; false is a fetch that failed
-  const speedLabel = () => {
-    const b = document.querySelector('.speed-row button.active');
-    return b ? b.textContent : 'NORMAL';
-  };
+  // Where a best stands on a fetched board: an equal row is read as your
+  // own, because a best that reached the board is on it. 0 = does not place.
+  function boardRank(top, myBest) {
+    if (!myBest) return 0;
+    const i = top.findIndex(r => r.score <= myBest);
+    return i >= 0 ? i + 1 : (top.length < MAX_ENTRIES ? top.length + 1 : 0);
+  }
   function fillModeRail() {
     modeRail.dataset.mode = mode;
     railName.textContent = MODE_LABELS[mode] || '';
     railDesc.textContent = MODE_DESC[mode] || '';
     const facts = [];
     if (mode === 'versus') {
-      // rooms play fixed rules (vsBegin), so these rows tell the truth even
-      // when the settings sheet says otherwise
-      facts.push(['Players', '2 TO 5'], ['Rated', 'QUICK MATCH'], ['Walls', 'ON'], ['Speed', 'NORMAL']);
+      facts.push(['Players', '2 TO 5'], ['Rated', 'QUICK MATCH']);
     } else if (mode === 'tourney') {
       if (tourney) {
         const st = tourneyState();
@@ -4264,25 +4277,18 @@
           });
         top = null;
       }
+      // One standing line, never two: your rank when your best places, or
+      // the door in when it does not (the tenth row plus one, the same
+      // arithmetic as placesOnBoard). Showing both numbers left the reader
+      // doing subtraction on a menu, which is how this screen got called
+      // complicated; settings rows are gone for the same reason, the gear
+      // already owns them.
       if (Array.isArray(top)) {
-        // ten rows ordered score desc then age: an equal score sorts behind
-        // the older one, so the door into the board is the tenth row plus one
-        // (the same arithmetic as placesOnBoard)
-        facts.push(['Top ten starts at',
+        const rank = boardRank(top, myBest);
+        if (rank) facts.push(['World rank', '#' + rank]);
+        else facts.push(['Top ten starts at',
           top.length < MAX_ENTRIES ? 'OPEN' : top[MAX_ENTRIES - 1].score + 1, true]);
-        if (myBest > 0) {
-          // a row equal to your best is read as your own, because a best
-          // that reached the board is on it; below the whole list, the row
-          // says nothing rather than guessing
-          const i = top.findIndex(r => r.score <= myBest);
-          const rank = i >= 0 ? i + 1 : (top.length < MAX_ENTRIES ? top.length + 1 : 0);
-          if (rank) facts.push(['World rank', '#' + rank]);
-        }
-      } else if (top === null) {
-        facts.push(['Top ten starts at', '\u2026']);
-        if (myBest > 0) facts.push(['World rank', '\u2026']);
       }
-      facts.push(['Walls', pageWalls ? 'ON' : 'OFF'], ['Speed', speedLabel()]);
     }
     modeFacts.innerHTML = '';
     for (const f of facts) factRow(modeFacts, f[0], f[1], f[2]);
@@ -4291,79 +4297,57 @@
   // ---- the kickoff's side rail ----
   // Same contract as the chooser's rail: filled whenever the ready screen is
   // up for a solo board mode, visible only where the container query has
-  // room. The board read is the same one fetch per mode per session the
-  // chooser uses (railTops); the rating is one fetch per session for every
-  // mode at once. Both are held back on narrow panels, show nothing rather
-  // than guesses while in the air, and drop away on failure.
+  // room, sharing the chooser's one board read per mode per session
+  // (railTops), held back on narrow panels and degraded silently. It holds
+  // at most two numbers and one sentence on purpose: this game is for
+  // seven-year-olds and ninety-year-olds, and a menu that hands out three
+  // numbers whose relationships the reader must work out got called
+  // complicated the first evening it was live. Your best, then EITHER your
+  // world rank OR the door card saying what score takes a place, never
+  // both; the rating stays on the multiplayer surfaces where it belongs.
   const kickTag = document.getElementById('kickTag');
   const kickNums = document.getElementById('kickNums');
   const kickDoor = document.getElementById('kickDoor');
   const kickDoorN = document.getElementById('kickDoorN');
   const kickDoorS = document.getElementById('kickDoorS');
-  let railRatings;   // undefined = not asked, null = in flight, false = failed
   function fillKickRail() {
     const rm = ruleMode();
     const seconds = rm === 'survival';
     kickTag.textContent = 'YOUR ' + (RULE_LABELS[rm] || '');
     const myBest = bestByMode[rm] || 0;
-    const wide = overlay.clientWidth >= 540;
-    const refill = () => {
-      // a stale settle repaints only the screen it was fetched for
-      if (state === 'ready' && !showModes && ruleMode() === rm) fillKickRail();
-    };
     let top = railTops[rm];
-    if (top === undefined && sbOn() && wide) {
+    if (top === undefined && sbOn() && overlay.clientWidth >= 540) {
       railTops[rm] = null;
       sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm })
         .then(rows => { railTops[rm] = asList(rows).filter(r => r && typeof r.score === 'number'); })
         .catch(() => { railTops[rm] = false; })
-        .then(refill);
+        .then(() => {
+          // a stale settle repaints only the screen it was fetched for
+          if (state === 'ready' && !showModes && ruleMode() === rm) fillKickRail();
+        });
       top = null;
     }
-    if (railRatings === undefined && sbOn() && sbToken && wide) {
-      railRatings = null;
-      sbRpc('pitch_snake_my_rating', {})
-        .then(rows => { railRatings = rows || false; })
-        .catch(() => { railRatings = false; })
-        .then(refill);
-    }
-    // the numerals: only what is known now, nothing invented and no
-    // placeholders, so the row simply grows as answers land
     kickNums.innerHTML = '';
-    const num = (v, label, prov) => {
+    const num = (v, label) => {
       const d = document.createElement('div'); d.className = 'kick-num';
       const b = document.createElement('b'); b.textContent = v;
-      if (prov) {
-        const p = document.createElement('span');
-        p.className = 'prov'; p.textContent = 'P';
-        p.title = 'Provisional: fewer than 10 rated rounds';
-        b.appendChild(p);
-      }
       const s = document.createElement('span'); s.textContent = label;
       d.append(b, s); kickNums.appendChild(d);
     };
     num(myBest > 0 ? myBest : '\u2014', 'BEST');
-    let rank = 0;
-    if (Array.isArray(top) && myBest > 0) {
-      // same reading as the chooser: an equal row is your own, because a
-      // best that reached the board is on it
-      const i = top.findIndex(r => r.score <= myBest);
-      rank = i >= 0 ? i + 1 : (top.length < MAX_ENTRIES ? top.length + 1 : 0);
-    }
+    const rank = Array.isArray(top) ? boardRank(top, myBest) : 0;
     if (rank) num('#' + rank, 'WORLD');
-    const own = railRatings && railRatings[rm];
-    if (own) num(String(own.rating), 'RATING', own.provisional);
-    // the door: the score that takes a place, and how far your best stands
-    if (Array.isArray(top)) {
+    // the door card only when it is the player's next move: a best that
+    // already places has its story told by the WORLD numeral above
+    if (Array.isArray(top) && !rank) {
       kickDoor.hidden = false;
       const entering = top.length < MAX_ENTRIES ? 0 : top[MAX_ENTRIES - 1].score + 1;
       const gap = entering - myBest;
       kickDoorN.textContent = entering ? entering : 'OPEN';
       kickDoorS.textContent =
         !entering ? 'The board has room. Any score enters.'
-        : myBest === 0 ? (seconds ? 'Survive ' + SURVIVAL_UNIT(entering) : 'Score ' + entering) + ' and you are on it.'
-        : gap <= 0 ? 'Your best already places. Raise it.'
-        : (seconds ? SURVIVAL_UNIT(gap) : gap + (gap === 1 ? ' point' : ' points')) + ' clear of your best. One good run.';
+        : myBest === 0 ? (seconds ? 'Survive ' + SURVIVAL_UNIT(entering) : 'Score ' + entering) + ' to get on the board.'
+        : (seconds ? SURVIVAL_UNIT(gap) + ' more' : gap + ' more') + ' than your best. One good run.';
     } else kickDoor.hidden = true;
   }
 
@@ -5809,7 +5793,6 @@
       document.querySelectorAll('.speed-row button').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       pageTickMs = parseInt(b.dataset.speed, 10);
-      refreshModeUI();   // the chooser's rail quotes this setting
     });
   });
 
@@ -5820,7 +5803,6 @@
     wallToggle.classList.toggle('on', pageWalls);
     wallToggle.setAttribute('aria-checked', String(pageWalls));
     wallStatus.textContent = pageWalls ? 'ON' : 'OFF';
-    refreshModeUI();   // the chooser's rail quotes this setting
   });
 
   // sound is the one setting free to change mid-round: it touches nothing
