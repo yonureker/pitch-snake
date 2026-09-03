@@ -525,26 +525,25 @@
      foot keep spanning, so the title and the actions do not move; only the
      body splits, which is why the change reads as the board moving beside
      the result rather than as a different screen. */
-  @container ov (min-width: 520px) {
-    /* One centered column, since play testing: the split put the board
-       beside the result on every death, and a board you are not on is
-       noise, so now it appears only when your round places (boardWanted)
-       and the boards live behind the trophy for the curious. The result
-       panel keeps the score as the centered hero. */
-    .ov-body.two-col {
-      width: 100%;
-      max-width: 480px;
-      text-align: center;
-    }
-    .ov-body.two-col > .res-col {
-      display: flex; flex-direction: column; align-items: center;
-    }
-    .ov-body.two-col .result { display: block; text-align: center; width: auto; }
-    .ov-body.two-col .entry,
-    .ov-body.two-col .save-note,
-    .ov-body.two-col .badges,
-    .ov-body.two-col .acct { margin-top: 12px; }
+  /* One centered column on EVERY width, since play testing: the split put
+     the board beside the result on every death, and a board you are not on
+     is noise, so it appears only when your round places (boardWanted) and
+     the boards live behind the trophy for the curious. The score is the
+     hero on phones too now, which is what let the strapline shrink to the
+     death flavor alone instead of saying the number twice. */
+  .ov-body.two-col {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
   }
+  .ov-body.two-col > .res-col {
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .ov-body.two-col .result { display: block; text-align: center; width: auto; }
+  .ov-body.two-col .entry,
+  .ov-body.two-col .save-note,
+  .ov-body.two-col .badges,
+  .ov-body.two-col .acct { margin-top: 12px; }
   /* ---- the wide chooser ----
      Same threshold and the same two measurement traps as the result screen
      above. The six modes become glyph tiles, two columns, CENTERED: play
@@ -555,14 +554,14 @@
      always has. */
   @container ov (min-width: 520px) {
     .ov-body.modes-grid > .mode-row {
-      width: min(100%, 620px); max-width: none;
+      /* one column, stacked, since play testing: six wide rows with the
+         glyph and the sentence read top to bottom the way the narrow list
+         always has, and nothing sits beside anything */
+      width: min(100%, 480px); max-width: none;
       display: grid;
-      /* two columns, fixed: without the old side rail there is room for
-         them at every qualifying size, and three narrow ones wrapped the
-         names */
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       grid-auto-rows: 1fr;
-      gap: clamp(10px, 1.8cqw, 16px);
+      gap: clamp(8px, 1.4cqw, 12px);
     }
     /* The tile: the mode's own border and ledge, the name wearing the slab
        treatment (Anton in cream with a hard offset shadow in the mode's own
@@ -572,10 +571,11 @@
     .ov-body.modes-grid .stack-choice button {
       display: flex; align-items: center; text-align: left;
       gap: clamp(10px, 1.8cqw, 16px);
-      /* a floor, not the size: the stretched 1fr rows above set the real
-         height, three ways or six ways depending on the column count */
-      min-height: 48px;
-      padding: clamp(8px, 1.6cqw, 14px) clamp(12px, 2.2cqw, 20px);
+      /* compact rows: six of them have to fit the smallest wide panel
+         without scrolling, and the fade cutting TOURNAMENTS in half is how
+         the first stack shipped */
+      min-height: 42px;
+      padding: clamp(5px, 1cqw, 10px) clamp(12px, 2.2cqw, 20px);
       border-radius: 9px;
       background: rgba(33,30,26,0.34);
       box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 55%, #12180f);
@@ -1160,8 +1160,11 @@
     font-size: 11px; letter-spacing: 3px; color: var(--gold);
   }
   .res-score {
-    font-family: 'Anton', sans-serif; font-size: 96px; line-height: 0.9;
-    color: #f6efde; text-shadow: 4px 4px 0 var(--gold); margin-top: 4px;
+    font-family: 'Anton', sans-serif; line-height: 0.9;
+    /* the hero shows on phones now too: cqw scales it to the panel */
+    font-size: clamp(54px, 15cqw, 96px);
+    color: #f6efde; text-shadow: clamp(3px, 0.6cqw, 4px) clamp(3px, 0.6cqw, 4px) 0 var(--gold);
+    margin-top: 4px;
   }
   .res-note { font-size: 14px; color: #b7ac93; margin-top: 12px; line-height: 1.35; }
   .res-note b { color: var(--gold-bright); font-weight: 700; }
@@ -1606,7 +1609,7 @@
              board. Everything in here is already known at death; nothing new
              is computed and nothing is fetched. -->
         <div class="result" id="resultPanel" hidden>
-          <p class="res-tag">YOU SCORED</p>
+          <p class="res-tag" id="resTag">YOU SCORED</p>
           <div class="res-score" id="resScore">0</div>
           <p class="res-note" id="resNote"></p>
         </div>
@@ -2424,6 +2427,7 @@
   const SURVIVAL_UNIT = (n) => n === 1 ? '1 second' : n + ' seconds';
   function fillResult(score, reason) {
     const seconds = ruleMode() === 'survival';
+    resTag.textContent = seconds ? 'SECONDS SURVIVED' : 'YOU SCORED';
     resScore.textContent = score;
     const prev = bestAtStart;
     resNote.textContent = '';
@@ -2451,13 +2455,15 @@
     if (mode === 'levels') { levelOver(reason); return; }
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
-    const how = reason === 'wall' ? 'The walls got you. '
-              : reason === 'ghost' ? 'The ghost got you. '
-              : reason === 'time' ? 'The final whistle. '
-              : '';
-    overlayText.textContent = ruleMode() === 'survival'
-      ? `${how}You survived ${g.score} seconds.`
-      : `${how}You scored ${g.score}.`;
+    // the flavor only: the score's home is the hero right below, and saying
+    // the number twice in two lines was play tested into this comment
+    overlayText.textContent =
+        reason === 'wall' ? 'The walls got you.'
+      : reason === 'ghost' ? 'The ghost got you.'
+      : reason === 'time' ? 'The final whistle.'
+      : reason === 'tnt' ? 'The TNT went off.'
+      : reason === 'self' ? 'You caught your own tail.'
+      : 'Full time.';
     savedThisRound = false;
     badgeNote.hidden = true;      // last round's rewards are not this round's
     lastEarned = null;
@@ -4405,6 +4411,9 @@
     }
     // your numbers ride the corner on both menu screens
     fillCorner(listScreen || kickScreen);
+    // the trophy is menu furniture: mid-round it is a distraction next to
+    // the settings gear, which stays because pausing for settings is play
+    boardsBtn.hidden = !onMenu;
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     // The level screen borrows the chooser's footer: START plays the level
@@ -4567,6 +4576,7 @@
   const ovBody = document.querySelector('.ov-body');
   const resultPanel = document.getElementById('resultPanel');
   const resScore = document.getElementById('resScore');
+  const resTag = document.getElementById('resTag');
   const resNote = document.getElementById('resNote');
   function markOverflow() {
     requestAnimationFrame(() => {
