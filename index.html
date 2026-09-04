@@ -2647,16 +2647,21 @@
     // two passes of glow, then the glyph clean on top: a colour emoji ignores
     // fillStyle but not shadow, so the bloom is the halo and the glyph stays
     // its own colours
-    // the engine's item is still the bolt; the pitch draws it as the sloth,
-    // which says what it does (everything slows down) better than a zap did
+    // The engine's item is still the bolt; the pitch draws it as a dizzied
+    // ghost, the 👻 glyph with the 💫 over its brow, because "the ghosts
+    // get dizzy" is the effect in one picture. Composed from two glyphs
+    // since no ghost version of the spiral-eyes face exists in any font.
+    const gx = boltS / 2, gy = boltS / 2 + Math.round(cell * 0.06);
     c.shadowColor = 'rgba(255,214,102,0.95)';
     c.fillStyle = '#ffd666';
     for (const blur of [22, 11]) {
       c.shadowBlur = blur;
-      c.fillText('🦥', boltS / 2, boltS / 2);
+      c.fillText('👻', gx, gy);
     }
     c.shadowBlur = 0;
-    c.fillText('🦥', boltS / 2, boltS / 2);
+    c.fillText('👻', gx, gy);
+    c.font = `${(cell * 0.5) | 0}px ${EMOJI_FONT}`;
+    c.fillText('💫', boltS / 2 + Math.round(cell * 0.2), boltS / 2 - Math.round(cell * 0.46));
   }
 
   function drawBolt() {
@@ -3567,7 +3572,7 @@
     if (sec === boltBannerSec) return;
     boltBannerSec = sec;
     if (!sec) { boltBanner.hidden = true; return; }
-    boltBanner.textContent = '🦥 GHOSTS SLOWED · ' + sec;
+    boltBanner.textContent = '👻💫 GHOSTS SLOWED · ' + sec;
     boltBanner.hidden = false;
   }
 
