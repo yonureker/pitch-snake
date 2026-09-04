@@ -1574,8 +1574,8 @@
                single line the narrow screens have always shown, lg-two is
                the wide kickoff's name-plus-explanation pair. applyLegend
                fills both; only the container query decides which renders. -->
-          <div class="lg-row"><span class="lg-ic">🍎</span><span class="lg-txt">Emoji</span><span class="lg-two"><span class="lg-name">Emoji</span><span class="lg-sub">snack on these to grow</span></span><span class="lg-val pos">+1</span></div>
-          <div class="lg-row"><span class="lg-ic ring">⭐</span><span class="lg-txt">Emoji with a ring</span><span class="lg-two"><span class="lg-name">Ringed emoji</span><span class="lg-sub">every sixth one, worth five</span></span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic">⚽</span><span class="lg-txt">Ball</span><span class="lg-two"><span class="lg-name">Ball</span><span class="lg-sub">snack on these to grow</span></span><span class="lg-val pos">+1</span></div>
+          <div class="lg-row"><span class="lg-ic ring">⚽</span><span class="lg-txt">Ball with a ring</span><span class="lg-two"><span class="lg-name">Ringed ball</span><span class="lg-sub">every sixth one, worth five</span></span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 shorter</span><span class="lg-two"><span class="lg-name">TNT</span><span class="lg-sub">five points gone, five shorter</span></span><span class="lg-val neg">-5</span></div>
           <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, one trip</span><span class="lg-two"><span class="lg-name">Teleport window</span><span class="lg-sub">jump across the pitch, one trip</span></span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-two"><span class="lg-name">Walls, ghosts, yourself</span><span class="lg-sub">the pitch bites back</span></span><span class="lg-val die">DIE</span></div>
@@ -2599,8 +2599,11 @@
   const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
   // the engine picks food.kind; these lists are what a kind looks like here.
   // Lengths must match REGULAR_KINDS / BONUS_KINDS in the engine.
-  const FOOD_EMOJIS = ['🍪','🍕','🌮','🍿','🍰','🍊','🍋','🍎','🍏','🍑','🍒','🍓','🍅','🥑','🥨','🥯'];
-  const BONUS_EMOJIS = ['⭐','🏆','👑','💰','💎'];
+  // One ball for every kind since the football rebrand: the engine still
+  // deals its 16 regular and 5 bonus kinds and the log replays them, the
+  // pitch just dresses them all the same. The ring alone says bonus.
+  const FOOD_EMOJIS = Array(16).fill('⚽');
+  const BONUS_EMOJIS = Array(5).fill('⚽');
 
   // Color-emoji fillText is among the most expensive single canvas calls on
   // mobile, so the emoji is rasterized once per placement into a small sprite;
@@ -2644,14 +2647,16 @@
     // two passes of glow, then the glyph clean on top: a colour emoji ignores
     // fillStyle but not shadow, so the bloom is the halo and the glyph stays
     // its own colours
+    // the engine's item is still the bolt; the pitch draws it as the sloth,
+    // which says what it does (everything slows down) better than a zap did
     c.shadowColor = 'rgba(255,214,102,0.95)';
     c.fillStyle = '#ffd666';
     for (const blur of [22, 11]) {
       c.shadowBlur = blur;
-      c.fillText('⚡', boltS / 2, boltS / 2);
+      c.fillText('🦥', boltS / 2, boltS / 2);
     }
     c.shadowBlur = 0;
-    c.fillText('⚡', boltS / 2, boltS / 2);
+    c.fillText('🦥', boltS / 2, boltS / 2);
   }
 
   function drawBolt() {
@@ -3562,7 +3567,7 @@
     if (sec === boltBannerSec) return;
     boltBannerSec = sec;
     if (!sec) { boltBanner.hidden = true; return; }
-    boltBanner.textContent = '⚡ GHOSTS SLOWED · ' + sec;
+    boltBanner.textContent = '🦥 GHOSTS SLOWED · ' + sec;
     boltBanner.hidden = false;
   }
 
@@ -4415,13 +4420,13 @@
       rows[i].querySelector('.lg-sub').textContent = sub;
     };
     if (ruleMode() === 'survival') {
-      set(0, 'Emoji, one shorter', '-1', 'pos', 'Emoji', 'one shorter. Shorter is safer');
-      set(1, 'Emoji with a ring, 5 shorter', '-5', 'pos', 'Ringed emoji', 'five shorter at once');
+      set(0, 'Ball, one shorter', '-1', 'pos', 'Ball', 'one shorter. Shorter is safer');
+      set(1, 'Ball with a ring, 5 shorter', '-5', 'pos', 'Ringed ball', 'five shorter at once');
       set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', 'five LONGER. Stay away');
       set(3, 'Teleport, 5 shorter', '-5', 'pos', 'Teleport window', 'hop across, five shorter');
     } else {
-      set(0, 'Emoji', '+1', 'pos', 'Emoji', 'snack on these to grow');
-      set(1, 'Emoji with a ring', '+5', 'pos', 'Ringed emoji', 'every sixth one, worth five');
+      set(0, 'Ball', '+1', 'pos', 'Ball', 'snack on these to grow');
+      set(1, 'Ball with a ring', '+5', 'pos', 'Ringed ball', 'every sixth one, worth five');
       set(2, 'TNT block, 5 shorter', '-5', 'neg', 'TNT', 'five points gone, five shorter');
       set(3, 'Teleport, one trip', '+5', 'pos', 'Teleport window', 'jump across the pitch, one trip');
     }
