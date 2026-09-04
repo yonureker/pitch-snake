@@ -19,8 +19,8 @@
     --snake-glow: rgba(216,179,94,0.75);
     --food: #e6402a;
     --food-glow: rgba(230,64,42,0.6);
-    --arena: #2c241b;
-    --arena-edge: #221b14;
+    --arena: #24321b;
+    --arena-edge: #1b2614;
     --line: rgba(244,236,216,0.06);
   }
 
@@ -1680,6 +1680,11 @@
           <button class="switch on" id="soundToggle" role="switch" aria-checked="true"><span class="knob"></span></button>
           <span class="state" id="soundStatus">ON</span>
         </div>
+        <div class="toggle-row">
+          <span>CROWD</span>
+          <button class="switch on" id="crowdToggle" role="switch" aria-checked="true"><span class="knob"></span></button>
+          <span class="state" id="crowdStatus">ON</span>
+        </div>
         <p class="lock-hint" id="lockHint">Finish the round to change settings.</p>
         <button class="btn small" id="settingsClose">DONE</button>
       </div>
@@ -2107,7 +2112,12 @@
     audioNoise = audio.createBuffer(1, audio.sampleRate / 2, audio.sampleRate);
     const d = audioNoise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    audio.onstatechange = () => { if (audio.state === 'running') audioUnhook(); else audioHook(); };
+    audio.onstatechange = () => {
+      if (audio.state === 'running') audioUnhook(); else audioHook();
+      // the context often unlocks AFTER the kickoff gesture's own sync ran
+      // and saw it suspended; this is where the bed catches up
+      crowdSync();
+    };
     if (audio.state !== 'running') audioResume();   // some browsers hand it back suspended
     else audioUnhook();
   }
@@ -2267,6 +2277,69 @@
     sfxTone('sine', 300, 120, at + 0.1, 0.4, 0.25 * vol);
   }
   function sfxKickoff() { if (sfxOn()) sfxPeep(audio.currentTime, 0.3, 1); }
+
+  // ---- the crowd ----
+  // Stadium ambience in the Football Manager spirit: a stand full of people
+  // is noise through three filters (a low rumble, a voice band, a high
+  // sizzle), with two slow detuned sines breathing the voice band so it
+  // swells like a crowd instead of hissing like rain, and a fourth voice
+  // that lifts for a beat when something scores. Built once on demand from
+  // a four-second buffer (the half-second sfx buffer loops audibly as a
+  // flutter through a narrow band), then only gain targets ever move, all
+  // on the audio thread: the frame loop never touches any of this. It
+  // hangs off audioMaster, so the mute and the limiter own it like every
+  // other sound.
+  let crowdOn = true;
+  try { crowdOn = localStorage.getItem('snakeCrowd') !== 'off'; } catch (e) {}
+  let crowdBed = null, crowdCheer = null;
+  const CROWD_LEVEL = 0.16;
+  function crowdVoice(buf, rate, type, freq, q, level) {
+    const src = audio.createBufferSource();
+    src.buffer = buf; src.loop = true; src.playbackRate.value = rate;
+    const filt = audio.createBiquadFilter();
+    filt.type = type; filt.frequency.value = freq; filt.Q.value = q;
+    const gn = audio.createGain(); gn.gain.value = level;
+    src.connect(filt); filt.connect(gn); gn.connect(crowdBed);
+    src.start();
+    return gn;
+  }
+  function crowdBuild() {
+    crowdBed = audio.createGain();
+    crowdBed.gain.value = 0;
+    crowdBed.connect(audioMaster);
+    const buf = audio.createBuffer(1, audio.sampleRate * 4, audio.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    crowdVoice(buf, 0.82, 'lowpass', 260, 0.7, 0.6);
+    const voices = crowdVoice(buf, 1.0, 'bandpass', 640, 0.9, 0.42);
+    crowdVoice(buf, 1.31, 'bandpass', 2600, 0.8, 0.07);
+    crowdCheer = crowdVoice(buf, 1.12, 'bandpass', 920, 1.1, 0);
+    // the breath: two sines with no shared period wobble the voice band,
+    // additive around its base so the sum never goes negative
+    for (const [freq, depth] of [[0.11, 0.13], [0.037, 0.16]]) {
+      const o = audio.createOscillator(), gn = audio.createGain();
+      o.frequency.value = freq; gn.gain.value = depth;
+      o.connect(gn); gn.connect(voices.gain); o.start();
+    }
+  }
+  // One door for every transition, called wherever state or sound changes.
+  // Idempotent, so no caller reasons about what the bed was already doing:
+  // it fades in through the countdown and out on death, pause and menus.
+  function crowdSync() {
+    const want = crowdOn && pageSound && audio !== null && audio.state === 'running'
+      && (state === 'playing' || state === 'countdown');
+    if (want && !crowdBed) crowdBuild();
+    if (!crowdBed) return;
+    crowdBed.gain.setTargetAtTime(want ? CROWD_LEVEL : 0, audio.currentTime, want ? 0.8 : 0.4);
+  }
+  // the stand lifts for a beat; k is loudness against the bed's own level
+  function crowdPulse(k) {
+    if (!crowdCheer || !crowdOn || !sfxOn()) return;
+    const t = audio.currentTime;
+    crowdCheer.gain.cancelScheduledValues(t);
+    crowdCheer.gain.setTargetAtTime(k, t, 0.06);
+    crowdCheer.gain.setTargetAtTime(0, t + 0.3, 0.5);
+  }
   function sfxFullTime() {
     if (!sfxOn()) return;
     const at = audio.currentTime;
@@ -2290,12 +2363,16 @@
       if (e.t === 'food') buildFoodSprite();
       else if (e.t === 'eat') {
         if (e.bonus) sfxBonus(mineVol); else sfxEat((g.bonusStreak + 4) % 5, mineVol);
+        // the crowd cheers whoever scores, full volume: it is the stadium's
+        // voice, not the player's
+        crowdPulse(e.bonus ? 0.9 : 0.22);
         const burstColor = getCss(e.bonus ? '--gold-bright' : '--food');
         spawnBurst(e.x, e.y, e.bonus ? 30 : 16, 0.5,
           () => (Math.random() * 2 + 1) * (cell / 14) * (e.bonus ? 1.5 : 1),
           () => burstColor);
       } else if (e.t === 'hop') {
         sfxHop(mineVol);
+        crowdPulse(0.7);
         const leaveCol = e.fromA ? PORTAL_A : PORTAL_B;
         const arriveCol = e.fromA ? PORTAL_B : PORTAL_A;
         const payCol = getCss('--gold-bright');
@@ -2427,6 +2504,7 @@
   function onDeath(reason) {
     state = 'dead';
     syncScoreDom();
+    crowdSync();       // here rather than deeper: the levels branch leaves early
     if (mode === 'levels') { levelOver(reason); return; }
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
@@ -3082,8 +3160,12 @@
     const c = arenaCtx;
     c.fillStyle = getCss('--arena');
     c.fillRect(0, 0, W, H);
+    // mown bands two cells wide, the thing that reads as grass from across
+    // the room: every other band lifted a touch, like the TV pitch
+    c.fillStyle = 'rgba(214,232,164,0.05)';
+    for (let i = 0; i < GRID; i += 4) c.fillRect(i * cell, 0, cell * 2, H);
     const grd = c.createRadialGradient(W/2, H/2, Math.min(W,H)*0.1, W/2, H/2, Math.max(W,H)*0.72);
-    grd.addColorStop(0, 'rgba(90,70,44,0.38)');
+    grd.addColorStop(0, 'rgba(104,126,58,0.34)');
     grd.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = grd;
     c.fillRect(0, 0, W, H);
@@ -3093,6 +3175,15 @@
       c.beginPath(); c.moveTo(i * cell, 0); c.lineTo(i * cell, H); c.stroke();
       c.beginPath(); c.moveTo(0, i * cell); c.lineTo(W, i * cell); c.stroke();
     }
+    // the chalk: halfway line, centre circle, centre spot. Part of this one
+    // prerender, so the markings cost nothing per frame, and nothing
+    // simulated knows they exist; the vertical line is the TV view.
+    c.strokeStyle = 'rgba(238,244,226,0.15)';
+    c.lineWidth = Math.max(2, cell * 0.09);
+    c.beginPath(); c.moveTo(W / 2, 0); c.lineTo(W / 2, H); c.stroke();
+    c.beginPath(); c.arc(W / 2, H / 2, cell * 2.8, 0, Math.PI * 2); c.stroke();
+    c.fillStyle = 'rgba(238,244,226,0.22)';
+    c.beginPath(); c.arc(W / 2, H / 2, Math.max(3, cell * 0.12), 0, Math.PI * 2); c.fill();
   }
 
   // ---- the frame ----
@@ -4341,6 +4432,9 @@
   // entry, the caption, and both buttons. Everything else just flips state
   // and calls this.
   function refreshModeUI() {
+    // every state transition repaints the surfaces through here, which
+    // makes it the crowd's heartbeat: kickoff, pause, resume, full time
+    crowdSync();
     const onMenu = state === 'ready' || state === 'dead';
     const modesOpen = showModes && onMenu;
     for (const b of modeRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === mode);
@@ -6094,6 +6188,22 @@
   }
   soundToggle.addEventListener('click', () => setSound(!pageSound));
   if (!pageSound) setSound(false);   // reflect a stored OFF in the switch
+
+  // the crowd is the same shape as sound: it touches nothing the engine
+  // simulates, so it too stays free to change mid-round
+  const crowdToggle = document.getElementById('crowdToggle');
+  const crowdStatus = document.getElementById('crowdStatus');
+  function setCrowd(on) {
+    crowdOn = on;
+    crowdToggle.classList.toggle('on', on);
+    crowdToggle.setAttribute('aria-checked', String(on));
+    crowdStatus.textContent = on ? 'ON' : 'OFF';
+    try { localStorage.setItem('snakeCrowd', on ? 'on' : 'off'); } catch (e) {}
+    if (on) { audioHook(); audioWake(); }   // the toggle itself is a gesture
+    crowdSync();
+  }
+  crowdToggle.addEventListener('click', () => setCrowd(!crowdOn));
+  if (!crowdOn) setCrowd(false);   // reflect a stored OFF in the switch
 
   // resize events arrive in bursts; coalesce to once per frame
   let resizeQueued = false;
