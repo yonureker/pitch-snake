@@ -2590,6 +2590,7 @@
     buildBoltSprite();
     buildHatSprite();
     buildSpikeSprite();
+    vsRefit();                  // rival hats bake at cell size too
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
   }
@@ -3389,7 +3390,9 @@
   // rivals are information, not traffic: faint enough that your own snake is
   // never the second thing you find, solid enough to read where they are.
   // The tag stays clearer than the body, since a name is what you look FOR.
-  const VS_BODY_ALPHA = 0.22, VS_TAG_ALPHA = 0.7;
+  // 0.32 rather than the old 0.22 because rivals wear their outfits now, and
+  // a colour ramp needs a little more paint than a flat fill to read as one.
+  const VS_BODY_ALPHA = 0.32, VS_TAG_ALPHA = 0.7;
   let vsTagFont = '';
 
   // Rollback smoothing, per segment. A late remote turn rewinds and re-runs
@@ -3455,11 +3458,24 @@
       const pl = g.players[pi];
       if (!pl.snake.length) continue;
       ctx.globalAlpha = VS_BODY_ALPHA;
-      ctx.fillStyle = VS_COLORS[pi];
+      // the body wears the rival's own outfit, ghosted; identity stays in
+      // the tag and the roster dot, which keep VS_COLORS
+      const fit = vsFits[pi];
+      const lut = fit ? fit.lut : SNAKE_LUT;
+      const denom = Math.max(1, pl.snake.length - 1);
       const prog = progOf(pi);
+      let lastShade = -1;
       for (let i = pl.snake.length - 1; i >= 0; i--) {
+        const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
+        if (shade !== lastShade) { ctx.fillStyle = lut[shade]; lastShade = shade; }
         const rp = segRenderPos(pl, i, prog);
         drawBodyCell(rp.cx + segOffX(pi, i), rp.cy + segOffY(pi, i), r, rad);
+      }
+      if (fit && fit.hatW) {
+        const rp0 = segRenderPos(pl, 0, prog);
+        const hx = wrapf(rp0.cx + segOffX(pi, 0)) * cell + cell / 2;
+        const hy = wrapf(rp0.cy + segOffY(pi, 0)) * cell + cell / 2;
+        ctx.drawImage(fit.hatCanvas, Math.round(hx - fit.hatW / 2), Math.round(hy + fit.dy));
       }
     }
     // name tags over each living rival's head, one font set for the batch
@@ -3497,8 +3513,9 @@
   // The purchasable skins key on their pitch_snake_items ids ON PURPOSE: the
   // server sells ids and prices, the client owns the art, and an id this
   // page has never heard of renders as classic, which is what lets the
-  // catalogue grow by SQL without stranding old clients. Rivals in rooms
-  // keep their VS_COLORS: those are identity, and this is clothing.
+  // catalogue grow by SQL without stranding old clients. Rival BODIES wear
+  // this clothing too (their fits ride presence, see vsRefit); VS_COLORS
+  // survive as the name tags and roster dots, identity rather than clothing.
   const SKINS = {
     classic:     { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
                    spikes: null, spikesAlt: null },
@@ -3521,14 +3538,46 @@
   // body shades from head to tail, precomputed once per skin change (rule 5:
   // the per-frame loop reads this table and never builds a string)
   const SNAKE_SHADES = 64;
-  function buildSnakeLut() {
+  function buildLutFor(sk) {
     return Array.from({ length: SNAKE_SHADES }, (_, i) => {
       const t = i / (SNAKE_SHADES - 1);
-      const h = SKIN.head, l = SKIN.tail;
+      const h = sk.head, l = sk.tail;
       return `rgb(${(h[0] + (l[0] - h[0]) * t) | 0}, ${(h[1] + (l[1] - h[1]) * t) | 0}, ${(h[2] + (l[2] - h[2]) * t) | 0})`;
     });
   }
-  let SNAKE_LUT = buildSnakeLut();
+  let SNAKE_LUT = buildLutFor(SKIN);
+
+  // ---- rival outfits ----
+  // What a rival wears crosses in PRESENCE, never in the kickoff roster: the
+  // server's room_start washes its roster down to ref and name on purpose
+  // (the round of record does not launder clothing), so skin and hat ride
+  // the same channel readiness does and join the seat map by ref. Unknown
+  // ids fall back to classic exactly like the shop shelf, so a client that
+  // has never heard of next month's skin still draws a snake. Rebuilt at
+  // roster and presence changes and on resize, never per frame; the per-seat
+  // fit carries a baked hat canvas and a colour LUT so drawRivals allocates
+  // nothing.
+  const vsFits = new Array(5).fill(null);
+  function vsRefit() {
+    vsFits.fill(null);
+    if (!vs || !vs.roster || !(cell > 0)) return;
+    for (let i = 0; i < vs.roster.length && i < 5; i++) {
+      if (i === vs.myIdx) continue;
+      const ref = vs.roster[i].ref;
+      const src = (vs.present || []).find(x => x.ref === ref) || vs.roster[i];
+      const sk = Object.hasOwn(SKINS, src.skin ?? '') ? SKINS[src.skin] : SKINS.classic;
+      const hd = Object.hasOwn(HATS, src.hat ?? '') ? HATS[src.hat] : HATS.classic;
+      const fit = { lut: buildLutFor(sk), hatCanvas: null, hatW: 0, dy: 0 };
+      if (hatOn) {
+        const hw = Math.ceil(cell * hd.wf), hh = Math.ceil(cell * hd.hf);
+        const cnv = document.createElement('canvas');
+        cnv.width = hw; cnv.height = hh;
+        hd.draw(cnv.getContext('2d'), hw, hh);
+        fit.hatCanvas = cnv; fit.hatW = hw; fit.dy = hd.dy(cell, hh);
+      }
+      vsFits[i] = fit;
+    }
+  }
 
   // ---- what is worn ----
   // The profile's skin and hat columns are the truth and my_wallet carries
@@ -3543,7 +3592,7 @@
     try { localStorage.setItem('snakeWorn', JSON.stringify(worn)); } catch (e) {}
     if (!(skinParam && SKINS[skinParam])) SKIN = SKINS[worn.skin] ?? SKINS.classic;
     HAT = HATS[worn.hat] ?? HATS.classic;
-    SNAKE_LUT = buildSnakeLut();
+    SNAKE_LUT = buildLutFor(SKIN);
     if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
   }
 
@@ -5034,7 +5083,8 @@
           // presence dies with the old join on every reconnect: track again
           room.lastTrackAt = Date.now();
           room.trackDirty = false;
-          void channel.track({ name: room.name, cc: vsCountry(), ts: room.joinedTs, host: room.host, ready: room.ready });
+          void channel.track({ name: room.name, cc: vsCountry(), ts: room.joinedTs, host: room.host, ready: room.ready,
+                               skin: worn.skin, hat: worn.hat });
           if (vs === room) { vsSetNote(''); vsRefreshPanel(); }
         } else {
           room.up = false;
@@ -5113,7 +5163,11 @@
       // whichever source spoke last about this seat wins, by its own counter
       const held = vs.readyBy.get(key);
       const ready = held && held.rseq > (m.rseq | 0) ? held.ready : !!m.ready;
-      list.push({ ref: key, name: String(m.name || 'YOU'), country: cc(m.cc), ts: m.ts || 0, host: !!m.host, ready });
+      // outfits are peer-typed strings headed for object-key lookups, so
+      // they are shape-checked here and existence-checked in vsRefit
+      const wornId = v => typeof v === 'string' && v.length <= 32 ? v : null;
+      list.push({ ref: key, name: String(m.name || 'YOU'), country: cc(m.cc), ts: m.ts || 0, host: !!m.host, ready,
+                  skin: wornId(m.skin), hat: wornId(m.hat) });
       if (key !== vs.ref && !vs.knownRefs.has(key)) { vs.knownRefs.add(key); fresh = true; }
     }
     // A newcomer reads readiness out of presence, which can be up to a pacing
@@ -5123,6 +5177,7 @@
     // the host anchors slot one; everyone else queues by arrival
     list.sort((a, b) => (b.host - a.host) || (a.ts - b.ts) || (a.ref < b.ref ? -1 : 1));
     vs.present = list;
+    vsRefit();               // a joiner's outfit lands with their presence
     // a mid-round vanisher's snake goes on rails, deterministically everywhere
     if (vs.session && vs.roster) {
       for (let i = 0; i < vs.roster.length; i++) {
@@ -5167,7 +5222,8 @@
   function vsTrack() {
     vs.lastTrackAt = Date.now();
     vs.trackDirty = false;
-    void vs.channel.track({ name: vs.name, cc: vsCountry(), ts: vs.joinedTs, host: vs.host, ready: vs.ready, rseq: vs.rseq });
+    void vs.channel.track({ name: vs.name, cc: vsCountry(), ts: vs.joinedTs, host: vs.host, ready: vs.ready, rseq: vs.rseq,
+                            skin: worn.skin, hat: worn.hat });
   }
   function vsTrackSoon() {
     if (Date.now() - vs.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
@@ -5272,6 +5328,7 @@
     }
     vs.roster = m.roster;
     vs.myIdx = idx;
+    vsRefit();                  // dress the seats from presence
     vsTakeSeat();               // on the record before a single input exists
     vs.over = false;
     vs.spectating = false;
