@@ -3,6 +3,14 @@
 export declare const ENGINE_VERSION: number;
 /** Round presets: a mode is a config. Spread MODES[name] into createGame. */
 export declare const MODES: { classic: GameConfig; speedrun: GameConfig; survival: GameConfig };
+/**
+ * Onboarding levels (v20+): each is a config, a stable ordered id, and the one
+ * hazard it teaches. Not a campaign; the `id` is what progress stores against.
+ */
+export interface Level {
+  id: string; name: string; teach: string; goal: string; cfg: GameConfig;
+}
+export declare const LEVELS: Level[];
 export declare const GRID: number;
 export declare const START_LEN: number;
 export declare const SIM_DT: number;
@@ -122,6 +130,8 @@ export interface RoundLog {
   scoreByTime?: boolean; startLen?: number;
   eatGrowth?: number; bonusGrowth?: number; tntGrowth?: number; portalGrowth?: number;
   ghostEveryMs?: number; bombEveryMs?: number; boltEveryMs?: number;
+  /** A level's win score (v20+): the round ends 'won' at it. Absent = no goal. */
+  goalScore?: number;
   /** Snakes on the board; absent in v4 (single-snake era) logs. */
   players?: number;
   /** [quantum, x, y] triples; a fourth column names the player when players > 1. */
@@ -224,6 +234,12 @@ export interface GameConfig {
   ghostEveryMs?: number;
   bombEveryMs?: number;
   boltEveryMs?: number;
+  /**
+   * End the round with deadReason 'won' the moment the score reaches this
+   * (levels only; 0 = no goal). Judged at the whistle's spot in the quantum,
+   * after contact, so a ghost on the same tick still outranks the win.
+   */
+  goalScore?: number;
   /** Snakes on one shared board, 1..MAX_PLAYERS (default 1). */
   players?: number;
 }

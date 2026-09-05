@@ -146,6 +146,39 @@ test('reversals and repeats are filtered; two quick taps both land', () => {
   assert.deepEqual(g.dir, { x: -1, y: 0 }, 'both taps landed on successive ticks');
 });
 
+test('setDir refuses a non-unit vector, in the log as much as in play', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[8, 10], [7, 10], [6, 10]], 1, 0);
+  g.setDir(2, 0);                        // a stride of two
+  g.setDir(1, 1);                        // a diagonal
+  g.setDir(0.5, 0.5);                    // a fraction
+  g.setDir(0, 0);                        // a stand-still
+  assert.equal(g.dirQueue.length, 0, 'none reached the queue');
+  assert.equal(g.log.inputs.length, 0, 'and none reached the log, so no crafted stride can replay');
+  g.setDir(0, -1);                       // an honest unit turn still lands
+  assert.equal(g.dirQueue.length, 1, 'the real turn is unaffected');
+});
+
+test('clearQueue un-records a pending press, so a paused round still replays', () => {
+  // The bug this guards: setDir logs a press at the instant it arrives, but a
+  // pause (clearQueue) used to drop the press from the runtime WITHOUT dropping
+  // its log row, so the live round and its own replay diverged at that turn.
+  const g = createGame({ seed: 7, tickMs: 130, wallsEnabled: false });
+  g.advance(400);                              // a few steps in, mid-glide
+  g.setDir(0, -1);                             // perpendicular: queued AND logged
+  assert.equal(g.log.inputs.length, 1, 'the press was recorded when it arrived');
+  g.clearQueue();                              // what a pause does on the way out
+  assert.equal(g.log.inputs.length, 0, 'and un-recorded, because it never actually played');
+  assert.equal(g.dirQueue.length, 0);
+  g.advance(2000);                             // play on: the snake keeps its heading
+  const log = JSON.parse(JSON.stringify(g.log));
+  log.end = g.quanta;
+  const r = replay(log);
+  assert.deepEqual(r.players[0].snake[0], g.players[0].snake[0], 'live head and replay head agree');
+  assert.deepEqual(r.players[0].dir, g.players[0].dir, 'and so does the heading');
+});
+
 // ---------------------------------------------------------------- the windows
 test('a hop is one step out of the far end, both directions, no bounce', () => {
   const g = quietGame();
@@ -388,7 +421,7 @@ test('doom: a safe press inside the window converts death into the turn that was
   g.advanceQuanta(2);                          // 20ms into the window
   g.setDir(0, -1);                             // the save: recorded, not taken
   assert.ok(g.doom, 'setDir moves nothing; the world only changes in a quantum');
-  assert.deepEqual(g.doomSave, { x: 0, y: -1 }, 'the press is held for the next one');
+  assert.deepEqual({ x: g.doomSave.x, y: g.doomSave.y }, { x: 0, y: -1 }, 'the press is held for the next one');
   assert.ok(cellEq(g.snake[0], 5, 5), 'the head has not moved yet');
   g.advanceQuanta(1);
   assert.equal(g.doom, null, 'the window is spent');
@@ -415,17 +448,33 @@ test('doom: a press taken while the clock is stopped moves nothing', () => {
   assert.equal(g.score, score + 5, 'the bonus counts once the round is running again');
 });
 
+test('doom: clearQueue un-records a held save, its log row included', () => {
+  // The queued-turn case above proves splice + replay agreement on a
+  // replayable round; walledGame pokes its wall in directly, so its round is
+  // not reconstructable from (seed, config, inputs) and cannot be replayed.
+  // What is left to prove here is the doomSave arm of the same splice: a save
+  // held when the pause lands leaves no phantom row for a replay to act on.
+  const g = walledGame();
+  g.advanceQuanta(13);                         // into the wall: the move hangs
+  assert.ok(g.doom, 'the doom window is open');
+  g.setDir(0, -1);                             // a save: recorded, not yet taken
+  assert.equal(g.log.inputs.length, 1, 'the held save was recorded');
+  g.clearQueue();                              // a pause lands inside the window
+  assert.equal(g.doomSave, null, 'the held save does not survive the pause');
+  assert.equal(g.log.inputs.length, 0, 'and its log row went with it, so no phantom save can replay');
+});
+
 test('doom: a stale press left by a save is dropped, never played as a reversal', () => {
   const g = walledGame();
   g.wallLookup.add(K(5, 4));                   // up is walled too
   g.advanceQuanta(13);
   g.setDir(0, -1);                             // fatal: no save, so it queues
-  assert.deepEqual(g.dirQueue, [{ x: 0, y: -1 }], 'the press still counts as a queued turn');
+  assert.deepEqual(g.dirQueue.map(d => ({ x: d.x, y: d.y })), [{ x: 0, y: -1 }], 'the press still counts as a queued turn');
   g.setDir(0, 1);                              // down saves
   g.advanceQuanta(1);
   assert.equal(g.doom, null);
   assert.deepEqual(g.dir, { x: 0, y: 1 }, 'the save set the heading');
-  assert.deepEqual(g.dirQueue, [{ x: 0, y: -1 }], 'and left a press that is now a reversal');
+  assert.deepEqual(g.dirQueue.map(d => ({ x: d.x, y: d.y })), [{ x: 0, y: -1 }], 'and left a press that is now a reversal');
   g.advanceQuanta(13);                         // the next boundary must refuse it
   assert.equal(g.alive, true, 'the snake did not turn back into its own neck');
   assert.deepEqual(g.dir, { x: 0, y: 1 }, 'the stale press was dropped, the heading held');
@@ -461,7 +510,7 @@ test('doom: a save is judged again on the way in, not just when it was pressed',
   const g = walledGame();
   g.advanceQuanta(13);
   g.setDir(0, -1);                             // (5,4) is open at the instant of the press
-  assert.deepEqual(g.doomSave, { x: 0, y: -1 });
+  assert.deepEqual({ x: g.doomSave.x, y: g.doomSave.y }, { x: 0, y: -1 });
   g.wallLookup.add(K(5, 4));                   // the board moves before the tick lands it
   g.advanceQuanta(1);
   assert.ok(g.doom, 'consent to a save was never consent to a fatal one');

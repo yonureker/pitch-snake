@@ -428,7 +428,8 @@ export function createGame(cfg = {}) {
     players,
     quanta: 0,          // sim quanta elapsed; the replay clock
     clockMs: 0,         // one hazard clock (the old wall/bomb/ghost/portal clocks were identical)
-    progMs: 0,          // ms into the current cell; renderProg() adds the sub-quantum remainder
+    // progMs is not a field here: the singular alias below makes S.progMs read
+    // players[0].progMs, which is where a snake's per-cell progress really lives
     accMs: 0,           // dt not yet turned into quanta (always < SIM_DT after advance)
 
     food: null,         // {x, y, bonus, kind} - kind indexes the renderer's emoji list
@@ -719,13 +720,13 @@ export function createGame(cfg = {}) {
     });
   }
 
-  // A ghost's sense of distance: the shortest wrapped walk OR the route
-  // through an open, unused teleport pair (to an end, one hop, out the far
-  // side). One formula makes portal use deliberate and personality-dependent
-  // at once: whichever cell a ghost wants, it will dive through a window when
-  // the window genuinely gets it there sooner - and never when the pair is
-  // spent. A step landing ON an end is priced as the far side plus the hop,
-  // which is exactly what the forced hop next move will do to it.
+  // The straight-line (portal-aware) distance the ghosts USED to steer by,
+  // before ghostField/fieldDist replaced it with the true walk (rule 23). No
+  // engine code calls it any more; it is kept, and exported as _airDist, as
+  // the test suite's contrast baseline: the tests assert the walk knows about
+  // walls the crow-flight is blind to. It still folds an open, unused teleport
+  // pair into the reckoning (to an end, one hop, out the far side), and prices
+  // a step landing ON an end as the far side plus that hop.
   function airDist(x, y, tx, ty) {
     let d = wrapDist(x, y, tx, ty);
     const pair = S.portal;
@@ -1143,7 +1144,7 @@ export function createGame(cfg = {}) {
       const d = p.dirQueue.shift();
       if (d.x === -p.dir.x && d.y === -p.dir.y) continue;
       if (d.x === p.dir.x && d.y === p.dir.y) continue;
-      p.dir = d;
+      p.dir = { x: d.x, y: d.y };   // copy out x/y only: the queue entry carries a log index (li)
       break;
     }
     // A head standing in a window spends this step coming out of the far one:
@@ -1516,6 +1517,14 @@ export function createGame(cfg = {}) {
   function setDir(x, y, player = 0) {
     const p = players[player];
     if (!p || !p.alive) return;
+    // Exactly one unit step, or nothing. A non-unit vector (a stride, a
+    // diagonal, a fraction) would move the head more than one cell in a step
+    // while collision is only entry-tested on the cell it LANDS on, so a
+    // crafted log could otherwise walk the head over a wall line or its own
+    // body two cells at a time. No honest input source ever sends one, so
+    // every real log replays byte-identically and no ENGINE_VERSION bump is
+    // owed; the wire already enforces it (net.js) and the validator re-checks.
+    if (!Number.isInteger(x) || !Number.isInteger(y) || Math.abs(x) + Math.abs(y) !== 1) return;
     // A press during a doom window is RECORDED, never executed: setDir is
     // input, and the engine's contract is that the world only ever changes
     // inside a quantum. Committing here let a press land while the clock was
@@ -1524,8 +1533,17 @@ export function createGame(cfg = {}) {
     // milliseconds later at the outside. Logged like any accepted input, so
     // replays re-save.
     if (p.doom && saveable(p, x, y)) {
-      p.doomSave = { x, y };
       S.log.inputs.push(players.length === 1 ? [S.quanta, x, y] : [S.quanta, x, y, player]);
+      // li ties this held save to the log row it just wrote, so clearQueue (a
+      // pause) can un-record a save that never played. One corner it does NOT
+      // cover: a second saveable press in the same <=REDIRECT_MS window
+      // overwrites this and orphans the first row, so a pause landing inside
+      // that window leaves the orphan behind, and the submitted round then
+      // replays (and, since the validator scores the replay, scores) as if the
+      // orphan had played rather than as it went live. Humanly unreachable
+      // (two saves within one 10ms quantum, then a pause before it runs) and
+      // pointless to craft, so it is left as is.
+      p.doomSave = { x, y, li: S.log.inputs.length - 1 };
       return;
     }
     // a press that saves nothing is not thrown away: it queues like any other,
@@ -1534,17 +1552,34 @@ export function createGame(cfg = {}) {
     if (x === -ref.x && y === -ref.y) return; // no 180° reversal
     if (x === ref.x && y === ref.y) return;   // ignore repeats
     if (p.dirQueue.length < 3) {
-      p.dirQueue.push({ x, y });
       // a one-snake log keeps the classic triple shape; more snakes append
       // the player index as a fourth column
       S.log.inputs.push(players.length === 1 ? [S.quanta, x, y] : [S.quanta, x, y, player]);
+      // li ties this queued turn to its log row (see clearQueue)
+      p.dirQueue.push({ x, y, li: S.log.inputs.length - 1 });
     }
   }
 
-  // a turn queued before a pause must not fire on resume
-  // a turn queued before a pause must not fire on resume, and neither may a
-  // save pressed against a window whose time stopped moving
-  function clearQueue() { for (const p of players) { p.dirQueue.length = 0; p.doomSave = null; } }
+  // A turn queued before a pause, or a save held against a window whose clock
+  // stopped, must not fire on resume. Dropping them from the runtime is not
+  // enough: setDir LOGGED each at press time, so the log rows have to go too
+  // or the round stops matching its own replay (a pause would silently fork
+  // the two). Every pending press carries the index of the row it wrote (li);
+  // pull those rows, highest index first so the earlier ones keep their place
+  // as the array shrinks. Solo-shell only (the pause path): the netcode never
+  // pauses, and a rollback rebuilds the queue and doomSave without li, which
+  // the guards below simply skip.
+  function clearQueue() {
+    const drop = [];
+    for (const p of players) {
+      for (const d of p.dirQueue) if (d.li !== undefined) drop.push(d.li);
+      if (p.doomSave && p.doomSave.li !== undefined) drop.push(p.doomSave.li);
+      p.dirQueue.length = 0;
+      p.doomSave = null;
+    }
+    drop.sort((a, b) => b - a);
+    for (let i = 0; i < drop.length; i++) S.log.inputs.splice(drop[i], 1);
+  }
 
   // Advance by real milliseconds. Whole quanta simulate; the remainder stays
   // in accMs for the renderers' interpolation. Clamp dt at the call site
@@ -1595,6 +1630,9 @@ export function createGame(cfg = {}) {
         doomSave: p.doomSave ? { x: p.doomSave.x, y: p.doomSave.y } : null,
         alive: p.alive, deadReason: p.deadReason, diedAt: p.diedAt,
       })),
+      // log.finalScores/diedAt are deliberately not captured: they are stamped
+      // only by stampEnd, and any rollback that rewinds past an ending re-runs
+      // stampEnd on the way back, so they cannot leak a stale ending.
       logLen: S.log.inputs.length, logEnd: S.log.end, logFinal: S.log.finalScore,
     };
   }

@@ -428,6 +428,51 @@ test('junk on the wire is refused without taking the session down', () => {
   assert.equal(JSON.stringify(g0.log), before, 'and none of it entered the record');
 });
 
+test('a straggler from another round is ignored once the session is round-tagged', () => {
+  // The page reuses one channel across a room's rounds. A beat or input
+  // delayed across the results screen used to land in the next round's session
+  // and drag it (peerQ only rises). Tagging every message with the round it
+  // belongs to lets the new session throw the stale one away.
+  const bus = loopbackBus(2, { latency: 10 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0], round: 5 });
+  for (let now = 0; now <= 500; now += 10) { bus.pump(now); s0.frame(now); }
+  const before = JSON.stringify(g0.log);
+  // a well-formed input, but tagged for a DIFFERENT round on the reused channel
+  bus.endpoints[1].send({ t: 'i', v: 1, rd: 4, p: 1, s: 1, q: 5, x: 0, y: 1 });
+  bus.pump(510); s0.frame(510);
+  assert.equal(JSON.stringify(g0.log), before, 'the stale-round input never entered the timeline');
+  // the same input tagged for THIS round does land
+  bus.endpoints[1].send({ t: 'i', v: 1, rd: 5, p: 1, s: 1, q: 5, x: 0, y: 1 });
+  bus.pump(520); s0.frame(520);
+  assert.equal(g0.log.inputs.filter(e => e[3] === 1).length, 1, 'the current-round input applied');
+});
+
+test('the resend answer is throttled per requester', () => {
+  // The room channel is open to anyone with the code; an unthrottled 'n' loop
+  // would make every client spew 400-entry batches. Clean wire (no real gaps),
+  // so the only resends counted are the ones these hand-sent requests draw.
+  const bus = loopbackBus(2, { latency: 0 });
+  const g0 = createGame({ ...QUIET, players: 2 });
+  const s0 = createSession({ game: g0, myIdx: 0, transport: bus.endpoints[0] });
+  const g1 = createGame({ ...QUIET, players: 2 });
+  const s1 = createSession({ game: g1, myIdx: 1, transport: bus.endpoints[1] });
+  for (let now = 0; now <= 1000; now += 10) {
+    bus.pump(now);
+    if (now === 300) s0.localDir(0, -1, now);
+    if (now === 500) s0.localDir(-1, 0, now);
+    if (now === 700) s0.localDir(0, 1, now);
+    s0.frame(now); s1.frame(now);
+  }
+  s0.frame(2000); s1.frame(2000);      // clock forward, past any warm-up window
+  const before = s0.stats.resends;
+  for (let k = 0; k < 5; k++) {         // hammer within one cooldown window
+    bus.endpoints[1].send({ t: 'n', v: 1, p: 1, of: 0, from: 1 });
+    bus.pump(2000); s0.frame(2000);
+  }
+  assert.equal(s0.stats.resends, before + 1, 'five rapid requests drew exactly one answer');
+});
+
 test('desynced state hashes are caught by the beat exchange', () => {
   const bus = loopbackBus(2, { latency: 10 });
   const g0 = createGame({ ...QUIET, players: 2 });

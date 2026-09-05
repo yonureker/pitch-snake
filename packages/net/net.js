@@ -75,6 +75,11 @@ export const NEED_COOLDOWN = 300; // ms between repeat resend requests per peer
 // receiver caps its reads at its own constant, so mixed builds only lose
 // the extra ballast, never correctness.
 export const REDUNDANCY = 6;
+// A hard ceiling on the quantum an input may claim, matching the validator's
+// own `log.end` bound (720000 quanta, two hours at SIM_DT). A message from
+// beyond it is not a real turn: a stale straggler or a poisoned peerQ that
+// would peg the slew to its hard rate for the rest of the round.
+export const MAX_INPUT_Q = 720000;
 
 // FNV-1a over a string: cheap, stable, good enough to catch divergence
 export function foldHash(str) {
@@ -97,8 +102,17 @@ export function foldHash(str) {
  *          settled hash disagrees, an input arrived from beyond the snapshot
  *          horizon, or this client fell too far behind to catch up
  */
-export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
+export function createSession({ game, myIdx, transport, onEnd, onDesync, round }) {
   const N = game.players.length;
+  // Every message this session sends carries the round it belongs to, and one
+  // tagged with a different round is dropped on arrival. The page reuses a
+  // single channel across a room's successive rounds, so a beat or input
+  // delayed across the results screen can otherwise land in the NEXT round's
+  // session: peerQ[p] only ever rises, so it would peg this fresh round to a
+  // phantom lead (a rollback storm, then a 'horizon' desync). Untagged
+  // messages (an older page build on the same ENGINE_VERSION) fall through to
+  // the pre-tag behaviour and are never dropped, so mixed builds stay correct.
+  const roundId = round | 0;
   const table = Array.from({ length: N }, () => []);   // accepted inputs, seq order
   const applied = new Array(N).fill(0);                // next table[p] entry not yet applied
   const lastSeq = new Array(N).fill(0);
@@ -110,7 +124,8 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   const lagCost = new Array(N).fill(0);                // ms the room has frozen on each peer
   const _behind = new Uint8Array(N);                   // scratch: under the leash this frame
   const _gaveUp = new Uint8Array(N);                   // counted once per peer, for the record
-  const needAt = new Array(N).fill(0);                 // resend-request throttle
+  const needAt = new Array(N).fill(0);                 // resend-request throttle (asking side)
+  const replyAt = new Array(N).fill(0);                // resend-answer throttle, per requester
   const snaps = [];                                    // {q, s, h?} ascending by q
   const myHist = [];                                   // my own sends, for resend
   let mySeq = 0;
@@ -221,7 +236,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     // undefined fail by construction. Every peer runs this same filter, so
     // rejecting is as deterministic as accepting.
     if (!(p >= 0 && p < N) || p === myIdx) return Infinity;
-    if (!(msg.s >= 1) || !(msg.q >= 0)) return Infinity;
+    if (!(msg.s >= 1) || !(msg.q >= 0) || msg.q > MAX_INPUT_Q) return Infinity;
     const ax = msg.x === 1 || msg.x === -1 ? 1 : msg.x === 0 ? 0 : -1;
     const ay = msg.y === 1 || msg.y === -1 ? 1 : msg.y === 0 ? 0 : -1;
     if (ax < 0 || ay < 0 || ax + ay !== 1) return Infinity;   // exactly one unit step
@@ -245,7 +260,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
     if (nowMs - needAt[p] < NEED_COOLDOWN) return;
     needAt[p] = nowMs;
     stats.needsSent++;
-    transport.send({ t: 'n', v: NET_PROTO, p: myIdx, of: p, from: lastSeq[p] + 1 });
+    transport.send({ t: 'n', v: NET_PROTO, rd: roundId, p: myIdx, of: p, from: lastSeq[p] + 1 });
   }
 
   function settledSnap() {
@@ -267,7 +282,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
   function sendBeat() {
     const s = settledSnap();
     transport.send({
-      t: 'b', v: NET_PROTO, p: myIdx, q: game.quanta, s: mySeq,
+      t: 'b', v: NET_PROTO, rd: roundId, p: myIdx, q: game.quanta, s: mySeq,
       hq: s ? s.q : -1, h: s ? snapHash(s) : 0,
     });
   }
@@ -369,6 +384,8 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
 
   transport.onMessage((msg) => {
     if (!msg || msg.v !== NET_PROTO || dead || ended) return;
+    // a straggler from another round on this reused channel; see roundId above
+    if (msg.rd !== undefined && msg.rd !== roundId) return;
     const nowMs = lastNow < 0 ? 0 : lastNow;
     const pOk = typeof msg.p === 'number' && msg.p >= 0 && msg.p < N && msg.p !== myIdx;
     if (pOk) lastHeard[msg.p] = nowMs;
@@ -403,12 +420,19 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
         if (mine && snapHash(mine) !== msg.h) fail('hash');
       }
     } else if (msg.t === 'n') {
-      if (msg.of !== myIdx) return;
+      if (!pOk || msg.of !== myIdx) return;
+      // throttle answers per requester, the way requestResend throttles asks.
+      // The room channel is open to anyone with the code, so an unthrottled 'n'
+      // loop would make every client spew 400-entry batches and drain the
+      // room's shared (message-billed) budget. A well-behaved peer asks at most
+      // every NEED_COOLDOWN anyway, so honest resends are untouched.
+      if (nowMs - replyAt[msg.p] < NEED_COOLDOWN) return;
+      replyAt[msg.p] = nowMs;
       const list = [];
       for (const e of myHist) if (e.s >= msg.from) list.push([e.s, e.q, e.x, e.y]);
       if (list.length) {
         stats.resends++;
-        transport.send({ t: 'ri', v: NET_PROTO, p: myIdx, list: list.slice(0, 400) });
+        transport.send({ t: 'ri', v: NET_PROTO, rd: roundId, p: myIdx, list: list.slice(0, 400) });
       }
     }
   });
@@ -449,7 +473,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
         const h = myHist[k];
         r.push([h.s, h.q, h.x, h.y]);
       }
-      transport.send({ t: 'i', v: NET_PROTO, p: myIdx, s: e.s, q: e.q, x, y, r });
+      transport.send({ t: 'i', v: NET_PROTO, rd: roundId, p: myIdx, s: e.s, q: e.q, x, y, r });
     },
 
     /**
@@ -470,7 +494,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync }) {
       }
       if (list.length) {
         stats.resends++;
-        transport.send({ t: 'ri', v: NET_PROTO, p: myIdx, list });
+        transport.send({ t: 'ri', v: NET_PROTO, rd: roundId, p: myIdx, list });
       }
       sendBeat();
     },

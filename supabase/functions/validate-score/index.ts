@@ -346,8 +346,13 @@ Deno.serve(async (req) => {
   // size, solo input shape, and the very seed we handed out
   if ((log.players ?? 1) !== 1) return refuse('solo rounds only');
   const inputs = log.inputs;
+  // Each row is [quantum, x, y], and (x, y) must be exactly one unit step.
+  // The engine rejects non-unit vectors too, but that is only as current as
+  // the pinned import; checking here closes a striding-head log server-side
+  // regardless of which engine commit this function runs.
   if (!Array.isArray(inputs) || inputs.length > 20000 ||
-      !inputs.every((r) => Array.isArray(r) && r.length === 3 && r.every(Number.isInteger))) {
+      !inputs.every((r) => Array.isArray(r) && r.length === 3 && r.every(Number.isInteger) &&
+        Math.abs(r[1]) + Math.abs(r[2]) === 1)) {
     return refuse('malformed inputs');
   }
   if (!Number.isInteger(log.end) || (log.end as number) <= 0 || (log.end as number) > 720000) {
@@ -486,9 +491,12 @@ async function roomRound(
   // with 'malformed inputs', and nothing but a live round could have shown
   // it: a synthetic placings blob never goes near the log.
   const inputs = log.inputs;
+  // [quantum, x, y, seat]: (x, y) exactly one unit step (see the solo path),
+  // seat a real slot in this room.
   if (!Array.isArray(inputs) || inputs.length > 60000 ||
       !inputs.every((r) =>
         Array.isArray(r) && r.length === 4 && r.every(Number.isInteger) &&
+        Math.abs(r[1]) + Math.abs(r[2]) === 1 &&
         r[3] >= 0 && r[3] < (players as number))) {
     return refuse('malformed inputs');
   }
