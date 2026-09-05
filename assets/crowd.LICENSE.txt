@@ -1,6 +1,8 @@
-crowd.m4a
+crowd.m4a and cheer.m4a
 
-A 50 second excerpt (2:42 to 3:32) of "Sports Crowd Various Sounds"
+crowd.m4a: a 50 second excerpt (2:42 to 3:32), and cheer.m4a: the 8
+second goal-scale roar (2:59.5 to 3:07.5, faded at both ends), both
+of "Sports Crowd Various Sounds"
 by FlatHill, https://freesound.org/people/FlatHill/sounds/324756/
 License: Creative Commons 0 (public domain dedication); no attribution
 is required, this note exists so the provenance is never a mystery.
