@@ -629,7 +629,9 @@
      right rail first and the half empty column read as clutter. */
   @container ov (min-width: 520px) {
     .ov-body.kick-grid > .legend {
-      width: min(100%, clamp(400px, 66cqw, 520px));
+      /* the chooser's compact column, not a table across the panel: at
+         520px the values sat a hand's width from the words they price */
+      width: min(100%, 360px);
       max-width: none; margin: 0; gap: 0;
       text-align: left;
     }
