@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 20;  // 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 21;  // 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -695,6 +695,9 @@ export function createGame(cfg = {}) {
     // standing clear closes the pass behind it: one way, out.
     if (S.wallLookup.has(k) && !S.wallLookup.has(K(self.x, self.y))) return true;
     if (S.food !== null && S.food.x === x && S.food.y === y) return true;
+    // the bolt is the players' relief and blocks like food does: a ghost
+    // parked on it was hiding the one thing you needed to reach (v21)
+    if (S.bolt !== null && S.bolt.x === x && S.bolt.y === y) return true;
     for (let i = 0; i < S.bombs.length; i++) if (S.bombs[i].x === x && S.bombs[i].y === y) return true;
     for (let i = 0; i < S.ghosts.length; i++) {
       const g = S.ghosts[i];
@@ -773,6 +776,7 @@ export function createGame(cfg = {}) {
       for (const k of players[i].snakeSet) _impassable[k] = 1;
     }
     if (S.food !== null) _impassable[K(S.food.x, S.food.y)] = 1;
+    if (S.bolt !== null) _impassable[K(S.bolt.x, S.bolt.y)] = 1;
     for (let i = 0; i < S.bombs.length; i++) _impassable[K(S.bombs[i].x, S.bombs[i].y)] = 1;
   }
 
@@ -848,6 +852,10 @@ export function createGame(cfg = {}) {
   // Pure targeting: the legs (GHOST_MS, the no-reverse rule, blocked cells)
   // are identical for all five.
   function ghostTarget(g) {
+    // the one override before personality (v21): a ghost a wall has formed
+    // on is not hunting, it is leaving, and every role leaves the same way.
+    // Inside ghostTarget so intelligence keeps living here and nowhere else.
+    if (S.wallLookup.has(K(g.x, g.y))) return wallExit(g);
     const v = victimOf(g);
     const head = v.snake[0];
     switch (g.role ?? 0) {
@@ -875,6 +883,29 @@ export function createGame(cfg = {}) {
       default:   // the Chaser: the victim's head, plainly
         return head;
     }
+  }
+
+  // A ghost a wall has formed on has one job: off the shape, by the
+  // shortest walk (v21). Its personality resumes on clear ground. Before
+  // this the target stayed the hunt, which dragged a phasing ghost back and
+  // forth ALONG the shape whenever its victim moved, lingering on cells it
+  // was only ever passing through. The sweep is rooted at the ghost (its
+  // map has the walls off while it stands on one), and the nearest cell
+  // not under the shape wins; ties fall to scan order, which is fixed, so
+  // replays agree. A ghost boxed in on the shape keeps its own cell and
+  // falls back to the ordinary shuffle.
+  function wallExit(g) {
+    ghostField(g, g.x, g.y);
+    let bx = g.x, by = g.y, bd = Infinity;
+    for (let x = 0; x < GRID; x++) {
+      for (let y = 0; y < GRID; y++) {
+        const k = K(x, y);
+        if (S.wallLookup.has(k)) continue;
+        const d = _walkField[k];
+        if (d >= 0 && d < bd) { bd = d; bx = x; by = y; }
+      }
+    }
+    return { x: bx, y: by };
   }
 
   // One deep copy of a ghost, used by both ends of a rollback. A ghost field

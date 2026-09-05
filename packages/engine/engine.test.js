@@ -796,6 +796,49 @@ test('a bolt falls due every ten items, counting appetite and not points', () =>
   assert.deepEqual({ x: g.bolt.x, y: g.bolt.y }, where, 'and only one of it');
 });
 
+test('the bolt blocks ghosts: the relief is never stood on (v21)', () => {
+  const g = quietGame();
+  foodFar(g);
+  // the victim waits on the bolt's far side, so the straight hunt runs
+  // right through the bolt cell; the route has to bend around it
+  setSnake(g, [[9, 5], [10, 5], [11, 5]], -1, 0);
+  g.bolt = { x: 6, y: 5, bornAt: 0 };
+  g.ghosts.push({ x: 5, y: 5, px: 5, py: 5, dir: { x: 1, y: 0 }, warped: false, role: 0,
+                  moveAt: 0, stepMs: GHOST_MS, majX: 5, majY: 5, crossed: true });
+  const gh = g.ghosts[0];
+  for (let n = 0; n < 30; n++) {
+    g._moveGhost(gh);
+    assert.ok(!(gh.x === 6 && gh.y === 5), 'a ghost never takes the bolt cell');
+  }
+});
+
+test('a walled-on ghost makes for open ground, not for its victim (v21)', () => {
+  const g = quietGame();
+  foodFar(g);
+  // a wide three-deep shape with the ghost mid-band, and the victim just off
+  // the band's END: the personality pull runs ALONG the shape, which is
+  // exactly the linger this rule retires. Open ground is two cells up or
+  // down; the hunt would have dragged it eight cells sideways first.
+  setSnake(g, [[1, 9], [1, 10], [1, 11]], 0, -1);
+  g.wallState = 'solid';
+  const cells = [];
+  for (let x = 2; x <= 18; x++) for (let y = 8; y <= 10; y++) cells.push(K(x, y));
+  g.wallLookup = new Set(cells);
+  g.ghosts.push({ x: 10, y: 9, px: 10, py: 9, dir: { x: 0, y: 0 }, warped: false, role: 0,
+                  moveAt: 0, stepMs: GHOST_MS, majX: 10, majY: 9, crossed: true });
+  const gh = g.ghosts[0];
+  let out = -1;
+  for (let n = 0; n < 10 && out < 0; n++) {
+    g._moveGhost(gh);
+    if (!g.wallLookup.has(K(gh.x, gh.y))) out = n;
+  }
+  assert.ok(out >= 0 && out <= 6, 'off a three-deep shape within a handful of moves, victim or no victim (got ' + out + ')');
+  for (let n = 0; n < 20; n++) {
+    g._moveGhost(gh);
+    assert.ok(!g.wallLookup.has(K(gh.x, gh.y)), 'and the shape shuts behind it');
+  }
+});
+
 test('a bolt drags the pack for five seconds, then lets it go', () => {
   const g = quietGame();
   g.portalRetryAt = 1e12;
