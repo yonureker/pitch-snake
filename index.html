@@ -1076,8 +1076,6 @@
     color: #f6efde; text-shadow: clamp(3px, 0.6cqw, 4px) clamp(3px, 0.6cqw, 4px) 0 var(--gold);
     margin-top: 4px;
   }
-  .res-note { font-size: 14px; color: #b7ac93; margin-top: 12px; line-height: 1.35; }
-  .res-note b { color: var(--gold-bright); font-weight: 700; }
   /* ---- the score stickers ----
      NEW BEST and TOP 100 are die-cut stickers riding the hero's corner, not
      sentences under it: the number is the story and the stickers are slapped
@@ -1589,7 +1587,6 @@
             <span class="res-stick stick-best" id="stickBest" hidden>NEW BEST</span>
             <span class="res-stick stick-top" id="stickTop" hidden>TOP 100<i>WORLDWIDE</i></span>
           </div>
-          <p class="res-note" id="resNote"></p>
         </div>
         <div class="entry" id="entry" style="display:none">
           <input id="nameInput" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false">
@@ -2496,35 +2493,18 @@
     }
   }
 
-  // ---- a level ends ----
-  // The result, written from what the round already knows. Nothing here is
-  // fetched and nothing is computed that the screen did not already have: it
-  // is the same facts the old single line carried, given room to be read.
-  // Only the wide layout shows it, but it is filled either way, because
-  // whether it is visible is the container query's business and not this
-  // function's.
-  const SURVIVAL_UNIT = (n) => n === 1 ? '1 second' : n + ' seconds';
+  // The result, written from what the round already knows. The number and
+  // its stickers are the whole story now: the off-best delta and the "top
+  // 10 starts at" target both went the way of the best sentence, at the
+  // owner's call, because a number you have to subtract from is homework
+  // and the target is one tap away behind the trophy. The TOP 100 sticker
+  // is hidden here and unhidden by askIfItPlaces, the one place that has
+  // the hundredth row to judge it against.
   function fillResult(score, reason) {
-    const seconds = ruleMode() === 'survival';
-    resTag.textContent = seconds ? 'SECONDS SURVIVED' : 'YOU SCORED';
+    resTag.textContent = ruleMode() === 'survival' ? 'SECONDS SURVIVED' : 'YOU SCORED';
     resScore.textContent = score;
-    const prev = bestAtStart;
-    resNote.textContent = '';
-    // The sticker alone: saying how far clear as well was play tested into
-    // this comment, since a best is a best whatever the margin, and the
-    // sentence went the same way once the sticker existed to say it. The
-    // TOP 100 sticker is hidden here and unhidden by askIfItPlaces, the one
-    // place that has the hundredth row to judge it against.
     stickBest.hidden = !beatBest;
     stickTop.hidden = true;
-    if (!beatBest && prev > 0) {
-      const off = prev - score;
-      resNote.textContent = off === 0 ? 'Level with your best.'
-        : (seconds ? SURVIVAL_UNIT(off) : off + (off === 1 ? ' point' : ' points')) + ' off your best.';
-    }
-    // No fact rows any more: the mode is on the REMATCH button, how it
-    // ended is in the strapline, and the best context lives in the note
-    // above. Facts the screen already tells once do not get a table.
   }
 
   function onDeath(reason) {
@@ -4380,10 +4360,8 @@
       setTimeout(() => nameInput.focus(), 60);
       return;
     }
-    // a miss is worth a number: what it would have taken is the next target
-    saveNote.textContent = 'Top 10 starts at ' + list[MAX_ENTRIES - 1].score + '.';
-    saveNote.className = 'save-note soft';
-    saveNote.hidden = false;
+    // a miss shows nothing extra: the target lives behind the trophy, and a
+    // line of homework under the hero was the owner's call to cut
     submitSilently();          // it earned no place, but it may have earned a badge
   }
 
@@ -4725,7 +4703,6 @@
   const resultPanel = document.getElementById('resultPanel');
   const resScore = document.getElementById('resScore');
   const resTag = document.getElementById('resTag');
-  const resNote = document.getElementById('resNote');
   const stickBest = document.getElementById('stickBest');
   const stickTop = document.getElementById('stickTop');
   function markOverflow() {
