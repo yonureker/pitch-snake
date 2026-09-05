@@ -710,7 +710,7 @@ export default function Index() {
                     <View style={styles.legend}>
                       <LegendRow
                         icon={<Image source={appleIcon} style={styles.lgImage} />}
-                        text="Emoji"
+                        text="Ball"
                         value="+1"
                         valueTone="pos"
                       />
@@ -720,7 +720,7 @@ export default function Index() {
                             <Image source={starIcon} style={styles.lgRingImage} />
                           </View>
                         }
-                        text="Emoji with a ring"
+                        text="Ball with a ring"
                         value="+5"
                         valueTone="pos"
                       />

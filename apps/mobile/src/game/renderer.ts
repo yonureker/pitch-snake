@@ -40,6 +40,7 @@ import {
   type Game,
 } from '@pitch-snake/engine';
 
+import { paintDizzyGhost, paintPitch } from './pitch-art';
 import { GameColors, GhostColors, SNAKE_SHADES, snakeShade } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
@@ -211,6 +212,7 @@ let snakeSprites: (Baked | null)[] = [];
 let ghostSprites: (Baked | null)[] = [];
 let ghostSpriteOriginY = 0;
 let tntSprite: Baked | null = null;
+let boltSprite: Baked | null = null;
 let portalSpriteA: Baked | null = null;
 let portalSpriteB: Baked | null = null;
 let wallSprite: Baked | null = null;
@@ -218,17 +220,16 @@ let wallSprite: Baked | null = null;
 const tntFontFamily = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
 
 function bakeArena(boardPx: number): void {
+  // pitch-art owns the whole look: grass, bands, glow, grid and chalk
   arenaSprite = bake(boardPx, boardPx, (c) => {
-    fillPaint.setColor(C.arena);
-    c.drawRect(Skia.XYWHRect(0, 0, boardPx, boardPx), fillPaint);
-    strokePaint.setColor(C.gridLine);
-    strokePaint.setStrokeWidth(1);
-    strokePaint.setStrokeCap(StrokeCap.Butt);
-    const cell = boardPx / GRID;
-    for (let i = 1; i < GRID; i++) {
-      c.drawLine(i * cell, 0, i * cell, boardPx, strokePaint);
-      c.drawLine(0, i * cell, boardPx, i * cell, strokePaint);
-    }
+    paintPitch(c, boardPx);
+  });
+}
+
+function bakeBolt(cell: number): Baked | null {
+  const s = Math.ceil(cell * 1.7);
+  return bake(s, s, (c) => {
+    paintDizzyGhost(c, s, cell);
   });
 }
 
@@ -351,6 +352,8 @@ function ensureSprites(boardPx: number): void {
     bakeSnakeCells(cell);
     bakeGhosts(cell);
     bakeTnt(cell);
+    boltSprite?.image.dispose();
+    boltSprite = bakeBolt(cell);
     portalSpriteA?.image.dispose();
     portalSpriteB?.image.dispose();
     portalSpriteA = bakePortalEnd(
@@ -646,42 +649,20 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     fillPaint.setAlphaf(1);
   }
 
-  // The bolt, drawn rather than blitted: the atlas holds food glyphs and this
-  // phone cannot render a text emoji at all, so the shape is a path. Cheap
-  // enough to build per frame at one bolt a board.
+  // The bolt wears its dizzy-ghost portrait, baked in pitch-art: the halo,
+  // the sheet and the star are bake-time work, so the frame only blits it
+  // on its own heartbeat, blinking as its life runs out like the web.
   const bolt = game.bolt;
-  if (bolt !== null) {
+  if (bolt !== null && boltSprite !== null) {
     const bx = bolt.x * cell + cell / 2;
     const by = bolt.y * cell + cell / 2;
     const left = bolt.bornAt + BOLT_LIFE_MS - game.clockMs;
     const blink = left < 1500 && ((game.clockMs / 110) | 0) % 2 !== 0;
-    const s = cell * 0.5 * pulse;
-    const p = Skia.Path.Make();
-    p.moveTo(bx + s * 0.18, by - s);
-    p.lineTo(bx - s * 0.62, by + s * 0.12);
-    p.lineTo(bx - s * 0.06, by + s * 0.12);
-    p.lineTo(bx - s * 0.22, by + s);
-    p.lineTo(bx + s * 0.66, by - s * 0.18);
-    p.lineTo(bx + s * 0.08, by - s * 0.18);
-    p.close();
-    strokePaint.setColor(C.goldBright);
-    strokePaint.setStrokeWidth(Math.max(2, cell * 0.07));
-    strokePaint.setAlphaf((blink ? 0.35 : 1) * (0.55 + Math.sin(game.clockMs / 150 + Math.PI) * 0.2));
-    const halfBox = cell * 0.5 * (2 - pulse);
-    canvas.drawRRect(
-      Skia.RRectXY(
-        Skia.XYWHRect(bx - halfBox, by - halfBox, halfBox * 2, halfBox * 2),
-        cell * 0.1,
-        cell * 0.1,
-      ),
-      strokePaint,
-    );
-    strokePaint.setAlphaf(1);
-    fillPaint.setColor(C.goldBright);
+    const beat = 1 + Math.sin(game.clockMs / 150) * 0.12;
+    const d = boltSprite.w * beat;
     fillPaint.setAlphaf(blink ? 0.35 : 1);
-    canvas.drawPath(p, fillPaint);
+    drawBaked(canvas, boltSprite, bx - d / 2, by - d / 2, d, d);
     fillPaint.setAlphaf(1);
-    p.dispose();
   }
 
   // TNT: one image per block; wave blink via alpha, pulse via dst size
