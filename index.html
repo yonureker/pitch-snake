@@ -4807,9 +4807,14 @@
     // this round placed on it (or a save just landed a row), because ten
     // rows you are not in is noise and the trophy button browses the boards
     // on demand. A tournament board still always shows, since a small named
-    // field is one every entry belongs to.
-    const deadResult = deadPanels && mode !== 'levels';
-    const showBoard = deadResult && boardWanted;
+    // field is one every entry belongs to, and a room's standings ALWAYS
+    // show for the same reason: they are the result. A room also never
+    // shows the solo hero, whose YOU SCORED belongs to a round about your
+    // own number; a room's number is the finishing order, and the hero up
+    // there was last filled by some earlier solo round (this shipped wrong
+    // once, a stale YOU SCORED 0 over a finished room).
+    const deadResult = deadPanels && mode !== 'levels' && mode !== 'versus';
+    const showBoard = (deadResult && boardWanted) || (deadPanels && mode === 'versus');
     standingsEl.style.display = showBoard ? 'block' : 'none';
     boardHead.style.display = showBoard ? 'block' : 'none';
     ovBody.classList.toggle('two-col', deadResult);
