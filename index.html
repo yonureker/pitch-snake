@@ -1342,6 +1342,9 @@
     font-size: 14px; letter-spacing: 0.5px; color: var(--gold-bright);
   }
   .modal.profile { gap: 11px; max-height: 86vh; overflow-y: auto; }
+  /* a hundred rows since the board grew: the sheet scrolls like the profile
+     does, one scroller only, since the backdrop itself never scrolls */
+  .modal.boards { max-height: 86vh; overflow-y: auto; }
   .modal.profile .entry.wide { width: 100%; }
   .modal.profile select {
     width: 100%; padding: 9px 10px; border-radius: 6px;
@@ -1431,7 +1434,7 @@
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
       <!-- The boards live behind the trophy now: the death screen shows the
-           top ten only when your round places on it, so browsing the boards
+           top 100 only when your round places on it, so browsing the boards
            needed its own door, one that works on every screen and width. -->
       <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">&#127942;</button>
       <!-- The chip row: the player chip and the purse side by side, one
@@ -1459,7 +1462,7 @@
              text. The glyph carries the identity that colour cannot: six
              modes told apart by hue alone fail 8% of men. -->
         <div class="mode-row stack-choice" id="modeRow">
-          <button data-mode="classic" class="active"><span class="m-txt"><span class="m-t">CLASSIC</span><span class="m-d">No time limit. Chase the top ten.</span></span></button>
+          <button data-mode="classic" class="active"><span class="m-txt"><span class="m-t">CLASSIC</span><span class="m-d">No time limit. Chase the top 100.</span></span></button>
           <button data-mode="speedrun"><span class="m-txt"><span class="m-t">SPEED RUN</span><span class="m-d">Sixty seconds. Score fast.</span></span></button>
           <button data-mode="survival"><span class="m-txt"><span class="m-t">SURVIVAL</span><span class="m-d">The clock is the score.</span></span></button>
           <button data-mode="versus"><span class="m-txt"><span class="m-t">MULTIPLAYER</span><span class="m-d">Five snakes, one seed.</span></span></button>
@@ -1602,7 +1605,7 @@
           </div>
         </div>
         </div><!-- /res-col -->
-        <div class="board-head" id="boardHead" style="display:none">Top 10</div>
+        <div class="board-head" id="boardHead" style="display:none">Top 100</div>
         <ol class="standings" id="standings" style="display:none"></ol>
         <div class="mode-caption" id="modeCaption"></div>
         </div>
@@ -1715,12 +1718,12 @@
          previews draw with the SAME ramps and hat art the pitch uses, so a
          preview cannot lie. Later in the DOM than the profile sheet on
          purpose: it opens above it and DONE lands you back on the sheet. -->
-    <!-- The boards sheet: every mode's world top ten, browsable on demand
+    <!-- The boards sheet: every mode's world top 100, browsable on demand
          from the trophy button. The death screen stopped showing a board
          you are not on; this is where the curious go instead. -->
     <div class="modal-backdrop" id="boardsModal" hidden>
       <div class="modal boards">
-        <div class="modal-title">TOP 10 WORLDWIDE</div>
+        <div class="modal-title">TOP 100 WORLDWIDE</div>
         <div class="board-chips" id="boardChips">
           <button data-bmode="classic" class="active">CLASSIC</button>
           <button data-bmode="speedrun">SPEED RUN</button>
@@ -1897,7 +1900,7 @@
     survival: 'Stay short. The clock is your score.',
   };
   const MODE_DESC = {
-    classic: 'No time limit. Beat your best, take a top ten spot, brag about your snake skills.',
+    classic: 'No time limit. Beat your best, take a top 100 spot, brag about your snake skills.',
     speedrun: 'One minute on the clock. Do not let the snake skip her meals.',
     survival: 'Time is the score. Emojis shrink you, TNT feeds you, and every ten seconds the pitch turns meaner.',
     versus: 'Settle disputes the friendly way. Hunger Games, snake edition.',
@@ -2536,9 +2539,10 @@
     // a tournament board only takes entries while its window is open
     const canEnter = mode !== 'tourney' || tourneyState() === 'open';
     // A tournament is a small named field where every entry belongs, so it
-    // asks at once. The world boards hold ten places, and whether this round
-    // reaches one is only knowable from the standings, so their form waits for
-    // askIfItPlaces to read the tenth row off the board being fetched anyway.
+    // asks at once. The world boards hold a hundred places, and whether this
+    // round reaches one is only knowable from the standings, so their form
+    // waits for askIfItPlaces to read the last row off the board being
+    // fetched anyway.
     const worldBoard = mode !== 'tourney';
     entryWanted = g.score > 0 && canEnter && !worldBoard;
     saveNote.hidden = true;
@@ -2549,7 +2553,7 @@
     armReveal(g.score);          // the hero counts up to it from the whistle
     const gen = ++deathGen;
     // the tournament entry under a known name submits itself too; the world
-    // board's version of this lives in askIfItPlaces, behind its ten-row gate
+    // board's version of this lives in askIfItPlaces, behind its hundred-row gate
     if (entryWanted && sbProfile && sbProfile.name) { entryWanted = false; autoSubmit(gen); }
     else if (g.score > 0 && worldBoard) askIfItPlaces(gen, g.score);
     else renderStandings();
@@ -3934,7 +3938,11 @@
     if (nudgedThisSession || nudgeRefusals() >= NUDGE_LIMIT) return false;
     return (savedThisRound && !boardIsLocal) || beatBest;
   }
-  const MAX_ENTRIES = 10;
+  // A hundred since 2026-09-05, at the owner's call: the board tracks the
+  // world top 100, the entry gate is the hundredth row, and the TOP 100
+  // sticker is the same judgment worn on the score. The server's
+  // top_scores clamp has always been 100, so this is the page catching up.
+  const MAX_ENTRIES = 100;
 
   // One call shape for both functions. Every call carries its own abort timer,
   // because a request that never answers must not leave FULL TIME sitting there
@@ -4196,10 +4204,7 @@
             .filter(r => r && typeof r.score === 'number')
             .map(r => ({ key: 'n:' + String(r.name || 'YOU'), name: String(r.name || 'YOU'), score: r.score, country: cc(r.country) }));
         }
-        // A hundred rows, not ten: the board still renders MAX_ENTRIES, but
-        // the tail is what judges the TOP 100 sticker, and the server clamps
-        // at 100 anyway. Same single call either way.
-        const rows = await sbRpc('pitch_snake_top_scores', { limit_count: 100, p_mode: ruleMode() });
+        const rows = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: ruleMode() });
         boardIsLocal = false;
         return asList(rows)
           .filter(r => r && typeof r.score === 'number')
@@ -4262,7 +4267,7 @@
   // renders race when the backend is slow (die() fires one without awaiting, a
   // quick save fires another); the generation counter lets only the newest
   // render win, so a stale list can't overwrite the saved one. Returns the
-  // list it drew, so the caller that needs the tenth row (askIfItPlaces) reads
+  // list it drew, so the caller that needs the last row (askIfItPlaces) reads
   // it off the render instead of asking the server a second time; a render
   // that lost the race returns nothing, which is also the answer "do not
   // decide anything from this".
@@ -4278,19 +4283,16 @@
     if (gen !== standingsGen) return;
     boardHead.textContent =
       mode === 'tourney' && tourney ? (boardIsLocal ? tourney.title + ' (unreachable)' : tourney.title + ' \u00b7 ' + tourney.code)
-      : (boardIsLocal ? 'Top 10 on this device' : 'Top 10 worldwide') +
+      : (boardIsLocal ? 'Top 100 on this device' : 'Top 100 worldwide') +
         (ruleMode() === 'classic' ? '' : ' \u00b7 ' + RULE_LABELS[ruleMode()]);
     standingsEl.innerHTML = '';
-    // A ten-row board does not fit a phone and never has; it scrolls, which
+    // A hundred-row board does not fit a phone and never will; it scrolls, which
     // is fine, but only if the player can tell. The fade that says so is
     // measured by markOverflow, and refreshModeUI ran it BEFORE this function
     // awaited the board: it measured an empty list, found nothing to scroll,
     // and cleared the fade for the one screen that most needed it. Every exit
     // from here re-measures now that the rows actually exist.
-    // the fetch may carry a hundred rows for the sticker; the board is
-    // still a top ten and draws only that
-    const shown = list.slice(0, MAX_ENTRIES);
-    standingsEl.classList.toggle('dense', shown.length > 4);
+    standingsEl.classList.toggle('dense', list.length > 4);
     if (!list.length) {
       const li = document.createElement('li');
       li.className = 'empty';
@@ -4299,7 +4301,7 @@
       markOverflow();
       return list;                  // an empty board is a board with room
     }
-    shown.forEach((e, i) => {
+    list.forEach((e, i) => {
       const li = document.createElement('li');
       if (highlightKey && e.key === highlightKey) li.className = 'me';
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
@@ -4321,16 +4323,16 @@
   }
 
   // ---- who gets asked for a name ----
-  // A world board has ten places, so a round that cannot reach one has nowhere
-  // to save into and is never asked. The gate is the tenth row of the very
-  // standings the death screen fetches anyway: no second call, no cutoff
-  // cached somewhere to drift out of date, and the board a round is judged
-  // against is the one the player is looking at while it is judged.
+  // A world board has a hundred places, so a round that cannot reach one has
+  // nowhere to save into and is never asked. The gate is the hundredth row of
+  // the very standings the death screen fetches anyway: no second call, no
+  // cutoff cached somewhere to drift out of date, and the board a round is
+  // judged against is the one the player is looking at while it is judged.
   //
-  // Ten rows and the board orders by score desc, created_at asc, so matching
-  // the tenth is not reaching it: an equal score sorts behind the older one.
-  // It has to be beaten. A board with room takes anyone, which is also the
-  // offline answer, since a short local list is the board the row lands on.
+  // The board orders by score desc, created_at asc, so matching the last row
+  // is not reaching it: an equal score sorts behind the older one. It has to
+  // be beaten. A board with room takes anyone, which is also the offline
+  // answer, since a short local list is the board the row lands on.
   function placesOnBoard(list, sc) {
     return list.length < MAX_ENTRIES || sc > list[MAX_ENTRIES - 1].score;
   }
@@ -4344,11 +4346,9 @@
     const list = await renderStandings();
     if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
     if (!list) return;                   // a newer render owns the screen
-    // The TOP 100 sticker, judged against the same fetch and only against
-    // the WORLD board: a device list cannot claim a worldwide standing.
-    // Matching the hundredth is not beating it, same as the top-ten gate:
-    // the board orders equal scores behind the older one.
-    if (!boardIsLocal && (list.length < 100 || sc > list[99].score)) stickTop.hidden = false;
+    // The TOP 100 sticker is the entry gate worn on the score, and only the
+    // WORLD board awards it: a device list cannot claim a worldwide standing.
+    if (!boardIsLocal && placesOnBoard(list, sc)) stickTop.hidden = false;
     if (placesOnBoard(list, sc)) {
       // the round placed: the board earns its screen space, with your row
       boardWanted = true;
@@ -6715,7 +6715,7 @@
   shopClose.addEventListener('click', () => { shopModal.hidden = true; });
 
   // ---- the boards sheet ----
-  // The world top tens on demand, behind the trophy: the death screen shows
+  // The world top 100s on demand, behind the trophy: the death screen shows
   // a board only when your round places on it, so the curious needed a door
   // of their own. Feeds from the same one-fetch-per-mode session cache the
   // chooser retries refill (railTops); unreachable falls back to this device's
