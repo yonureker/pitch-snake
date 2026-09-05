@@ -137,15 +137,12 @@
      the button renders its label exactly as the bare text always did. */
   .stack-choice .m-g, .stack-choice .m-d { display: none; }
   .stack-choice .m-txt, .stack-choice .m-t { display: contents; }
-  /* One colour per mode. LEARN THE PITCH had no accent at all and fell
-     back to the panel gold, which made it read as disabled next to five
-     coloured siblings; the cool blue is deliberate, one calm thing among
-     five warm ones. */
+  /* One colour per mode: a tile with no accent read as disabled next to
+     its coloured siblings. */
   #modeRow button[data-mode="classic"]  { --accent: #c9a961; }
   #modeRow button[data-mode="speedrun"] { --accent: #4fc3d9; }
   #modeRow button[data-mode="survival"] { --accent: #e2803a; }
   #modeRow button[data-mode="versus"]   { --accent: #7dbf5c; }
-  #modeRow button[data-mode="levels"]   { --accent: #8fa8c8; }
   #modeRow button[data-mode="tourney"]  { --accent: #a878d8; }
 
   /* the tournament panel's chips stay chips */
@@ -1060,58 +1057,6 @@
   .country-row select { flex: 1 1 auto; min-width: 0; }
   /* a row with no flag still lines its names up with the rows that have one */
   .standings .fl-gap { width: 20px; flex: 0 0 20px; }
-  /* The briefing for the lesson the red button is about to play. It sits
-     where the board sits in every other mode, because that is the space a
-     result screen has, and a lesson result screen was leaving it empty while
-     sending the player into the next lesson knowing nothing about it. */
-  .brief {
-    width: 72%; max-width: 260px; margin: 2px 0;
-    padding: 12px 14px; border-radius: 8px; text-align: center;
-    background: rgba(33,30,26,0.5); border: 1px solid rgba(194,162,90,0.4);
-    display: flex; flex-direction: column; gap: 5px;
-  }
-  .brief[hidden] { display: none; }
-  .brief-eyebrow {
-    margin: 0; font-family: 'Barlow', sans-serif; font-weight: 700;
-    font-size: 10px; letter-spacing: 2px; color: var(--gold);
-  }
-  .brief-name {
-    margin: 0; font-family: 'Anton', sans-serif; font-size: 19px;
-    letter-spacing: 0.5px; color: var(--text-bright, #efe6d0);
-  }
-  .brief-teach {
-    margin: 0; font-family: 'Barlow', sans-serif; font-size: 12px;
-    line-height: 1.35; color: #b7ac93;
-  }
-  .brief-goal {
-    margin: 2px 0 0; font-family: 'Barlow', sans-serif; font-weight: 700;
-    font-size: 13px; line-height: 1.3; color: #e9e0cd;
-  }
-  /* the level list: a lesson, what it asks, and whether it is behind you */
-  .levels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; }
-  .levels .lv {
-    display: flex; align-items: flex-start; gap: 10px; text-align: left;
-    padding: 9px 11px; border-radius: 6px; cursor: pointer;
-    background: rgba(33,30,26,0.5); border: 1px solid rgba(194,162,90,0.35);
-  }
-  .levels .lv:hover { border-color: var(--gold); }
-  .levels .lv.at { border-color: var(--food); }
-  .levels .lv.locked { cursor: default; opacity: 0.45; }
-  .levels .lv.locked:hover { border-color: rgba(194,162,90,0.35); }
-  .levels .lv-mark {
-    flex: 0 0 20px; text-align: center; font-family: 'Barlow', sans-serif;
-    font-weight: 700; font-size: 13px; color: var(--gold-bright); line-height: 1.35;
-  }
-  .levels .lv.done .lv-mark { color: #8fbf5e; }
-  .levels .lv-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .levels .lv-body b {
-    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 12px;
-    /* the panel is dark, so this is the standings' light ink and NOT --text,
-       which is the near-black meant for the cream surfaces */
-    letter-spacing: 1px; color: #e9e0cd;
-  }
-  .levels .lv.locked .lv-body b { color: #8d867a; }
-  .levels .lv-goal { font-family: 'Barlow', sans-serif; font-size: 12px; color: #b7ac93; line-height: 1.3; }
   .standings li {
     display: flex; align-items: baseline; gap: 10px;
     font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 14px;
@@ -1468,12 +1413,7 @@
           <button data-mode="speedrun"><span class="m-g">&#9201;&#65039;</span><span class="m-txt"><span class="m-t">SPEED RUN</span><span class="m-d">Sixty seconds. Score fast.</span></span></button>
           <button data-mode="survival"><span class="m-g">&#128293;</span><span class="m-txt"><span class="m-t">SURVIVAL</span><span class="m-d">The clock is the score.</span></span></button>
           <button data-mode="versus"><span class="m-g">&#128101;</span><span class="m-txt"><span class="m-t">MULTIPLAYER</span><span class="m-d">Five snakes, one seed.</span></span></button>
-          <button data-mode="levels"><span class="m-g">&#127891;</span><span class="m-txt"><span class="m-t">LEARN THE PITCH</span><span class="m-d">Five lessons, then you are off.</span></span></button>
           <button data-mode="tourney"><span class="m-g">&#127942;</span><span class="m-txt"><span class="m-t">TOURNAMENTS</span><span class="m-d">A code, a window, one board.</span></span></button>
-        </div>
-        <div class="tourney" id="levelPanel" hidden>
-          <ol class="levels" id="levelList"></ol>
-          <p class="vs-hint" id="levelHint"></p>
         </div>
         <div class="tourney" id="vsPanel" hidden>
           <!-- The card wrappers and the second hint texts render as nothing
@@ -1609,12 +1549,6 @@
           </div>
         </div>
         </div><!-- /res-col -->
-        <div class="brief" id="levelBrief" hidden>
-          <p class="brief-eyebrow" id="briefEyebrow">NEXT</p>
-          <p class="brief-name" id="briefName"></p>
-          <p class="brief-teach" id="briefTeach"></p>
-          <p class="brief-goal" id="briefGoal"></p>
-        </div>
         <div class="board-head" id="boardHead" style="display:none">Top 10</div>
         <ol class="standings" id="standings" style="display:none"></ol>
         <div class="mode-caption" id="modeCaption"></div>
@@ -1773,7 +1707,7 @@
   // Same performance rules as ever: zero allocations per frame in steady
   // state, no string building in hot loops, DOM only on state change.
   import {
-    createGame, ghostRenderPos, MODES, LEVELS,
+    createGame, ghostRenderPos, MODES,
     GRID, SPEEDS, FOOD_TTL, REDIRECT_MS, BOLT_LIFE_MS,
     PORTAL_OPEN_MS, PORTAL_WARN_MS,
   } from './packages/engine/engine.js';
@@ -1879,57 +1813,7 @@
   // The page holds a mode NAME; the rules it implies come from the engine's
   // MODES table, never from here. 'tourney' is a lobby, not a ruleset: a
   // joined tournament carries its own mode and the round runs under that.
-  let mode = 'classic';                    // classic | speedrun | survival | versus | tourney | levels
-  // ---- levels: where a player learns the pitch ----
-  // Progress is a set of finished level IDS, not a count, so the table can be
-  // reordered or added to without anyone losing what they did. Device-local
-  // for now, which is exactly the thing the account offer at the end is FOR.
-  const LEVELS_KEY = 'snakeLevelsDone';
-  let levelIdx = 0;                        // which level is loaded
-  let lvScreen = false;                    // inside the chooser: the level list
-  let lastLessonPassed = false;            // did the round that just ended pass?
-  let levelsDone = new Set();
-  try {
-    const v = JSON.parse(localStorage.getItem(LEVELS_KEY));
-    if (Array.isArray(v)) for (const id of v) if (typeof id === 'string') levelsDone.add(id);
-  } catch (e) {}
-  function saveLevels() {
-    try { localStorage.setItem(LEVELS_KEY, JSON.stringify([...levelsDone])); } catch (e) {}
-    pushLevels();
-  }
-  // The account offer at the end says it keeps your progress, so it has to.
-  // The server MERGES rather than replaces, so two devices that each finished
-  // different lessons end up with both instead of whichever synced last.
-  // Fire and forget: a lesson is never held up by the network.
-  function pushLevels() {
-    if (!sbOn() || !sbToken || !levelsDone.size) return;
-    sbRpc('pitch_snake_set_levels', { p_levels: [...levelsDone] })
-      .then(list => { if (Array.isArray(list)) takeLevels(list); })
-      .catch(() => {});
-  }
-  // and the other direction: what the account already knows, folded in on
-  // sign-in, so a new device picks up where the old one stopped
-  function takeLevels(list) {
-    let grew = false;
-    for (const id of list) {
-      if (typeof id === 'string' && !levelsDone.has(id)) { levelsDone.add(id); grew = true; }
-    }
-    if (!grew) return;
-    try { localStorage.setItem(LEVELS_KEY, JSON.stringify([...levelsDone])); } catch (e) {}
-    if (mode === 'levels') { levelIdx = firstUnfinished(); refreshModeUI(); }
-  }
-  function currentLevel() { return LEVELS[Math.min(levelIdx, LEVELS.length - 1)]; }
-  // Unlocked means done, or the first one that is not: the player walks the
-  // list in order, and nothing is gated behind a level they cannot see.
-  function levelOpen(i) {
-    if (i === 0) return true;
-    return levelsDone.has(LEVELS[i - 1].id);
-  }
-  function firstUnfinished() {
-    const i = LEVELS.findIndex(l => !levelsDone.has(l.id));
-    return i < 0 ? LEVELS.length - 1 : i;
-  }
-  function onboardingDone() { return LEVELS.every(l => levelsDone.has(l.id)); }
+  let mode = 'classic';                    // classic | speedrun | survival | versus | tourney
   let tourney = null;                      // { code, title, mode, starts_at, ends_at }
   try {
     const m = localStorage.getItem('snakeMode');
@@ -1940,18 +1824,13 @@
   if (mode === 'tourney' && !tourney) mode = 'classic';
 
   // the ruleset the next round runs under, and how a player reads its name
-  // Levels are a UI mode, not a ruleset: their config comes from the engine's
-  // LEVELS table, and they never touch a board, a best or a seed ticket. So
-  // ruleMode answers 'classic' for them, which is what every board-shaped
-  // caller here wants to hear, and newRound branches for the actual config.
   function ruleMode() {
-    if (mode === 'levels') return 'classic';
     return mode === 'tourney' ? (tourney ? tourney.mode : 'classic') : mode;
   }
   const RULE_LABELS = { classic: 'CLASSIC', speedrun: 'SPEED RUN', survival: 'SURVIVAL', versus: 'MULTIPLAYER' };
   // what the chooser calls each entry, and what each one is for. A mode is
   // picked and read about first; nothing starts until the player says so.
-  const MODE_LABELS = { ...RULE_LABELS, tourney: 'TOURNAMENTS', levels: 'LEARN THE PITCH' };
+  const MODE_LABELS = { ...RULE_LABELS, tourney: 'TOURNAMENTS' };
   // the colour each mode answers to, and the ledge its CONFIGURE stands on
   const MODE_ACCENT = {
     versus: ['#7dbf5c', '#4e7d38'],
@@ -1970,7 +1849,6 @@
     survival: 'Time is the score. Emojis shrink you, TNT feeds you, and every ten seconds the pitch turns meaner.',
     versus: 'Settle disputes the friendly way. Hunger Games, snake edition.',
     tourney: 'A private board among friends, so you can bet all your money and lose it.',
-    levels: 'Five short lessons in what the pitch will otherwise kill you with. Start here.',
   };
   // The fixture identity: the ruleset plus, in a tournament, which one. A
   // REMATCH is only a rematch when this matches the round just played;
@@ -2001,17 +1879,6 @@
     // previous best is already gone
     bestAtStart = bestByMode[ruleMode()] || 0;
     roundTicket = null;
-    // A level is its own board: fixed seed so a hint about it is true for
-    // everyone, its own knobs, and no ticket, because a lesson never enters a
-    // leaderboard and so never needs the server to mint it a round.
-    if (mode === 'levels') {
-      const lv = currentLevel();
-      g = createGame({ tickMs: pageTickMs, ...lv.cfg });
-      lastShownScore = null;
-      handleEvents(g.drainEvents());
-      syncScoreDom();
-      return;
-    }
     let seed;
     const ticket = forReal ? takeTicket() : null;
     if (ticket) {
@@ -2047,10 +1914,7 @@
     // BEST is a solo statistic; a versus score rides a shared, leader-driven
     // board and would not mean the same thing
     if (!inVs) {
-      // A lesson is not a score. Eating three apples to pass level one is not
-      // a personal best and must never be recorded as one, or the first thing
-      // onboarding does is overwrite the number the player was chasing.
-      if (mode !== 'levels' && sc > best) { best = sc; bestByMode[ruleMode()] = best; beatBest = true; }
+      if (sc > best) { best = sc; bestByMode[ruleMode()] = best; beatBest = true; }
       bestEl.textContent = best;
     } else {
       syncMpHud();
@@ -2577,55 +2441,6 @@
   }
 
   // ---- a level ends ----
-  // A lesson is not a match: it is passed or repeated, it never enters a
-  // board, it never touches BEST, and it never asks for a name. The engine
-  // says which happened, 'won' for a score goal and 'time' for a survival
-  // one, so nothing here has to re-decide it.
-  function levelOver(reason) {
-    const lv = currentLevel();
-    const passed = reason === 'won' || reason === 'time';
-    lastLessonPassed = passed;
-    if (passed && !levelsDone.has(lv.id)) { levelsDone.add(lv.id); saveLevels(); }
-    const finished = passed && onboardingDone();
-
-    overlayTitle.textContent = passed ? 'WELL PLAYED' : 'AGAIN';
-    overlayTitle.className = passed ? '' : 'dead';
-    // The headline says only what just happened. What comes NEXT is the
-    // briefing's job, because a cause of death and a set of instructions
-    // crammed into one sentence is neither.
-    overlayText.textContent =
-      finished ? 'That is the pitch. Everything it can do, you have seen.'
-      : passed ? lv.name + ' done.'
-      : reason === 'wall' ? 'The walls got you.'
-      : reason === 'ghost' ? 'The ghost got you.'
-      : reason === 'self' ? 'You folded into yourself.'
-      : reason === 'tnt' ? 'The TNT got you.'
-      : 'That is the round.';
-
-    // move to the next one so START replays the right thing either way
-    if (passed && LEVELS[levelIdx + 1]) levelIdx += 1;
-    // and brief whatever the button will now play: the next lesson after a
-    // pass, this one again after a failure
-    briefWord = passed ? 'UP NEXT' : 'TRY THIS AGAIN';
-
-    savedThisRound = false;
-    badgeNote.hidden = true;
-    entryWanted = false;                 // a lesson never enters a board
-    saveNote.hidden = true;
-    saveNote.className = 'save-note';
-    showModes = false;
-    standingsEl.innerHTML = '';
-    // Finishing the whole thing IS the earned moment: it is the first thing
-    // most players will ever complete here, and unlike a top ten place it is
-    // one everybody reaches. The board offer stays for the rare round that
-    // makes it; this is the one that will actually convert.
-    const gen = ++deathGen;
-    if (finished) askAfterOnboarding(gen);
-    refreshModeUI();
-    overlay.classList.remove('hidden');
-    refreshSettingsUI();
-  }
-
   // The result, written from what the round already knows. Nothing here is
   // fetched and nothing is computed that the screen did not already have: it
   // is the same facts the old single line carried, given room to be read.
@@ -2658,8 +2473,7 @@
   function onDeath(reason) {
     state = 'dead';
     syncScoreDom();
-    crowdSync();       // here rather than deeper: the levels branch leaves early
-    if (mode === 'levels') { levelOver(reason); return; }
+    crowdSync();
     overlayTitle.textContent = 'FULL TIME';
     overlayTitle.className = 'dead';
     // the flavor only: the score's home is the hero right below, and saying
@@ -4013,30 +3827,15 @@
       const name = (sbProfile && sbProfile.name) || 'YOU';
       const r = await sbValidate(ticket.id, name);
       showBadges(r && r.earned, r && r.coins);
-      if (mode !== 'levels') refreshModeUI();
-    } catch (e) { /* a lesson in humility, not an error the player should see */ }
+      refreshModeUI();
+    } catch (e) { /* not an error the player should see */ }
   }
 
   // reached the world board, or beat the best, while still a guest
   function nudgeDue() {
     if (!sbOn() || !sbToken || !sbAnon()) return false;
     if (nudgedThisSession || nudgeRefusals() >= NUDGE_LIMIT) return false;
-    // levels have their own moment, at the end of the whole thing, with its
-    // own words: asking about scores in the middle of a lesson is nonsense
-    if (mode === 'levels') return false;
     return (savedThisRound && !boardIsLocal) || beatBest;
-  }
-  // Finishing onboarding, which is the one earned moment every player reaches
-  // rather than the few who reach a board. It ignores the refusal count on
-  // purpose: those refusals were answers to a DIFFERENT question, asked about
-  // a score, and this is the first time the player has something they would
-  // genuinely lose. It still only asks once, and never twice in a session.
-  function askAfterOnboarding(gen) {
-    if (!sbOn() || !sbToken || !sbAnon() || nudgedThisSession) return;
-    if (gen !== deathGen) return;
-    nudgedThisSession = true;
-    acctLine.textContent = 'You have finished the lessons. Create an account to keep your progress.';
-    authNudge.hidden = false;
   }
   const MAX_ENTRIES = 10;
 
@@ -4186,7 +3985,6 @@
       .catch(() => {});
     try {
       const prof = await sbRpc('pitch_snake_get_profile', {});
-      if (prof && Array.isArray(prof.levels)) takeLevels(prof.levels);
       if (prof && prof.name) {
         sbProfile = prof;
         if (takeTheirs || !vsNameInput.value) {
@@ -4547,69 +4345,6 @@
   // ---- mode + tournament UI ----
   const modeRow = document.getElementById('modeRow');
   const tourneyPanel = document.getElementById('tourneyPanel');
-  const levelPanel = document.getElementById('levelPanel');
-  const levelBrief = document.getElementById('levelBrief');
-  const briefEyebrow = document.getElementById('briefEyebrow');
-  const briefName = document.getElementById('briefName');
-  const briefTeach = document.getElementById('briefTeach');
-  const briefGoal = document.getElementById('briefGoal');
-
-  // What the red button is about to play, said in full: the name, the thing
-  // it teaches, and above all what it ASKS OF YOU. A result screen used to
-  // hand the player straight into the next lesson knowing none of that.
-  let briefWord = 'THIS LESSON';
-  function showBrief(lv, eyebrow) {
-    if (!lv) { levelBrief.hidden = true; return; }
-    briefEyebrow.textContent = eyebrow;
-    briefName.textContent = lv.name;
-    briefTeach.textContent = lv.teach;
-    briefGoal.textContent = lv.goal;
-    levelBrief.hidden = false;
-  }
-  const levelList = document.getElementById('levelList');
-  const levelHint = document.getElementById('levelHint');
-
-  // The list is the whole level UI: what each one teaches, whether it is done,
-  // and which one is next. Built on open, never per frame.
-  function renderLevels() {
-    levelList.innerHTML = '';
-    LEVELS.forEach((lv, i) => {
-      const done = levelsDone.has(lv.id);
-      const open = levelOpen(i);
-      const li = document.createElement('li');
-      li.className = 'lv' + (done ? ' done' : '') + (!open ? ' locked' : '') + (i === levelIdx ? ' at' : '');
-      const mark = document.createElement('span');
-      mark.className = 'lv-mark';
-      mark.textContent = done ? '\u2713' : open ? String(i + 1) : '\u00b7';
-      const body = document.createElement('span');
-      body.className = 'lv-body';
-      const nm = document.createElement('b');
-      nm.textContent = lv.name;
-      const go = document.createElement('span');
-      go.className = 'lv-goal';
-      go.textContent = open ? lv.goal : 'Finish the one above first.';
-      body.append(nm, go);
-      li.append(mark, body);
-      if (open) {
-        li.tabIndex = 0;
-        li.addEventListener('click', () => pickLevel(i));
-        li.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickLevel(i); }
-        });
-      }
-      levelList.appendChild(li);
-    });
-    levelHint.textContent = onboardingDone()
-      ? 'All five done. The pitch is yours.'
-      : currentLevel().teach;
-  }
-  function pickLevel(i) {
-    if (!levelOpen(i)) return;
-    levelIdx = i;
-    newRound();
-    renderLevels();
-    refreshModeUI();
-  }
   const tJoin = document.getElementById('tJoin');
   const tCreate = document.getElementById('tCreate');
   const tCard = document.getElementById('tCard');
@@ -4695,7 +4430,7 @@
     for (const b of modeRow.querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === mode);
     // the list screen: every mode, what the highlighted one is, and the two
     // buttons that either play it or take the choice back to the pitch
-    const listScreen = modesOpen && !tScreen && !lvScreen;
+    const listScreen = modesOpen && !tScreen;
     // The chooser and the multiplayer doors title themselves. The round's
     // title (KICK OFF, FULL TIME, WELL PLAYED...) belongs to the round state
     // and is set by events this function cannot recompute, so it is parked
@@ -4722,8 +4457,7 @@
     modeRow.style.display = listScreen ? '' : 'none';
     ovBody.classList.toggle('modes-grid', listScreen);
     // the kickoff's own dress, solo board modes only: a tournament's ready
-    // screen has its caption and card, a room has its steps, and a lesson
-    // briefs instead of scoring
+    // screen has its caption and card, and a room has its steps
     const kickScreen = state === 'ready' && !modesOpen &&
       (mode === 'classic' || mode === 'speedrun' || mode === 'survival');
     ovBody.classList.toggle('kick-grid', kickScreen);
@@ -4740,27 +4474,18 @@
     purseBtn.hidden = !onMenu || !purseKnown;
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
-    // The level screen borrows the chooser's footer: START plays the level
-    // the list has highlighted, BACK returns to the mode list. Without this
-    // the screen has no way in and no way out, which is how it first shipped
-    // to the headless test and immediately looked broken.
-    const lvFooter = modesOpen && lvScreen && mode === 'levels';
-    modeFooter.hidden = !(listScreen || lvFooter);
+    modeFooter.hidden = !listScreen;
     // a mode that needs a room or a code says so, in its own colour: gold
     // opens a setup screen, red is the whistle
     const step = modeNeedsStep();
     modeGoMain.textContent = step ? 'CONFIGURE' : 'START';
-    // on the level screen the button names the lesson it is about to play,
-    // because "LEARN THE PITCH" tells the player nothing they did not just read
-    modeGoSub.textContent = lvFooter ? currentLevel().name : (MODE_LABELS[mode] || '');
+    modeGoSub.textContent = MODE_LABELS[mode] || '';
     modeGoBtn.classList.toggle('configure', step);
     const accent = MODE_ACCENT[mode];
     if (step && accent) {
       modeGoBtn.style.setProperty('--go-fill', accent[0]);
       modeGoBtn.style.setProperty('--go-deep', accent[1]);
     }
-    levelPanel.hidden = !(modesOpen && lvScreen && mode === 'levels');
-    if (!levelPanel.hidden) renderLevels();
     tourneyPanel.hidden = !(modesOpen && tScreen && mode === 'tourney');
     vsPanel.hidden = !(modesOpen && tScreen && mode === 'versus');
     vsRefreshPanel();      // also the one place the pinned versus footer hides
@@ -4785,24 +4510,6 @@
     // says which it is holding
     document.getElementById('scoreLabel').textContent = ruleMode() === 'survival' ? 'Seconds' : 'Score';
     const deadPanels = state === 'dead' && !modesOpen;
-    // A lesson has nothing to do with the leaderboard, so it shows no board:
-    // an empty TOP 10 box sat in the middle of every tutorial result screen,
-    // which is worse than useless because it invites the player to wonder
-    // what they were supposed to have scored.
-    // The briefing rides the same rule as the board it replaces: a lesson
-    // screen shows one, every other screen shows none. Driven from here and
-    // not set by hand, or the refresh that follows levelOver would undo it.
-    // The one lesson screen with no briefing is the graduation one, which has
-    // its own sentence and no next lesson to point at. It is not "everything
-    // is finished": a player who has finished the lot and comes back to
-    // replay one still needs telling what they just walked into.
-    const onLessonMenu = mode === 'levels' && !modesOpen && (state === 'ready' || state === 'dead');
-    const graduated = state === 'dead' && lastLessonPassed && onboardingDone();
-    if (onLessonMenu && !graduated) {
-      showBrief(currentLevel(), state === 'dead' ? briefWord : 'THIS LESSON');
-    } else {
-      levelBrief.hidden = true;
-    }
     // The board earns its place on the death screen: it shows only when
     // this round placed on it (or a save just landed a row), because ten
     // rows you are not in is noise and the trophy button browses the boards
@@ -4813,7 +4520,7 @@
     // own number; a room's number is the finishing order, and the hero up
     // there was last filled by some earlier solo round (this shipped wrong
     // once, a stale YOU SCORED 0 over a finished room).
-    const deadResult = deadPanels && mode !== 'levels' && mode !== 'versus';
+    const deadResult = deadPanels && mode !== 'versus';
     const showBoard = (deadResult && boardWanted) || (deadPanels && mode === 'versus');
     standingsEl.style.display = showBoard ? 'block' : 'none';
     boardHead.style.display = showBoard ? 'block' : 'none';
@@ -4823,9 +4530,8 @@
     // one quiet line, at the one moment the pitch sells itself: a score just
     // went onto the world board and the identity under it is still anonymous
     // the offer, on an earned moment only, and it says which one it was
-    // the onboarding ask sets the line itself and is not re-judged here
-    const askNow = deadPanels && (nudgeDue() || (mode === 'levels' && !authNudge.hidden));
-    if (askNow && mode !== 'levels') {
+    const askNow = deadPanels && nudgeDue();
+    if (askNow) {
       nudgedThisSession = true;
       acctLine.textContent = (savedThisRound && !boardIsLocal)
         ? 'You made the world board. Create an account to save your scores.'
@@ -4854,29 +4560,16 @@
     // for everyone, then the acting host's REMATCH once the room has ticked.
     const vsDead = mode === 'versus' && state === 'dead' && !!(vs && vs.over);
     const vsReadyStatsNow = vsDead ? vsReadyStats() : null;
-    // A lesson is a sequence, so the button has to say where it goes. It read
-    // REMATCH / CLASSIC after finishing level one: wrong twice over, since it
-    // plays the NEXT lesson and 'classic' is only what ruleMode answers for a
-    // mode that has no ruleset of its own. Nobody would have guessed that
-    // button was the way forward.
-    const onLevel = mode === 'levels';
-    // what the button DOES, not what the player has ever done: after a pass
-    // levelIdx has already moved on, so it plays the next lesson (NEXT);
-    // after a failure it replays this one (AGAIN). Reading levelsDone instead
-    // said NEXT on a screen that had just told the player they lost.
-    const lessonDone = onLevel && state === 'dead' && lastLessonPassed;
     startMain.textContent =
       state === 'paused' ? 'RESUME'
       : vsDead ? (!vs.ready ? 'READY UP'
                  : vsHostNow() && vsReadyStatsNow.all ? 'REMATCH'
                  : 'UNREADY')
       : mode === 'versus' ? 'REMATCH'
-      : onLevel ? (state === 'dead' ? (lessonDone && !onboardingDone() ? 'NEXT' : 'AGAIN') : 'START')
       : state === 'dead' && runKey() === lastRunKey ? 'REMATCH'
       : 'START';
     startSub.textContent = vsDead
       ? `${vsReadyStatsNow.ready}/${vsReadyStatsNow.seats} READY`
-      : onLevel ? currentLevel().name
       : RULE_LABELS[ruleMode()];
     startSub.hidden = state === 'paused';
     // no dead ends on a results screen: READY UP, UNREADY and REMATCH are all
@@ -4890,7 +4583,7 @@
     vsBailBtn.hidden = !(vsDead && !modesOpen);
     // both chooser screens carry their own BACK and primary, so the shared
     // pair stands down there; on the pitch MODES is the way in
-    const vsScreen = (modesOpen && tScreen && mode === 'versus') || (modesOpen && lvScreen);
+    const vsScreen = modesOpen && tScreen && mode === 'versus';
     modesBtn.style.display = (onMenu && !vsScreen && !listScreen) ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     best = bestByMode[ruleMode()] || 0;
@@ -4921,7 +4614,6 @@
     if (state !== 'ready' && state !== 'dead') return;
     showModes = !showModes;
     tScreen = false;
-    lvScreen = false;
     // a read that failed gets one fresh try per visit, not a loop
     for (const k in railTops) if (railTops[k] === false) delete railTops[k];
     if (railLadder === false) railLadder = undefined;
@@ -4938,10 +4630,6 @@
     if (vs && b.dataset.mode !== 'versus') vsLeave();   // walking away leaves the room
     mode = b.dataset.mode;
     persistModeState();
-    // levels open their own list, like tournaments do, and land on the first
-    // one the player has not finished rather than always on lesson one
-    lvScreen = mode === 'levels';
-    if (lvScreen) { levelIdx = firstUnfinished(); briefWord = 'THIS LESSON'; }
     if (state === 'ready') newRound();   // the clock preview and the next round follow the mode
     else {
       // the finished round belongs to the mode it was played under: switching
@@ -4964,9 +4652,6 @@
     play();
   });
   modeBackBtn.addEventListener('click', () => {
-    // from the level list, back means back to the mode list; from the mode
-    // list it means out to the pitch
-    if (lvScreen) { lvScreen = false; refreshModeUI(); return; }
     showModes = false;
     refreshModeUI();
   });
@@ -5037,7 +4722,6 @@
   tTitle.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); tCreateGo(); } });
   tBackBtn.addEventListener('click', () => {
     tScreen = false;
-    lvScreen = false;
     refreshModeUI();
   });
   tLeave.addEventListener('click', () => {
@@ -6281,9 +5965,9 @@
     const root = padScope();
     if (!root) return [];
     const out = [];
-    // [tabindex] as well as the tags: the level list is made of <li> rows that
-    // take focus, and a pad that cannot reach them cannot start a lesson,
-    // which would quietly undo the pointer-free work on a TV or a handheld
+    // [tabindex] as well as the tags: focusable non-controls (list rows and
+    // their kin) must stay reachable to a pad, or the pointer-free work on
+    // a TV or a handheld quietly loses screens
     for (const el of root.querySelectorAll('button, input, [tabindex]')) if (padUsable(el)) out.push(el);
     return out;
   }
