@@ -6180,9 +6180,27 @@
   const padPointers = new Map();   // pointerId to the wedge that finger is in
   let padRect = null;
 
-  function padZone(e) {
+  // The wedge a point sits in. On a fresh press (moving false) every point
+  // resolves to a wedge, so a deliberate tap always registers. On a MOVE a
+  // finger sliding or jittering crosses seams, and two regions there read as
+  // "no change" instead: the dead centre where all four wedges meet, and a
+  // band either side of each diagonal boundary. A real thumb never holds still,
+  // so without this a fast corner (a slide, or two quick taps with a jittery
+  // thumb) fired a burst of spurious turns on the micro-moves; six of them fill
+  // the engine's three-slot queue and the next real tap is dropped, or a stray
+  // reversal filters the turn you meant, both of which read as the pad ignoring
+  // you. firePad treats a null as "keep this finger's current wedge", so the
+  // hold band is hysteresis for free, and a genuine slide still fires the wedge
+  // it clearly lands in. Keyboard has no such noise, which is why it felt
+  // cleaner. PAD_DEAD_R2 / PAD_SEAM are in pad-fraction units, tune for feel.
+  const PAD_DEAD_R2 = 0.13 * 0.13, PAD_SEAM = 0.05;
+  function padZone(e, moving) {
     const u = (e.clientX - padRect.left) / padRect.width - 0.5;
     const v = (e.clientY - padRect.top) / padRect.height - 0.5;
+    if (moving) {
+      if (u * u + v * v < PAD_DEAD_R2) return null;                     // dead centre: hold
+      if (Math.abs(Math.abs(u) - Math.abs(v)) < PAD_SEAM) return null;  // near a diagonal seam: hold
+    }
     return Math.abs(u) > Math.abs(v) ? (u > 0 ? padBtn.right : padBtn.left)
                                      : (v > 0 ? padBtn.down : padBtn.up);
   }
@@ -6207,11 +6225,11 @@
     e.preventDefault();
     padRect = dpad.getBoundingClientRect();   // re-read per press: layout may have changed
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
-    firePad(e.pointerId, padZone(e));
+    firePad(e.pointerId, padZone(e, false));   // a press always picks a wedge
   });
   dpad.addEventListener('pointermove', (e) => {
     if (!padPointers.has(e.pointerId)) return;
-    firePad(e.pointerId, padZone(e));
+    firePad(e.pointerId, padZone(e, true));     // a move holds through the ambiguous zones
   });
   dpad.addEventListener('pointerup', padEnd);
   dpad.addEventListener('pointercancel', padEnd);
