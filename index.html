@@ -135,7 +135,7 @@
      the wide chooser lays them out. On a narrow panel the extra spans leave
      no box behind (`display: contents` for the name, none for the rest), so
      the button renders its label exactly as the bare text always did. */
-  .stack-choice .m-g, .stack-choice .m-d { display: none; }
+  .stack-choice .m-d { display: none; }
   .stack-choice .m-txt, .stack-choice .m-t { display: contents; }
   /* One colour per mode: a tile with no accent read as disabled next to
      its coloured siblings. */
@@ -566,7 +566,7 @@
        Selected fills with the accent and the slab flips dark, which is the
        narrow list's fill rule wearing the same costume. */
     .ov-body.modes-grid .stack-choice button {
-      display: flex; align-items: center; text-align: left;
+      display: flex; align-items: center; justify-content: center; text-align: center;
       gap: clamp(10px, 1.8cqw, 16px);
       /* compact rows: six of them have to fit the smallest wide panel
          without scrolling, and the fade cutting TOURNAMENTS in half is how
@@ -586,22 +586,10 @@
       background: var(--accent, var(--gold));
       box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
     }
-    /* A light chip behind every glyph, both states: half the emoji set is
-       dark art (the graduation cap, the trophy's base) and vanished on the
-       tile's own dark. line-height 0 kills the emoji font's leading, which
-       floated every glyph high of centre. */
-    .ov-body.modes-grid .m-g {
-      display: grid; place-items: center; flex: 0 0 auto;
-      width: clamp(30px, 5.4cqw, 44px); height: clamp(30px, 5.4cqw, 44px);
-      border-radius: 8px; border: 1px solid var(--accent, var(--gold));
-      background: rgba(244,236,216,0.92);
-      font-size: clamp(15px, 2.9cqw, 22px); line-height: 0;
-    }
-    .ov-body.modes-grid button.active .m-g {
-      background: rgba(244,236,216,0.95); border-color: rgba(26,40,30,0.35);
-    }
+    /* no glyph chips any more: the name and its one line, centered, carry
+       the tile; colour identity stays in the border, the slab and the fill */
     .ov-body.modes-grid .m-txt {
-      display: flex; flex-direction: column;
+      display: flex; flex-direction: column; align-items: center;
       gap: clamp(2px, 0.5cqw, 5px); min-width: 0;
     }
     /* A slab shadow only reads as depth when it sits closer to the
@@ -1409,11 +1397,11 @@
              text. The glyph carries the identity that colour cannot: six
              modes told apart by hue alone fail 8% of men. -->
         <div class="mode-row stack-choice" id="modeRow">
-          <button data-mode="classic" class="active"><span class="m-g">&#9917;</span><span class="m-txt"><span class="m-t">CLASSIC</span><span class="m-d">No time limit. Chase the top ten.</span></span></button>
-          <button data-mode="speedrun"><span class="m-g">&#9201;&#65039;</span><span class="m-txt"><span class="m-t">SPEED RUN</span><span class="m-d">Sixty seconds. Score fast.</span></span></button>
-          <button data-mode="survival"><span class="m-g">&#128293;</span><span class="m-txt"><span class="m-t">SURVIVAL</span><span class="m-d">The clock is the score.</span></span></button>
-          <button data-mode="versus"><span class="m-g">&#128101;</span><span class="m-txt"><span class="m-t">MULTIPLAYER</span><span class="m-d">Five snakes, one seed.</span></span></button>
-          <button data-mode="tourney"><span class="m-g">&#127942;</span><span class="m-txt"><span class="m-t">TOURNAMENTS</span><span class="m-d">A code, a window, one board.</span></span></button>
+          <button data-mode="classic" class="active"><span class="m-txt"><span class="m-t">CLASSIC</span><span class="m-d">No time limit. Chase the top ten.</span></span></button>
+          <button data-mode="speedrun"><span class="m-txt"><span class="m-t">SPEED RUN</span><span class="m-d">Sixty seconds. Score fast.</span></span></button>
+          <button data-mode="survival"><span class="m-txt"><span class="m-t">SURVIVAL</span><span class="m-d">The clock is the score.</span></span></button>
+          <button data-mode="versus"><span class="m-txt"><span class="m-t">MULTIPLAYER</span><span class="m-d">Five snakes, one seed.</span></span></button>
+          <button data-mode="tourney"><span class="m-txt"><span class="m-t">TOURNAMENTS</span><span class="m-d">A code, a window, one board.</span></span></button>
         </div>
         <div class="tourney" id="vsPanel" hidden>
           <!-- The card wrappers and the second hint texts render as nothing
