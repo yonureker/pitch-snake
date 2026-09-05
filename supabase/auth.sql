@@ -12,11 +12,21 @@
 --   2. Authentication -> Sign In / Providers -> "Allow manual linking": ON.
 --      (This is what lets an anonymous player later attach Apple / Google /
 --      email WITHOUT changing their user id, which is the whole design.)
--- And for the sign-in sheet, TWO EMAIL TEMPLATES need {{ .Token }} in their
--- body (Authentication -> Email Templates), so the mails carry a 6-digit
--- code instead of a link:
+-- And for the sign-in sheet, TWO EMAIL TEMPLATES have to be edited by hand
+-- (Authentication -> Email Templates) to present {{ .Token }} and drop the
+-- default {{ .ConfirmationURL }} magic link, so the mail carries a 6-digit
+-- code the sheet verifies and no link at all:
 --   "Magic Link"            (signing in to an existing account)
 --   "Change Email Address"  (an anonymous player attaching their email)
+-- This is a CODE flow (the sheet calls verifyOtp with the typed code, never a
+-- link). Leaving the default link in the template sends a stray magic link
+-- that redirects to the project Site URL, which confuses the player and breaks
+-- if clicked. Which is the third setting: Authentication -> URL Configuration
+-- -> Site URL must be https://pitchsnake.com, NOT the project default
+-- http://localhost:3000, and Redirect URLs must allow both origins the page is
+-- served from, https://pitchsnake.com/** and https://yonureker.github.io/**.
+-- Nothing in the sign-in flow uses a redirect, but a wrong Site URL is exactly
+-- where a stray link lands, and it is the sane default for every auth path.
 -- Note the built-in mailer only delivers to the project's own team members
 -- and only a couple of mails an hour; before real players sign in, set a
 -- custom SMTP provider under Project Settings -> Authentication.
