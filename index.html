@@ -2292,7 +2292,7 @@
   let crowdOn = true;
   try { crowdOn = localStorage.getItem('snakeCrowd') !== 'off'; } catch (e) {}
   let crowdBed = null, crowdCheer = null;
-  const CROWD_LEVEL = 0.16;
+  const CROWD_LEVEL = 0.17;
   function crowdVoice(buf, rate, type, freq, q, level) {
     const src = audio.createBufferSource();
     src.buffer = buf; src.loop = true; src.playbackRate.value = rate;
@@ -2310,27 +2310,54 @@
     const buf = audio.createBuffer(1, audio.sampleRate * 4, audio.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    crowdVoice(buf, 0.82, 'lowpass', 260, 0.7, 0.6);
-    const voices = crowdVoice(buf, 1.0, 'bandpass', 640, 0.9, 0.42);
-    crowdVoice(buf, 1.31, 'bandpass', 2600, 0.8, 0.07);
+    crowdVoice(buf, 0.82, 'lowpass', 240, 0.7, 0.65);
+    // two vowel-ish bands rather than one: a formant pair is what makes
+    // filtered noise read as thousands of voices instead of rainfall
+    const voxA = crowdVoice(buf, 1.0, 'bandpass', 620, 1.2, 0.38);
+    const voxB = crowdVoice(buf, 0.93, 'bandpass', 1150, 1.4, 0.22);
+    crowdVoice(buf, 1.31, 'bandpass', 2600, 0.8, 0.06);
     crowdCheer = crowdVoice(buf, 1.12, 'bandpass', 920, 1.1, 0);
-    // the breath: two sines with no shared period wobble the voice band,
-    // additive around its base so the sum never goes negative
-    for (const [freq, depth] of [[0.11, 0.13], [0.037, 0.16]]) {
+    // the breath and the babble: sub-0.1Hz swells so the stand heaves, and
+    // a syllable-rate flutter of a few Hz so the wash chatters like speech.
+    // All additive around each band's base, so no sum ever goes negative.
+    for (const [freq, depth, to] of [[0.11, 0.11, voxA], [0.037, 0.13, voxA], [0.083, 0.08, voxB],
+                                     [4.7, 0.09, voxA], [3.9, 0.05, voxB]]) {
       const o = audio.createOscillator(), gn = audio.createGain();
       o.frequency.value = freq; gn.gain.value = depth;
-      o.connect(gn); gn.connect(voices.gain); o.start();
+      o.connect(gn); gn.connect(to.gain); o.start();
     }
+  }
+  // The surge: every quarter minute or so the whole bed leans in for a
+  // couple of seconds and settles back, the far end reacting to play you
+  // cannot see. A timer rather than an LFO because irregularity is the
+  // whole point; it is audio texture, not gameplay, so it does not ride
+  // the loop clock, and crowdSync arms and disarms it with the bed.
+  let crowdSurgeTimer = 0;
+  function crowdArm() {
+    if (!crowdSurgeTimer) crowdSurgeTimer = setTimeout(crowdSurge, 12000 + Math.random() * 20000);
+  }
+  function crowdSurge() {
+    crowdSurgeTimer = 0;
+    if (!crowdWanted()) return;
+    const t = audio.currentTime;
+    crowdBed.gain.cancelScheduledValues(t);
+    crowdBed.gain.setTargetAtTime(CROWD_LEVEL * 1.8, t, 0.7);
+    crowdBed.gain.setTargetAtTime(CROWD_LEVEL, t + 2.2, 1.1);
+    crowdArm();
   }
   // One door for every transition, called wherever state or sound changes.
   // Idempotent, so no caller reasons about what the bed was already doing:
   // it fades in through the countdown and out on death, pause and menus.
+  const crowdWanted = () => crowdOn && pageSound && audio !== null && audio.state === 'running'
+    && (state === 'playing' || state === 'countdown');
   function crowdSync() {
-    const want = crowdOn && pageSound && audio !== null && audio.state === 'running'
-      && (state === 'playing' || state === 'countdown');
+    const want = crowdWanted();
     if (want && !crowdBed) crowdBuild();
     if (!crowdBed) return;
+    crowdBed.gain.cancelScheduledValues(audio.currentTime);
     crowdBed.gain.setTargetAtTime(want ? CROWD_LEVEL : 0, audio.currentTime, want ? 0.8 : 0.4);
+    if (want) crowdArm();
+    else if (crowdSurgeTimer) { clearTimeout(crowdSurgeTimer); crowdSurgeTimer = 0; }
   }
   // the stand lifts for a beat; k is loudness against the bed's own level
   function crowdPulse(k) {
@@ -2590,6 +2617,7 @@
     buildBoltSprite();
     buildHatSprite();
     buildSpikeSprite();
+    buildJerseySprite();
     vsRefit();                  // rival hats bake at cell size too
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
@@ -2648,21 +2676,15 @@
     // two passes of glow, then the glyph clean on top: a colour emoji ignores
     // fillStyle but not shadow, so the bloom is the halo and the glyph stays
     // its own colours
-    // The engine's item is still the bolt; the pitch draws it as a dizzied
-    // ghost, the 👻 glyph with the 💫 over its brow, because "the ghosts
-    // get dizzy" is the effect in one picture. Composed from two glyphs
-    // since no ghost version of the spiral-eyes face exists in any font.
-    const gx = boltS / 2, gy = boltS / 2 + Math.round(cell * 0.06);
+    // the thunderbolt, back by request after a dizzy-ghost interlude
     c.shadowColor = 'rgba(255,214,102,0.95)';
     c.fillStyle = '#ffd666';
     for (const blur of [22, 11]) {
       c.shadowBlur = blur;
-      c.fillText('👻', gx, gy);
+      c.fillText('⚡', boltS / 2, boltS / 2);
     }
     c.shadowBlur = 0;
-    c.fillText('👻', gx, gy);
-    c.font = `${(cell * 0.5) | 0}px ${EMOJI_FONT}`;
-    c.fillText('💫', boltS / 2 + Math.round(cell * 0.2), boltS / 2 - Math.round(cell * 0.46));
+    c.fillText('⚡', boltS / 2, boltS / 2);
   }
 
   function drawBolt() {
@@ -2863,6 +2885,51 @@
     const x = wrapf(cxCell) * cell + cell / 2;
     const y = wrapf(cyCell) * cell + cell / 2;
     ctx.drawImage(hatCanvas, Math.round(x - hatW / 2), Math.round(y + HAT.dy(cell, hatH)));
+  }
+
+  // ---- the jersey ----
+  // Number 10 in yellow and red halves, worn on the square behind the head.
+  // A test balloon for outfits beyond hats: baked art on the local snake
+  // only for now, not yet a shop item, so future plans can look at it in
+  // play before anything is priced. The digits are 3x5 pixel grids drawn as
+  // blocks, 8-bit on purpose and immune to font differences.
+  const jerseyCanvas = document.createElement('canvas');
+  const jerseyCtx = jerseyCanvas.getContext('2d');
+  let jerseyS = 0;
+  const JERSEY_DIGITS = [['010', '110', '010', '010', '111'], ['111', '101', '101', '101', '111']];
+  function buildJerseySprite() {
+    jerseyS = Math.ceil(cell * 0.84);
+    jerseyCanvas.width = jerseyS; jerseyCanvas.height = jerseyS;
+    const c = jerseyCtx, s = jerseyS;
+    c.save();
+    roundRectOn(c, 0, 0, s, s, s * 0.3);
+    c.clip();
+    c.fillStyle = '#f2c114'; c.fillRect(0, 0, s / 2, s);
+    c.fillStyle = '#d8231f'; c.fillRect(s / 2, 0, s / 2, s);
+    c.restore();
+    roundRectOn(c, 0.5, 0.5, s - 1, s - 1, s * 0.3);
+    c.strokeStyle = 'rgba(33,30,26,0.55)';
+    c.lineWidth = Math.max(1, s * 0.05);
+    c.stroke();
+    const px = Math.max(1, Math.round(s * 0.11));
+    const x0 = Math.round((s - (px * 7)) / 2), y0 = Math.round((s - px * 5) / 2);
+    const ink = (color, dx, dy) => {
+      c.fillStyle = color;
+      for (let d = 0; d < 2; d++)
+        for (let r = 0; r < 5; r++)
+          for (let k = 0; k < 3; k++)
+            if (JERSEY_DIGITS[d][r][k] === '1')
+              c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
+    };
+    ink('rgba(33,30,26,0.8)', 1, 1);   // the drop shadow keeps white legible on yellow
+    ink('#ffffff', 0, 0);
+  }
+  function drawJersey(pl, lane, prog) {
+    if (!jerseyS || pl.snake.length < 2) return;
+    const rp = segRenderPos(pl, 1, prog);
+    const x = wrapf(rp.cx + segOffX(lane, 1)) * cell + cell / 2;
+    const y = wrapf(rp.cy + segOffY(lane, 1)) * cell + cell / 2;
+    ctx.drawImage(jerseyCanvas, Math.round(x - jerseyS / 2), Math.round(y - jerseyS / 2));
   }
 
   // The wall shape is static for its whole phase, so it is rendered once to an
@@ -3252,6 +3319,8 @@
       drawBodyCell(rp.cx + segOffX(mi, i), rp.cy + segOffY(mi, i), r, rad);
     }
 
+    drawJersey(me, mi, p);      // the shirt sits over the square behind the head
+
     // eyes on the head, at its interpolated position
     if (me.snake.length) {
       const rp0 = segRenderPos(me, 0, p);
@@ -3621,7 +3690,7 @@
     if (sec === boltBannerSec) return;
     boltBannerSec = sec;
     if (!sec) { boltBanner.hidden = true; return; }
-    boltBanner.textContent = '👻💫 GHOSTS SLOWED · ' + sec;
+    boltBanner.textContent = '⚡ GHOSTS SLOWED · ' + sec;
     boltBanner.hidden = false;
   }
 

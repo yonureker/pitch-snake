@@ -40,7 +40,7 @@ import {
   type Game,
 } from '@pitch-snake/engine';
 
-import { paintDizzyGhost, paintPitch } from './pitch-art';
+import { paintBolt, paintPitch } from './pitch-art';
 import { GameColors, GhostColors, SNAKE_SHADES, snakeShade } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
@@ -229,7 +229,7 @@ function bakeArena(boardPx: number): void {
 function bakeBolt(cell: number): Baked | null {
   const s = Math.ceil(cell * 1.7);
   return bake(s, s, (c) => {
-    paintDizzyGhost(c, s, cell);
+    paintBolt(c, s, cell);
   });
 }
 
@@ -649,9 +649,9 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     fillPaint.setAlphaf(1);
   }
 
-  // The bolt wears its dizzy-ghost portrait, baked in pitch-art: the halo,
-  // the sheet and the star are bake-time work, so the frame only blits it
-  // on its own heartbeat, blinking as its life runs out like the web.
+  // The bolt, baked in pitch-art with its halo: bake-time work, so the
+  // frame only blits it on its own heartbeat, blinking as its life runs
+  // out like the web.
   const bolt = game.bolt;
   if (bolt !== null && boltSprite !== null) {
     const bx = bolt.x * cell + cell / 2;
