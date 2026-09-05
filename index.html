@@ -1078,6 +1078,67 @@
   }
   .res-note { font-size: 14px; color: #b7ac93; margin-top: 12px; line-height: 1.35; }
   .res-note b { color: var(--gold-bright); font-weight: 700; }
+  /* ---- the score stickers ----
+     NEW BEST and TOP 100 are die-cut stickers riding the hero's corner, not
+     sentences under it: the number is the story and the stickers are slapped
+     on it. The cream border is the die-cut edge. Sized in cqw like the hero
+     so a phone's smaller number wears smaller stickers, and anchored to
+     .res-hero (the number's own box) so centering never moves them. */
+  .res-hero { position: relative; display: inline-block; }
+  .res-stick {
+    position: absolute; left: 100%; margin-left: clamp(2px, 0.8cqw, 6px);
+    font-family: 'Anton', sans-serif; letter-spacing: 1.5px;
+    font-size: clamp(11px, 2.3cqw, 15px); text-transform: uppercase;
+    border: 3px solid var(--panel); border-radius: 8px;
+    padding: clamp(3px, 0.8cqw, 5px) clamp(7px, 1.7cqw, 11px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    white-space: nowrap; text-align: center; line-height: 1.15;
+  }
+  .res-stick i {
+    display: block; font-style: normal; font-family: 'Barlow', sans-serif;
+    font-weight: 800; font-size: clamp(7px, 1.2cqw, 8px); letter-spacing: 2px;
+  }
+  /* two slots: best on top, top-100 under it, and the lower sticker takes
+     the top slot when it is alone ([hidden] is display:none, but the
+     sibling selector reads the DOM, which is exactly what is wanted) */
+  .stick-best {
+    top: clamp(-14px, -2cqw, -10px); transform: rotate(8deg);
+    background: var(--gold-bright); color: #211e1a;
+    animation: stickPopA 0.26s ease-out 1s both;
+  }
+  .stick-top {
+    top: clamp(28px, 6.4cqw, 42px); transform: rotate(-7deg);
+    background: var(--food); color: #ffffff;
+    animation: stickPopB 0.26s ease-out 0.25s both;
+  }
+  .stick-best[hidden] ~ .stick-top { top: clamp(-14px, -2cqw, -10px); }
+  @keyframes stickPopA {
+    0% { opacity: 0; transform: rotate(8deg) scale(0.3); }
+    70% { opacity: 1; transform: rotate(8deg) scale(1.12); }
+    100% { opacity: 1; transform: rotate(8deg) scale(1); }
+  }
+  @keyframes stickPopB {
+    0% { opacity: 0; transform: rotate(-7deg) scale(0.3); }
+    70% { opacity: 1; transform: rotate(-7deg) scale(1.12); }
+    100% { opacity: 1; transform: rotate(-7deg) scale(1); }
+  }
+  /* the round's pay flying to the purse: a float beside the chip while the
+     number inside it counts up (the count runs off the loop clock) */
+  .purse-float {
+    align-self: center;
+    font-family: 'Anton', sans-serif; font-size: 14px;
+    color: var(--gold-bright); text-shadow: 1px 1px 0 #1a281e;
+    animation: purseFloat 1.8s ease-out both;
+  }
+  @keyframes purseFloat {
+    0% { opacity: 0; transform: translateY(5px); }
+    14% { opacity: 1; transform: none; }
+    72% { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: translateY(-7px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .res-stick, .purse-float { animation: none; }
+  }
   /* ---- the achievement shelf ---- */
   .shelf { width: 100%; text-align: left; }
   .shelf-head {
@@ -1383,6 +1444,7 @@
       <div class="chip-row">
         <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
         <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden>&#129689;<span id="purseCoins"></span></button>
+        <span class="purse-float" id="purseFloat" hidden>+0</span>
       </div>
       <div class="overlay" id="overlay">
         <div class="ov-head">
@@ -1522,7 +1584,11 @@
              is computed and nothing is fetched. -->
         <div class="result" id="resultPanel" hidden>
           <p class="res-tag" id="resTag">YOU SCORED</p>
-          <div class="res-score" id="resScore">0</div>
+          <div class="res-hero">
+            <div class="res-score" id="resScore">0</div>
+            <span class="res-stick stick-best" id="stickBest" hidden>NEW BEST</span>
+            <span class="res-stick stick-top" id="stickTop" hidden>TOP 100<i>WORLDWIDE</i></span>
+          </div>
           <p class="res-note" id="resNote"></p>
         </div>
         <div class="entry" id="entry" style="display:none">
@@ -2444,13 +2510,14 @@
     resScore.textContent = score;
     const prev = bestAtStart;
     resNote.textContent = '';
-    if (beatBest) {
-      // the sticker alone: saying how far clear as well was play tested
-      // into this comment, since a best is a best whatever the margin
-      const b = document.createElement('b');
-      b.textContent = prev > 0 ? 'New personal best.' : 'Your first best.';
-      resNote.appendChild(b);
-    } else if (prev > 0) {
+    // The sticker alone: saying how far clear as well was play tested into
+    // this comment, since a best is a best whatever the margin, and the
+    // sentence went the same way once the sticker existed to say it. The
+    // TOP 100 sticker is hidden here and unhidden by askIfItPlaces, the one
+    // place that has the hundredth row to judge it against.
+    stickBest.hidden = !beatBest;
+    stickTop.hidden = true;
+    if (!beatBest && prev > 0) {
       const off = prev - score;
       resNote.textContent = off === 0 ? 'Level with your best.'
         : (seconds ? SURVIVAL_UNIT(off) : off + (off === 1 ? ' point' : ' points')) + ' off your best.';
@@ -2499,6 +2566,7 @@
     showModes = false;
     savePersonalBest();          // the round is over; that best is worth keeping
     fillResult(g.score, reason);
+    armReveal(g.score);          // the hero counts up to it from the whistle
     const gen = ++deathGen;
     // the tournament entry under a known name submits itself too; the world
     // board's version of this lives in askIfItPlaces, behind its ten-row gate
@@ -3664,6 +3732,60 @@
   // inject so waking up never fast-forwards the round.
   const MAX_DT = 100;
   let lastTick = 0;
+  // ---- the whistle reveal ----
+  // The death screen's numbers arrive as moments rather than a wall: the
+  // hero counts up to the score, and the purse ticks up when the validator
+  // pays. Both run off the loop clock with its shared dt clamp (rule 15),
+  // never a timer, and both stop touching the DOM the instant they land
+  // (rule 8: the steady-state frame writes nothing). The stickers and the
+  // purse float are CSS animations and need no clock at all.
+  const REVEAL_DELAY_MS = 300, REVEAL_COUNT_MS = 700, PURSE_COUNT_MS = 800;
+  let reveal = null;       // { t, score, shown } while the hero counts
+  let purseAnim = null;    // { t, from, to, shown } while the purse ticks
+  const reducedMotion = () =>
+    window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function armReveal(score) {
+    if (reducedMotion() || !(score > 0)) { reveal = null; return; }
+    reveal = { t: 0, score, shown: 0 };
+    resScore.textContent = '0';
+  }
+  // The pay is derived, not fetched: the validator's answer says what this
+  // round just paid (round coins plus new badge bounties), and the ledger
+  // is idempotent, so displayed + paid is the server's own arithmetic. The
+  // boot-time wallet fetch stays the reconciler if anything ever drifts.
+  function pursePay(paid) {
+    if (!(paid > 0) || !purseKnown) return;
+    const from = parseInt(purseCoins.textContent, 10) || 0;
+    const to = from + paid;
+    if (shopWallet) shopWallet.coins = to;
+    shopCoins.textContent = to;
+    if (reducedMotion()) { purseCoins.textContent = to; return; }
+    purseFloat.textContent = '+' + paid;
+    purseFloat.hidden = false;      // [hidden] toggling restarts the float
+    purseAnim = { t: 0, from, to, shown: from };
+  }
+  function revealTick(dt) {
+    if (reveal) {
+      if (state !== 'dead') {       // a restart cuts the show, never the fact
+        resScore.textContent = reveal.score;
+        reveal = null;
+      } else {
+        reveal.t += dt;
+        const k = Math.min(1, Math.max(0, (reveal.t - REVEAL_DELAY_MS) / REVEAL_COUNT_MS));
+        const v = Math.round(reveal.score * k);
+        if (v !== reveal.shown) { resScore.textContent = v; reveal.shown = v; }
+        if (k >= 1) reveal = null;
+      }
+    }
+    if (purseAnim) {
+      purseAnim.t += dt;
+      const k = Math.min(1, purseAnim.t / PURSE_COUNT_MS);
+      const v = Math.round(purseAnim.from + (purseAnim.to - purseAnim.from) * k);
+      if (v !== purseAnim.shown) { purseCoins.textContent = v; purseAnim.shown = v; }
+      if (k >= 1) purseAnim = null;   // the float fades on its own animation
+    }
+  }
+
   function loop(now) {
     const t0 = showFps ? performance.now() : 0;
     if (resizeQueued) { resizeQueued = false; resize(); markOverflow(); }
@@ -3693,6 +3815,7 @@
       }
     }
     syncClockDom();
+    if (reveal || purseAnim) revealTick(dt);
     draw(dt);
     if (showFps) {
       fpsCount++;
@@ -3753,6 +3876,10 @@
     badgeNote.innerHTML = '';
     const rows = Array.isArray(earned) ? earned : [];
     if (!rows.length && !(roundCoins > 0)) { badgeNote.hidden = true; return; }
+    // everything the validator just paid, in one number, flown to the purse
+    let paid = roundCoins > 0 ? roundCoins : 0;
+    for (const a of rows) if (a.coins > 0) paid += a.coins;
+    pursePay(paid);
     for (const a of rows) {
       const row = document.createElement('div');
       row.className = 'bg-row';
@@ -4089,7 +4216,10 @@
             .filter(r => r && typeof r.score === 'number')
             .map(r => ({ key: 'n:' + String(r.name || 'YOU'), name: String(r.name || 'YOU'), score: r.score, country: cc(r.country) }));
         }
-        const rows = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: ruleMode() });
+        // A hundred rows, not ten: the board still renders MAX_ENTRIES, but
+        // the tail is what judges the TOP 100 sticker, and the server clamps
+        // at 100 anyway. Same single call either way.
+        const rows = await sbRpc('pitch_snake_top_scores', { limit_count: 100, p_mode: ruleMode() });
         boardIsLocal = false;
         return asList(rows)
           .filter(r => r && typeof r.score === 'number')
@@ -4177,7 +4307,10 @@
     // awaited the board: it measured an empty list, found nothing to scroll,
     // and cleared the fade for the one screen that most needed it. Every exit
     // from here re-measures now that the rows actually exist.
-    standingsEl.classList.toggle('dense', list.length > 4);
+    // the fetch may carry a hundred rows for the sticker; the board is
+    // still a top ten and draws only that
+    const shown = list.slice(0, MAX_ENTRIES);
+    standingsEl.classList.toggle('dense', shown.length > 4);
     if (!list.length) {
       const li = document.createElement('li');
       li.className = 'empty';
@@ -4186,7 +4319,7 @@
       markOverflow();
       return list;                  // an empty board is a board with room
     }
-    list.forEach((e, i) => {
+    shown.forEach((e, i) => {
       const li = document.createElement('li');
       if (highlightKey && e.key === highlightKey) li.className = 'me';
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
@@ -4231,6 +4364,11 @@
     const list = await renderStandings();
     if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
     if (!list) return;                   // a newer render owns the screen
+    // The TOP 100 sticker, judged against the same fetch and only against
+    // the WORLD board: a device list cannot claim a worldwide standing.
+    // Matching the hundredth is not beating it, same as the top-ten gate:
+    // the board orders equal scores behind the older one.
+    if (!boardIsLocal && (list.length < 100 || sc > list[99].score)) stickTop.hidden = false;
     if (placesOnBoard(list, sc)) {
       // the round placed: the board earns its screen space, with your row
       boardWanted = true;
@@ -4257,13 +4395,11 @@
   // error path, so the retry stays a person's choice.
   async function autoSubmit(gen) {
     // the input is the name submitScore reads; the death-screen prefill can
-    // predate a profile that arrived late, so it is set here from the truth
+    // predate a profile that arrived late, so it is set here from the truth.
+    // No "On the board as X" note afterwards: the board renders with your
+    // row highlighted, and a line restating what the row shows was noise.
     nameInput.value = sbProfile.name;
     await submitScore();
-    if (gen !== deathGen || state !== 'dead' || !savedThisRound) return;
-    saveNote.textContent = 'On the board as ' + sbProfile.name + '.';
-    saveNote.className = 'save-note soft';
-    saveNote.hidden = false;
   }
 
   // BEST is the player's own best, kept in this browser. It used to be the top
@@ -4590,6 +4726,8 @@
   const resScore = document.getElementById('resScore');
   const resTag = document.getElementById('resTag');
   const resNote = document.getElementById('resNote');
+  const stickBest = document.getElementById('stickBest');
+  const stickTop = document.getElementById('stickTop');
   function markOverflow() {
     requestAnimationFrame(() => {
       ovBody.classList.toggle('is-scrollable', ovBody.scrollHeight > ovBody.clientHeight + 2);
@@ -6419,6 +6557,9 @@
   const shopClose = document.getElementById('shopClose');
   const purseBtn = document.getElementById('purseBtn');
   const purseCoins = document.getElementById('purseCoins');
+  const purseFloat = document.getElementById('purseFloat');
+  // the float hides itself once its fade has played out, no timer involved
+  purseFloat.addEventListener('animationend', () => { purseFloat.hidden = true; });
   let purseKnown = false;   // the purse waits until a wallet has answered
   let shopCatalog = null;   // [{id, kind, name, price}], the server's word
   let shopWallet = null;    // the last wallet json the server handed back
@@ -6440,6 +6581,9 @@
   // answer
   function takeWallet(w) {
     shopWallet = w;
+    // the server's number outranks a count-up mid-flight
+    purseAnim = null;
+    purseFloat.hidden = true;
     shopCoins.textContent = w.coins;
     purseCoins.textContent = w.coins;
     purseKnown = true;
