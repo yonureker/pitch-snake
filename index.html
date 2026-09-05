@@ -2500,8 +2500,16 @@
   // burst replayed for an already-shown quantum would flicker: those skip.
   let vsEventQ = -1;
   function handleEvents(events) {
+    // The high-water mark from BEFORE this batch. A rollback resim re-emits a
+    // whole quantum's events, and several can share one quantum (a fallen
+    // rival's 'die' and the clincher's 'won'; an 'eat' and the 'zap' it
+    // triggered). Judging "already shown?" against a mark this same loop just
+    // raised would brand the second same-quantum event a replay of the first
+    // and swallow it, so the clinch flourish never fired. Judge against the
+    // frozen floor instead; still raise vsEventQ so the NEXT batch sees them.
+    const floor = vsEventQ;
     for (const e of events) {
-      const replayed = vsView() && e.q !== undefined && e.q <= vsEventQ;
+      const replayed = vsView() && e.q !== undefined && e.q <= floor;
       if (vsView() && e.q !== undefined && e.q > vsEventQ) vsEventQ = e.q;
       if (replayed && (e.t === 'eat' || e.t === 'hop' || e.t === 'tnt' || e.t === 'die'
                        || e.t === 'ghost' || e.t === 'save' || e.t === 'zap')) continue;
@@ -2631,13 +2639,11 @@
     resScore.textContent = score;
     const prev = bestAtStart;
     resNote.textContent = '';
-    if (beatBest && prev > 0) {
-      const by = score - prev;
-      resNote.append(by === 1 ? 'One clear of your best. ' : by + ' clear of your best. ');
-      const b = document.createElement('b'); b.textContent = 'New personal best.';
-      resNote.appendChild(b);
-    } else if (beatBest) {
-      const b = document.createElement('b'); b.textContent = 'Your first best.';
+    if (beatBest) {
+      // the sticker alone: saying how far clear as well was play tested
+      // into this comment, since a best is a best whatever the margin
+      const b = document.createElement('b');
+      b.textContent = prev > 0 ? 'New personal best.' : 'Your first best.';
       resNote.appendChild(b);
     } else if (prev > 0) {
       const off = prev - score;
@@ -5539,6 +5545,10 @@
     vs.game = g;
     vs.session = createSession({
       game: g, myIdx: idx, transport: vs.transport,
+      // the round number every peer agreed on (server counter, or the host's
+      // broadcast n): tags the wire so a straggler from the last round on this
+      // reused channel cannot drag this one
+      round: vs.startN,
       onEnd: vsRoundOver,
       onDesync: vsDesync,
     });
