@@ -2279,44 +2279,83 @@
   function sfxKickoff() { if (sfxOn()) sfxPeep(audio.currentTime, 0.3, 1); }
 
   // ---- the crowd ----
-  // Stadium ambience in the Football Manager spirit: a stand full of people
-  // is noise through three filters (a low rumble, a voice band, a high
-  // sizzle), with two slow detuned sines breathing the voice band so it
-  // swells like a crowd instead of hissing like rain, and a fourth voice
-  // that lifts for a beat when something scores. Built once on demand from
-  // a four-second buffer (the half-second sfx buffer loops audibly as a
-  // flutter through a narrow band), then only gain targets ever move, all
-  // on the audio thread: the frame loop never touches any of this. It
-  // hangs off audioMaster, so the mute and the limiter own it like every
-  // other sound.
+  // Stadium ambience in the Football Manager spirit, in two layers. The
+  // bed proper is a real stand: a CC0 field recording shipped as
+  // assets/crowd.m4a (the one runtime audio asset, provenance in
+  // assets/crowd.LICENSE.txt), looped seamlessly and fetched lazily. Under
+  // it lives the synthesized stand: noise through filters with formant
+  // bands, babble flutter and slow swells, which starts INSTANTLY, carries
+  // the whole sound if the tape cannot load, and stays ducked underneath
+  // once it has, so the surges keep breathing. A cheer voice lifts when
+  // something scores. Only gain targets ever move after build, all on the
+  // audio thread: the frame loop never touches any of this. It hangs off
+  // audioMaster, so the mute and the limiter own it like every other
+  // sound.
   let crowdOn = true;
   try { crowdOn = localStorage.getItem('snakeCrowd') !== 'off'; } catch (e) {}
-  let crowdBed = null, crowdCheer = null;
+  let crowdBed = null, crowdCheer = null, crowdSynth = null, crowdTape = null;
+  let crowdTapeAsked = false;
   const CROWD_LEVEL = 0.17;
-  function crowdVoice(buf, rate, type, freq, q, level) {
+  function crowdVoice(buf, rate, type, freq, q, level, dest) {
     const src = audio.createBufferSource();
     src.buffer = buf; src.loop = true; src.playbackRate.value = rate;
     const filt = audio.createBiquadFilter();
     filt.type = type; filt.frequency.value = freq; filt.Q.value = q;
     const gn = audio.createGain(); gn.gain.value = level;
-    src.connect(filt); filt.connect(gn); gn.connect(crowdBed);
+    src.connect(filt); filt.connect(gn); gn.connect(dest);
     src.start();
     return gn;
+  }
+  // The real stand: a CC0 field recording (assets/crowd.LICENSE.txt), cut
+  // to a fifty second loop with the seam crossfaded away, fetched lazily
+  // the first time the crowd is wanted. The synthesized bed is the
+  // instant-on sound while the tape loads and the whole sound if the fetch
+  // or decode fails, because a dead network degrades the ambience, never
+  // the game; once the tape lands the synth ducks under it rather than
+  // vanishing, so the babble and swells keep working the room.
+  function crowdTapeLoad() {
+    if (crowdTapeAsked) return;
+    crowdTapeAsked = true;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 12000);
+    fetch('assets/crowd.m4a', { signal: ctl.signal })
+      .then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.arrayBuffer(); })
+      .then(b => audio.decodeAudioData(b))
+      .then(buf => {
+        clearTimeout(timer);
+        if (!crowdBed) return;
+        crowdTape = audio.createGain();
+        crowdTape.gain.value = 0;
+        crowdTape.connect(crowdBed);
+        const src = audio.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        src.connect(crowdTape);
+        src.start(0, Math.random() * buf.duration);   // not every kickoff on the same roar
+        const t = audio.currentTime;
+        crowdTape.gain.setTargetAtTime(1, t, 1.2);
+        crowdSynth.gain.setTargetAtTime(0.1, t, 1.2);
+      })
+      .catch(() => { clearTimeout(timer); });         // the synth simply keeps singing
   }
   function crowdBuild() {
     crowdBed = audio.createGain();
     crowdBed.gain.value = 0;
     crowdBed.connect(audioMaster);
+    crowdSynth = audio.createGain();
+    crowdSynth.gain.value = 1;
+    crowdSynth.connect(crowdBed);
     const buf = audio.createBuffer(1, audio.sampleRate * 4, audio.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    crowdVoice(buf, 0.82, 'lowpass', 240, 0.7, 0.65);
+    crowdVoice(buf, 0.82, 'lowpass', 240, 0.7, 0.65, crowdSynth);
     // two vowel-ish bands rather than one: a formant pair is what makes
     // filtered noise read as thousands of voices instead of rainfall
-    const voxA = crowdVoice(buf, 1.0, 'bandpass', 620, 1.2, 0.38);
-    const voxB = crowdVoice(buf, 0.93, 'bandpass', 1150, 1.4, 0.22);
-    crowdVoice(buf, 1.31, 'bandpass', 2600, 0.8, 0.06);
-    crowdCheer = crowdVoice(buf, 1.12, 'bandpass', 920, 1.1, 0);
+    const voxA = crowdVoice(buf, 1.0, 'bandpass', 620, 1.2, 0.38, crowdSynth);
+    const voxB = crowdVoice(buf, 0.93, 'bandpass', 1150, 1.4, 0.22, crowdSynth);
+    crowdVoice(buf, 1.31, 'bandpass', 2600, 0.8, 0.06, crowdSynth);
+    // the cheer sits beside the synth bed, not inside it: it must stay full
+    // even once the tape has ducked the synth away
+    crowdCheer = crowdVoice(buf, 1.12, 'bandpass', 920, 1.1, 0, crowdBed);
     // the breath and the babble: sub-0.1Hz swells so the stand heaves, and
     // a syllable-rate flutter of a few Hz so the wash chatters like speech.
     // All additive around each band's base, so no sum ever goes negative.
@@ -2354,6 +2393,7 @@
     const want = crowdWanted();
     if (want && !crowdBed) crowdBuild();
     if (!crowdBed) return;
+    if (want) crowdTapeLoad();
     crowdBed.gain.cancelScheduledValues(audio.currentTime);
     crowdBed.gain.setTargetAtTime(want ? CROWD_LEVEL : 0, audio.currentTime, want ? 0.8 : 0.4);
     if (want) crowdArm();

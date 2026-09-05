@@ -1,0 +1,13 @@
+crowd.m4a
+
+A 50 second excerpt (2:42 to 3:32) of "Sports Crowd Various Sounds"
+by FlatHill, https://freesound.org/people/FlatHill/sounds/324756/
+License: Creative Commons 0 (public domain dedication); no attribution
+is required, this note exists so the provenance is never a mystery.
+
+Prepared for looping: the first 2.5 seconds are crossfaded with the
+audio that continues past the excerpt's end, so the wrap-around seam
+is continuous. Re-encoded to AAC at 96kbps.
+
+The page fetches this lazily the first time the crowd is wanted and
+falls back to the synthesized stand if the fetch or decode fails.
