@@ -366,6 +366,27 @@
   .mp-hud .pl.dead { opacity: 0.5; text-decoration: line-through; text-decoration-thickness: 2px; }
   .mp-hud .pl.me { position: relative; }
   .mp-hud .note { color: var(--gold-bright); font-weight: 800; }
+  /* On the phone the strip wears the same scoreboard the header wears wide:
+     seat columns, crown, the gold underline, the fallen struck through. The
+     strip's slice of the column grows a little to pay for the second line
+     (54px against the pill's 42), and the pitch stays exactly as clear as
+     the day the list was moved off it. */
+  @media (max-width: 899.98px) {
+    .mp-hud {
+      background: #24321b; border: 1.5px solid var(--gold);
+      border-radius: 12px; padding: 3px 4px; gap: 0; align-items: stretch;
+    }
+    .mp-hud .pl { flex-direction: column; gap: 0; padding: 1px 9px; align-items: center; }
+    .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+    .mp-hud .pl .nm { font-size: 9.5px; letter-spacing: 1.4px; }
+    .mp-hud .pl .sc { font-size: 15px; line-height: 1.05; }
+    .mp-hud .pl.me::after {
+      content: ''; position: absolute; left: 9px; right: 9px; bottom: 1px;
+      height: 2px; border-radius: 2px; background: var(--gold-bright);
+    }
+    .mp-hud .note { align-self: center; padding: 0 10px; font-size: 10px; letter-spacing: 1.4px; }
+    .wrap.mp-open { --mp-h: 54px; }
+  }
   @media (min-width: 900px) {
     /* The room rides the HEADER since 2026-09-06, at the owner's call: the
        seat cells sit directly under the nameplate row as a second cluster
