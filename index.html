@@ -281,35 +281,6 @@
     padding: 6px;
   }
 
-  /* wall status pill: floats just above the field so it never covers the play area */
-  .wall-banner {
-    position: absolute;
-    left: 50%;
-    bottom: 100%;
-    transform: translateX(-50%);
-    margin-bottom: 8px;
-    padding: 3px 13px;
-    border-radius: 999px;
-    background: rgba(230,64,42,0.92);
-    color: #fff;
-    font-family: 'Anton', sans-serif;
-    font-size: clamp(11px, 3.2vw, 14px);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    white-space: nowrap;
-    box-shadow: 0 3px 12px rgba(230,64,42,0.5);
-    pointer-events: none;
-    z-index: 5;
-  }
-  .wall-banner[hidden] { display: none; }
-  /* the bolt's drag sits under the wall pill so the two never overlap */
-  .bolt-banner {
-    top: auto; bottom: -14px;
-    background: #2b6fb5;
-    box-shadow: 0 3px 12px rgba(43,111,181,0.5);
-  }
-  .wall-banner.forming { animation: wallBlink 0.32s steps(1, end) infinite; }
-  @keyframes wallBlink { 50% { opacity: 0.28; } }
 
   /* Versus furniture lives in its own strip ABOVE the pitch, never on it: a
      scoreboard chip per player on the left, the exit on the right. Drawn over
@@ -343,11 +314,39 @@
   }
   .mp-quit[hidden] { display: none; }
   .mp-quit.armed { background: var(--food); border-color: var(--food); color: #fff; }
+  /* seat cells: the name in its seat's own colour, the score under it on
+     wide (the match bar), beside it on narrow (the compact pill) */
   .mp-hud .pl { display: inline-flex; gap: 5px; align-items: center; }
-  .mp-hud .pl i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
-  .mp-hud .pl.dead { opacity: 0.5; text-decoration: line-through; }
-  .mp-hud .pl.me { color: #ffffff; font-weight: 800; }
+  .mp-hud .pl .nm { font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1.2px; }
+  .mp-hud .pl .sc { font-family: 'Anton', sans-serif; letter-spacing: 0.5px; color: #f4ecd8; }
+  .mp-hud .pl.dead { opacity: 0.5; text-decoration: line-through; text-decoration-thickness: 2px; }
+  .mp-hud .pl.me { position: relative; }
   .mp-hud .note { color: var(--gold-bright); font-weight: 800; }
+  @media (min-width: 900px) {
+    /* the stadium's own scoreboard: board-width, docked on the frame's top
+       edge, rounded above and flush below (the frame's border completes it) */
+    .mp-bar { justify-content: center; position: relative; margin: 0 auto; }
+    .mp-bar:not([hidden]) {
+      background: #24321b; border: 2px solid var(--gold); border-bottom: none;
+      border-radius: 12px 12px 0 0; padding: 7px 8px 6px;
+    }
+    /* the exit stays clear of the last column whatever the table size */
+    .mp-bar.has-quit { padding-right: 104px; }
+    .mp-hud {
+      background: transparent; padding: 0; overflow: visible;
+      gap: 0; align-items: stretch;
+    }
+    .mp-hud .pl { flex-direction: column; gap: 1px; padding: 2px 22px; align-items: center; }
+    .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+    .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.8px; }
+    .mp-hud .pl .sc { font-size: 19px; line-height: 1.05; }
+    .mp-hud .pl.me::after {
+      content: ''; position: absolute; left: 22px; right: 22px; bottom: -1px;
+      height: 2.5px; border-radius: 2px; background: var(--gold-bright);
+    }
+    .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
+    .mp-quit { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+  }
 
   canvas {
     display: block;
@@ -1356,6 +1355,45 @@
     backdrop-filter: blur(2px);
   }
   .gear:active { transform: scale(0.94); }
+  /* ---- the scoreboard row (wide screens): option C ----
+     Identity stands alone as a nameplate; the three utilities share one
+     bordered tray. Chips never pop in and out up here: while competition
+     is live they SLEEP (dim, inert), except the gear, because pausing for
+     settings is part of playing. The same buttons move back onto the board
+     frame on narrow screens (placeChrome), where the old rules hold. */
+  .hdr-cluster { display: none; }
+  @media (min-width: 900px) {
+    header { display: flex; align-items: center; gap: 22px; }
+    header h1 { margin-right: 2px; }
+    .scores { margin-left: auto; min-width: 178px; }
+    .hdr-cluster { display: flex; align-items: center; gap: 9px; }
+    .hdr-cluster .gear {
+      position: static; width: 34px; height: 34px; font-size: 15px;
+      background: transparent; border: 1.5px solid var(--gold);
+      color: var(--gold-deep); backdrop-filter: none;
+    }
+    .hdr-cluster .gear.who {
+      width: auto; min-width: 34px; padding: 0 14px; border-radius: 17px;
+      color: var(--text); font-family: 'Barlow', sans-serif; font-weight: 700;
+      font-size: 12px; letter-spacing: 1.5px;
+    }
+    .hdr-tray {
+      display: inline-flex; align-items: center; height: 34px;
+      border: 1.5px solid var(--gold); border-radius: 17px; overflow: hidden;
+    }
+    .hdr-tray .gear {
+      width: 40px; height: 100%; border: none; border-radius: 0; background: transparent;
+    }
+    .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
+    .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
+    .sleeping { opacity: 0.42; pointer-events: none; }
+  }
+  /* the purse's coin is drawn, not typed: the emoji rendered as a grey moon */
+  .coin-dot {
+    width: 11px; height: 11px; border-radius: 50%; display: inline-block;
+    background: var(--gold-bright); border: 1.5px solid var(--gold-deep);
+    margin-right: 5px; flex: none;
+  }
   .modal-backdrop {
     position: fixed; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;
@@ -1473,6 +1511,7 @@
   <div class="wrap">
     <header>
       <h1><span class="p-egg" id="pEgg">P</span>ITCH<br> SNAKE</h1>
+      <div class="hdr-cluster" id="hdrCluster"><span class="hdr-tray" id="hdrTray"></span></div>
       <div class="scores">
         <div class="tally">
           <div class="label" id="scoreLabel">Score</div>
@@ -1490,8 +1529,6 @@
 
     <div class="board-frame">
       <canvas id="game"></canvas>
-      <div class="wall-banner" id="wallBanner" hidden></div>
-      <div class="wall-banner bolt-banner" id="boltBanner" hidden></div>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
       <!-- The boards live behind the trophy now: the death screen shows the
@@ -1505,7 +1542,7 @@
            the door to the shop. -->
       <div class="chip-row">
         <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
-        <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden>&#129689;<span id="purseCoins"></span></button>
+        <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden><i class="coin-dot"></i><span id="purseCoins"></span></button>
         <span class="purse-float" id="purseFloat" hidden>+0</span>
       </div>
       <div class="overlay" id="overlay">
@@ -1751,6 +1788,7 @@
     <div class="modal-backdrop" id="profileModal" hidden>
       <div class="modal profile">
         <div class="modal-title" id="profTitle">Player</div>
+        <p class="lock-hint" id="profLock" hidden></p>
         <div class="entry wide"><input id="profName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false"></div>
         <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag" hidden></span><select id="profCountry"><option value="">NO FLAG</option></select></div>
         <button class="btn small" id="profSaveBtn">SAVE</button>
@@ -1905,7 +1943,6 @@
   const startBtn = document.getElementById('startBtn');
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
-  const wallBanner = document.getElementById('wallBanner');
   const entry = document.getElementById('entry');
   const nameInput = document.getElementById('nameInput');
   const saveBtn = document.getElementById('saveBtn');
@@ -2670,6 +2707,7 @@
     buildSpikeSprite();
     buildJerseySprite();
     vsRefit();                  // rival hats bake at cell size too
+    syncMpBar();                // the docked bar follows the board's width
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
     if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
   }
@@ -3408,8 +3446,6 @@
     }
     ctx.globalAlpha = 1;
 
-    syncWallBanner();
-    syncBoltBanner();
     syncCountdown();
 
     if (showFps) {
@@ -3716,34 +3752,6 @@
     if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
   }
 
-  // wall status banner: DOM only on phase change; the blink is CSS
-  let wallBannerState = '';
-  function syncWallBanner() {
-    const live = state === 'playing' || state === 'countdown';
-    const shown = live ? g.wallState : 'off';
-    if (shown === wallBannerState) return;
-    wallBannerState = shown;
-    if (shown === 'off') { wallBanner.hidden = true; return; }
-    wallBanner.textContent = shown === 'warning' ? 'WALLS FORMING' : 'WALLS LIVE';
-    wallBanner.classList.toggle('forming', shown === 'warning');
-    wallBanner.hidden = false;
-  }
-
-  // The bolt's own banner, counting the drag down so the player knows both
-  // why the pack slowed and how long they have. DOM only when the printed
-  // second changes (rule 8), same as the speed run clock.
-  const boltBanner = document.getElementById('boltBanner');
-  let boltBannerSec = 0;                 // gate on the integer, not the string
-  function syncBoltBanner() {
-    const live = state === 'playing' || state === 'countdown';
-    const left = live && g ? g.slowUntil - g.renderNow() : 0;
-    const sec = left > 0 ? Math.ceil(left / 1000) : 0;
-    if (sec === boltBannerSec) return;
-    boltBannerSec = sec;
-    if (!sec) { boltBanner.hidden = true; return; }
-    boltBanner.textContent = '⚡ GHOSTS SLOWED · ' + sec;
-    boltBanner.hidden = false;
-  }
 
   // ---- pre-round countdown: page-owned; the engine does not advance ----
   const countdownEl = document.getElementById('countdown');
@@ -4641,11 +4649,22 @@
       // rules it sat over
       overlayText.textContent = STRAPLINES[mode] || STRAPLINES.classic;
     }
-    // the trophy and the purse are menu furniture: mid-round they distract
-    // next to the settings gear, which stays because pausing for settings
-    // is play; the purse also waits until it has a number to show
-    boardsBtn.hidden = !onMenu;
-    purseBtn.hidden = !onMenu || !purseKnown;
+    // Chrome by home. On the board frame (narrow), the trophy and purse
+    // are menu furniture and hide mid-round as they always did. In the
+    // header (wide) nothing pops: while competition is live the name, the
+    // purse and the trophy SLEEP instead, dim and inert, and the profile
+    // sheet's own lock is the real gate on identity.
+    if (chromeWide) {
+      boardsBtn.hidden = false;
+      purseBtn.hidden = !purseKnown;
+      const asleep = !onMenu;
+      whoBtn.classList.toggle('sleeping', asleep);
+      purseBtn.classList.toggle('sleeping', asleep);
+      boardsBtn.classList.toggle('sleeping', asleep);
+    } else {
+      boardsBtn.hidden = !onMenu;
+      purseBtn.hidden = !onMenu || !purseKnown;
+    }
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
     modeFooter.hidden = !listScreen;
@@ -5010,6 +5029,11 @@
       document.querySelector('.wrap').classList.toggle('mp-open', open);
       resizeQueued = true;
     }
+    // the docked bar spans exactly the board it sits on (wide only); an
+    // event-time read, never from the frame loop
+    mpBar.classList.toggle('has-quit', !mpQuitBtn.hidden);
+    if (!mpBar.hidden && chromeWide) mpBar.style.width = boardFrameEl.offsetWidth + 'px';
+    else mpBar.style.width = '';
   }
 
   let mpHudHash = -1;
@@ -5050,11 +5074,16 @@
       const p = g.players[i];
       const el = document.createElement('span');
       el.className = 'pl' + (p.alive ? '' : ' dead') + (i === vs.myIdx ? ' me' : '');
-      const dot = document.createElement('i');
-      dot.style.background = i === vs.myIdx ? getCss('--gold-bright') : VS_COLORS[i];
-      el.appendChild(dot);
-      el.appendChild(document.createTextNode(
-        (k === 0 ? '👑 ' : '') + (vs.roster[i] ? vs.roster[i].name : '?') + ' ' + p.score));
+      // seat cells: the name wears its seat's colour (mine the gold), the
+      // score sits in Anton, and the crown rides the leader
+      const nm = document.createElement('span');
+      nm.className = 'nm';
+      nm.style.color = i === vs.myIdx ? getCss('--gold-bright') : VS_COLORS[i];
+      nm.textContent = (k === 0 ? '👑 ' : '') + (vs.roster[i] ? vs.roster[i].name : '?');
+      const sc = document.createElement('span');
+      sc.className = 'sc';
+      sc.textContent = p.score;
+      el.append(nm, sc);
       mpHud.appendChild(el);
     }
     if (chase > 0) {
@@ -6413,8 +6442,13 @@
 
   function refreshSettingsUI() {
     const inRound = (state === 'playing' || state === 'paused' || state === 'countdown');
-    gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
-    document.getElementById('whoBtn').style.display = gearBtn.style.display;
+    if (chromeWide) {
+      gearBtn.style.display = 'flex';   // the gear stays awake: pausing for settings is play
+      whoBtn.style.display = 'flex';
+    } else {
+      gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
+      whoBtn.style.display = gearBtn.style.display;
+    }
     // only what the engine simulates locks mid-round: speed and walls.
     // THEME shares the chips' clothes but stays free, like sound.
     settingsModal.querySelectorAll('[data-speed], #wallToggle').forEach(el => { el.disabled = inRound; });
@@ -6823,6 +6857,33 @@
   }
 
   purseBtn.addEventListener('click', openShop);
+
+  // ---- the scoreboard row's movers ----
+  // One set of buttons, two homes. Wide screens put the nameplate and the
+  // tray in the header; narrow screens put everything back on the board
+  // frame exactly where it always lived. Moving nodes keeps listeners.
+  const hdrCluster = document.getElementById('hdrCluster');
+  const hdrTray = document.getElementById('hdrTray');
+  const chipRowEl = whoBtn.closest('.chip-row');
+  const boardFrameEl = gearBtn.parentElement;
+  let chromeWide = false;
+  const wideQuery = window.matchMedia('(min-width: 900px)');
+  function placeChrome() {
+    chromeWide = wideQuery.matches;
+    if (chromeWide) {
+      hdrCluster.insertBefore(whoBtn, hdrTray);
+      hdrTray.append(purseBtn, boardsBtn, gearBtn);
+    } else {
+      chipRowEl.append(whoBtn, purseBtn);
+      boardFrameEl.append(boardsBtn, gearBtn);
+      for (const b of [whoBtn, purseBtn, boardsBtn]) b.classList.remove('sleeping');
+      gearBtn.style.display = '';
+      whoBtn.style.display = '';
+    }
+    refreshModeUI();
+    refreshSettingsUI();
+  }
+  wideQuery.addEventListener('change', placeChrome);
   shopClose.addEventListener('click', () => { shopModal.hidden = true; });
 
   // ---- the boards sheet ----
@@ -6927,9 +6988,30 @@
   // the backdrop is a door too, exactly like the settings sheet's
   boardsModal.addEventListener('click', (e) => { if (e.target === boardsModal) boardsModal.hidden = true; });
 
+  // Identity freezes while competition is live: during any round, and for
+  // as long as a seat in a room is held, because the series tally is keyed
+  // by NAME and a lobby rename between rematches would fork it. The sheet
+  // still opens (the shelf is browsing), but every editing control locks,
+  // the settings sheet's own pattern wearing room-aware words.
+  function syncProfileLock() {
+    const roundLive = state === 'playing' || state === 'countdown' || state === 'paused';
+    const seated = !!vs;
+    const locked = roundLive || seated;
+    const profLock = document.getElementById('profLock');
+    profLock.hidden = !locked;
+    if (locked) {
+      profLock.textContent = seated && !roundLive
+        ? 'Leave the room to change your name.'
+        : 'Finish the round to change your profile.';
+    }
+    for (const el of profileModal.querySelectorAll('input, select, .btn')) el.disabled = locked;
+    return locked;
+  }
+
   function openProfile() {
     buildCountries();
     refreshProfileSheet(true);
+    syncProfileLock();
     profShelf.hidden = true;      // last visit's shelf is not this visit's
     void loadShelf();
     profileModal.hidden = false;
@@ -7162,6 +7244,7 @@ $ `;
   resize();
   newRound();
   applyWorn(worn.skin, worn.hat);   // the cached outfit, before the first draw
+  placeChrome();                    // the chrome picks its home before the first paint
   refreshSettingsUI();
   loadPersonalBest();
   refreshModeUI();
