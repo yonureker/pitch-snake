@@ -4544,10 +4544,11 @@
     // ready-only so a room's FULL TIME result keeps its whistle.
     const menuTitle = listScreen ? 'MODES'
       : (modesOpen && tScreen && mode === 'versus' && state === 'ready') ? 'MULTIPLAYER'
+      : (modesOpen && tScreen && mode === 'tourney' && state === 'ready') ? 'TOURNAMENTS'
       : null;
     if (menuTitle) {
       const cur = overlayTitle.textContent;
-      if (cur !== 'MODES' && cur !== 'MULTIPLAYER') titleBehindModes = [cur, overlayTitle.className];
+      if (cur !== 'MODES' && cur !== 'MULTIPLAYER' && cur !== 'TOURNAMENTS') titleBehindModes = [cur, overlayTitle.className];
       overlayTitle.textContent = menuTitle;
       overlayTitle.className = '';
     } else if (titleBehindModes) {
@@ -4687,7 +4688,10 @@
     vsBailBtn.hidden = !(vsDead && !modesOpen);
     // both chooser screens carry their own BACK and primary, so the shared
     // pair stands down there; on the pitch MODES is the way in
-    const vsScreen = modesOpen && tScreen && mode === 'versus';
+    // both step screens, versus and tournaments alike: each carries its own
+    // BACK and primary, so the shared MODES/DONE button stands down (the
+    // tournament step wore a stray DONE under its own BACK for a while)
+    const vsScreen = modesOpen && tScreen && (mode === 'versus' || mode === 'tourney');
     modesBtn.style.display = (onMenu && !vsScreen && !listScreen) ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     best = bestByMode[ruleMode()] || 0;
