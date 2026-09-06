@@ -27,12 +27,28 @@
     /* ---- the shell's own tokens ----
        The table the pitch sits on, and the ink written straight onto it:
        the poster title, the score column, the hint line, the touch pad.
-       These are what the theme swaps. The sheet tokens above (--text,
-       --panel, --muted) deliberately do NOT swap: the sheets are paper
-       laid over the table and their ink must keep meaning ink on paper. */
+       These are what the theme swaps. The base tokens (--text, --panel,
+       --muted) never swap: they mean ink on cream wherever they appear,
+       and the sheets stopped using them directly for exactly that reason. */
     --shell-ink: var(--text);
     --shell-muted: var(--muted);
     --shell-gold: var(--gold-deep);
+    /* ---- the sheet tokens ----
+       The modals (settings, profile, shop, boards) follow the theme too,
+       since 2026-09-06 at the owner's call: a cream sheet over the dark
+       table read as a light-mode leak. Every color inside a sheet routes
+       through these; a sheet rule reaching for --text directly is a bug. */
+    --sheet: var(--panel);
+    --sheet-ink: var(--text);
+    --sheet-muted: var(--muted);
+    --sheet-gold: var(--gold-deep);
+    --sheet-line: rgba(33,30,26,0.18);
+    --sheet-tint: rgba(33,30,26,0.06);
+    --sheet-tint-line: rgba(33,30,26,0.10);
+    --sheet-track: rgba(33,30,26,0.25);
+    --sheet-ghost-line: rgba(107,98,80,0.55);
+    --sheet-field: rgba(246,239,222,0.96);
+    --sheet-field-ink: var(--text);
     --pad-hi: #fbf6e8;
     --pad-mid: var(--panel);
     --pad-lo: #ded2b4;
@@ -61,6 +77,17 @@
       --pad-shade: rgba(0,0,0,0.35);
       --pad-ring: rgba(194,162,90,0.35);
       --pad-ink: #e9e0cd;
+      --sheet: #1f2a1d;
+      --sheet-ink: #e9e0cd;
+      --sheet-muted: #b7ac93;
+      --sheet-gold: #d8b35e;
+      --sheet-line: rgba(244,236,216,0.22);
+      --sheet-tint: rgba(244,236,216,0.07);
+      --sheet-tint-line: rgba(244,236,216,0.12);
+      --sheet-track: rgba(244,236,216,0.28);
+      --sheet-ghost-line: rgba(183,172,147,0.55);
+      --sheet-field: rgba(15,20,12,0.7);
+      --sheet-field-ink: #f6efde;
     }
   }
   html.theme-dark {
@@ -77,6 +104,17 @@
     --pad-shade: rgba(0,0,0,0.35);
     --pad-ring: rgba(194,162,90,0.35);
     --pad-ink: #e9e0cd;
+    --sheet: #1f2a1d;
+    --sheet-ink: #e9e0cd;
+    --sheet-muted: #b7ac93;
+    --sheet-gold: #d8b35e;
+    --sheet-line: rgba(244,236,216,0.22);
+    --sheet-tint: rgba(244,236,216,0.07);
+    --sheet-tint-line: rgba(244,236,216,0.12);
+    --sheet-track: rgba(244,236,216,0.28);
+    --sheet-ghost-line: rgba(183,172,147,0.55);
+    --sheet-field: rgba(15,20,12,0.7);
+    --sheet-field-ink: #f6efde;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -916,12 +954,12 @@
 
   .speed-row {
     display: flex; gap: 8px; align-items: center;
-    font-size: 12px; color: var(--muted); letter-spacing: 1px; font-weight: 600;
+    font-size: 12px; color: var(--sheet-muted); letter-spacing: 1px; font-weight: 600;
   }
   .speed-row button {
-    background: var(--panel);
-    border: 1.5px solid rgba(33,30,26,0.18);
-    color: var(--text);
+    background: var(--sheet);
+    border: 1.5px solid var(--sheet-line);
+    color: var(--sheet-ink);
     font-family: 'Barlow', sans-serif;
     font-weight: 700;
     letter-spacing: 1px;
@@ -933,16 +971,16 @@
   .speed-row button.active {
     background: var(--gold);
     border-color: var(--gold);
-    color: var(--text);
+    color: #211e1a;
   }
 
   .toggle-row {
     display: flex; gap: 10px; align-items: center;
-    font-size: 12px; color: var(--muted); letter-spacing: 1px; font-weight: 600;
+    font-size: 12px; color: var(--sheet-muted); letter-spacing: 1px; font-weight: 600;
   }
   .switch {
     width: 46px; height: 26px; border-radius: 999px; border: none; padding: 0;
-    background: rgba(33,30,26,0.25); position: relative; cursor: pointer;
+    background: var(--sheet-track); position: relative; cursor: pointer;
     transition: background 0.18s ease;
   }
   .switch.on { background: var(--food); }
@@ -952,7 +990,7 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.35);
   }
   .switch.on .knob { left: 23px; }
-  .toggle-row .state { font-weight: 700; color: var(--text); width: 28px; }
+  .toggle-row .state { font-weight: 700; color: var(--sheet-ink); width: 28px; }
 
   .entry { display: flex; gap: 8px; align-items: center; }
   /* the name field is the gate to a versus room, so it gets the full width */
@@ -997,7 +1035,7 @@
   .entry input {
     width: 130px; padding: 10px 12px; border-radius: 6px;
     border: 2px solid var(--gold);
-    background: rgba(246,239,222,0.96); color: var(--text);
+    background: var(--sheet-field); color: var(--sheet-field-ink);
     font-family: 'Anton', sans-serif; font-size: 20px; letter-spacing: 4px;
     text-align: center; text-transform: uppercase; outline: none;
   }
@@ -1203,9 +1241,9 @@
   .shelf-head {
     display: flex; justify-content: space-between; align-items: baseline;
     font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px;
-    letter-spacing: 2px; color: var(--muted); margin-bottom: 7px;
+    letter-spacing: 2px; color: var(--sheet-muted); margin-bottom: 7px;
   }
-  .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--gold-deep); letter-spacing: 1px; }
+  .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--sheet-gold); letter-spacing: 1px; }
   /* No scroller of its own: the profile sheet already scrolls (max-height
      86vh), and a scroll area inside a scroll area is a trap on touch, where
      the inner one swallows the drag that was meant to move the sheet. */
@@ -1213,7 +1251,7 @@
   .shelf-list li {
     display: flex; align-items: flex-start; gap: 9px;
     padding: 7px 9px; border-radius: 7px;
-    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.10);
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
   }
   /* earned reads as gold and lit; locked keeps the same shape so the shelf
      is a set with gaps rather than two different lists */
@@ -1221,8 +1259,8 @@
   .shelf-list .pip {
     flex: 0 0 20px; width: 20px; height: 20px; border-radius: 50%;
     display: grid; place-items: center; font-size: 11px; font-weight: 700;
-    background: rgba(33,30,26,0.10); color: var(--muted);
-    border: 1px solid rgba(33,30,26,0.18);
+    background: var(--sheet-tint-line); color: var(--sheet-muted);
+    border: 1px solid var(--sheet-line);
   }
   .shelf-list li.got .pip {
     background: var(--gold); color: #fff; border-color: var(--gold-deep);
@@ -1230,39 +1268,39 @@
   .shelf-list .txt { flex: 1; min-width: 0; }
   .shelf-list .nm {
     display: block; font-family: 'Barlow', sans-serif; font-weight: 700;
-    font-size: 11.5px; letter-spacing: 1.2px; color: var(--muted);
+    font-size: 11.5px; letter-spacing: 1.2px; color: var(--sheet-muted);
   }
-  .shelf-list li.got .nm { color: var(--gold-deep); }
-  .shelf-list .dt { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
-  .shelf-list li.got .dt { color: var(--text); }
+  .shelf-list li.got .nm { color: var(--sheet-gold); }
+  .shelf-list .dt { display: block; font-size: 11px; color: var(--sheet-muted); margin-top: 1px; }
+  .shelf-list li.got .dt { color: var(--sheet-ink); }
   /* what a badge pays: the incentive on a locked row, the receipt on an
      earned one */
   .shelf-list .coins {
     margin-left: auto; padding-left: 8px;
-    font-family: 'Anton', sans-serif; font-size: 13px; color: var(--gold-deep);
+    font-family: 'Anton', sans-serif; font-size: 13px; color: var(--sheet-gold);
   }
   /* ---- the boards sheet ---- */
   .board-chips { display: flex; gap: 8px; justify-content: center; }
   .board-chips button {
     font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
     font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
-    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.2);
-    color: var(--text);
+    background: var(--sheet-tint); border: 1px solid var(--sheet-line);
+    color: var(--sheet-ink);
   }
   .board-chips button.active { background: var(--gold); border-color: var(--gold); color: #211e1a; }
   .boards-list { list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
   .boards-list li {
     display: flex; align-items: center; gap: 9px;
     padding: 6px 9px; border-radius: 7px; font-size: 13px; font-weight: 600;
-    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.10);
-    color: var(--text);
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+    color: var(--sheet-ink);
   }
-  .boards-list .rk { flex: 0 0 20px; color: var(--gold-deep); font-weight: 700; }
+  .boards-list .rk { flex: 0 0 20px; color: var(--sheet-gold); font-weight: 700; }
   .boards-list .nm { flex: 1; text-align: left; letter-spacing: 1px; }
   .boards-list .sc { font-family: 'Anton', sans-serif; font-size: 15px; letter-spacing: 0.5px; }
-  .boards-list .empty { justify-content: center; color: var(--muted); font-weight: 500; }
+  .boards-list .empty { justify-content: center; color: var(--sheet-muted); font-weight: 500; }
   .boards-list li.me { border: 1px solid var(--gold); }
-  .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--gold-deep); font-weight: 700; }
+  .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--sheet-gold); font-weight: 700; }
 
   /* ---- the shop ---- */
   .modal.shop .shelf-head { width: 100%; }
@@ -1271,13 +1309,13 @@
   .shop-list li {
     display: flex; align-items: center; gap: 10px;
     padding: 7px 9px; border-radius: 7px;
-    background: rgba(33,30,26,0.06); border: 1px solid rgba(33,30,26,0.10);
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
   }
   .shop-list li.worn { background: rgba(194,162,90,0.16); border-color: rgba(194,162,90,0.5); }
   .shop-prev { flex: 0 0 64px; width: 64px; height: 28px; }
   .shop-txt { flex: 1; min-width: 0; text-align: left; }
-  .shop-txt .nm { display: block; font-weight: 700; font-size: 12px; letter-spacing: 1px; color: var(--text); }
-  .shop-txt .st { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .shop-txt .nm { display: block; font-weight: 700; font-size: 12px; letter-spacing: 1px; color: var(--sheet-ink); }
+  .shop-txt .st { display: block; font-size: 11px; color: var(--sheet-muted); margin-top: 1px; }
   .shop-list .btn.small { flex: 0 0 auto; padding: 8px 12px; font-size: 12.5px; min-width: 86px; }
   /* WEARING wears the gold it is: pressing it again undresses */
   .shop-list .btn.small.worn-btn { background: var(--gold); color: #211e1a; box-shadow: 0 4px 0 var(--gold-deep); }
@@ -1411,7 +1449,7 @@
   }
   .modal-backdrop[hidden] { display: none; }
   .modal {
-    background: var(--panel); color: var(--text);
+    background: var(--sheet); color: var(--sheet-ink);
     border: 2px solid var(--gold); border-radius: 14px;
     padding: 20px 22px; width: min(320px, 90vw);
     display: flex; flex-direction: column; align-items: center; gap: 16px;
@@ -1419,7 +1457,7 @@
   }
   .modal-title {
     font-family: 'Anton', sans-serif; font-weight: 400; font-size: 26px;
-    letter-spacing: 1px; text-transform: uppercase; color: var(--text);
+    letter-spacing: 1px; text-transform: uppercase; color: var(--sheet-ink);
   }
   .modal .speed-row, .modal .toggle-row { justify-content: center; }
   .lock-hint { font-size: 12px; color: var(--food); font-weight: 700; text-align: center; }
@@ -1457,8 +1495,8 @@
   .modal.profile .entry.wide { width: 100%; }
   .modal.profile select {
     width: 100%; padding: 9px 10px; border-radius: 6px;
-    border: 2px solid var(--gold); background: rgba(246,239,222,0.96);
-    color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14px;
+    border: 2px solid var(--gold); background: var(--sheet-field);
+    color: var(--sheet-field-ink); font-family: 'Barlow', sans-serif; font-size: 14px;
     font-weight: 600; letter-spacing: 0.5px; outline: none;
   }
   .modal.profile input.prof-email {
@@ -1471,9 +1509,9 @@
   }
   .prof-auth[hidden] { display: none; }
   .prof-auth .vs-hint { text-align: center; margin: 0; }
-  /* the ghost button was dressed for the dark overlay; on the cream modal
-     it needs ink, not chalk */
-  .modal .btn.ghostbtn { color: #6b6250; border-color: rgba(107,98,80,0.55); box-shadow: none; }
+  /* the ghost button was dressed for the dark overlay; on a sheet it wears
+     the sheet's own muted ink, whichever theme the sheet is in */
+  .modal .btn.ghostbtn { color: var(--sheet-muted); border-color: var(--sheet-ghost-line); box-shadow: none; }
   .prof-auth b { color: var(--gold-bright); letter-spacing: 0.5px; text-transform: none; }
   .linkline {
     background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
