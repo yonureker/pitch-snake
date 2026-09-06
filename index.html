@@ -185,14 +185,14 @@
   .scores { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
   .scores .tally { text-align: right; line-height: 1.1; }
   .scores .label {
-    font-size: 11px; letter-spacing: 2px; color: var(--shell-muted);
+    font-size: 13px; letter-spacing: 2px; color: var(--shell-muted);
     text-transform: uppercase; font-weight: 600;
   }
   .scores .val {
-    font-family: 'Anton', sans-serif; font-size: 38px; color: var(--shell-ink);
+    font-family: 'Anton', sans-serif; font-size: 48px; color: var(--shell-ink);
   }
   .scores .best {
-    color: var(--gold); font-size: 14px; font-weight: 700;
+    color: var(--gold); font-size: 17px; font-weight: 700;
     letter-spacing: 1px;
   }
   .scores .clock {
@@ -558,8 +558,8 @@
   html.touch .wrap > .hint { display: none; }
   html.touch h1 { font-size: clamp(17px, 5.4vw, 25px); line-height: 1; text-shadow: 2px 2px 0 var(--gold); }
   html.touch h1 br { display: none; }
-  html.touch .scores .val { font-size: 22px; }
-  html.touch .scores .label, html.touch .scores .best { font-size: 9px; }
+  html.touch .scores .val { font-size: 28px; }
+  html.touch .scores .label, html.touch .scores .best { font-size: 11px; }
   html.touch .scores .clock { font-size: 19px; padding-left: 8px; }
   html.touch .scores { gap: 8px; }
   html.touch header { padding: 0 10px; }
@@ -1427,9 +1427,10 @@
     /* the clock keeps its centered seat; a stretched one drew its divider
        the full height of the title */
     .scores .clock { align-self: center; }
-    /* glyphs, not boxes: SECONDS paints 2.5px below its box top and BEST
-       ends 1px above its box bottom (screenshot-measured) */
-    .scores .label { margin-top: -2.5px; }
+    /* glyphs, not boxes: the label paints below its box top and BEST ends
+       above its box bottom (screenshot-measured, re-tuned when the column
+       grew to 13/48/17px on 2026-09-06) */
+    .scores .label { margin-top: -3.5px; }
     .scores .best { margin-bottom: -1px; }
     /* shell tokens, not sheet tokens: these sit on the table and must flip
        with the theme (the nameplate's ink was invisible on the dark table) */
