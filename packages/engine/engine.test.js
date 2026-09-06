@@ -1077,28 +1077,52 @@ test('per-snake pace survives a snapshot and a rollback resim', () => {
 });
 
 // ------------------------------------------------------------------- the TNT
-test('eating a TNT: -5 points, -5 segments, floored, never fatal, streak untouched', () => {
+test('eating a TNT (classic, v22): -5 points, +5 segments, never fatal, streak untouched', () => {
+  // Since v22 a classic/speedrun TNT FEEDS the snake instead of trimming it,
+  // so it is a hazard in every sense: five points gone and five harder to
+  // steer. The score may go negative; a TNT still never kills.
   const g = quietGame();
   foodFar(g);
-  setSnake(g, [[4, 5], [3, 5], [2, 5], [1, 5], [0, 5], [19, 5], [18, 5], [17, 5], [16, 5], [15, 5]], 1, 0);
+  setSnake(g, [[4, 5], [3, 5], [2, 5]], 1, 0);
   g.score = 12; g.bonusStreak = 3;
   g.bombs = [{ x: 5, y: 5 }]; g.bombPhase = 'active'; g.bombExpireAt = 1e12;
   g._step();
-  assert.equal(g.snake.length, 5, 'five segments off a ten long snake');
-  assert.equal(g.score, 7, 'and five points');
+  assert.equal(g.score, 7, 'five points gone');
   assert.equal(g.bonusStreak, 3, 'the bonus streak is untouched');
-  assert.ok(!g.cellOccupied(15, 5), 'the occupancy set let go of the lost segments');
+  assert.equal(g.pendingGrowth, 5, 'and five segments owed');
   assert.equal(g.bombs.length, 0, 'the block it ate is gone');
+  const tnt = g.drainEvents().find(e => e.t === 'tnt');
+  assert.deepEqual(tnt.lost, [], 'nothing came off; a classic TNT now feeds');
+  const start = g.snake.length;
+  for (let i = 0; i < 5; i++) g._step();
+  assert.equal(g.snake.length, start + 5, 'the snake really is five longer');
+  assert.equal(g.alive, true, 'and a TNT never kills');
 
+  // the score is free to go negative, exactly as before
   const h = quietGame();
   foodFar(h);
   setSnake(h, [[4, 5], [3, 5], [2, 5]], 1, 0);
   h.score = 3;
   h.bombs = [{ x: 5, y: 5 }]; h.bombPhase = 'active'; h.bombExpireAt = 1e12;
   h._step();
-  assert.equal(h.snake.length, START_LEN, 'never below the starting length');
   assert.equal(h.score, -2, 'the score may go negative');
-  assert.equal(h.alive, true, 'and a TNT never kills');
+  assert.equal(h.alive, true, 'still alive');
+});
+
+test('a teleport trip grows the classic snake five (v22)', () => {
+  // Since v22 a classic/speedrun window pays +5 AND grows five, the reward
+  // fully mirrored; survival keeps its own coin (trims five, no points).
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[4, 5], [3, 5], [2, 5]], 1, 0);
+  g.portal = PAIR();
+  g._step();                                 // steps into the near window
+  g._step();                                 // surfaces at the far one, pays and grows
+  assert.equal(g.score, PORTAL_BONUS, 'the trip paid five points');
+  assert.equal(g.pendingGrowth, 5, 'and owes five segments');
+  const start = g.snake.length;
+  for (let i = 0; i < 5; i++) g._step();
+  assert.equal(g.snake.length, start + 5, 'which it delivers');
 });
 
 // ---------------------------------------------------------------- the streak

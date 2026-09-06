@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 21;  // 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 22;  // 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -322,7 +322,10 @@ export const LEVELS = [
   {
     id: 'danger-on-the-pitch',
     name: 'DANGER ON THE PITCH',
-    teach: 'TNT is not food. It costs you five points and five of your length.',
+    // retired content, kept true: since v22 a classic TNT feeds rather than
+    // trims, so the lesson teaches the hazard it is now (the level plays bare
+    // createGame, so it takes the same +5 default classic does)
+    teach: 'TNT is not food. It costs you five points and makes you five longer.',
     goal: 'Eat 4 and leave the TNT alone.',
     cfg: { seed: 1105, wallsEnabled: false, startBombs: 3, bombFirstMs: 2500, goalScore: 4 },
   },
@@ -354,8 +357,8 @@ export function createGame(cfg = {}) {
   const startLen = cfg.startLen ?? START_LEN;
   const eatGrowth = cfg.eatGrowth ?? 1;
   const bonusGrowth = cfg.bonusGrowth ?? 5;
-  const tntGrowth = cfg.tntGrowth ?? -5;
-  const portalGrowth = cfg.portalGrowth ?? 0;   // survival: a trip trims five
+  const tntGrowth = cfg.tntGrowth ?? 5;         // classic/rooms: TNT feeds five (v22), a hazard in every sense
+  const portalGrowth = cfg.portalGrowth ?? 5;   // classic/rooms: a trip grows five (v22); survival overrides to trim five
   const ghostEveryMs = cfg.ghostEveryMs ?? 0;
   const bombEveryMs = cfg.bombEveryMs ?? 0;
   const boltEveryMs = cfg.boltEveryMs ?? 0;

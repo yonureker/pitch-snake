@@ -851,7 +851,7 @@ export default function Index() {
                             <View style={styles.lgTntBand} />
                           </View>
                         }
-                        text="TNT block, 5 shorter"
+                        text="TNT block, 5 longer"
                         value="-5"
                         valueTone="neg"
                       />
