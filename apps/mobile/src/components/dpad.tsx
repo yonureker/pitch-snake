@@ -175,7 +175,13 @@ export function Dpad({ onDir, heading }: DpadProps) {
   const fireDown = (id: number, zone: Zone, tag: string): void => {
     const now = nowMs();
     const last = lastDownAt.current.get(id) ?? -1e9;
-    if (fingers.current.has(id) && now - last < ECHO_MS) {
+    // The zone comparison is load-bearing: an echo is the SAME wedge twice.
+    // Without it this guard also swallowed a finger sliding into a NEW wedge
+    // within the echo window, which is exactly how fast corner combos are
+    // drawn, and the second turn of an up-then-left snapped inside 60ms
+    // silently died here. Turns a millisecond apart are legitimate input;
+    // only the same wedge re-delivered is not.
+    if (fingers.current.get(id) === zone && now - last < ECHO_MS) {
       note(`x${String(id)}`);
       lastDownAt.current.set(id, now);
       return;
