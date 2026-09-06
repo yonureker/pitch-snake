@@ -24,6 +24,7 @@ import {
   type GameEvent,
   type RoundLog,
 } from '@pitch-snake/engine';
+import type { NetSession } from '@pitch-snake/net';
 
 import type { RuleMode } from '@/lib/modes';
 
@@ -54,6 +55,18 @@ export interface GameLoop {
   best: number;
   /** Dress the snake (skin id, hat id); null wears classic. Menu-time only. */
   setWorn: (skin: string | null, hat: string | null) => void;
+  /** Hand over a room round: shared game, its session, my seat, kickoff lag. */
+  startVersus: (
+    g: Game,
+    session: NetSession,
+    myIdx: number,
+    preElapsedMs: number,
+    vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] },
+  ) => void;
+  /** The session says the round ended (or desynced): show FULL TIME. */
+  endVersus: () => void;
+  /** Out of the room, back to a solo ready screen. */
+  leaveVersus: () => void;
   /** 3, 2, 1 or START! while counting down, empty otherwise. */
   countText: string;
   /** '', 'WALLS FORMING' or 'WALLS LIVE'. */
@@ -133,6 +146,10 @@ interface LoopBox {
   boardPx: number;
   /** What the snake wears; swapped at menu time by setWorn, read per frame. */
   worn: { skin: string | null; hat: string | null };
+  /** A room's round: the session drives the sim and myIdx is my seat. */
+  session: NetSession | null;
+  vsIdx: number;
+  vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] } | null;
   lastScore: number;
   lastBanner: string;
   lastCount: string;
@@ -172,6 +189,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     atlas: null,
     boardPx: 1,
     worn: { skin: null, hat: null },
+    session: null,
+    vsIdx: -1,
+    vsRc: null,
     lastScore: -1,
     lastBanner: '',
     lastCount: '',
@@ -255,6 +275,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             break;
           }
           case 'die': {
+            // In a room only MY death buzzes, and the round plays on around
+            // the fallen: phase 'dead' arrives from the session's onEnd.
+            if (box.vsIdx >= 0) {
+              if (e.player === box.vsIdx) {
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              }
+              break;
+            }
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             setDeadReason(e.reason);
             box.phase = 'dead';
@@ -306,12 +334,16 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         }
       }
       if (box.phase === 'playing') {
-        g.advance(dt);
+        // a room's session owns pacing against the peers; solo advances by dt
+        if (box.session !== null) box.session.frame(now);
+        else g.advance(dt);
         handleEvents(g, g.drainEvents(), cellPx);
-        if (g.score !== box.lastScore) {
-          box.lastScore = g.score;
-          setScore(g.score);
-          setBest((b) => (g.score > b ? g.score : b));
+        const myScore = box.vsIdx >= 0 ? (g.players[box.vsIdx]?.score ?? 0) : g.score;
+        if (myScore !== box.lastScore) {
+          box.lastScore = myScore;
+          setScore(myScore);
+          // BEST is a solo statistic; a room's score rides its own board
+          if (box.vsIdx < 0) setBest((b) => (myScore > b ? myScore : b));
         }
         const banner =
           g.wallState === 'warning' ? 'WALLS FORMING'
@@ -348,6 +380,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         pulseMs: box.pulseMs,
         playing: box.phase === 'playing',
         worn: box.worn,
+        vs: box.vsRc ?? undefined,
       });
       // Dispose pictures deterministically, two frames late: the newest
       // retired one may still be mid-replay on the render thread, and leaving
@@ -416,6 +449,12 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     if (box.phase !== 'playing' && box.phase !== 'countdown') return;
     const g = game.current;
     if (g === null) return;
+    if (box.session !== null) {
+      // the session stamps the true press time, broadcasts it, and feeds
+      // the shared timeline (the web's dirInput, netcode edition)
+      box.session.localDir(x, y, nowMs());
+      return;
+    }
     // Stamp the press at the moment it happened, not at the last frame tick:
     // advance the sim to now before recording the input, so a turn can catch
     // a cell boundary that falls between frames. advance() quantizes, so this
@@ -438,7 +477,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     if (box.phase !== 'playing' && box.phase !== 'countdown') return null;
     const g = game.current;
     if (g === null) return null;
-    return g.dirQueue[g.dirQueue.length - 1] ?? g.dir;
+    const pl = box.vsIdx >= 0 ? (g.players[box.vsIdx] ?? g) : g;
+    return pl.dirQueue[pl.dirQueue.length - 1] ?? pl.dir;
   };
 
   const debugDie = (): void => {
@@ -470,6 +510,64 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // rebakes its sprites on the new key at the next frame (the web's applyWorn)
   const setWorn = (skin: string | null, hat: string | null): void => {
     boxRef.current.worn = { skin, hat };
+  };
+
+  // ---- a room's round (the session drives, this loop renders) ----
+  // The kickoff hands over a shared game and its net session; the countdown
+  // pre-elapses by how late the kickoff reached this device, so every screen
+  // whistles at the same absolute moment (the web's skew clamp).
+  const startVersus = (
+    g: Game,
+    session: NetSession,
+    myIdx: number,
+    preElapsedMs: number,
+    vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] },
+  ): void => {
+    const box = boxRef.current;
+    game.current = g;
+    g.drainEvents();
+    box.session = session;
+    box.vsIdx = myIdx;
+    box.vsRc = vsRc;
+    roundTicket.current = null;
+    setCanSubmit(false);
+    clearParticles();
+    clearWallLayer();
+    box.lastScore = -1;
+    setScore(0);
+    setDeadReason('');
+    box.lastClock = '';
+    setClockText('');
+    box.lastBanner = '';
+    setWallBanner('');
+    box.countClock = Math.min(1200, Math.max(0, preElapsedMs));
+    box.lastCount = '';
+    box.phase = 'countdown';
+    setPhase('countdown');
+  };
+
+  // full time (or a desync): the session said the round is over
+  const endVersus = (): void => {
+    const box = boxRef.current;
+    if (box.vsIdx < 0) return;
+    box.phase = 'dead';
+    setPhase('dead');
+  };
+
+  // walking out of the room: back to a solo ready screen with a preview game
+  const leaveVersus = (): void => {
+    const box = boxRef.current;
+    box.session = null;
+    box.vsIdx = -1;
+    box.vsRc = null;
+    game.current = createGame({ seed: freshSeed(), tickMs: SPEEDS.normal });
+    game.current.drainEvents();
+    clearParticles();
+    clearWallLayer();
+    box.lastScore = -1;
+    setScore(0);
+    box.phase = 'ready';
+    setPhase('ready');
   };
 
   // The ruleset for the NEXT round; refused mid-round so a running game can
@@ -508,6 +606,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     picture,
     phase,
     setWorn,
+    startVersus,
+    endVersus,
+    leaveVersus,
     score,
     best,
     countText,

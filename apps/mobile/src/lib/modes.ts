@@ -9,8 +9,9 @@
 /** A ruleset the engine can run. */
 export type RuleMode = 'classic' | 'speedrun' | 'survival';
 
-/** What the mode picker shows; 'tourney' resolves to the tournament's own rule mode. */
-export type UiMode = RuleMode | 'tourney';
+/** What the mode picker shows; 'tourney' resolves to the tournament's own
+ *  rule mode, and 'versus' is a room, which plays and is rated as classic. */
+export type UiMode = RuleMode | 'tourney' | 'versus';
 
 /** Type guard for values arriving from storage or the network. */
 export function isRuleMode(v: unknown): v is RuleMode {

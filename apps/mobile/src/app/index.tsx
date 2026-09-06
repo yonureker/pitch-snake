@@ -11,10 +11,12 @@ import atlasSource from '@/assets/food-atlas.png';
 import flagSheet from '@/assets/flags.png';
 import skullIcon from '@/assets/icon-skull.png';
 import { Dpad } from '@/components/dpad';
+import { RoomPanel } from '@/components/room-panel';
 import { ShopSheet } from '@/components/shop-sheet';
 import { GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
 import { useCrowd } from '@/hooks/use-crowd';
+import { useRoom } from '@/hooks/use-room';
 import { useWallet } from '@/hooks/queries/use-wallet';
 import { useCreateTournament } from '@/hooks/queries/use-create-tournament';
 import { useJoinTournament } from '@/hooks/queries/use-join-tournament';
@@ -38,6 +40,7 @@ const MODE_LABELS: { mode: UiMode; label: string }[] = [
   { mode: 'classic', label: 'CLASSIC' },
   { mode: 'speedrun', label: 'SPEED RUN' },
   { mode: 'survival', label: 'SURVIVAL' },
+  { mode: 'versus', label: 'MULTIPLAYER' },
   { mode: 'tourney', label: 'TOURNAMENT' },
 ];
 const RULE_LABEL: Record<RuleMode, string> = {
@@ -174,6 +177,7 @@ export default function Index() {
   const [showModes, setShowModes] = useState(false);
   const [lastRunKey, setLastRunKey] = useState<string | null>(null);
   const [tScreen, setTScreen] = useState(false);
+  const [vScreen, setVScreen] = useState(false);
   const [tourney, setTourney] = useState<TournamentRow | null>(null);
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
   const [tCreating, setTCreating] = useState(false);
@@ -183,7 +187,10 @@ export default function Index() {
   const [createTitle, setCreateTitle] = useState('');
   const [createMode, setCreateMode] = useState<RuleMode>('classic');
   const [createMinutes, setCreateMinutes] = useState(1440);
-  const ruleMode: RuleMode = uiMode === 'tourney' ? (tourney?.mode ?? 'classic') : uiMode;
+  const ruleMode: RuleMode =
+    uiMode === 'tourney' ? (tourney?.mode ?? 'classic')
+    : uiMode === 'versus' ? 'classic'
+    : uiMode;
   // the fixture identity: a REMATCH is only a rematch of this exact thing
   const runKey = (uiMode === 'tourney' && tourney !== null ? `T:${tourney.code}:` : '') + ruleMode;
   const topScores = useTopScores(dead && uiMode !== 'tourney' && SUPABASE_CONFIGURED, ruleMode);
@@ -197,6 +204,7 @@ export default function Index() {
   const loopSetWorn = loop.setWorn;
   const wallet = useWallet();
   const { crowdOn, setCrowdOn } = useCrowd(loop.phase);
+  const room = useRoom(loop, { skin: wallet.data?.skin ?? null, hat: wallet.data?.hat ?? null }, boardPx);
 
   // the cached outfit dresses the first frame; the wallet's answer is the
   // truth and re-dresses (and re-caches) when it lands
@@ -220,7 +228,11 @@ export default function Index() {
       setUiMode(prefs.uiMode);
       setTourney(prefs.tourney);
       setTStatus(statusOf(prefs.tourney));
-      loopSetMode(prefs.uiMode === 'tourney' ? (prefs.tourney?.mode ?? 'classic') : prefs.uiMode);
+      loopSetMode(
+        prefs.uiMode === 'tourney' ? (prefs.tourney?.mode ?? 'classic')
+        : prefs.uiMode === 'versus' ? 'classic'
+        : prefs.uiMode,
+      );
     });
   }, [loopSetMode]);
 
@@ -241,7 +253,11 @@ export default function Index() {
     if (loop.phase !== 'ready' && loop.phase !== 'dead') return;
     setUiMode(m);
     setTStatus(statusOf(tourney));
-    loopSetMode(m === 'tourney' ? (tourney?.mode ?? 'classic') : m);
+    loopSetMode(
+      m === 'tourney' ? (tourney?.mode ?? 'classic')
+      : m === 'versus' ? 'classic'
+      : m,
+    );
     void saveModePrefs({ uiMode: m, tourney });
   };
 
@@ -302,6 +318,7 @@ export default function Index() {
   const pickFromList = (m: UiMode): void => {
     pickMode(m);
     if (m === 'tourney') setTScreen(true);
+    else if (m === 'versus') setVScreen(true);
     else setShowModes(false);
   };
 
@@ -444,7 +461,19 @@ export default function Index() {
           {showOverlay && (
             <View style={styles.overlay}>
               {showModes && menuPhase ?
-                tScreen ?
+                vScreen ?
+                  <>
+                    <Text style={styles.overlayTitle}>MULTIPLAYER</Text>
+                    <RoomPanel
+                      room={room}
+                      phase={loop.phase}
+                      initialName={entryName}
+                      onBack={() => {
+                        if (room.status === 'idle') setVScreen(false);
+                      }}
+                    />
+                  </>
+                : tScreen ?
                   <>
                     <Text style={styles.overlayTitle}>TOURNAMENT</Text>
                     <View style={styles.tPanel}>
@@ -634,35 +663,46 @@ export default function Index() {
                       'HALF TIME'
                     : 'KICK OFF'}
                   </Text>
-                  {dead ?
+                  {uiMode === 'versus' && room.status === 'lobby' && (
+                    <RoomPanel
+                      room={room}
+                      phase={loop.phase}
+                      initialName={entryName}
+                      onBack={() => undefined}
+                    />
+                  )}
+                  {dead && uiMode !== 'versus' ?
                     <Text style={styles.overlayText}>
                       {deadLine}You scored {loop.score}.
                     </Text>
                   : loop.phase === 'paused' ?
                     <Text style={styles.overlayText}>Take a breather.</Text>
                   : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
-                  {dead && loop.score > prevBest ?
+                  {dead && uiMode !== 'versus' && loop.score > prevBest ?
                     <Text style={styles.stickerText}>
                       {prevBest > 0 ? 'New personal best.' : 'Your first best.'}
                     </Text>
-                  : dead && prevBest > 0 ?
+                  : dead && uiMode !== 'versus' && prevBest > 0 ?
                     <Text style={styles.saveNoteSoft}>
                       {loop.score === prevBest ?
                         'Level with your best.'
                       : `${String(prevBest - loop.score)} off your best.`}
                     </Text>
                   : null}
-                  {dead && submit.data !== undefined && submit.data.earned.length > 0 && (
-                    <View style={styles.badgeWrap}>
-                      {submit.data.earned.map((b) => (
-                        <View key={b.id} style={styles.badgeChip}>
-                          <Text style={styles.badgeName}>{b.name}</Text>
-                          {b.coins > 0 && <Text style={styles.badgeCoins}>+{b.coins}</Text>}
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                  {dead && submit.data !== undefined && submit.data.coins > 0 && (
+                  {dead &&
+                    uiMode !== 'versus' &&
+                    submit.data !== undefined &&
+                    submit.data.earned.length > 0 && (
+                      <View style={styles.badgeWrap}>
+                        {submit.data.earned.map((b) => (
+                          <View key={b.id} style={styles.badgeChip}>
+                            <Text style={styles.badgeName}>{b.name}</Text>
+                            {b.coins > 0 && <Text style={styles.badgeCoins}>+{b.coins}</Text>}
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  {dead && uiMode !== 'versus' && submit.data !== undefined && submit.data.coins > 0 && (
                     <Text style={styles.coinNote}>
                       +{submit.data.coins} COINS {'\u00b7'} one per five points
                     </Text>
@@ -745,7 +785,7 @@ export default function Index() {
                       }
                     </View>
                   )}
-                  {dead && SUPABASE_CONFIGURED && uiMode !== 'tourney' && (
+                  {dead && SUPABASE_CONFIGURED && uiMode !== 'tourney' && uiMode !== 'versus' && (
                     <View style={styles.standings}>
                       <Text style={styles.boardHead}>
                         TOP 10 WORLDWIDE{ruleMode === 'classic' ? '' : ` \u00b7 ${RULE_LABEL[ruleMode]}`}
@@ -782,7 +822,7 @@ export default function Index() {
                       }
                     </View>
                   )}
-                  {loop.phase === 'ready' && (
+                  {loop.phase === 'ready' && uiMode !== 'versus' && (
                     <View style={styles.legend}>
                       <LegendRow icon={<BallIcon size={22} />} text="Ball" value="+1" valueTone="pos" />
                       <LegendRow
@@ -823,7 +863,7 @@ export default function Index() {
                       />
                     </View>
                   )}
-                  {loop.phase === 'ready' && (
+                  {loop.phase === 'ready' && uiMode !== 'versus' && (
                     <View style={styles.speedRow}>
                       <Pressable
                         accessibilityRole="button"
@@ -852,22 +892,23 @@ export default function Index() {
                     <Text style={styles.modeCaption}>{modeCaption}</Text>
                   )}
                   <View style={styles.btnRow}>
-                    {(loop.phase === 'paused' || uiMode !== 'tourney' || tStatus === 'open') && (
-                      <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
-                        <Text style={styles.startText}>
-                          {dead ?
-                            runKey === lastRunKey ?
-                              'REMATCH'
-                            : 'START'
-                          : loop.phase === 'paused' ?
-                            'RESUME'
-                          : 'START'}
-                        </Text>
-                        {loop.phase !== 'paused' && (
-                          <Text style={styles.startSub}>{RULE_LABEL[ruleMode]}</Text>
-                        )}
-                      </Pressable>
-                    )}
+                    {uiMode !== 'versus' &&
+                      (loop.phase === 'paused' || uiMode !== 'tourney' || tStatus === 'open') && (
+                        <Pressable accessibilityRole="button" onPress={startRound} style={styles.startBtn}>
+                          <Text style={styles.startText}>
+                            {dead ?
+                              runKey === lastRunKey ?
+                                'REMATCH'
+                              : 'START'
+                            : loop.phase === 'paused' ?
+                              'RESUME'
+                            : 'START'}
+                          </Text>
+                          {loop.phase !== 'paused' && (
+                            <Text style={styles.startSub}>{RULE_LABEL[ruleMode]}</Text>
+                          )}
+                        </Pressable>
+                      )}
                     {menuPhase && (
                       <Pressable
                         accessibilityRole="button"

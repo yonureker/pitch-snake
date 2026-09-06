@@ -38,6 +38,7 @@ import {
   BOLT_LIFE_MS,
   ghostRenderPos,
   type Game,
+  type Player,
 } from '@pitch-snake/engine';
 
 import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
@@ -55,7 +56,13 @@ export interface RenderContext {
   playing: boolean;
   /** What the snake wears; unknown or null ids dress classic. */
   worn: { skin: string | null; hat: string | null };
+  /** A room's round: my seat, and each seat's name and outfit. */
+  vs?: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] };
 }
+
+/** Rival seat colours, the web's VS_COLORS: identity for tags, not clothing. */
+const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'] as const;
+const VS_BODY_ALPHA = 0.32;
 
 const ATLAS_CELL = 128;
 const ATLAS_COLS = 6;
@@ -223,6 +230,8 @@ let portalSpriteB: Baked | null = null;
 let wallSprite: Baked | null = null;
 
 const tntFontFamily = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
+// rival name tags in rooms: one font object, matched once
+const tagFont = matchFont({ fontFamily: tntFontFamily, fontSize: 11, fontWeight: 'bold' });
 
 function bakeArena(boardPx: number): void {
   // pitch-art owns the whole look: grass, bands, glow, grid and chalk
@@ -275,6 +284,68 @@ function bakeOutfit(cell: number, hatId: string | null): void {
   jerseySprite = bake(js, js, (c) => {
     paintJersey(c, js);
   });
+}
+
+// ---- rival outfits (rooms) -------------------------------------------------
+// One sprite set per DISTINCT skin worn in the room and one hat bake per
+// distinct hat, cached by id and rebaked when the cell size moves. Built at
+// kickoff by prepareVersusSprites (bake time), never from the frame loop.
+const rivalSkinSprites = new Map<string, (Baked | null)[]>();
+const rivalHatSprites = new Map<string, { sprite: Baked | null; dy: number }>();
+let rivalBakedCell = 0;
+
+function bakeSkinSet(cell: number, skin: string | null): (Baked | null)[] {
+  const r = cell * 0.42;
+  const rad = cell * 0.32;
+  const lw = Math.max(1, cell * 0.05);
+  const s = r * 2 + lw + 2;
+  const outline = Skia.Color(skinRamp(skin).line);
+  const out: (Baked | null)[] = [];
+  for (let i = 0; i < SNAKE_SHADES; i++) {
+    const color = Skia.Color(snakeShadeFor(skin, i));
+    out.push(
+      bake(s, s, (c) => {
+        const rect = Skia.RRectXY(Skia.XYWHRect(s / 2 - r, s / 2 - r, r * 2, r * 2), rad, rad);
+        fillPaint.setColor(color);
+        c.drawRRect(rect, fillPaint);
+        strokePaint.setColor(outline);
+        strokePaint.setStrokeWidth(lw);
+        c.drawRRect(rect, strokePaint);
+      }),
+    );
+  }
+  return out;
+}
+
+/** Bake every outfit a room's seats wear; call once at kickoff. */
+export function prepareVersusSprites(
+  boardPx: number,
+  fits: { skin: string | null; hat: string | null }[],
+): void {
+  const cell = boardPx / GRID;
+  if (cell !== rivalBakedCell) {
+    rivalBakedCell = cell;
+    for (const set of rivalSkinSprites.values()) for (const b of set) b?.image.dispose();
+    for (const h of rivalHatSprites.values()) h.sprite?.image.dispose();
+    rivalSkinSprites.clear();
+    rivalHatSprites.clear();
+  }
+  for (const fit of fits) {
+    const skinKey = fit.skin ?? 'classic';
+    if (!rivalSkinSprites.has(skinKey)) rivalSkinSprites.set(skinKey, bakeSkinSet(cell, fit.skin));
+    const hatKey = fit.hat ?? 'classic';
+    if (!rivalHatSprites.has(hatKey)) {
+      const art = hatArt(fit.hat);
+      const w = Math.ceil(cell * art.wf);
+      const h = Math.ceil(cell * art.hf);
+      rivalHatSprites.set(hatKey, {
+        sprite: bake(w, h, (c) => {
+          art.draw(c, w, h);
+        }),
+        dy: art.dy(cell, h),
+      });
+    }
+  }
 }
 
 function bakeGhosts(cell: number): void {
@@ -471,27 +542,27 @@ export function clearWallLayer(): void {
 // segment glide, ported from the web segRenderPos: interpolate from the cell
 // behind, shortest way through tunnels, snap ends across a teleport hop
 const _rp = { cx: 0, cy: 0 };
-function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: number } {
-  const s = game.snake[i];
+function segRenderPos(pl: Game | Player, i: number, p: number): { cx: number; cy: number } {
+  const s = pl.snake[i];
   if (s === undefined) return _rp;
   // rule 25: a hanging move is drawn as if it had committed: every segment
   // glides toward the one ahead (the head toward the fatal cell), so no gap
   // opens behind the head. A save or a pardon commits onto this exact
   // geometry (no seam), and a death freezes the whole body mid-stride.
-  if (game.doom !== null) {
+  if (pl.doom !== null) {
     // a hanging move only ever gets REDIRECT_MS of the tick, so its glide
     // stops there: past that the head would be drawn a whole cell inside the
     // wall the moment the round stops being 'playing' and p arrives as 1
-    const cap = REDIRECT_MS / (game.players[0]?.tickMs ?? game.tickMs);
+    const cap = REDIRECT_MS / pl.tickMs;
     if (p > cap) p = cap;
-    if (i === game.snake.length - 1 && game.pendingGrowth > 0) {
+    if (i === pl.snake.length - 1 && pl.pendingGrowth > 0) {
       _rp.cx = s.x;
       _rp.cy = s.y; // a growing tail would have stayed
       return _rp;
     }
-    const aheadSeg = i === 0 ? null : game.snake[i - 1];
-    const ax = aheadSeg === null || aheadSeg === undefined ? game.doom.tx : aheadSeg.x;
-    const ay = aheadSeg === null || aheadSeg === undefined ? game.doom.ty : aheadSeg.y;
+    const aheadSeg = i === 0 ? null : pl.snake[i - 1];
+    const ax = aheadSeg === null || aheadSeg === undefined ? pl.doom.tx : aheadSeg.x;
+    const ay = aheadSeg === null || aheadSeg === undefined ? pl.doom.ty : aheadSeg.y;
     let dx = ax - s.x;
     let dy = ay - s.y;
     if (dx > 1) dx -= GRID;
@@ -508,8 +579,8 @@ function segRenderPos(game: Game, i: number, p: number): { cx: number; cy: numbe
     _rp.cy = s.y + dy * p;
     return _rp;
   }
-  const behind = game.snake[i + 1];
-  const prev = behind ?? game.tailFrom ?? s;
+  const behind = pl.snake[i + 1];
+  const prev = behind ?? pl.tailFrom ?? s;
   let dx = s.x - prev.x;
   let dy = s.y - prev.y;
   if (dx > 1) dx -= GRID;
@@ -719,34 +790,71 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     fillPaint.setAlphaf(1);
   }
 
+  // Rooms first: rivals ghosted in their own outfits under my full-alpha
+  // snake, the web's drawRivals in Skia. Solo keeps the classic path below.
+  if (rc.vs !== undefined) {
+    const myIdx = rc.vs.myIdx;
+    for (let pi = 0; pi < game.players.length; pi++) {
+      if (pi === myIdx) continue;
+      const pl = game.players[pi];
+      if (pl === undefined || pl.snake.length === 0) continue;
+      const fit = rc.vs.fits[pi];
+      const sprites = rivalSkinSprites.get(fit?.skin ?? 'classic') ?? snakeSprites;
+      const prog = rc.playing ? game.renderProg(pi) : 1;
+      const rDenom = Math.max(1, pl.snake.length - 1);
+      fillPaint.setAlphaf(VS_BODY_ALPHA);
+      for (let i = pl.snake.length - 1; i >= 0; i--) {
+        const shade = ((i * (SNAKE_SHADES - 1)) / rDenom) | 0;
+        const sprite = sprites[shade];
+        if (sprite === null || sprite === undefined) continue;
+        const rp = segRenderPos(pl, i, prog);
+        drawSegmentSprite(canvas, sprite, rp.cx, rp.cy, cell);
+      }
+      const rp0 = segRenderPos(pl, 0, prog);
+      const hx = wrapf(rp0.cx) * cell + cell / 2;
+      const hy = wrapf(rp0.cy) * cell + cell / 2;
+      const hat = rivalHatSprites.get(fit?.hat ?? 'classic');
+      if (hat?.sprite != null) {
+        drawBaked(canvas, hat.sprite, Math.round(hx - hat.sprite.w / 2), Math.round(hy + hat.dy));
+      }
+      fillPaint.setAlphaf(0.7);
+      const name = rc.vs.names[pi] ?? '?';
+      const tagW = tagFont.measureText(name).width;
+      fillPaint.setColor(particleColor(VS_COLORS[pi % VS_COLORS.length] ?? '#f4ecd8'));
+      canvas.drawText(name, hx - tagW / 2, hy - cell * 0.75, fillPaint, tagFont);
+      fillPaint.setAlphaf(1);
+    }
+  }
+  const me: Game | Player = rc.vs === undefined ? game : (game.players[rc.vs.myIdx] ?? game);
+
   // the snake: one pre-tinted image per segment (outline baked in)
-  const denom = Math.max(1, game.snake.length - 1);
+  const denom = Math.max(1, me.snake.length - 1);
   // per snake: a rival dragged by a bolt is on a longer step than you are
-  const p = rc.playing ? game.renderProg() : 1;
-  for (let i = game.snake.length - 1; i >= 0; i--) {
+  const p = rc.playing ? game.renderProg(rc.vs?.myIdx ?? 0) : 1;
+  for (let i = me.snake.length - 1; i >= 0; i--) {
     const shade = ((i * (SNAKE_SHADES - 1)) / denom) | 0;
     const sprite = snakeSprites[shade];
     if (sprite === null || sprite === undefined) continue;
-    const rp = segRenderPos(game, i, p);
+    const rp = segRenderPos(me, i, p);
     drawSegmentSprite(canvas, sprite, rp.cx, rp.cy, cell);
   }
 
   // the shirt on the square behind the head, upright like the hat
-  if (jerseySprite !== null && game.snake.length > 1) {
-    const rp1 = segRenderPos(game, 1, p);
+  if (jerseySprite !== null && me.snake.length > 1) {
+    const rp1 = segRenderPos(me, 1, p);
     const jx = wrapf(rp1.cx) * cell + cell / 2;
     const jy = wrapf(rp1.cy) * cell + cell / 2;
     drawBaked(canvas, jerseySprite, Math.round(jx - jerseySprite.w / 2), Math.round(jy - jerseySprite.h / 2));
   }
 
   // eyes on the head, at its interpolated position
-  if (game.snake.length > 0) {
-    const rp = segRenderPos(game, 0, p);
+  if (me.snake.length > 0) {
+    const rp = segRenderPos(me, 0, p);
     const hx = wrapf(rp.cx) * cell + cell / 2;
     const hy = wrapf(rp.cy) * cell + cell / 2;
     const off = cell * 0.16;
-    const ex = game.dir.x;
-    const ey = game.dir.y;
+    const ex = me.dir.x;
+    const ey = me.dir.y;
     const px = ey;
     const py = ex;
     fillPaint.setColor(C.ink);
