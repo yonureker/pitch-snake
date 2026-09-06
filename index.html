@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#efe6d0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12160e" media="(prefers-color-scheme: dark)">
 <title>PITCH SNAKE</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&display=swap');
@@ -1200,6 +1202,8 @@
   .boards-list .nm { flex: 1; text-align: left; letter-spacing: 1px; }
   .boards-list .sc { font-family: 'Anton', sans-serif; font-size: 15px; letter-spacing: 0.5px; }
   .boards-list .empty { justify-content: center; color: var(--muted); font-weight: 500; }
+  .boards-list li.me { border: 1px solid var(--gold); }
+  .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--gold-deep); font-weight: 700; }
 
   /* ---- the shop ---- */
   .modal.shop .shelf-head { width: 100%; }
@@ -1410,6 +1414,44 @@
     vertical-align: text-bottom; animation: term-blink 1s steps(1) infinite;
   }
   @keyframes term-blink { 50% { opacity: 0; } }
+  /* ---- dark mode, for the SHELL only ----
+     Follows the system setting, no toggle. The pitch panel was always dark;
+     this darkens the table it sits on: page background, the poster title,
+     the score column, the hint line and the touch pad. The sheets (settings,
+     profile, shop, boards) deliberately stay cream: they are paper laid over
+     the table, and their long tail of dark-on-light detail colors would all
+     need re-deriving for a surface nobody asked to change. Tokens are NOT
+     flipped globally for the same reason: --text on --panel must keep
+     meaning ink on paper wherever a sheet uses them. */
+  @media (prefers-color-scheme: dark) {
+    html { color-scheme: dark; background: #12160e; }
+    body {
+      background:
+        radial-gradient(circle at 15% 0%, rgba(194,162,90,0.07), transparent 40%),
+        radial-gradient(circle at 90% 100%, rgba(230,64,42,0.05), transparent 42%),
+        #12160e;
+    }
+    /* the poster ink flips to cream; the gold shadow is what carries the
+       identity and it works on both grounds */
+    h1 { color: #f6efde; }
+    .scores .label { color: #b7ac93; }
+    .scores .val, .scores .clock { color: #f6efde; }
+    .hint { color: #b7ac93; }
+    .dpad {
+      background:
+        linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(244,236,216,0.14) calc(50% - 1px), rgba(244,236,216,0.14) calc(50% + 1px), transparent calc(50% + 1px)),
+        linear-gradient(to bottom left,  transparent calc(50% - 1px), rgba(244,236,216,0.14) calc(50% - 1px), rgba(244,236,216,0.14) calc(50% + 1px), transparent calc(50% + 1px)),
+        radial-gradient(ellipse at 50% 45%, #2b3325, #212a1d 72%, #171e15 100%);
+      box-shadow:
+        inset 0 2px 3px rgba(244,236,216,0.10),
+        inset 0 -5px 10px rgba(0,0,0,0.35),
+        inset 0 0 0 2px rgba(194,162,90,0.35);
+    }
+    .dpad .wedge { color: #e9e0cd; }
+    /* a pressed wedge keeps the gold fill, whose dark ink label needs the
+       dark text back for the flash */
+    .dpad .wedge.pressed { color: #211e1a; }
+  }
 </style>
 </head>
 <body>
@@ -1601,6 +1643,7 @@
         </div>
         <div class="save-note" id="saveNote" hidden></div>
         <div class="badges" id="badgeNote" hidden></div>
+        <button class="btn small ghostbtn" id="seeBoardBtn" hidden>SEE THE TOP 100</button>
         <div class="acct" id="authNudge" hidden>
           <p class="acct-line" id="acctLine">Create an account to save your scores.</p>
           <div class="acct-row">
@@ -4423,6 +4466,7 @@
     saveNote.hidden = true;
     try {
       const key = await saveScore(name, g.score);
+      lastSaveKey = key;   // the sheet scrolls to this row when the door is taken
       showBadges(lastEarned, lastCoins);
       boardWanted = true;   // a saved row is a row worth showing
       await renderStandings(key);
@@ -4630,7 +4674,15 @@
     // there was last filled by some earlier solo round (this shipped wrong
     // once, a stale YOU SCORED 0 over a finished room).
     const deadResult = deadPanels && mode !== 'versus';
-    const showBoard = (deadResult && boardWanted) || (deadPanels && mode === 'versus');
+    // The whistle stopped rendering the world list inline: the sticker
+    // already says the round placed, and a hundred rows under a result is
+    // noise. Placing earns one door instead, SEE THE TOP 100, into the
+    // trophy's own sheet scrolled to the new row. The inline block survives
+    // only where it IS the result (a room) or a small named field every
+    // entry belongs to (a tournament).
+    const soloDead = deadResult && mode !== 'tourney';
+    const showBoard = (deadResult && mode === 'tourney' && boardWanted) || (deadPanels && mode === 'versus');
+    seeBoardBtn.hidden = !(soloDead && boardWanted);
     standingsEl.style.display = showBoard ? 'block' : 'none';
     boardHead.style.display = showBoard ? 'block' : 'none';
     ovBody.classList.toggle('two-col', deadResult);
@@ -6734,6 +6786,7 @@
   const boardChips = document.getElementById('boardChips');
   const boardsBtn = document.getElementById('boardsBtn');
   const boardsClose = document.getElementById('boardsClose');
+  const seeBoardBtn = document.getElementById('seeBoardBtn');
   let boardsMode = 'classic';
   function localListFor(rm) {
     try {
@@ -6785,13 +6838,31 @@
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = e.score;
       li.append(rk, fl, nm, sc);
+      // the row a save just made wears the gold and the sheet opens on it
+      if (boardsHighlight !== null && (('r' + e.id) === boardsHighlight || e.key === boardsHighlight)) {
+        li.classList.add('me');
+      }
       boardsList.appendChild(li);
     });
     if (note) { boardsNote.textContent = note; boardsNote.hidden = false; }
+    const mine = boardsList.querySelector('li.me');
+    if (mine) mine.scrollIntoView({ block: 'center' });
   }
   boardsBtn.addEventListener('click', () => {
     const rm = ruleMode();
     boardsMode = (rm === 'classic' || rm === 'speedrun' || rm === 'survival') ? rm : 'classic';
+    boardsHighlight = null;          // browsing, not arriving from a save
+    boardsModal.hidden = false;
+    renderBoards();
+  });
+  // the death screen's door: same sheet, opened on the round's own mode and
+  // scrolled to the row the save just made
+  let lastSaveKey = null;
+  let boardsHighlight = null;
+  seeBoardBtn.addEventListener('click', () => {
+    const rm = ruleMode();
+    boardsMode = (rm === 'classic' || rm === 'speedrun' || rm === 'survival') ? rm : 'classic';
+    boardsHighlight = lastSaveKey;
     boardsModal.hidden = false;
     renderBoards();
   });
