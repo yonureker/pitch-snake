@@ -1344,7 +1344,11 @@
   .modal.profile { gap: 11px; max-height: 86vh; overflow-y: auto; }
   /* a hundred rows since the board grew: the sheet scrolls like the profile
      does, one scroller only, since the backdrop itself never scrolls */
-  .modal.boards { max-height: 86vh; overflow-y: auto; }
+  /* the LIST scrolls, never the modal: with a hundred rows, a modal that
+     scrolled whole buried DONE under the entire board and locked the
+     player in (this shipped wrong once, at the top-10 to top-100 growth) */
+  .modal.boards { max-height: 86vh; }
+  .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
   .modal.profile .entry.wide { width: 100%; }
   .modal.profile select {
     width: 100%; padding: 9px 10px; border-radius: 6px;
@@ -6798,6 +6802,8 @@
     renderBoards();
   });
   boardsClose.addEventListener('click', () => { boardsModal.hidden = true; });
+  // the backdrop is a door too, exactly like the settings sheet's
+  boardsModal.addEventListener('click', (e) => { if (e.target === boardsModal) boardsModal.hidden = true; });
 
   function openProfile() {
     buildCountries();
