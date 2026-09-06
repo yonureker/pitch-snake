@@ -367,29 +367,35 @@
   .mp-hud .pl.me { position: relative; }
   .mp-hud .note { color: var(--gold-bright); font-weight: 800; }
   @media (min-width: 900px) {
-    /* the stadium's own scoreboard: board-width, docked on the frame's top
-       edge, rounded above and flush below (the frame's border completes it) */
-    .mp-bar { justify-content: center; position: relative; margin: 0 auto; }
-    .mp-bar:not([hidden]) {
-      background: #24321b; border: 2px solid var(--gold); border-bottom: none;
-      border-radius: 12px 12px 0 0; padding: 7px 8px 6px;
+    /* The room rides the HEADER since 2026-09-06, at the owner's call: the
+       seat cells sit directly under the nameplate row as a second cluster
+       line, so a room opening no longer costs the board a strip of its own.
+       placeChrome moves the node; the wrap keeps it on narrow screens. The
+       pill stays DARK in both themes on purpose: the seat colors were
+       picked against the pitch and wash out on the cream table. */
+    .hdr-cluster { flex-wrap: wrap; row-gap: 8px; }
+    .hdr-cluster .mp-bar {
+      flex-basis: 100%; width: auto; display: flex; align-items: center;
+      justify-content: flex-start; gap: 9px;
     }
-    /* the exit stays clear of the last column whatever the table size */
-    .mp-bar.has-quit { padding-right: 104px; }
-    .mp-hud {
-      background: transparent; padding: 0; overflow: visible;
-      gap: 0; align-items: stretch;
+    .hdr-cluster .mp-hud {
+      display: inline-flex; align-items: stretch; gap: 0; padding: 0;
+      height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;
+      background: #24321b; overflow: hidden; flex: 0 1 auto; min-width: 0;
     }
-    .mp-hud .pl { flex-direction: column; gap: 1px; padding: 2px 22px; align-items: center; }
-    .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
-    .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.8px; }
-    .mp-hud .pl .sc { font-size: 19px; line-height: 1.05; }
-    .mp-hud .pl.me::after {
-      content: ''; position: absolute; left: 22px; right: 22px; bottom: -1px;
-      height: 2.5px; border-radius: 2px; background: var(--gold-bright);
+    .hdr-cluster .mp-hud .pl { flex-direction: row; align-items: center; gap: 8px; padding: 0 14px; position: relative; }
+    /* the rounded ends eat into the first and last cells; pay them back */
+    .hdr-cluster .mp-hud .pl:first-child { padding-left: 18px; }
+    .hdr-cluster .mp-hud .pl:last-child { padding-right: 18px; }
+    .hdr-cluster .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+    .hdr-cluster .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.5px; }
+    .hdr-cluster .mp-hud .pl .sc { font-size: 16px; line-height: 1; }
+    .hdr-cluster .mp-hud .pl.me::after {
+      content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px;
+      height: 2px; border-radius: 2px; background: var(--gold-bright);
     }
-    .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
-    .mp-quit { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+    .hdr-cluster .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
+    .hdr-cluster .mp-quit { height: 34px; padding: 0 13px; }
   }
 
   canvas {
@@ -5134,11 +5140,6 @@
       document.querySelector('.wrap').classList.toggle('mp-open', open);
       resizeQueued = true;
     }
-    // the docked bar spans exactly the board it sits on (wide only); an
-    // event-time read, never from the frame loop
-    mpBar.classList.toggle('has-quit', !mpQuitBtn.hidden);
-    if (!mpBar.hidden && chromeWide) mpBar.style.width = boardFrameEl.offsetWidth + 'px';
-    else mpBar.style.width = '';
   }
 
   let mpHudHash = -1;
@@ -6978,9 +6979,13 @@
     if (chromeWide) {
       hdrCluster.insertBefore(whoBtn, hdrTray);
       hdrTray.append(purseBtn, boardsBtn, gearBtn);
+      // the room's seat cells ride the header too, wrapping under the
+      // nameplate row (flex-basis 100%), so a room costs the board nothing
+      hdrCluster.append(mpBar);
     } else {
       chipRowEl.append(whoBtn, purseBtn);
       boardFrameEl.append(boardsBtn, gearBtn);
+      boardFrameEl.parentElement.insertBefore(mpBar, boardFrameEl);
       for (const b of [whoBtn, purseBtn, boardsBtn]) b.classList.remove('sleeping');
       gearBtn.style.display = '';
       whoBtn.style.display = '';
