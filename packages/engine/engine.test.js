@@ -146,6 +146,49 @@ test('reversals and repeats are filtered; two quick taps both land', () => {
   assert.deepEqual(g.dir, { x: -1, y: 0 }, 'both taps landed on successive ticks');
 });
 
+test('running right, a sudden up-left a millisecond apart plays as the corner', () => {
+  // The play-tested requirement, verbatim: two directional commands must
+  // both land however close they fall. Real advance() slices here, not raw
+  // steps: the presses arrive mid-glide with one millisecond between them,
+  // exactly as a shell delivers a two-thumb snap.
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[8, 10], [7, 10], [6, 10]], 1, 0);
+  g.advance(40);                          // mid-glide, heading right
+  g.setDir(0, -1);
+  g.advance(1);                           // one millisecond later
+  g.setDir(-1, 0);
+  assert.equal(g.dirQueue.length, 2, 'both presses queued');
+  g.advance(130);                         // through the next boundary
+  assert.deepEqual(g.dir, { x: 0, y: -1 }, 'first boundary turns up');
+  const afterUp = { x: g.snake[0].x, y: g.snake[0].y };
+  g.advance(130);                         // and the one after
+  assert.deepEqual(g.dir, { x: -1, y: 0 }, 'second boundary turns left');
+  assert.equal(g.snake[0].x, afterUp.x - 1, 'the left step left the up column');
+  assert.equal(g.snake[0].y, afterUp.y, 'without sliding further up');
+});
+
+test('running up, a sudden right-down a millisecond apart plays as the corner', () => {
+  const g = quietGame();
+  foodFar(g);
+  setSnake(g, [[10, 8], [10, 9], [10, 10]], 0, -1);
+  g.advance(40);                          // mid-glide, heading up
+  g.setDir(1, 0);
+  g.advance(1);
+  // down is a reversal of the ORIGINAL heading but perpendicular to the
+  // queued right, which is what the finger meant; the queue judges against
+  // its own tail, so it lands
+  g.setDir(0, 1);
+  assert.equal(g.dirQueue.length, 2, 'both presses queued');
+  g.advance(130);
+  assert.deepEqual(g.dir, { x: 1, y: 0 }, 'first boundary turns right');
+  const afterRight = { x: g.snake[0].x, y: g.snake[0].y };
+  g.advance(130);
+  assert.deepEqual(g.dir, { x: 0, y: 1 }, 'second boundary turns down');
+  assert.equal(g.snake[0].y, afterRight.y + 1, 'the down step left the right row');
+  assert.equal(g.snake[0].x, afterRight.x, 'without sliding further right');
+});
+
 test('setDir refuses a non-unit vector, in the log as much as in play', () => {
   const g = quietGame();
   foodFar(g);

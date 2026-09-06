@@ -83,6 +83,42 @@ test('a loss burst deeper than the ballast still converges via the resend path',
   assert.ok(sessions.some(s => s.stats.resends > 0), 'and the other side actually resent');
 });
 
+test('a corner pressed a millisecond apart crosses the wire whole', () => {
+  // The same play-tested requirement at the netcode layer: two localDir
+  // calls one millisecond apart must both ride the wire and land on every
+  // peer's identical timeline, corners intact.
+  const bus = loopbackBus(2, { latency: 60, jitter: 20, seed: 3 });
+  const results = [];
+  const sessions = [];
+  for (let i = 0; i < 2; i++) {
+    const game = createGame({ ...QUIET, players: 2 });
+    const r = { game, ended: 0, desync: null };
+    results.push(r);
+    sessions.push(createSession({
+      game, myIdx: i, transport: bus.endpoints[i],
+      onEnd: () => { r.ended++; },
+      onDesync: (why) => { r.desync = why; },
+    }));
+  }
+  const before = results[0].game.players[0].dir;
+  // first turn perpendicular to the start, second perpendicular to the first
+  const turnA = { x: before.y === 0 ? 0 : 1, y: before.y === 0 ? -1 : 0 };
+  const turnB = { x: turnA.y !== 0 ? 1 : 0, y: turnA.x !== 0 ? 1 : 0 };
+  for (let now = 0; now <= 8000; now += 10) {
+    bus.pump(now);
+    if (now === 500) {
+      sessions[0].localDir(turnA.x, turnA.y, 500);
+      sessions[0].localDir(turnB.x, turnB.y, 501);   // one millisecond later
+    }
+    for (let i = 0; i < 2; i++) sessions[i].frame(now);
+  }
+  for (const r of results) assert.equal(r.desync, null, 'no desync');
+  assert.equal(logOf(results[0]), logOf(results[1]), 'one timeline on both machines');
+  const mine = results[0].game.log.inputs.filter((row) => row[3] === 0);
+  assert.equal(mine.length, 2, 'both presses are in the shared log');
+  assert.ok(Math.abs(mine[1][0] - mine[0][0]) <= 1, 'stamped a quantum or less apart');
+});
+
 test('a press between frames advances the sim and stamps the true instant', () => {
   const bus = loopbackBus(2, { latency: 10 });
   const g0 = createGame({ ...QUIET, players: 2 });
