@@ -32,6 +32,7 @@
        laid over the table and their ink must keep meaning ink on paper. */
     --shell-ink: var(--text);
     --shell-muted: var(--muted);
+    --shell-gold: var(--gold-deep);
     --pad-hi: #fbf6e8;
     --pad-mid: var(--panel);
     --pad-lo: #ded2b4;
@@ -51,6 +52,7 @@
       --bg: #12160e;
       --shell-ink: #f6efde;
       --shell-muted: #b7ac93;
+      --shell-gold: #d8b35e;
       --pad-hi: #2b3325;
       --pad-mid: #212a1d;
       --pad-lo: #171e15;
@@ -66,6 +68,7 @@
     --bg: #12160e;
     --shell-ink: #f6efde;
     --shell-muted: #b7ac93;
+    --shell-gold: #d8b35e;
     --pad-hi: #2b3325;
     --pad-mid: #212a1d;
     --pad-lo: #171e15;
@@ -84,7 +87,10 @@
   html, body {
     min-height: 100%;
     background: var(--bg);
-    color: var(--text);
+    /* the SHELL ink, not the sheet ink: anything inheriting this sits on
+       the table (or the always-dark overlay, where cream is right too);
+       the sheets are safe because .modal sets its own color */
+    color: var(--shell-ink);
     font-family: 'Barlow', sans-serif;
     overflow-x: hidden;
     overflow-y: auto;
@@ -154,7 +160,7 @@
   .scores .clock {
     font-family: 'Anton', sans-serif; font-size: 30px; color: var(--shell-ink);
     letter-spacing: 1px; line-height: 1;
-    padding-left: 12px; border-left: 2px solid var(--gold-deep);
+    padding-left: 12px; border-left: 2px solid var(--shell-gold);
   }
   .scores .clock.late { color: var(--food); }
   .scores .clock[hidden] { display: none; }
@@ -1074,7 +1080,9 @@
     font-family: 'Barlow', sans-serif; font-size: 12px; font-weight: 600;
     color: #b7ac93; text-decoration: underline; text-underline-offset: 3px;
   }
-  .acct-later:hover { color: var(--text); }
+  /* brighten, never darken: this link lives on the overlay, which is dark
+     in every theme, and var(--text) hovered it to near-black once */
+  .acct-later:hover { color: #e9e0cd; }
   .standings {
     list-style: none; margin: 2px 0; padding: 10px 14px; width: 230px;
     background: rgba(33,30,26,0.5); border-radius: 8px;
@@ -1367,14 +1375,16 @@
     header h1 { margin-right: 2px; }
     .scores { margin-left: auto; min-width: 178px; }
     .hdr-cluster { display: flex; align-items: center; gap: 9px; }
+    /* shell tokens, not sheet tokens: these sit on the table and must flip
+       with the theme (the nameplate's ink was invisible on the dark table) */
     .hdr-cluster .gear {
       position: static; width: 34px; height: 34px; font-size: 15px;
       background: transparent; border: 1.5px solid var(--gold);
-      color: var(--gold-deep); backdrop-filter: none;
+      color: var(--shell-gold); backdrop-filter: none;
     }
     .hdr-cluster .gear.who {
       width: auto; min-width: 34px; padding: 0 14px; border-radius: 17px;
-      color: var(--text); font-family: 'Barlow', sans-serif; font-weight: 700;
+      color: var(--shell-ink); font-family: 'Barlow', sans-serif; font-weight: 700;
       font-size: 12px; letter-spacing: 1.5px;
     }
     .hdr-tray {
@@ -2551,6 +2561,7 @@
         spawnBurst(e.x, e.y, e.bonus ? 30 : 16, 0.5,
           () => (Math.random() * 2 + 1) * (cell / 14) * (e.bonus ? 1.5 : 1),
           () => burstColor);
+        if (mineVol === 1 && ruleMode() !== 'survival') spawnFloat(e.x, e.y, e.bonus ? '+5' : '+1', true);
       } else if (e.t === 'hop') {
         sfxHop(mineVol);
         crowdPulse(0.7);
@@ -2560,12 +2571,14 @@
         spawnBurst(e.fx, e.fy, 14, 0.7, () => (Math.random() * 1.8 + 0.8) * (cell / 14), () => leaveCol);
         spawnBurst(e.tx, e.ty, 26, 0.7, () => (Math.random() * 2.2 + 1) * (cell / 14),
           i => i % 3 === 0 ? payCol : arriveCol);
+        if (mineVol === 1 && ruleMode() !== 'survival') spawnFloat(e.tx, e.ty, '+5', true);
       } else if (e.t === 'tnt') {
         sfxTnt(e.lost.length, mineVol);
         for (const t of e.lost)
           spawnBurst(t.x, t.y, 6, 0.9, () => (Math.random() * 1.2 + 0.5) * (cell / 14), () => '#f4ecd8');
         spawnBurst(e.x, e.y, 26, 0.6, () => (Math.random() * 2.4 + 1) * (cell / 13),
           i => i % 3 === 0 ? '#e6402a' : '#3a3630');
+        if (mineVol === 1 && ruleMode() !== 'survival') spawnFloat(e.x, e.y, '-5', false);
       } else if (e.t === 'wall') {
         // the layer mirror must apply even on a rollback replay; the sound only once
         if (e.phase === 'warning') { rebuildWallLayer(false); if (!replayed) sfxWallWarn(); }
@@ -2670,6 +2683,17 @@
 
   // ---- rendering: sprites, layers, particles (all page-side) ----
   let particles = [];
+  // score deltas that rise out of a pickup's burst and fade: +1/+5 for food,
+  // +5 for a portal trip, -5 for TNT. Paint, never simulation, like the
+  // particles: page-side and needing no random, spawned on the same events
+  // and drawn in the same pass. Only in POINT modes: survival scores the
+  // clock, so a +1 over an eaten ball there would be a lie (the legend
+  // already teaches survival's inverted rules).
+  let floats = [];
+  let floatFontCell = -1, floatFont = '';
+  function spawnFloat(gx, gy, text, pos) {
+    floats.push({ x: gx * cell + cell / 2, y: gy * cell + cell / 2 - cell * 0.28, text, pos, life: 1 });
+  }
   let foodPulse = 0;
 
   // one shared ring-burst emitter; effects differ only in count, jitter,
@@ -3445,6 +3469,28 @@
       ctx.beginPath(); ctx.arc(pt.x, pt.y, cell * 0.1 * pt.life, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    // score deltas: rise and fade above the burst. The font is cached and set
+    // only on change (rule 6); the loop runs at most a few items and only
+    // when something was just scored, so it is not steady-state work.
+    if (floats.length) {
+      if (floatFontCell !== cell) { floatFontCell = cell; floatFont = 'bold ' + Math.max(13, (cell * 0.62) | 0) + "px 'Anton', sans-serif"; }
+      if (ctx.font !== floatFont) ctx.font = floatFont;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = Math.max(2, cell * 0.07); ctx.strokeStyle = 'rgba(20,17,13,0.9)';
+      const posCol = getCss('--gold-bright'), negCol = getCss('--food');
+      for (let i = floats.length - 1; i >= 0; i--) {
+        const fl = floats[i];
+        fl.y -= f * cell * 0.03;                 // rise, framerate-independent
+        fl.life -= 0.02 * f;
+        if (fl.life <= 0) { floats[i] = floats[floats.length - 1]; floats.pop(); continue; }
+        ctx.globalAlpha = Math.min(1, fl.life * 1.7);   // hold, then fade at the end
+        ctx.strokeText(fl.text, fl.x, fl.y);
+        ctx.fillStyle = fl.pos ? posCol : negCol;
+        ctx.fillText(fl.text, fl.x, fl.y);
+      }
+      ctx.globalAlpha = 1;
+    }
 
     syncCountdown();
 
