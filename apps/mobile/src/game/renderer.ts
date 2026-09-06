@@ -91,9 +91,39 @@ interface Particle {
 const MAX_PARTICLES = 200;
 const particles: Particle[] = [];
 
+/** A rising score delta over a pickup's burst (+1/+5/-5). Paint, not sim. */
+interface Float {
+  x: number;
+  y: number;
+  vy: number;
+  text: string;
+  pos: boolean;
+  life: number;
+}
+const floats: Float[] = [];
+let floatFont: ReturnType<typeof matchFont> | null = null;
+let floatFontCell = -1;
+
+/**
+ * Raise a score delta above a scoring pickup, the app twin of the web's
+ * spawnFloat: +1/+5 for a ball, +5 for a portal trip, -5 for TNT. Gated to
+ * point modes and the local player by the loop; this only paints.
+ */
+export function spawnFloat(gx: number, gy: number, cellPx: number, text: string, pos: boolean): void {
+  floats.push({
+    x: gx * cellPx + cellPx / 2,
+    y: gy * cellPx + cellPx / 2 - cellPx * 0.28,
+    vy: -cellPx * 0.03,
+    text,
+    pos,
+    life: 1,
+  });
+}
+
 /** Clear the particle pool (new round). */
 export function clearParticles(): void {
   particles.length = 0;
+  floats.length = 0;
 }
 
 /**
@@ -124,6 +154,17 @@ export function spawnBurst(
 export function stepParticles(dtMs: number): void {
   const f = dtMs / 16.667;
   const damp = Math.pow(0.92, f);
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const fl = floats[i];
+    if (fl === undefined) continue;
+    fl.y += fl.vy * f; // rise, framerate-independent; vy is cell-scaled at spawn
+    fl.life -= 0.02 * f;
+    if (fl.life <= 0) {
+      const last = floats[floats.length - 1];
+      if (last !== undefined) floats[i] = last;
+      floats.pop();
+    }
+  }
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     if (p === undefined) continue;
@@ -898,6 +939,41 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     canvas.drawCircle(pt.x, pt.y, cell * 0.1 * pt.life, fillPaint);
   }
   fillPaint.setAlphaf(1);
+
+  // score deltas: rise and fade above the burst, a dark shadow under the
+  // colour for legibility on the bright particles and the green. The font is
+  // rematched only when the cell changes, and the loop runs only just after a
+  // pickup, so steady state does neither.
+  if (floats.length > 0) {
+    if (floatFontCell !== cell) {
+      floatFontCell = cell;
+      floatFont = matchFont({
+        fontFamily: tntFontFamily,
+        fontSize: Math.max(13, Math.round(cell * 0.62)),
+        fontWeight: 'bold',
+      });
+    }
+    if (floatFont !== null) {
+      for (const fl of floats) {
+        const w = floatFont.measureText(fl.text).width;
+        const x = fl.x - w / 2;
+        const a = Math.min(1, fl.life * 1.7);
+        fillPaint.setColor(C.ink);
+        fillPaint.setAlphaf(a * 0.9);
+        canvas.drawText(
+          fl.text,
+          x + Math.max(1, cell * 0.03),
+          fl.y + Math.max(1, cell * 0.03),
+          fillPaint,
+          floatFont,
+        );
+        fillPaint.setColor(fl.pos ? C.goldBright : C.wall);
+        fillPaint.setAlphaf(a);
+        canvas.drawText(fl.text, x, fl.y, fillPaint, floatFont);
+      }
+      fillPaint.setAlphaf(1);
+    }
+  }
 
   return recorder.finishRecordingAsPicture();
 }

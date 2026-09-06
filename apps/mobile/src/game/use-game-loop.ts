@@ -38,6 +38,7 @@ import {
   clearParticles,
   clearWallLayer,
   spawnBurst,
+  spawnFloat,
   stepParticles,
 } from './renderer';
 
@@ -69,8 +70,6 @@ export interface GameLoop {
   leaveVersus: () => void;
   /** 3, 2, 1 or START! while counting down, empty otherwise. */
   countText: string;
-  /** '', 'WALLS FORMING' or 'WALLS LIVE'. */
-  wallBanner: string;
   /** Why the last round ended, for the FULL TIME line. */
   deadReason: string;
   /** Selected speed in ms per cell (applies to the next round). */
@@ -151,7 +150,6 @@ interface LoopBox {
   vsIdx: number;
   vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] } | null;
   lastScore: number;
-  lastBanner: string;
   lastCount: string;
 }
 
@@ -193,7 +191,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     vsIdx: -1,
     vsRc: null,
     lastScore: -1,
-    lastBanner: '',
     lastCount: '',
   });
   const picture = useSharedValue<SkPicture>(makeEmptyPicture());
@@ -205,7 +202,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [countText, setCountText] = useState('');
-  const [wallBanner, setWallBanner] = useState('');
   const [deadReason, setDeadReason] = useState('');
   const [tickMs, setTickMsState] = useState<number>(SPEEDS.normal);
   const [mode, setModeState] = useState<RuleMode>('classic');
@@ -237,6 +233,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             );
             const color = e.bonus ? GameColors.goldBright : GameColors.food;
             spawnBurst(e.x, e.y, cellPx, e.bonus ? 30 : 16, 0.5, cellPx / 14, (cellPx / 14) * 2, () => color);
+            if (box.mode !== 'survival' && (box.vsIdx < 0 || e.player === box.vsIdx))
+              spawnFloat(e.x, e.y, cellPx, e.bonus ? '+5' : '+1', true);
             break;
           }
           case 'hop': {
@@ -247,6 +245,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             spawnBurst(e.tx, e.ty, cellPx, 26, 0.7, cellPx / 14, (cellPx / 14) * 3.2, (i) =>
               i % 3 === 0 ? GameColors.goldBright : arrive,
             );
+            if (box.mode !== 'survival' && (box.vsIdx < 0 || e.player === box.vsIdx))
+              spawnFloat(e.tx, e.ty, cellPx, '+5', true);
             break;
           }
           case 'tnt': {
@@ -257,6 +257,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             spawnBurst(e.x, e.y, cellPx, 26, 0.6, cellPx / 13, (cellPx / 13) * 3.4, (i) =>
               i % 3 === 0 ? GameColors.wall : '#3a3630',
             );
+            if (box.mode !== 'survival' && (box.vsIdx < 0 || e.player === box.vsIdx))
+              spawnFloat(e.x, e.y, cellPx, '-5', false);
             break;
           }
           case 'wall': {
@@ -345,14 +347,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           // BEST is a solo statistic; a room's score rides its own board
           if (box.vsIdx < 0) setBest((b) => (myScore > b ? myScore : b));
         }
-        const banner =
-          g.wallState === 'warning' ? 'WALLS FORMING'
-          : g.wallState === 'solid' ? 'WALLS LIVE'
-          : '';
-        if (banner !== box.lastBanner) {
-          box.lastBanner = banner;
-          setWallBanner(banner);
-        }
         const clock = g.durationMs > 0 ? fmtClock(g.durationMs - g.clockMs) : '';
         if (clock !== box.lastClock) {
           box.lastClock = clock;
@@ -430,8 +424,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     box.countClock = 0;
     box.lastCount = '3';
     setCountText('3');
-    box.lastBanner = '';
-    setWallBanner('');
     box.phase = 'countdown';
     setPhase('countdown');
   };
@@ -538,8 +530,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setDeadReason('');
     box.lastClock = '';
     setClockText('');
-    box.lastBanner = '';
-    setWallBanner('');
     box.countClock = Math.min(1200, Math.max(0, preElapsedMs));
     box.lastCount = '';
     box.phase = 'countdown';
@@ -612,7 +602,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     score,
     best,
     countText,
-    wallBanner,
     deadReason,
     tickMs,
     setTickMs,

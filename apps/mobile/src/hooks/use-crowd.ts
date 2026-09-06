@@ -11,21 +11,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
 
+import cheerTape from '@/assets/cheer.m4a';
 import crowdTape from '@/assets/crowd.m4a';
 
 const CROWD_KEY = 'pitchSnakeCrowd';
 const CROWD_VOLUME = 0.55;
 
-/** Drive the crowd from the round phase; returns the toggle state and setter. */
-export function useCrowd(phase: string): { crowdOn: boolean; setCrowdOn: (on: boolean) => void } {
+/** What the game reads and calls from the crowd. */
+export interface Crowd {
+  crowdOn: boolean;
+  setCrowdOn: (on: boolean) => void;
+  /** A one-shot at a room's full time: the real goal roar on a win. */
+  playVerdict: (won: boolean) => void;
+}
+
+/** Drive the crowd from the round phase; returns the toggle and the verdict. */
+export function useCrowd(phase: string): Crowd {
   const player = useAudioPlayer(crowdTape);
+  const cheer = useAudioPlayer(cheerTape);
   // expo-audio's contract is mutation (loop, volume, play/pause), which the
-  // compiler forbids on a hook's render value; a ref is the sanctioned door
+  // compiler forbids on a hook's render value; refs are the sanctioned door
   const playerRef = useRef(player);
+  const cheerRef = useRef(cheer);
   useEffect(() => {
     playerRef.current = player;
-  }, [player]);
+    cheerRef.current = cheer;
+  }, [player, cheer]);
   const [crowdOn, setCrowdOnState] = useState(true);
+  const crowdOnRef = useRef(crowdOn);
+  useEffect(() => {
+    crowdOnRef.current = crowdOn;
+  }, [crowdOn]);
 
   // the stored preference arrives once, async, like the personal best
   useEffect(() => {
@@ -54,5 +70,19 @@ export function useCrowd(phase: string): { crowdOn: boolean; setCrowdOn: (on: bo
     setCrowdOnState(on);
     void AsyncStorage.setItem(CROWD_KEY, on ? 'on' : 'off').catch(() => undefined);
   };
-  return { crowdOn, setCrowdOn };
+
+  // The stand's verdict at a room's full time. The win gets the real goal
+  // roar (the same CC0 cut the web plays); the loss is the web's synth boo,
+  // which the app has no audio for, so it stays silent here rather than
+  // shipping a wrong sound. The bed has already faded out on the whistle,
+  // which reads as deflation on its own.
+  const playVerdict = (won: boolean): void => {
+    if (!won || !crowdOnRef.current) return;
+    const c = cheerRef.current;
+    c.volume = 0.75;
+    void c.seekTo(0);
+    c.play();
+  };
+
+  return { crowdOn, setCrowdOn, playVerdict };
 }

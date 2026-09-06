@@ -19,8 +19,8 @@ export interface ScoreRow {
   country: string | null;
 }
 
-/** How many places a world board has. One source for the ten. */
-export const BOARD_PLACES = 10;
+/** How many places a world board has. One source for the hundred. */
+export const BOARD_PLACES = 100;
 
 /**
  * Whether a score reaches the board, and so whether the round is worth asking

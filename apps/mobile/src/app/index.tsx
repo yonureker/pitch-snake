@@ -203,8 +203,23 @@ export default function Index() {
   const loopSetMode = loop.setMode;
   const loopSetWorn = loop.setWorn;
   const wallet = useWallet();
-  const { crowdOn, setCrowdOn } = useCrowd(loop.phase);
+  const crowd = useCrowd(loop.phase);
+  const { crowdOn, setCrowdOn } = crowd;
   const room = useRoom(loop, { skin: wallet.data?.skin ?? null, hat: wallet.data?.hat ?? null }, boardPx);
+  // the stand's verdict fires once when a room reaches full time: the roar
+  // for a win. Watching over, not a callback, keeps useRoom uncoupled from
+  // the audio; the ref guards against a re-render re-firing it.
+  const verdictFired = useRef(false);
+  const roomOver = room.over;
+  const iWon = room.standings[0]?.me ?? false;
+  useEffect(() => {
+    if (roomOver && !verdictFired.current) {
+      verdictFired.current = true;
+      crowd.playVerdict(iWon);
+    } else if (!roomOver) {
+      verdictFired.current = false;
+    }
+  }, [roomOver, iWon, crowd]);
 
   // the cached outfit dresses the first frame; the wallet's answer is the
   // truth and re-dresses (and re-caches) when it lands
@@ -442,11 +457,6 @@ export default function Index() {
         </Pressable>
       )}
       <View style={styles.boardWrap}>
-        {loop.wallBanner !== '' && (
-          <View style={styles.banner}>
-            <Text style={styles.bannerText}>{loop.wallBanner}</Text>
-          </View>
-        )}
         <View style={[styles.boardFrame, frameSize]}>
           <Canvas style={canvasSize} opaque>
             <Picture picture={loop.picture} />
@@ -995,16 +1005,6 @@ const styles = StyleSheet.create({
     color: GameColors.muted,
     zIndex: 10,
   },
-  banner: {
-    position: 'absolute',
-    top: -12,
-    zIndex: 5,
-    backgroundColor: 'rgba(230,64,42,0.92)',
-    paddingHorizontal: 13,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  bannerText: { fontFamily: ANTON, color: '#ffffff', fontSize: 11, letterSpacing: 1.5 },
   boardFrame: {
     borderRadius: 14,
     padding: 4,
