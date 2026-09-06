@@ -43,11 +43,38 @@ export const GhostColors = [
 /** Head-to-tail body shades, precomputed like the web LUT (64 steps). */
 export const SNAKE_SHADES = 64;
 
-/** rgb() string for body shade i of SNAKE_SHADES. */
-export function snakeShade(i: number): string {
+/**
+ * The purchasable skins, ramps straight from the web page's SKINS table:
+ * head colour, tail colour, and the outline that rides every segment. Keyed
+ * by pitch_snake_items ids like the web, so the server sells ids and this
+ * client owns the art; an id this table has never heard of renders classic,
+ * which is what lets the catalogue grow by SQL without stranding old builds.
+ */
+export const SKIN_RAMPS = {
+  classic: { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)' },
+  viper: { head: [88, 168, 246], tail: [24, 74, 150], line: 'rgba(150,110,235,0.75)' },
+  'skin-away': { head: [248, 248, 252], tail: [172, 194, 222], line: 'rgba(70,110,180,0.65)' },
+  'skin-volt': { head: [250, 240, 104], tail: [172, 142, 24], line: 'rgba(64,60,36,0.6)' },
+  'skin-rosa': { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)' },
+  'skin-night': { head: [226, 231, 241], tail: [36, 42, 56], line: 'rgba(122,132,160,0.55)' },
+  'skin-gilt': { head: [252, 232, 152], tail: [194, 150, 56], line: 'rgba(140,100,30,0.7)' },
+} as const satisfies Record<string, { head: number[]; tail: number[]; line: string }>;
+
+function isSkinId(v: string): v is keyof typeof SKIN_RAMPS {
+  return Object.hasOwn(SKIN_RAMPS, v);
+}
+
+/** The skin a wallet id resolves to; unknown ids and null wear classic. */
+export function skinRamp(id: string | null): (typeof SKIN_RAMPS)[keyof typeof SKIN_RAMPS] {
+  return id !== null && isSkinId(id) ? SKIN_RAMPS[id] : SKIN_RAMPS.classic;
+}
+
+/** rgb() string for body shade i of SNAKE_SHADES under one skin's ramp. */
+export function snakeShadeFor(skin: string | null, i: number): string {
+  const ramp = skinRamp(skin);
   const t = i / (SNAKE_SHADES - 1);
-  const r = (244 - t * 30) | 0;
-  const g = (236 - t * 40) | 0;
-  const b = (216 - t * 58) | 0;
-  return `rgb(${r}, ${g}, ${b})`;
+  const r = ramp.head[0] + (ramp.tail[0] - ramp.head[0]) * t;
+  const g = ramp.head[1] + (ramp.tail[1] - ramp.head[1]) * t;
+  const b = ramp.head[2] + (ramp.tail[2] - ramp.head[2]) * t;
+  return `rgb(${String(r | 0)}, ${String(g | 0)}, ${String(b | 0)})`;
 }

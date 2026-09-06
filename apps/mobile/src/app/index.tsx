@@ -9,12 +9,13 @@ import { Image } from 'expo-image';
 
 import atlasSource from '@/assets/food-atlas.png';
 import flagSheet from '@/assets/flags.png';
-import appleIcon from '@/assets/icon-apple.png';
 import skullIcon from '@/assets/icon-skull.png';
-import starIcon from '@/assets/icon-star.png';
 import { Dpad } from '@/components/dpad';
+import { ShopSheet } from '@/components/shop-sheet';
 import { GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
+import { useCrowd } from '@/hooks/use-crowd';
+import { useWallet } from '@/hooks/queries/use-wallet';
 import { useCreateTournament } from '@/hooks/queries/use-create-tournament';
 import { useJoinTournament } from '@/hooks/queries/use-join-tournament';
 import { useSubmitScore } from '@/hooks/queries/use-submit-score';
@@ -22,6 +23,7 @@ import { useSubmitTournamentScore } from '@/hooks/queries/use-submit-tournament-
 import { useTopScores } from '@/hooks/queries/use-top-scores';
 import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
 import { BOARD_PLACES, FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
+import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
@@ -85,6 +87,17 @@ const FLAG_H = 15;
 const ANTON = 'Anton_400Regular';
 const BARLOW = 'Barlow_600SemiBold';
 const BARLOW_BOLD = 'Barlow_700Bold';
+
+/** The football, cut from the food atlas the board itself draws (cell 0). */
+function BallIcon({ size }: { size: number }) {
+  const sheet = { width: (768 * size) / 128, height: (512 * size) / 128 };
+  const box = { width: size, height: size };
+  return (
+    <View style={[styles.ballBox, box]}>
+      <Image source={atlasSource} style={sheet} contentFit="fill" />
+    </View>
+  );
+}
 
 /**
  * One country flag, cut out of the shared sprite. A fixed-size window with
@@ -164,6 +177,8 @@ export default function Index() {
   const [tourney, setTourney] = useState<TournamentRow | null>(null);
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
   const [tCreating, setTCreating] = useState(false);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [prevBest, setPrevBest] = useState(0);
   const [joinCode, setJoinCode] = useState('');
   const [createTitle, setCreateTitle] = useState('');
   const [createMode, setCreateMode] = useState<RuleMode>('classic');
@@ -179,6 +194,25 @@ export default function Index() {
   const create = useCreateTournament();
   const tapTimes = useRef<number[]>([]);
   const loopSetMode = loop.setMode;
+  const loopSetWorn = loop.setWorn;
+  const wallet = useWallet();
+  const { crowdOn, setCrowdOn } = useCrowd(loop.phase);
+
+  // the cached outfit dresses the first frame; the wallet's answer is the
+  // truth and re-dresses (and re-caches) when it lands
+  useEffect(() => {
+    void loadWorn().then((w) => {
+      loopSetWorn(w.skin, w.hat);
+    });
+  }, [loopSetWorn]);
+  const walletSkin = wallet.data?.skin ?? null;
+  const walletHat = wallet.data?.hat ?? null;
+  const walletReady = wallet.isSuccess;
+  useEffect(() => {
+    if (!walletReady) return;
+    loopSetWorn(walletSkin, walletHat);
+    void saveWorn(walletSkin, walletHat);
+  }, [walletReady, walletSkin, walletHat, loopSetWorn]);
 
   // restore the saved mode and tournament once; the loop follows the choice
   useEffect(() => {
@@ -252,6 +286,8 @@ export default function Index() {
   const startRound = (): void => {
     setLastRunKey(runKey);
     setShowModes(false);
+    setShopOpen(false);
+    setPrevBest(loop.best); // the number to beat, captured before the round moves it
     setEntryName('');
     setSubmittedId(null);
     setSubmittedName(null);
@@ -289,8 +325,8 @@ export default function Index() {
     submit.mutate(
       { name, mode: ruleMode, seedId: round.seedId, log: round.log },
       {
-        onSuccess: (id) => {
-          setSubmittedId(id);
+        onSuccess: (r) => {
+          setSubmittedId(r.id);
         },
       },
     );
@@ -374,6 +410,20 @@ export default function Index() {
       </View>
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
+      {menuPhase && wallet.isSuccess && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setShopOpen(true);
+          }}
+          style={styles.purse}
+        >
+          <View style={styles.purseCoin} />
+          <Text style={styles.purseText}>
+            {wallet.data.coins} {'\u00b7'} SHOP
+          </Text>
+        </Pressable>
+      )}
       <View style={styles.boardWrap}>
         {loop.wallBanner !== '' && (
           <View style={styles.banner}>
@@ -591,6 +641,32 @@ export default function Index() {
                   : loop.phase === 'paused' ?
                     <Text style={styles.overlayText}>Take a breather.</Text>
                   : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
+                  {dead && loop.score > prevBest ?
+                    <Text style={styles.stickerText}>
+                      {prevBest > 0 ? 'New personal best.' : 'Your first best.'}
+                    </Text>
+                  : dead && prevBest > 0 ?
+                    <Text style={styles.saveNoteSoft}>
+                      {loop.score === prevBest ?
+                        'Level with your best.'
+                      : `${String(prevBest - loop.score)} off your best.`}
+                    </Text>
+                  : null}
+                  {dead && submit.data !== undefined && submit.data.earned.length > 0 && (
+                    <View style={styles.badgeWrap}>
+                      {submit.data.earned.map((b) => (
+                        <View key={b.id} style={styles.badgeChip}>
+                          <Text style={styles.badgeName}>{b.name}</Text>
+                          {b.coins > 0 && <Text style={styles.badgeCoins}>+{b.coins}</Text>}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {dead && submit.data !== undefined && submit.data.coins > 0 && (
+                    <Text style={styles.coinNote}>
+                      +{submit.data.coins} COINS {'\u00b7'} one per five points
+                    </Text>
+                  )}
                   {wantsEntry && placed && (
                     <View style={styles.entryRow}>
                       <TextInput
@@ -708,16 +784,11 @@ export default function Index() {
                   )}
                   {loop.phase === 'ready' && (
                     <View style={styles.legend}>
-                      <LegendRow
-                        icon={<Image source={appleIcon} style={styles.lgImage} />}
-                        text="Ball"
-                        value="+1"
-                        valueTone="pos"
-                      />
+                      <LegendRow icon={<BallIcon size={22} />} text="Ball" value="+1" valueTone="pos" />
                       <LegendRow
                         icon={
                           <View style={styles.lgRing}>
-                            <Image source={starIcon} style={styles.lgRingImage} />
+                            <BallIcon size={15} />
                           </View>
                         }
                         text="Ball with a ring"
@@ -754,6 +825,15 @@ export default function Index() {
                   )}
                   {loop.phase === 'ready' && (
                     <View style={styles.speedRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setCrowdOn(!crowdOn);
+                        }}
+                        style={[styles.speedBtn, crowdOn && styles.speedBtnOn]}
+                      >
+                        <Text style={styles.speedText}>{crowdOn ? 'CROWD ON' : 'CROWD OFF'}</Text>
+                      </Pressable>
                       {SPEED_LABELS.map((s) => (
                         <Pressable
                           accessibilityRole="button"
@@ -805,6 +885,16 @@ export default function Index() {
               }
             </View>
           )}
+          <ShopSheet
+            open={shopOpen && menuPhase}
+            onClose={() => {
+              setShopOpen(false);
+            }}
+            onWorn={(skin, hat) => {
+              loopSetWorn(skin, hat);
+              void saveWorn(skin, hat);
+            }}
+          />
           {loop.phase === 'playing' && (
             <Pressable accessibilityRole="button" onPress={loop.pause} style={styles.pauseBtn} hitSlop={10}>
               <Text style={styles.pauseText}>II</Text>
@@ -930,7 +1020,6 @@ const styles = StyleSheet.create({
   lgRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   lgIcon: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
   lgImage: { width: 20, height: 20 },
-  lgRingImage: { width: 13, height: 13 },
   lgRing: {
     width: 24,
     height: 24,
@@ -1123,4 +1212,47 @@ const styles = StyleSheet.create({
   boardName: { flex: 1, fontFamily: BARLOW, fontSize: 13, color: '#e9e0cd', letterSpacing: 1 },
   boardScore: { fontFamily: ANTON, fontSize: 13, color: '#e9e0cd' },
   boardMine: { color: GameColors.goldBright },
+  ballBox: { overflow: 'hidden', alignSelf: 'center' },
+  stickerText: { fontFamily: BARLOW_BOLD, fontSize: 13, color: GameColors.goldBright, letterSpacing: 0.5 },
+  badgeWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    maxWidth: 280,
+  },
+  badgeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(194,162,90,0.5)',
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  badgeName: { fontFamily: BARLOW_BOLD, fontSize: 10, color: '#e9e0cd', letterSpacing: 1 },
+  badgeCoins: { fontFamily: BARLOW_BOLD, fontSize: 10, color: GameColors.goldBright },
+  coinNote: { fontFamily: BARLOW, fontSize: 11, color: GameColors.goldBright, letterSpacing: 0.5 },
+  purse: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginLeft: 4,
+    borderWidth: 1,
+    borderColor: GameColors.gold,
+    borderRadius: 14,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+  },
+  purseCoin: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: GameColors.goldBright,
+    borderWidth: 1,
+    borderColor: GameColors.gold,
+  },
+  purseText: { fontFamily: BARLOW_BOLD, fontSize: 11, color: GameColors.ink, letterSpacing: 1 },
 });

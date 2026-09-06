@@ -52,6 +52,8 @@ export interface GameLoop {
   phase: RoundPhase;
   score: number;
   best: number;
+  /** Dress the snake (skin id, hat id); null wears classic. Menu-time only. */
+  setWorn: (skin: string | null, hat: string | null) => void;
   /** 3, 2, 1 or START! while counting down, empty otherwise. */
   countText: string;
   /** '', 'WALLS FORMING' or 'WALLS LIVE'. */
@@ -129,6 +131,8 @@ interface LoopBox {
   pulseMs: number;
   atlas: SkImage | null;
   boardPx: number;
+  /** What the snake wears; swapped at menu time by setWorn, read per frame. */
+  worn: { skin: string | null; hat: string | null };
   lastScore: number;
   lastBanner: string;
   lastCount: string;
@@ -167,6 +171,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     lastFrameTs: 0,
     atlas: null,
     boardPx: 1,
+    worn: { skin: null, hat: null },
     lastScore: -1,
     lastBanner: '',
     lastCount: '',
@@ -342,6 +347,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         atlas: box.atlas,
         pulseMs: box.pulseMs,
         playing: box.phase === 'playing',
+        worn: box.worn,
       });
       // Dispose pictures deterministically, two frames late: the newest
       // retired one may still be mid-replay on the render thread, and leaving
@@ -460,6 +466,12 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setTickMsState(ms);
   };
 
+  // the outfit: an equip or a wallet answer dresses the snake; the renderer
+  // rebakes its sprites on the new key at the next frame (the web's applyWorn)
+  const setWorn = (skin: string | null, hat: string | null): void => {
+    boxRef.current.worn = { skin, hat };
+  };
+
   // The ruleset for the NEXT round; refused mid-round so a running game can
   // never change shape under the player. BEST swaps with it: zero first so a
   // stale value never shows, then the stored best raises it when it arrives
@@ -495,6 +507,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     game,
     picture,
     phase,
+    setWorn,
     score,
     best,
     countText,

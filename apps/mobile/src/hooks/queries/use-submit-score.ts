@@ -14,7 +14,11 @@ import { validateRound } from '@/lib/validate';
 
 import { TOP_SCORES_KEY } from './use-top-scores';
 
-/** Submit { name, mode, seedId, log }; resolves to the new row id for highlighting. */
+/**
+ * Submit { name, mode, seedId, log }; resolves to the new row id for
+ * highlighting plus the badges and coins the validator granted, so the
+ * whistle can announce them the way the web page does.
+ */
 export function useSubmitScore() {
   const client = useQueryClient();
   return useMutation({
@@ -28,10 +32,14 @@ export function useSubmitScore() {
       mode: RuleMode;
       seedId: number;
       log: RoundLog;
-    }) => validateRound({ seedId, mode, name, log }).then((r) => r.id),
+    }) => validateRound({ seedId, mode, name, log }),
     onSuccess: async () => {
-      // the prefix invalidates every mode's board; only the played one refetches
+      // the prefix invalidates every mode's board; only the played one
+      // refetches. The wallet and the shelf move with every validated
+      // round, since the validator is the only minter and granter.
       await client.invalidateQueries({ queryKey: TOP_SCORES_KEY });
+      await client.invalidateQueries({ queryKey: ['wallet'] });
+      await client.invalidateQueries({ queryKey: ['badges'] });
     },
   });
 }

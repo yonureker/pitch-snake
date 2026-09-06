@@ -31,6 +31,7 @@ export function useSubmitTournamentScore() {
       log: RoundLog;
     }) => validateRound({ seedId, mode, name, code, log }).then(() => undefined),
     onSuccess: async (_data, { code }) => {
+      await client.invalidateQueries({ queryKey: ['wallet'] });
       await client.invalidateQueries({ queryKey: tournamentTopKey(code) });
     },
   });

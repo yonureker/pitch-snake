@@ -40,8 +40,8 @@ import {
   type Game,
 } from '@pitch-snake/engine';
 
-import { paintBolt, paintPitch } from './pitch-art';
-import { GameColors, GhostColors, SNAKE_SHADES, snakeShade } from './theme';
+import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
+import { GameColors, GhostColors, SNAKE_SHADES, skinRamp, snakeShadeFor } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
 export interface RenderContext {
@@ -53,6 +53,8 @@ export interface RenderContext {
   pulseMs: number;
   /** True while the round is simulating (affects glide progress). */
   playing: boolean;
+  /** What the snake wears; unknown or null ids dress classic. */
+  worn: { skin: string | null; hat: string | null };
 }
 
 const ATLAS_CELL = 128;
@@ -153,8 +155,6 @@ const C = {
   white: Skia.Color('#ffffff'),
   ghostEye: Skia.Color(GameColors.ghostEye),
 } as const;
-const snakeColors: SkColor[] = [];
-for (let i = 0; i < SNAKE_SHADES; i++) snakeColors.push(Skia.Color(snakeShade(i)));
 const particleColorCache = new Map<string, SkColor>();
 function particleColor(hex: string): SkColor {
   let c = particleColorCache.get(hex);
@@ -213,6 +213,11 @@ let ghostSprites: (Baked | null)[] = [];
 let ghostSpriteOriginY = 0;
 let tntSprite: Baked | null = null;
 let boltSprite: Baked | null = null;
+let hatSprite: Baked | null = null;
+let jerseySprite: Baked | null = null;
+let hatDy = 0;
+let bakedSkin: string | null = null;
+let bakedHatId: string | null = null;
 let portalSpriteA: Baked | null = null;
 let portalSpriteB: Baked | null = null;
 let wallSprite: Baked | null = null;
@@ -233,22 +238,43 @@ function bakeBolt(cell: number): Baked | null {
   });
 }
 
-function bakeSnakeCells(cell: number): void {
+function bakeSnakeCells(cell: number, skin: string | null): void {
   const r = cell * 0.42;
   const rad = cell * 0.32;
   const lw = Math.max(1, cell * 0.05);
   const s = r * 2 + lw + 2;
+  const outline = Skia.Color(skinRamp(skin).line);
   for (const old of snakeSprites) old?.image.dispose();
-  snakeSprites = snakeColors.map((color) =>
-    bake(s, s, (c) => {
-      const rect = Skia.RRectXY(Skia.XYWHRect(s / 2 - r, s / 2 - r, r * 2, r * 2), rad, rad);
-      fillPaint.setColor(color);
-      c.drawRRect(rect, fillPaint);
-      strokePaint.setColor(C.snakeOutline);
-      strokePaint.setStrokeWidth(lw);
-      c.drawRRect(rect, strokePaint);
-    }),
-  );
+  snakeSprites = [];
+  for (let i = 0; i < SNAKE_SHADES; i++) {
+    const color = Skia.Color(snakeShadeFor(skin, i));
+    snakeSprites.push(
+      bake(s, s, (c) => {
+        const rect = Skia.RRectXY(Skia.XYWHRect(s / 2 - r, s / 2 - r, r * 2, r * 2), rad, rad);
+        fillPaint.setColor(color);
+        c.drawRRect(rect, fillPaint);
+        strokePaint.setColor(outline);
+        strokePaint.setStrokeWidth(lw);
+        c.drawRRect(rect, strokePaint);
+      }),
+    );
+  }
+}
+
+function bakeOutfit(cell: number, hatId: string | null): void {
+  const art = hatArt(hatId);
+  const w = Math.ceil(cell * art.wf);
+  const h = Math.ceil(cell * art.hf);
+  hatSprite?.image.dispose();
+  hatSprite = bake(w, h, (c) => {
+    art.draw(c, w, h);
+  });
+  hatDy = art.dy(cell, h);
+  const js = Math.ceil(cell * 0.84);
+  jerseySprite?.image.dispose();
+  jerseySprite = bake(js, js, (c) => {
+    paintJersey(c, js);
+  });
 }
 
 function bakeGhosts(cell: number): void {
@@ -340,16 +366,31 @@ function bakePortalEnd(cell: number, rim: string, hot: string, deep: string, cor
   });
 }
 
-function ensureSprites(boardPx: number): void {
+function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
   const cell = boardPx / GRID;
+  const skin = worn?.skin ?? bakedSkin;
+  const hatId = worn?.hat ?? bakedHatId;
   if (boardPx !== bakedBoard) {
     bakedBoard = boardPx;
     arenaSprite?.image.dispose();
     bakeArena(boardPx);
   }
+  // the outfit rebakes on its own key: an equip at menu time swaps the
+  // sprites without waiting for a resize, exactly like the web's applyWorn
+  if (cell === bakedCell && skin !== bakedSkin) {
+    bakedSkin = skin;
+    bakeSnakeCells(cell, skin);
+  }
+  if (cell === bakedCell && hatId !== bakedHatId) {
+    bakedHatId = hatId;
+    bakeOutfit(cell, hatId);
+  }
   if (cell !== bakedCell) {
     bakedCell = cell;
-    bakeSnakeCells(cell);
+    bakedSkin = skin;
+    bakedHatId = hatId;
+    bakeSnakeCells(cell, skin);
+    bakeOutfit(cell, hatId);
     bakeGhosts(cell);
     bakeTnt(cell);
     boltSprite?.image.dispose();
@@ -568,7 +609,7 @@ function drawGhost(
  * particles - everything else is a baked image.
  */
 export function buildPicture(game: Game, rc: RenderContext): SkPicture {
-  ensureSprites(rc.boardPx);
+  ensureSprites(rc.boardPx, rc.worn);
   const recorder = Skia.PictureRecorder();
   const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, rc.boardPx, rc.boardPx));
   const cell = rc.boardPx / GRID;
@@ -690,6 +731,14 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     drawSegmentSprite(canvas, sprite, rp.cx, rp.cy, cell);
   }
 
+  // the shirt on the square behind the head, upright like the hat
+  if (jerseySprite !== null && game.snake.length > 1) {
+    const rp1 = segRenderPos(game, 1, p);
+    const jx = wrapf(rp1.cx) * cell + cell / 2;
+    const jy = wrapf(rp1.cy) * cell + cell / 2;
+    drawBaked(canvas, jerseySprite, Math.round(jx - jerseySprite.w / 2), Math.round(jy - jerseySprite.h / 2));
+  }
+
   // eyes on the head, at its interpolated position
   if (game.snake.length > 0) {
     const rp = segRenderPos(game, 0, p);
@@ -703,6 +752,10 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     fillPaint.setColor(C.ink);
     canvas.drawCircle(hx + ex * off + px * off, hy + ey * off + py * off, cell * 0.08, fillPaint);
     canvas.drawCircle(hx + ex * off - px * off, hy + ey * off - py * off, cell * 0.08, fillPaint);
+    // the hat rides the head, upright whichever way the snake is going
+    if (hatSprite !== null) {
+      drawBaked(canvas, hatSprite, Math.round(hx - hatSprite.w / 2), Math.round(hy + hatDy));
+    }
   }
 
   // ghosts: baked body + live pupils, tunnel copies like the web
