@@ -24,6 +24,56 @@
     --arena: #24321b;
     --arena-edge: #1b2614;
     --line: rgba(244,236,216,0.06);
+    /* ---- the shell's own tokens ----
+       The table the pitch sits on, and the ink written straight onto it:
+       the poster title, the score column, the hint line, the touch pad.
+       These are what the theme swaps. The sheet tokens above (--text,
+       --panel, --muted) deliberately do NOT swap: the sheets are paper
+       laid over the table and their ink must keep meaning ink on paper. */
+    --shell-ink: var(--text);
+    --shell-muted: var(--muted);
+    --pad-hi: #fbf6e8;
+    --pad-mid: var(--panel);
+    --pad-lo: #ded2b4;
+    --pad-line: rgba(33,30,26,0.22);
+    --pad-glare: rgba(255,255,255,0.5);
+    --pad-shade: rgba(33,30,26,0.18);
+    --pad-ring: rgba(33,30,26,0.28);
+    --pad-ink: var(--text);
+  }
+  /* The dark table, reachable two ways: the system says dark and the THEME
+     chips say AUTO (no class), or the chips force DARK outright. LIGHT
+     forces the defaults back by exempting the media block. The two value
+     lists are the same on purpose; CSS has no way to share them. */
+  @media (prefers-color-scheme: dark) {
+    html:not(.theme-light) {
+      color-scheme: dark;
+      --bg: #12160e;
+      --shell-ink: #f6efde;
+      --shell-muted: #b7ac93;
+      --pad-hi: #2b3325;
+      --pad-mid: #212a1d;
+      --pad-lo: #171e15;
+      --pad-line: rgba(244,236,216,0.14);
+      --pad-glare: rgba(244,236,216,0.10);
+      --pad-shade: rgba(0,0,0,0.35);
+      --pad-ring: rgba(194,162,90,0.35);
+      --pad-ink: #e9e0cd;
+    }
+  }
+  html.theme-dark {
+    color-scheme: dark;
+    --bg: #12160e;
+    --shell-ink: #f6efde;
+    --shell-muted: #b7ac93;
+    --pad-hi: #2b3325;
+    --pad-mid: #212a1d;
+    --pad-lo: #171e15;
+    --pad-line: rgba(244,236,216,0.14);
+    --pad-glare: rgba(244,236,216,0.10);
+    --pad-shade: rgba(0,0,0,0.35);
+    --pad-ring: rgba(194,162,90,0.35);
+    --pad-ink: #e9e0cd;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -80,7 +130,7 @@
     font-size: clamp(30px, 9vw, 52px);
     line-height: 0.9;
     letter-spacing: 1px;
-    color: var(--text);
+    color: var(--shell-ink);
     text-shadow: 4px 4px 0 var(--gold);
     text-transform: uppercase;
   }
@@ -91,18 +141,18 @@
   .scores { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
   .scores .tally { text-align: right; line-height: 1.1; }
   .scores .label {
-    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    font-size: 11px; letter-spacing: 2px; color: var(--shell-muted);
     text-transform: uppercase; font-weight: 600;
   }
   .scores .val {
-    font-family: 'Anton', sans-serif; font-size: 38px; color: var(--text);
+    font-family: 'Anton', sans-serif; font-size: 38px; color: var(--shell-ink);
   }
   .scores .best {
     color: var(--gold); font-size: 14px; font-weight: 700;
     letter-spacing: 1px;
   }
   .scores .clock {
-    font-family: 'Anton', sans-serif; font-size: 30px; color: var(--text);
+    font-family: 'Anton', sans-serif; font-size: 30px; color: var(--shell-ink);
     letter-spacing: 1px; line-height: 1;
     padding-left: 12px; border-left: 2px solid var(--gold-deep);
   }
@@ -218,16 +268,17 @@
     font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #b7ac93;
   }
 
+  /* No rim and no gold line since 2026-09-06, at the owner's call: in dark
+     mode the frame read as the wall ring the game builds around the pitch,
+     which is a lie about the rules. The 6px padding STAYS: the overlay and
+     the countdown scrim both sit at inset 6px and line up with the canvas
+     through it. The drop shadow moved onto the canvas itself. */
   .board-frame {
     position: relative;
     width: 100%;
     aspect-ratio: 1 / 1;
     border-radius: 14px;
     padding: 6px;
-    background: var(--text);
-    box-shadow:
-      0 14px 30px rgba(33,30,26,0.28),
-      inset 0 0 0 2px var(--gold);
   }
 
   /* wall status pill: floats just above the field so it never covers the play area */
@@ -304,6 +355,7 @@
     height: 100%;
     border-radius: 9px;
     background: var(--arena);
+    box-shadow: 0 14px 30px rgba(33,30,26,0.28);
     touch-action: none;
   }
 
@@ -849,7 +901,7 @@
     display: flex;
     gap: 18px;
     font-size: 12px;
-    color: var(--muted);
+    color: var(--shell-muted);
     letter-spacing: 0.5px;
     flex-wrap: wrap;
     justify-content: center;
@@ -1266,13 +1318,13 @@
     border-radius: 22px;
     overflow: hidden;
     background:
-      linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(33,30,26,0.22) calc(50% - 1px), rgba(33,30,26,0.22) calc(50% + 1px), transparent calc(50% + 1px)),
-      linear-gradient(to bottom left,  transparent calc(50% - 1px), rgba(33,30,26,0.22) calc(50% - 1px), rgba(33,30,26,0.22) calc(50% + 1px), transparent calc(50% + 1px)),
-      radial-gradient(ellipse at 50% 45%, #fbf6e8, var(--panel) 72%, #ded2b4 100%);
+      linear-gradient(to bottom right, transparent calc(50% - 1px), var(--pad-line) calc(50% - 1px), var(--pad-line) calc(50% + 1px), transparent calc(50% + 1px)),
+      linear-gradient(to bottom left,  transparent calc(50% - 1px), var(--pad-line) calc(50% - 1px), var(--pad-line) calc(50% + 1px), transparent calc(50% + 1px)),
+      radial-gradient(ellipse at 50% 45%, var(--pad-hi), var(--pad-mid) 72%, var(--pad-lo) 100%);
     box-shadow:
-      inset 0 2px 3px rgba(255,255,255,0.5),
-      inset 0 -5px 10px rgba(33,30,26,0.18),
-      inset 0 0 0 2px rgba(33,30,26,0.28);
+      inset 0 2px 3px var(--pad-glare),
+      inset 0 -5px 10px var(--pad-shade),
+      inset 0 0 0 2px var(--pad-ring);
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -1281,7 +1333,7 @@
   .dpad .wedge {
     position: absolute; inset: 0;
     border: none; background: transparent; margin: 0; padding: 0;
-    color: var(--text); font-size: clamp(24px, 7vw, 38px); font-weight: 700; line-height: 1;
+    color: var(--pad-ink); font-size: clamp(24px, 7vw, 38px); font-weight: 700; line-height: 1;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
   }
@@ -1289,7 +1341,8 @@
   .dpad .wedge.down  { clip-path: polygon(50% 50%, 100% 100%, 0 100%); align-items: flex-end;       padding-bottom: 8%; }
   .dpad .wedge.left  { clip-path: polygon(50% 50%, 0 100%, 0 0);       justify-content: flex-start; padding-left: 8%; }
   .dpad .wedge.right { clip-path: polygon(50% 50%, 100% 0, 100% 100%); justify-content: flex-end;   padding-right: 8%; }
-  .dpad .wedge.pressed { background: var(--gold); }
+  /* a pressed wedge is a gold flash, whose label is dark ink in any theme */
+  .dpad .wedge.pressed { background: var(--gold); color: #211e1a; }
 
   /* ---- settings gear + modal ---- */
   .gear {
@@ -1414,44 +1467,6 @@
     vertical-align: text-bottom; animation: term-blink 1s steps(1) infinite;
   }
   @keyframes term-blink { 50% { opacity: 0; } }
-  /* ---- dark mode, for the SHELL only ----
-     Follows the system setting, no toggle. The pitch panel was always dark;
-     this darkens the table it sits on: page background, the poster title,
-     the score column, the hint line and the touch pad. The sheets (settings,
-     profile, shop, boards) deliberately stay cream: they are paper laid over
-     the table, and their long tail of dark-on-light detail colors would all
-     need re-deriving for a surface nobody asked to change. Tokens are NOT
-     flipped globally for the same reason: --text on --panel must keep
-     meaning ink on paper wherever a sheet uses them. */
-  @media (prefers-color-scheme: dark) {
-    html { color-scheme: dark; background: #12160e; }
-    body {
-      background:
-        radial-gradient(circle at 15% 0%, rgba(194,162,90,0.07), transparent 40%),
-        radial-gradient(circle at 90% 100%, rgba(230,64,42,0.05), transparent 42%),
-        #12160e;
-    }
-    /* the poster ink flips to cream; the gold shadow is what carries the
-       identity and it works on both grounds */
-    h1 { color: #f6efde; }
-    .scores .label { color: #b7ac93; }
-    .scores .val, .scores .clock { color: #f6efde; }
-    .hint { color: #b7ac93; }
-    .dpad {
-      background:
-        linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(244,236,216,0.14) calc(50% - 1px), rgba(244,236,216,0.14) calc(50% + 1px), transparent calc(50% + 1px)),
-        linear-gradient(to bottom left,  transparent calc(50% - 1px), rgba(244,236,216,0.14) calc(50% - 1px), rgba(244,236,216,0.14) calc(50% + 1px), transparent calc(50% + 1px)),
-        radial-gradient(ellipse at 50% 45%, #2b3325, #212a1d 72%, #171e15 100%);
-      box-shadow:
-        inset 0 2px 3px rgba(244,236,216,0.10),
-        inset 0 -5px 10px rgba(0,0,0,0.35),
-        inset 0 0 0 2px rgba(194,162,90,0.35);
-    }
-    .dpad .wedge { color: #e9e0cd; }
-    /* a pressed wedge keeps the gold fill, whose dark ink label needs the
-       dark text back for the flash */
-    .dpad .wedge.pressed { color: #211e1a; }
-  }
 </style>
 </head>
 <body>
@@ -1706,6 +1721,12 @@
           <button data-speed="200">SLOW</button>
           <button data-speed="130" class="active">NORMAL</button>
           <button data-speed="100">FAST</button>
+        </div>
+        <div class="speed-row" id="themeRow">
+          <span>THEME</span>
+          <button data-theme="auto" class="active">AUTO</button>
+          <button data-theme="light">LIGHT</button>
+          <button data-theme="dark">DARK</button>
         </div>
         <div class="toggle-row">
           <span>WALLS</span>
@@ -6296,9 +6317,11 @@
 
   // speed and walls apply to the NEXT round; the controls are locked in-round,
   // so from the player's view nothing ever changes mid-game
-  document.querySelectorAll('.speed-row button').forEach(b => {
+  // [data-speed], not every .speed-row button: the THEME chips wear the
+  // same clothes and must not set the tick to NaN
+  document.querySelectorAll('[data-speed]').forEach(b => {
     b.addEventListener('click', () => {
-      document.querySelectorAll('.speed-row button').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('[data-speed]').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       pageTickMs = parseInt(b.dataset.speed, 10);
     });
@@ -6345,6 +6368,32 @@
   crowdToggle.addEventListener('click', () => setCrowd(!crowdOn));
   if (!crowdOn) setCrowd(false);   // reflect a stored OFF in the switch
 
+  // The table's theme: AUTO follows the system through the media query (no
+  // class on <html>), LIGHT and DARK force it with one. Free to change
+  // mid-round like sound: it touches nothing the engine simulates. The
+  // theme-color metas each carry their own media for AUTO; forcing a theme
+  // writes the forced table color into both, so the browser bar follows.
+  const themeMetas = document.querySelectorAll('meta[name="theme-color"]');
+  function setTheme(mode) {
+    document.documentElement.classList.toggle('theme-dark', mode === 'dark');
+    document.documentElement.classList.toggle('theme-light', mode === 'light');
+    document.querySelectorAll('#themeRow button').forEach(b => b.classList.toggle('active', b.dataset.theme === mode));
+    themeMetas.forEach(m => {
+      m.content = mode === 'auto' ? (m.media.includes('dark') ? '#12160e' : '#efe6d0')
+        : mode === 'dark' ? '#12160e' : '#efe6d0';
+    });
+    try { localStorage.setItem('snakeTheme', mode); } catch (e) {}
+  }
+  document.querySelectorAll('#themeRow button').forEach(b => {
+    b.addEventListener('click', () => setTheme(b.dataset.theme));
+  });
+  setTheme((() => {
+    try {
+      const v = localStorage.getItem('snakeTheme');
+      return v === 'dark' || v === 'light' ? v : 'auto';
+    } catch (e) { return 'auto'; }
+  })());
+
   // resize events arrive in bursts; coalesce to once per frame
   let resizeQueued = false;
   window.addEventListener('resize', () => { resizeQueued = true; });
@@ -6366,7 +6415,9 @@
     const inRound = (state === 'playing' || state === 'paused' || state === 'countdown');
     gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
     document.getElementById('whoBtn').style.display = gearBtn.style.display;
-    settingsModal.querySelectorAll('.speed-row button, #wallToggle').forEach(el => { el.disabled = inRound; });
+    // only what the engine simulates locks mid-round: speed and walls.
+    // THEME shares the chips' clothes but stays free, like sound.
+    settingsModal.querySelectorAll('[data-speed], #wallToggle').forEach(el => { el.disabled = inRound; });
     lockHint.style.display = inRound ? 'block' : 'none';
     syncMpQuit();
   }
