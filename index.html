@@ -69,14 +69,14 @@
       --shell-ink: #f6efde;
       --shell-muted: #b7ac93;
       --shell-gold: #d8b35e;
-      --pad-hi: #2b3325;
-      --pad-mid: #212a1d;
-      --pad-lo: #171e15;
-      --pad-line: rgba(244,236,216,0.14);
-      --pad-glare: rgba(244,236,216,0.10);
-      --pad-shade: rgba(0,0,0,0.35);
-      --pad-ring: rgba(194,162,90,0.35);
-      --pad-ink: #e9e0cd;
+      --pad-hi: #333d2c;
+      --pad-mid: #232d1f;
+      --pad-lo: #131a11;
+      --pad-line: rgba(244,236,216,0.12);
+      --pad-glare: rgba(244,236,216,0.16);
+      --pad-shade: rgba(0,0,0,0.45);
+      --pad-ring: rgba(194,162,90,0.5);
+      --pad-ink: #f6efde;
       --sheet: #1f2a1d;
       --sheet-ink: #e9e0cd;
       --sheet-muted: #b7ac93;
@@ -96,14 +96,14 @@
     --shell-ink: #f6efde;
     --shell-muted: #b7ac93;
     --shell-gold: #d8b35e;
-    --pad-hi: #2b3325;
-    --pad-mid: #212a1d;
-    --pad-lo: #171e15;
-    --pad-line: rgba(244,236,216,0.14);
-    --pad-glare: rgba(244,236,216,0.10);
-    --pad-shade: rgba(0,0,0,0.35);
-    --pad-ring: rgba(194,162,90,0.35);
-    --pad-ink: #e9e0cd;
+    --pad-hi: #333d2c;
+    --pad-mid: #232d1f;
+    --pad-lo: #131a11;
+    --pad-line: rgba(244,236,216,0.12);
+    --pad-glare: rgba(244,236,216,0.16);
+    --pad-shade: rgba(0,0,0,0.45);
+    --pad-ring: rgba(194,162,90,0.5);
+    --pad-ink: #f6efde;
     --sheet: #1f2a1d;
     --sheet-ink: #e9e0cd;
     --sheet-muted: #b7ac93;
@@ -1596,7 +1596,9 @@
     <div class="board-frame">
       <canvas id="game"></canvas>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
-      <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;</button>
+      <!-- U+FE0E pins the cog to TEXT presentation: without it iOS serves
+           the grey emoji cog, which ignores the gold the CSS asks for -->
+      <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;&#xFE0E;</button>
       <!-- The boards live behind the trophy now: the death screen shows the
            top 100 only when your round places on it, so browsing the boards
            needed its own door, one that works on every screen and width. -->
@@ -1607,7 +1609,7 @@
            a currency you cannot see is a currency you forget; the purse is
            the door to the shop. -->
       <div class="chip-row">
-        <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;</button>
+        <button class="gear who" id="whoBtn" aria-label="Player" title="Player">&#128100;&#xFE0E;</button>
         <button class="gear who purse" id="purseBtn" aria-label="Coins and shop" title="Coins" hidden><i class="coin-dot"></i><span id="purseCoins"></span></button>
         <span class="purse-float" id="purseFloat" hidden>+0</span>
       </div>
@@ -1813,7 +1815,7 @@
       <span class="pad-only"><b>&#9312;</b> select</span>
       <span class="pad-only"><b>&#9313;</b> back</span>
       <span class="pad-only"><b>START</b> pause</span>
-      <span><b>&#9881;</b> for settings</span>
+      <span><b>&#9881;&#xFE0E;</b> for settings</span>
     </div>
 
     <div class="modal-backdrop" id="settingsModal" hidden>
