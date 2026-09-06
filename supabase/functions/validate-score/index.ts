@@ -14,7 +14,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   replay, MODES, SPEEDS, START_LEN,
-} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@b5ffc7085f2ee543b88600f4cbc8fcae87077517/packages/engine/engine.js';
+} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@666b86dc1cb24ffc8a7ef75b9dddaa49804877d7/packages/engine/engine.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -24,12 +24,15 @@ const reply = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const refuse = (error: string, status = 422) => reply({ error }, status);
 
-// every knob a log may carry, with the classic default it means when absent
-// (pre-v15 logs cannot carry them); a claimed mode must match exactly
+// every knob a log may carry, with the CURRENT classic default it means when
+// absent (since v22 a classic TNT and a teleport trip both grow five, so
+// tntGrowth and portalGrowth default 5 here; pre-v15 logs that carried
+// neither are museum pieces only replay() ever sees, and it keeps its own
+// backward-compat defaults). A claimed mode must match exactly.
 const KNOBS: Record<string, unknown> = {
   durationMs: 0, startGhosts: 0, startBombs: 0, bombFirstMs: 0,
   scoreByTime: false, startLen: START_LEN,
-  eatGrowth: 1, bonusGrowth: 5, tntGrowth: -5, portalGrowth: 0,
+  eatGrowth: 1, bonusGrowth: 5, tntGrowth: 5, portalGrowth: 5,
   ghostEveryMs: 0, bombEveryMs: 0, boltEveryMs: 0,
   // levels are the only rounds with a goal and they never submit, so a
   // submitted round claiming a board mode must carry none
