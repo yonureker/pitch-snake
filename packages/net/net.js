@@ -133,6 +133,14 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
   let deadSince = -1;                                  // when the board first went still
   let ended = false, dead = false;                     // dead = desynced/aborted
   let stalled = false;
+  // The earliest quantum any message drained since the last pump reaches back
+  // to. Rolling back once to this, in pump(), instead of once per message is
+  // the multiplayer stutter fix: a burst of rival turns arriving in one socket
+  // drain used to fire N independent restore+resim passes in a single frame
+  // gap (each re-running the ghost pathing over tens of quanta), and now fires
+  // one. The timeline is identical: every input is committed to the table as
+  // it arrives regardless, and the single resim applies them all.
+  let pendingBack = Infinity;
   // Counters the session keeps about its own health. rollbacks/resimmed and
   // the repair counts were always here for tests; the stall figures exist
   // because a frozen room is the one failure a player FEELS and the one the
@@ -292,6 +300,10 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
   // double-counting the same wall time.
   function pump(nowMs) {
     if (lastNow < 0) { lastNow = nowMs; lastBeat = nowMs; }
+    // Apply the frame's coalesced rollback before advancing: every input that
+    // arrived since the last pump is already in the table, so one restore+resim
+    // to the earliest of them corrects the timeline that this frame will draw.
+    if (pendingBack !== Infinity && !dead) { const b = pendingBack; pendingBack = Infinity; rollback(b); }
     let dt = nowMs - lastNow;
     lastNow = nowMs;
     if (dt < 0) dt = 0;
@@ -402,12 +414,12 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
         }
       }
       back = Math.min(back, acceptInput(msg, nowMs));
-      if (back !== Infinity) rollback(back);
+      if (back < pendingBack) pendingBack = back;   // coalesced: one rollback in pump()
     } else if (msg.t === 'ri') {                 // a resend batch: same as inputs
       if (!pOk || !Array.isArray(msg.list)) return;
       let back = Infinity;
       for (const e of msg.list) back = Math.min(back, acceptInput({ p: msg.p, s: e[0], q: e[1], x: e[2], y: e[3] }, nowMs));
-      if (back !== Infinity) rollback(back);
+      if (back < pendingBack) pendingBack = back;   // coalesced: one rollback in pump()
     } else if (msg.t === 'b') {
       if (!pOk) return;                          // one validation, not three
       const p = msg.p;
