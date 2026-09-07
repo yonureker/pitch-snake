@@ -162,16 +162,21 @@
     /* the panel wrapper is content-sized everywhere else; the grid needs
        the full body or its right column runs off the edge */
     .overlay.vs-open #vsPanel { width: 100%; max-width: 900px; }
+    /* ONE column. This was two, with a rating rail down the right: a rating
+       card, a ladder top five and a door to a ladder screen. All three said
+       "who is best", which is the question the boards sheet exists to answer,
+       so the ladder became a chip there and the rating moved to the profile,
+       beside the name it belongs to. The panel is narrower for it: three
+       doors and nothing else. */
     .overlay.vs-open .vs-setup {
       display: grid;
       /* minmax(0, ...) because the code input's intrinsic width otherwise
-         sets a min-content floor that shoves the rail off the panel */
-      grid-template-columns: minmax(0, 1fr) clamp(206px, 32cqw, 320px);
-      column-gap: clamp(20px, 3.6cqw, 34px);
+         sets a min-content floor the column cannot go under */
+      grid-template-columns: minmax(0, 1fr);
       align-items: start;
       align-content: center;
       width: 100%;
-      max-width: 900px;
+      max-width: 560px;
       text-align: left;
     }
     .overlay.vs-open .vs-setup > #vsNameRow { grid-column: 1; width: auto; max-width: none; }
@@ -197,44 +202,8 @@
       background: var(--gold); color: #211e1a;
       box-shadow: 0 6px 0 var(--gold-deep);
     }
-    /* the narrow list has always given this ghost a red ledge (a later
-       .btn.small rule outranks .ghostbtn); at full card width that ledge
-       reads as a wound, so the wide door dresses like BACK instead */
-    .overlay.vs-open #vsLadderBtn {
-      box-shadow: none; border: 2px solid var(--gold); color: var(--gold-bright);
-    }
     .overlay.vs-open .h-n { display: none; }
     .overlay.vs-open .h-w { display: contents; }
-    .overlay.vs-open .vs-setup > .vs-rail {
-      display: flex; flex-direction: column; align-items: flex-start;
-      grid-column: 2; grid-row: 1 / span 2;
-      align-self: stretch; text-align: left;
-      border-left: 1px solid rgba(194,162,90,0.28);
-      padding-left: clamp(20px, 3.6cqw, 32px);
-    }
-    .vs-rate-card {
-      display: flex; align-items: center; gap: clamp(10px, 2cqw, 16px);
-      margin-top: clamp(8px, 1.6cqw, 14px);
-      border: 1px solid rgba(194,162,90,0.25); border-radius: 9px;
-      padding: clamp(10px, 2cqw, 16px);
-      background: rgba(33,30,26,0.34);
-      width: 100%;
-    }
-    .vs-rate {
-      font-family: 'Anton', sans-serif; font-weight: 400;
-      font-size: clamp(28px, 5cqw, 42px); line-height: 1; color: #f6efde;
-      text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
-                   color-mix(in srgb, var(--gold) 55%, #12180f);
-    }
-    .vs-rate-note {
-      font-size: clamp(10.5px, 1.7cqw, 12.5px); color: #8e8672; line-height: 1.35;
-    }
-    .vs-rail-gap { margin-top: clamp(14px, 2.6cqw, 22px); }
-    .vs-rail .standings.vs-mini { width: 100%; margin: 8px 0 0; }
-    .vs-rail-foot {
-      font-size: clamp(10px, 1.6cqw, 12px); color: #8e8672;
-      margin-top: 10px; line-height: 1.4;
-    }
   }
   /* a panel taller than its board says so, instead of looking guillotined */
   .ov-body.is-scrollable {

@@ -90,7 +90,6 @@
      the wide hint texts and the rail render as nothing at all. */
   .vs-card, .h-n { display: contents; }
   .h-w { display: none; }
-  .vs-rail { display: none; }
   /* three ways into a game, each one button, none of them hidden behind a
      choice you have to make first */
   .vs-actions {

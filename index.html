@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=f3a4a747bd">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=f3a4a747bd">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=3c20e03d68">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=3c20e03d68">
 </head>
 <body>
   <div class="wrap">
@@ -152,31 +152,7 @@
                 </div>
                 <p class="vs-hint"><span class="h-n">Or join a friend with their room code.</span><span class="h-w">Their five-character room code. Not rated.</span></p>
               </div>
-              <button class="btn small ghostbtn" id="vsLadderBtn">LADDER</button>
             </div>
-            <!-- The doors screen's rating rail, wide panels only. Filled by
-                 fillVsRail; the full ladder screen keeps its own fresh
-                 read. -->
-            <div class="vs-rail" id="vsRail">
-              <p class="res-tag">YOUR RATING</p>
-              <div class="vs-rate-card">
-                <b class="vs-rate" id="vsRailRating"></b>
-                <span class="vs-rate-note" id="vsRailNote"></span>
-              </div>
-              <p class="res-tag vs-rail-gap">LADDER &middot; TOP FIVE</p>
-              <ol class="standings lad vs-mini" id="vsRailList"></ol>
-              <p class="vs-rail-foot">Only quick match counts. P means under ten rounds.</p>
-            </div>
-          </div>
-          <div class="tourney" id="vsLadder" hidden>
-            <div class="t-code">LADDER</div>
-            <!-- ONE line of chrome above the list, and it is your own
-                 standing: that is what a player opens this screen for, and
-                 anything below the list scrolls out of sight. The legend
-                 goes under the board, where it is optional reading. -->
-            <div class="t-meta" id="vsLadderMeta"></div>
-            <ol class="standings lad" id="vsLadderList"></ol>
-            <p class="vs-hint" id="vsLadderHint"></p>
           </div>
           <div class="tourney" id="vsRoom" hidden>
             <div class="t-code" id="vsRoomCode"></div>
@@ -284,9 +260,6 @@
             </button>
             <button class="btn modes" id="modeBackBtn">BACK</button>
           </div>
-          <div class="btn-row" id="ladderFooter" hidden>
-            <button class="btn modes" id="vsLadderBack">BACK</button>
-          </div>
           <div class="btn-row" id="vsFooter" hidden>
             <button class="btn configure" id="vsCreateBtn">CREATE ROOM</button>
             <button class="btn modes" id="vsBackBtn">BACK</button>
@@ -354,6 +327,12 @@
         <div class="modal-title" id="profTitle">Player</div>
         <p class="lock-hint" id="profLock" hidden></p>
         <div class="entry wide"><input id="profName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false"></div>
+        <!-- Your rating rides with your NAME, because that is what it belongs
+             to: it is not a mode you pick or a board you browse, it is a fact
+             about you, and it used to need a column of its own on the
+             multiplayer step to say so. Hidden until there is one, since a
+             blank number reads as a bug rather than as "not rated yet". -->
+        <p class="prof-rating" id="profRating" hidden></p>
         <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag" hidden></span><select id="profCountry"><option value="">NO FLAG</option></select></div>
         <button class="btn small" id="profSaveBtn">SAVE</button>
         <div class="prof-auth" id="profAuthAnon" hidden>
@@ -389,11 +368,17 @@
          you are not on; this is where the curious go instead. -->
     <div class="modal-backdrop" id="boardsModal" hidden>
       <div class="modal boards">
-        <div class="modal-title">TOP 100 WORLDWIDE</div>
+        <div class="modal-title" id="boardsTitle">TOP 100 WORLDWIDE</div>
+        <!-- The ladder is a fourth board rather than a screen of its own. It
+             answers the same question the other three do, "who is best", and
+             it was costing the multiplayer step a whole second column to say
+             so: a rating card, a top five and a door, all to reach a list
+             that belongs here beside the boards it sits next to. -->
         <div class="board-chips" id="boardChips">
           <button data-bmode="classic" class="active">CLASSIC</button>
           <button data-bmode="speedrun">SPEED RUN</button>
           <button data-bmode="survival">SURVIVAL</button>
+          <button data-bmode="ladder">LADDER</button>
         </div>
         <ol class="boards-list" id="boardsList"></ol>
         <p class="save-note soft" id="boardsNote" hidden></p>
@@ -417,16 +402,16 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=f3a4a747bd",
-    "./packages/net/net.js": "./packages/net/net.js?v=f3a4a747bd",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=f3a4a747bd",
-    "./page/build/dom.js": "./page/build/dom.js?v=f3a4a747bd",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=f3a4a747bd",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=f3a4a747bd",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=f3a4a747bd",
-    "./page/build/shop.js": "./page/build/shop.js?v=f3a4a747bd",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=f3a4a747bd",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=f3a4a747bd"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=3c20e03d68",
+    "./packages/net/net.js": "./packages/net/net.js?v=3c20e03d68",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=3c20e03d68",
+    "./page/build/dom.js": "./page/build/dom.js?v=3c20e03d68",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=3c20e03d68",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=3c20e03d68",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=3c20e03d68",
+    "./page/build/shop.js": "./page/build/shop.js?v=3c20e03d68",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=3c20e03d68",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=3c20e03d68"
   }
 }
 </script>
@@ -2908,7 +2893,6 @@
     tScreen = false;
     // a read that failed gets one fresh try per visit, not a loop
     for (const k in railTops) if (railTops[k] === false) delete railTops[k];
-    if (railLadder === false) railLadder = undefined;
     refreshModeUI();
   });
 
@@ -3047,14 +3031,6 @@
   const buildReload = document.getElementById('buildReload');
   const vsPanel = document.getElementById('vsPanel');
   const vsSetup = document.getElementById('vsSetup');
-  const vsLadder = document.getElementById('vsLadder');
-  const vsLadderBtn = document.getElementById('vsLadderBtn');
-  const vsLadderBack = document.getElementById('vsLadderBack');
-  const ladderFooter = document.getElementById('ladderFooter');
-  const vsLadderList = document.getElementById('vsLadderList');
-  const vsLadderMeta = document.getElementById('vsLadderMeta');
-  const vsLadderHint = document.getElementById('vsLadderHint');
-  let ladderOpen = false;
   const vsFooter = document.getElementById('vsFooter');
   const vsQuickBtn = document.getElementById('vsQuickBtn');
   const vsJoinBtn = document.getElementById('vsJoinBtn');
@@ -3939,26 +3915,18 @@
     // three screens share this panel now: the doors in, a room, and the
     // ladder. The ladder only ever stands in for the doors, never for a room
     // you are already sitting in, and it never survives leaving multiplayer:
-    // left set, it would greet the next visitor with a board instead of the
-    // way in. vsPanel.hidden is assigned immediately before this call, so it
-    // catches every exit (a mode change, BACK, and the MODES toggle alike).
-    if (inRoom || vsPanel.hidden) ladderOpen = false;
-    vsSetup.hidden = inRoom || ladderOpen;
-    vsLadder.hidden = inRoom || !ladderOpen;
+    vsSetup.hidden = inRoom;
     vsRoom.hidden = !inRoom;
-    // the wide doors screen: cards beside the rating rail. The container
-    // query decides whether any of it renders; this only says which of the
-    // three screens is up.
-    const doors = !vsPanel.hidden && !inRoom && !ladderOpen;
+    // The doors screen is ONE column now. It used to be two: the ladder lived
+    // here as a rating card, a top five and a door to a screen of its own,
+    // which is a great deal of furniture to answer "who is best" when the
+    // boards sheet answers exactly that already. The ladder is a chip in that
+    // sheet now, and your own rating sits beside your name in the profile.
+    const doors = !vsPanel.hidden && !inRoom;
     overlay.classList.toggle('vs-open', doors);
-    if (doors) fillVsRail();
     // the footer lives in the overlay's pinned foot, so it has to be told
     // about screens the panel itself never sees
-    vsFooter.hidden = vsPanel.hidden || inRoom || ladderOpen;
-    // The ladder's way out is PINNED, not in the panel. Its list is longer
-    // than the body and scrolls; a BACK that scrolls with it is a dead end,
-    // because this screen hides the shared footer and MODES alike.
-    ladderFooter.hidden = !ladderOpen || inRoom || vsPanel.hidden;
+    vsFooter.hidden = vsPanel.hidden || inRoom;
     // The who-row shares the overlay's head with every other screen, so left
     // to itself it followed you onto the pitch and into a room. That made
     // CHANGE a trap: it hands over to a name input that lives inside the
@@ -3971,9 +3939,7 @@
       const named = !!vsTypedName();
       const editing = vsEditingName || !named;
       vsNameRow.hidden = !editing;
-      // ladderOpen for the same reason the comment above gives: CHANGE opens
-      // an input that lives in the setup panel, and the ladder has replaced it
-      vsWho.hidden = editing || vsPanel.hidden || ladderOpen;
+      vsWho.hidden = editing || vsPanel.hidden;
       if (!editing) vsWhoName.textContent = vsTypedName();
       vsQuickBtn.disabled = vsBusy || !named;
       vsCreateBtn.disabled = vsBusy || !named;
@@ -4127,104 +4093,6 @@
     li.append(rk, fl, nm, sc);
     return li;
   }
-
-  // ---- the doors screen's rating rail ----
-  // Filled whenever the doors are up, shown only where the container query
-  // has room. One read per session for the board and the own rating
-  // together; the full ladder screen keeps its own fresh read. Degrades
-  // silently, and the 7-to-90 rule holds: one number you own, five rows of
-  // who is above, one sentence of the rule that feeds them.
-  const vsRailRating = document.getElementById('vsRailRating');
-  const vsRailNote = document.getElementById('vsRailNote');
-  const vsRailList = document.getElementById('vsRailList');
-  let railLadder;    // undefined = not asked, null = in flight, false = failed
-  function fillVsRail() {
-    let r = railLadder;
-    if (r === undefined && supabaseConfigured() && overlay.clientWidth >= 540) {
-      railLadder = null;
-      Promise.all([
-        supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
-        sessionToken() ? supabaseRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
-      ]).then(([board, mine]) => { railLadder = { board: asList(board), mine }; })
-        .catch(() => { railLadder = false; })
-        .then(() => {
-          // a stale settle repaints only the screen it was fetched for
-          if (overlay.classList.contains('vs-open')) fillVsRail();
-        });
-      r = null;
-    }
-    const own = r && r.mine && r.mine[ROOM_RULES];
-    vsRailRating.textContent = '';
-    vsRailRating.append(own ? String(own.rating) : '\u2014');
-    if (own && own.provisional) {
-      const p = document.createElement('span');
-      p.className = 'prov'; p.textContent = 'P';
-      p.title = 'Provisional: fewer than 10 rated rounds';
-      vsRailRating.appendChild(p);
-    }
-    vsRailNote.textContent = own
-      ? own.rounds + (own.rounds === 1 ? ' rated round' : ' rated rounds')
-        + (own.provisional ? '. Ten settles it.' : '.')
-      : 'Quick match a stranger to get one.';
-    vsRailList.innerHTML = '';
-    const rows = r && r.board ? r.board.slice(0, 5) : [];
-    if (!rows.length) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = r === null ? '\u2026'
-        : r && r.board ? 'No rated rounds yet' : 'Ladder unavailable';
-      vsRailList.appendChild(li);
-    } else rows.forEach((row, i) => vsRailList.appendChild(ladderRow(row, i)));
-  }
-
-  let ladderGen = 0;
-  async function showLadder() {
-    const gen = ++ladderGen;
-    vsLadderList.innerHTML = '';
-    vsLadderMeta.textContent = 'QUICK MATCH ONLY';
-    vsLadderHint.textContent = '';
-    let board = null, mine = null;
-    try {
-      [board, mine] = await Promise.all([
-        supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
-        sessionToken() ? supabaseRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
-      ]);
-    } catch (e) { /* offline, or no board tier: say so below */ }
-    if (gen !== ladderGen) return;
-
-    const rows = Array.isArray(board) ? board : [];
-    if (!rows.length) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = board ? 'No rated rounds yet' : 'Ladder unavailable';
-      vsLadderList.appendChild(li);
-    }
-    vsLadderList.classList.toggle('dense', rows.length > 4);
-    rows.forEach((r, i) => vsLadderList.appendChild(ladderRow(r, i)));
-
-    const own = mine && mine[ROOM_RULES];
-    vsLadderMeta.textContent = own
-      ? 'YOU ' + own.rating + (own.provisional ? ' P' : '') + ' \u00b7 '
-        + own.rounds + (own.rounds === 1 ? ' ROUND' : ' ROUNDS')
-      : 'QUICK MATCH ONLY';
-    vsLadderHint.textContent = own && own.provisional
-      ? 'P until ten rated rounds settle it.'
-      : own ? '' : 'Quick match a stranger to get a rating.';
-    markOverflow();
-  }
-
-  vsLadderBtn.addEventListener('click', () => {
-    ladderOpen = true;
-    vsRefreshPanel();
-    void showLadder();
-    rehomeFocus();
-  });
-  vsLadderBack.addEventListener('click', () => {
-    ladderOpen = false;
-    ladderGen++;             // a reply still in flight must not paint a screen that left
-    vsRefreshPanel();
-    rehomeFocus();
-  });
 
   vsLeaveBtn.addEventListener('click', vsLeave);
   vsBackBtn.addEventListener('click', () => { tScreen = false; refreshModeUI(); });
@@ -4536,6 +4404,8 @@
   const profWhoEmail = document.getElementById('profWhoEmail');
   const profSignOut = document.getElementById('profSignOut');
   const profStatus = document.getElementById('profStatus');
+  const profRating = document.getElementById('profRating');
+  let profRatingGen = 0;   // a reply must not paint a sheet that has closed
 
 
   // the chip states who you are wherever a name is known; the silhouette
@@ -4566,6 +4436,23 @@
   // the current anonymous user, 'signin' switches to the account owning it
   let otpKind = '', otpEmail = '', resendTimer = null, autoVerified = false;
 
+  // The rating shown beside the name. Read once per sheet opening and only
+  // when signed in: it is a bonus tier like everything else identity gives,
+  // so a failure leaves the line hidden and nothing else changes.
+  function fillProfileRating() {
+    profRating.hidden = true;
+    if (!supabaseConfigured() || !sessionToken()) return;
+    const gen = ++profRatingGen;
+    supabaseRpc('pitch_snake_my_rating', {}).then((mine) => {
+      if (gen !== profRatingGen || profileModal.hidden) return;
+      const own = mine && mine[ROOM_RULES];
+      if (!own) return;
+      profRating.textContent = 'RATED ' + own.rating + (own.provisional ? ' P' : '')
+        + ' \u00b7 ' + own.rounds + (own.rounds === 1 ? ' ROUND' : ' ROUNDS');
+      profRating.hidden = false;
+    }).catch(() => { /* no rating today; the line simply stays away */ });
+  }
+
   function refreshProfileSheet(reset) {
     let localName = '';
     try { localName = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {}
@@ -4579,6 +4466,7 @@
     // the sheet names what it is for: an offer while a guest, a settings
     // panel once there is an account behind it
     profTitle.textContent = profAuthAnon.hidden ? 'Player' : 'Create account';
+    fillProfileRating();
     if (reset) {
       profCodeRow.hidden = true;
       profCode.value = '';
@@ -4626,6 +4514,7 @@
   // own list for the mode and says so.
   const boardsModal = document.getElementById('boardsModal');
   const boardsList = document.getElementById('boardsList');
+  const boardsTitle = document.getElementById('boardsTitle');
   const boardsNote = document.getElementById('boardsNote');
   const boardChips = document.getElementById('boardChips');
   const boardsBtn = document.getElementById('boardsBtn');
@@ -4639,10 +4528,57 @@
       return asLocal(JSON.parse(localStorage.getItem(key) || '[]'));
     } catch (e) { return []; }
   }
+  // The ladder board. Fetched fresh on every open rather than cached beside
+  // the score boards, because a rating moves on somebody ELSE's round as well
+  // as your own: a cached ladder goes stale while you are looking at it, in a
+  // way a score board cannot.
+  let ladderGen = 0;
+  async function renderLadder() {
+    const gen = ++ladderGen;
+    boardsList.innerHTML = '';
+    const waiting = document.createElement('li');
+    waiting.className = 'empty';
+    waiting.textContent = '\u2026';
+    boardsList.appendChild(waiting);
+    let board = null;
+    let mine = null;
+    if (supabaseConfigured()) {
+      try {
+        [board, mine] = await Promise.all([
+          supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: MAX_ENTRIES }),
+          sessionToken() ? supabaseRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
+        ]);
+      } catch (e) { /* offline, or no board tier: the note below says so */ }
+    }
+    // the sheet moved on while this was in the air: its render owns the list
+    if (gen !== ladderGen || boardsMode !== 'ladder' || boardsModal.hidden) return;
+    boardsList.innerHTML = '';
+    const rows = asList(board);
+    if (!rows.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = board ? 'No rated rounds yet' : 'Ladder unavailable';
+      boardsList.appendChild(li);
+    }
+    rows.forEach((r, i) => { boardsList.appendChild(ladderRow(r, i)); });
+    // Your own standing goes in the note rather than the list, because the
+    // list is who is BEST and you are usually not in the visible part of it.
+    const own = mine && mine[ROOM_RULES];
+    boardsNote.textContent = own
+      ? 'You are rated ' + own.rating + (own.provisional ? ' P' : '')
+        + ' over ' + own.rounds + (own.rounds === 1 ? ' rated round' : ' rated rounds')
+        + (own.provisional ? '. P means under ten. ' : '. ') + 'Only quick match is rated.'
+      : 'Only quick match is rated. Play one to get a rating.';
+    boardsNote.hidden = false;
+  }
+
   async function renderBoards() {
     for (const b of boardChips.querySelectorAll('button')) {
       b.classList.toggle('active', b.dataset.bmode === boardsMode);
     }
+    // a rating board is not a score board, and the title should not claim it is
+    boardsTitle.textContent = boardsMode === 'ladder' ? 'LADDER \u00b7 TOP 100' : 'TOP 100 WORLDWIDE';
+    if (boardsMode === 'ladder') { await renderLadder(); return; }
     const rm = boardsMode;
     boardsNote.hidden = true;
     let rows = railTops[rm];

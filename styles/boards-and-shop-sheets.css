@@ -23,7 +23,11 @@
      was silently discarded and the sheet grew to four screens tall. The list
      rule survived, which is why it looked like a layout bug rather than a
      parse error. scripts/check-stylesheets.mjs now refuses that shape. */
-  .modal.boards { max-height: 86vh; }
+  /* Wider than the other sheets. It carries a hundred rows of rank, flag,
+     name and score, and since the ladder joined it as a fourth chip the row
+     of chips needed 342px in a 272px box, so LADDER dropped to a line of its
+     own. The board is the one sheet that earns the width. */
+  .modal.boards { max-height: 86vh; width: min(390px, 92vw); }
   .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
   /* the header row the SHOP still wears; it outlived the achievement shelf
      it was first written for, so it keeps the class and loses the rest */
@@ -35,10 +39,14 @@
   .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--sheet-gold); letter-spacing: 1px; }
 
   /* ---- the boards sheet ---- */
-  .board-chips { display: flex; gap: 8px; justify-content: center; }
+  /* Four chips since the ladder joined them, which is enough to squeeze a
+     two-word label into breaking mid-name. The chips wrap as a ROW rather
+     than letting SPEED RUN become two lines of one button. */
+  .board-chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
   .board-chips button {
     font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
-    font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+    font-size: 12px; padding: 7px 10px; border-radius: 6px; cursor: pointer;
+    white-space: nowrap;
     background: var(--sheet-tint); border: 1px solid var(--sheet-line);
     color: var(--sheet-ink);
   }
@@ -98,7 +106,7 @@
   /* P for provisional, the chess convention: the number is real, it just has
      too few rounds behind it to be read as settled. Marked rather than
      withheld, or a new board is an empty box for weeks. */
-  .rt .prov, .lad .prov, .vs-rate .prov {
+  .rt .prov, .lad .prov, .boards-list .prov {
     font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
     color: var(--bg-deep, #211e1a); background: var(--gold);
     border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
