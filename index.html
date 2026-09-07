@@ -3785,7 +3785,15 @@
   // you find; the KIT (jersey and hat) rides at near-full alpha over it, since
   // clothing you cannot read is not worth wearing, and the name tag stays
   // clearest of all because a name is what you look FOR.
-  const VS_BODY_ALPHA = 0.22, VS_KIT_ALPHA = 0.85, VS_TAG_ALPHA = 0.78;
+  // A rival is ONE ghost, at one alpha. The kit used to ride at 0.85 while
+  // the body sat at 0.22, which made a rival's jersey and hat the most solid
+  // things on the pitch: the owner kept reading another snake as their own,
+  // because a bright kit is exactly how your own snake announces itself.
+  // Everything a rival wears now fades together, and further back than the
+  // body alone used to. Safe to take this low: a rival's body is not lethal
+  // (the engine's self test reads that player's own set), so rivals are
+  // situational awareness, never an obstacle to steer around.
+  const VS_RIVAL_ALPHA = 0.18, VS_TAG_ALPHA = 0.6;
   let vsTagFont = '';
 
   // Rollback smoothing, per segment. A late remote turn rewinds and re-runs
@@ -3854,12 +3862,13 @@
       const prog = progOf(pi);
       const base = pi * VS_SEG;
       const nSmooth = Math.min(pl.snake.length, VS_SEG);
-      // The body wears the rival's own outfit, ghosted. Each cell's resolved
+      // The body, kit and hat all wear VS_RIVAL_ALPHA: one ghost, one alpha.
+      // Each cell's resolved
       // position (rollback smoothing offset and all) was already computed by
       // updateVsSmoothing this same frame, so read it back rather than run
       // segRenderPos a second time; only segments past the smoothed depth fall
       // back. No stroke: a ghosted outline is transparent, so it painted nothing.
-      ctx.globalAlpha = VS_BODY_ALPHA;
+      ctx.globalAlpha = VS_RIVAL_ALPHA;
       let lastShade = -1;
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
@@ -3869,9 +3878,8 @@
         else { const rp = segRenderPos(pl, i, prog); cx = rp.cx; cy = rp.cy; }
         drawBodyCell(cx, cy, r, rad, false);
       }
-      // the kit reads clearly even as the body fades back: jersey on the
-      // second segment, hat on the head, both at near-full alpha
-      ctx.globalAlpha = VS_KIT_ALPHA;
+      // jersey on the second segment, hat on the head, at the body's own
+      // alpha: still legible as an outfit, never mistaken for your own
       drawJersey(pl, pi, prog);
       if (fit && fit.hatW) {
         const hx = wrapf(vsLastX[base]) * cell + cell / 2;

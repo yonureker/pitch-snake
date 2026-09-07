@@ -62,7 +62,10 @@ export interface RenderContext {
 
 /** Rival seat colours, the web's VS_COLORS: identity for tags, not clothing. */
 const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'] as const;
-const VS_BODY_ALPHA = 0.32;
+// A rival is one ghost at one alpha: body, hat and tag fade together and
+// sit well back, so another snake's outfit is never mistaken for your own.
+// Safe to take low: a rival's body is not lethal in the engine.
+const VS_BODY_ALPHA = 0.18;
 
 const ATLAS_CELL = 128;
 const ATLAS_COLS = 6;
@@ -861,7 +864,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       if (hat?.sprite != null) {
         drawBaked(canvas, hat.sprite, Math.round(hx - hat.sprite.w / 2), Math.round(hy + hat.dy));
       }
-      fillPaint.setAlphaf(0.7);
+      fillPaint.setAlphaf(0.6);
       const name = rc.vs.names[pi] ?? '?';
       const tagW = tagFont.measureText(name).width;
       fillPaint.setColor(particleColor(VS_COLORS[pi % VS_COLORS.length] ?? '#f4ecd8'));
