@@ -23,10 +23,24 @@ The engine and netcode suites. The pre-commit hook runs these plus the mobile
 lint and typecheck, so a commit cannot pass without them, but run them early
 rather than discovering it at commit time.
 
-## 2. Page syntax
+## 2. The page's TypeScript
 
-`index.html` is buildless, so nothing type-checks it and a syntax error ships
-a blank page. Extract the module body and check it:
+`page/*.ts` compiles to `page/build/*.js`, and that output is COMMITTED
+because a push to `main` is the whole deploy. Build it, and stage the result:
+
+```
+npm run build:page && git add page/build
+```
+
+The pre-commit hook does this too and refuses a commit whose `page/build` has
+drifted, but discovering it there costs a round trip. A stale `page/build` is
+the worst kind of bug this repo can ship: the site keeps working and simply
+does not match its own source.
+
+## 3. Page syntax
+
+The script still inlined in `index.html` has no compiler, so a syntax error
+there ships a blank page. Extract the module body and check it:
 
 ```bash
 python3 - <<'EOF'
@@ -38,7 +52,7 @@ EOF
 node --check /tmp/page_body.mjs && echo "SYNTAX OK"
 ```
 
-## 3. Drive it headless
+## 4. Drive it headless
 
 For anything behavioural, drive the real page rather than reasoning about it.
 
@@ -77,7 +91,7 @@ applies.
 
 **Remove the hook before committing.** `grep -c vtest index.html` must be `0`.
 
-## 4. Mobile
+## 5. Mobile
 
 If `packages/` or `apps/mobile/` changed:
 
@@ -85,12 +99,12 @@ If `packages/` or `apps/mobile/` changed:
 cd apps/mobile && npm run lint && npm run typecheck && npx expo export --platform ios
 ```
 
-## 5. Push
+## 6. Push
 
 Commit and push to `main`. Message style: prose, present tense, explains WHY.
 No double dashes anywhere (em, en, or ASCII).
 
-## 6. Confirm it is live, properly
+## 7. Confirm it is live, properly
 
 This is the step most often done wrong. **Do not poll the URL with a
 cache-busting query string** — the Pages CDN ignores it and you will watch a
@@ -117,7 +131,10 @@ If the domain will not resolve from this machine (a stale negative DNS cache
 from the migration day), pin an edge IP:
 `--resolve pitchsnake.com:443:$(dig +short pitchsnake.com @1.1.1.1 | head -1)`.
 
-**Always** verify that `packages/engine/engine.js` serves 200 on the domain:
+**Always** verify that `packages/engine/engine.js` AND every file under
+`page/build/` serve 200 on the domain: the page imports them at boot, so one
+404 there is a blank game even though `index.html` itself is perfect. Verify
+that `packages/engine/engine.js` serves 200 on the domain:
 the page cannot boot without it. And never set GitHub Pages' own
 custom-domain field: the Worker proxies github.io, and GitHub answering 301
 would loop it.
@@ -126,7 +143,7 @@ The strongest confirmation is not a grep. The shasum triple above proves the
 deployed bytes are the bytes you tested; alternatively load the shipped
 module in the live page and read a constant back out of it.
 
-## 7. Clean up
+## 8. Clean up
 
 Kill Chrome and the http server, remove the profile dir and any scratch
 scripts. Confirm `git status` shows nothing unintended.
