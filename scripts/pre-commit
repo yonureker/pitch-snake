@@ -4,6 +4,27 @@
 set -e
 echo "pre-commit: engine tests"
 npm test --silent
+
+# The page's modules are TypeScript compiled to page/build/, and that output is
+# COMMITTED, because GitHub Pages serves this repo as it stands and there is no
+# build step between a push and the live site. Committed output can drift from
+# its source, and the drift would be invisible: the page keeps working, just
+# not the way the source says. So rebuild and refuse the commit if anything
+# moved. Rebuilding also type-checks, which is the point of the .ts files.
+echo "pre-commit: page typescript"
+npm run build:page --silent
+if ! git diff --quiet -- page/build; then
+  echo
+  echo "  page/build is out of date with page/*.ts."
+  echo "  It has just been rebuilt; stage it and commit again:"
+  echo
+  git diff --name-only -- page/build | sed 's/^/    /'
+  echo
+  echo "    git add page/build"
+  echo
+  exit 1
+fi
+
 if [ -d apps/mobile/node_modules ]; then
   echo "pre-commit: mobile lint + typecheck"
   npm --workspace apps/mobile run lint --silent

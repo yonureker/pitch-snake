@@ -623,21 +623,28 @@
 
   // Sound and the crowd live in their own module: they own the AudioContext
   // and every noise the page makes, and need nothing from here but the
-  // round's phase, which crowdSync is told. See page/sound-and-crowd.js.
+  // round's phase, which crowdSync is told. See page/sound-and-crowd.ts.
   // Countries: the flag sprite's own index order, and the picker that
   // writes itself from the browser's region names. See
-  // page/country-flags.js, which is one third of a single artefact.
-  import { buildCountries, paintFlag } from './page/country-flags.js';
+  // page/country-flags.ts, which is one third of a single artefact.
+  // The one door to the backend: the URL, the publishable key, the abort
+  // timer and the session token every call carries. See
+  // page/supabase-client.ts, which throws and never decides what to do next.
+  import {
+    authorizationHeader, sessionToken, setSessionToken, supabaseConfigured,
+    supabaseRpc, SUPABASE_KEY, SUPABASE_URL,
+  } from './page/build/supabase-client.js';
+  import { buildCountries, paintFlag } from './page/build/country-flags.js';
   // The hidden brief behind the "P" in PITCH, wired at boot and otherwise
-  // invisible to the rest of the page. See page/easter-egg-terminal.js.
-  import { initEasterEggTerminal } from './page/easter-egg-terminal.js';
+  // invisible to the rest of the page. See page/easter-egg-terminal.ts.
+  import { initEasterEggTerminal } from './page/build/easter-egg-terminal.js';
   import {
     audioHook, audioWake, crowdPulse, crowdSync, crowdVerdict,
     isCrowdOn, isPageSoundOn, setCrowdOn, setPageSound,
     sfxBonus, sfxCrash, sfxEat, sfxFlourish, sfxFullTime, sfxGhostIn, sfxHop,
     sfxKickoff, sfxPortalOpen, sfxSave, sfxTick, sfxTnt, sfxWallSolid,
     sfxWallWarn, sfxZap,
-  } from './page/sound-and-crowd.js';
+  } from './page/build/sound-and-crowd.js';
   // ---- engine events -> effects (bursts, sprites, the death overlay) ----
   // In a versus round a rollback re-runs recent quanta and re-emits their
   // events. State mirrors (food sprite, wall layer) must always apply, but a
@@ -2105,10 +2112,6 @@
   // the scores table has RLS on with no policies and no grants, so this key can
   // reach exactly the two pitch_snake_ functions in supabase/leaderboard.sql and
   // nothing else. Do NOT put a secret key here: that one really is a secret.
-  let SB_URL = 'https://vyqlwoqvsnxyziutmgqz.supabase.co';
-  let SB_KEY = 'sb_publishable_tbNA8JWlc3V9twrk2knWtg__g6-K8lj';   // sb_publishable_: public by design; the table behind it is shut
-  const sbOn = () => !!(SB_URL && SB_KEY);
-  const SB_TIMEOUT = 6000;
 
   let memStandings = [];
   let savedThisRound = false;
@@ -2171,7 +2174,7 @@
   // used to swallow, and only the leaderboard ever wanted it swallowed.
   async function submitSilently() {
     const ticket = roundTicket;
-    if (!sbOn() || !sbToken || !ticket || savedThisRound) return;
+    if (!supabaseConfigured() || !sessionToken() || !ticket || savedThisRound) return;
     // Clearing the ticket is the whole guard: the seed is single use, so a
     // spent one cannot be submitted twice. savedThisRound deliberately stays
     // FALSE, because it means "this round went on the board" and is what the
@@ -2188,7 +2191,7 @@
 
   // reached the world board, or beat the best, while still a guest
   function nudgeDue() {
-    if (!sbOn() || !sbToken || !sbAnon()) return false;
+    if (!supabaseConfigured() || !sessionToken() || !sbAnon()) return false;
     if (nudgedThisSession || nudgeRefusals() >= NUDGE_LIMIT) return false;
     return (savedThisRound && !boardIsLocal) || beatBest;
   }
@@ -2198,31 +2201,6 @@
   // top_scores clamp has always been 100, so this is the page catching up.
   const MAX_ENTRIES = 100;
 
-  // One call shape for both functions. Every call carries its own abort timer,
-  // because a request that never answers must not leave FULL TIME sitting there
-  // with a dead SAVE button. The key goes in both headers with the same value,
-  // which is what a publishable key allows and what a legacy anon key expects.
-  async function sbRpc(fn, args) {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), SB_TIMEOUT);
-    try {
-      const res = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SB_KEY,
-          Authorization: 'Bearer ' + (sbToken || SB_KEY),
-        },
-        body: JSON.stringify(args),
-        signal: ac.signal,
-      });
-      if (!res.ok) throw new Error(fn + ': ' + res.status);
-      return await res.json();
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
   // ---- identity ----
   // Every player is signed in anonymously from first launch, silently: a
   // real user id under every score from day one, and never a login screen
@@ -2231,28 +2209,30 @@
   // Auth is a bonus tier on top of the game, never a dependency: if the CDN
   // is down, the switch is off, or the request fails, everything plays and
   // submits exactly as it did before this existed.
-  let sbToken = null, sbProfile = null, sbAuth = null, sbUser = null;
+  // the token itself lives in page/supabase-client.js, which is the only
+  // thing that reads it on every call; the page keeps the rest
+  let sbProfile = null, sbAuth = null, sbUser = null;
   function sbAnon() { return !!(sbUser && sbUser.is_anonymous); }
   async function bootAuth() {
-    if (!sbOn()) return;
+    if (!supabaseConfigured()) return;
     try {
       const { GoTrueClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/auth-js@2.112.4/+esm');
       sbAuth = new GoTrueClient({
-        url: SB_URL + '/auth/v1',
-        headers: { apikey: SB_KEY },
+        url: SUPABASE_URL + '/auth/v1',
+        headers: { apikey: SUPABASE_KEY },
         storageKey: 'snakeAuth',
         autoRefreshToken: true,
         persistSession: true,
       });
       sbAuth.onAuthStateChange((_ev, session) => {
-        sbToken = session ? session.access_token : null;
+        setSessionToken(session ? session.access_token : null);
         sbUser = session ? session.user : null;
       });
       let { data: { session } } = await sbAuth.getSession();
       if (!session) session = (await sbAuth.signInAnonymously()).data.session;
-      sbToken = session ? session.access_token : null;
+      setSessionToken(session ? session.access_token : null);
       sbUser = session ? session.user : null;
-      if (sbToken) { await syncProfile(); syncBests(); }
+      if (sessionToken()) { await syncProfile(); syncBests(); }
       refreshWho();
       fetchSeed();
     } catch (e) { /* no identity today; the game does not care */ }
@@ -2270,9 +2250,9 @@
   let roundTicket = null;   // the ticket of the round in g, spent by saveScore
   let lastCoins = 0;        // and what it paid for the round itself
   async function fetchSeed() {
-    if (!sbOn() || !sbToken || seedPocket) return;
+    if (!supabaseConfigured() || !sessionToken() || seedPocket) return;
     try {
-      const r = await sbRpc('pitch_snake_issue_seed', {});
+      const r = await supabaseRpc('pitch_snake_issue_seed', {});
       if (r && typeof r.id === 'number' && typeof r.seed === 'number')
         seedPocket = { id: r.id, seed: r.seed >>> 0, at: Date.now() };
     } catch (e) { /* no ticket: the next round saves on this device */ }
@@ -2295,12 +2275,12 @@
     // a replay plus an insert deserves more patience than a plain RPC
     const timer = setTimeout(() => ac.abort(), 12000);
     try {
-      const res = await fetch(SB_URL + '/functions/v1/validate-score', {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/validate-score', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: SB_KEY,
-          Authorization: 'Bearer ' + (sbToken || SB_KEY),
+          apikey: SUPABASE_KEY,
+          Authorization: authorizationHeader(),
         },
         body: JSON.stringify(payload),
         signal: ac.signal,
@@ -2338,11 +2318,11 @@
     // the outfit rides the wallet: fetched beside the profile on every boot
     // and account switch, applied through applyWorn, the one door. Fire and
     // forget: a dead network keeps the cached outfit, never blocks the game.
-    sbRpc('pitch_snake_my_wallet', {})
+    supabaseRpc('pitch_snake_my_wallet', {})
       .then(w => { if (w && typeof w.coins === 'number') takeWallet(w); })
       .catch(() => {});
     try {
-      const prof = await sbRpc('pitch_snake_get_profile', {});
+      const prof = await supabaseRpc('pitch_snake_get_profile', {});
       if (prof && prof.name) {
         sbProfile = prof;
         if (takeTheirs || !vsNameInput.value) {
@@ -2354,7 +2334,7 @@
         return;
       }
       const local = (localStorage.getItem('snakeVsName') || '').trim();
-      if (local) sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: local, p_country: null });
+      if (local) sbProfile = await supabaseRpc('pitch_snake_set_profile', { p_name: local, p_country: null });
       refreshWho();
     } catch (e) { /* same rule: identity never blocks anything */ }
   }
@@ -2373,9 +2353,9 @@
   //
   // Anonymous callers get {} and lose nothing; identity stays a bonus tier.
   async function syncBests() {
-    if (!sbOn() || !sbToken) return;
+    if (!supabaseConfigured() || !sessionToken()) return;
     try {
-      const rows = await sbRpc('pitch_snake_my_bests', {});
+      const rows = await supabaseRpc('pitch_snake_my_bests', {});
       if (!rows || typeof rows !== 'object') return;
       let raised = false;
       for (const m of ['classic', 'speedrun', 'survival']) {
@@ -2394,8 +2374,8 @@
 
   // a name the player just committed anywhere becomes the profile name
   function adoptName(name) {
-    if (!sbToken || !name) return;
-    sbRpc('pitch_snake_set_profile', { p_name: name, p_country: null })
+    if (!sessionToken() || !name) return;
+    supabaseRpc('pitch_snake_set_profile', { p_name: name, p_country: null })
       .then(prof => { sbProfile = prof; refreshWho(); })
       .catch(() => {});
   }
@@ -2447,17 +2427,17 @@
       boardIsLocal = true;
       if (mode !== 'tourney') return loadLocalStandings();
     }
-    if (sbOn()) {
+    if (supabaseConfigured()) {
       try {
         if (mode === 'tourney' && tourney) {
           // the tournament board is best-per-name, so the name IS the row key
-          const rows = await sbRpc('pitch_snake_tournament_top', { p_code: tourney.code, limit_count: MAX_ENTRIES });
+          const rows = await supabaseRpc('pitch_snake_tournament_top', { p_code: tourney.code, limit_count: MAX_ENTRIES });
           boardIsLocal = false;
           return asList(rows)
             .filter(r => r && typeof r.score === 'number')
             .map(r => ({ key: 'n:' + String(r.name || 'YOU'), name: String(r.name || 'YOU'), score: r.score, country: cc(r.country) }));
         }
-        const rows = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: ruleMode() });
+        const rows = await supabaseRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: ruleMode() });
         boardIsLocal = false;
         return asList(rows)
           .filter(r => r && typeof r.score === 'number')
@@ -2491,7 +2471,7 @@
     // seed is only spent once the server touches it); a refusal, or a round
     // with no ticket at all, falls through to this device's own board.
     const ticket = roundTicket;
-    if (sbOn() && sbToken && ticket) {
+    if (supabaseConfigured() && sessionToken() && ticket) {
       try {
         const r = await sbValidate(ticket.id, name);
         lastCoins = (r && r.coins) || 0;
@@ -2503,7 +2483,7 @@
         if (mode === 'tourney' && tourney) throw new Error('tournament declined');
         // declined: keep the round here rather than looping a doomed retry
       }
-    } else if (sbOn() && mode === 'tourney' && tourney) {
+    } else if (supabaseConfigured() && mode === 'tourney' && tourney) {
       // a tournament entry is meaningless off the server; say so honestly
       throw new Error('tournament needs the validator');
     }
@@ -2512,7 +2492,7 @@
     list.push({ key: 'l' + ts, name, score: sc, ts });
     list.sort((a, b) => b.score - a.score || a.ts - b.ts);
     await persistLocalStandings(list.slice(0, MAX_ENTRIES));
-    if (sbOn()) showLocalBoardOnce = true;   // show the board this row lives on
+    if (supabaseConfigured()) showLocalBoardOnce = true;   // show the board this row lives on
     return 'l' + ts;
   }
 
@@ -3060,7 +3040,7 @@
     if (code.length !== 6) { tSetNote('Codes are 6 characters.'); return; }
     tBusy = true; tJoinBtn.disabled = true; tSetNote('');
     try {
-      const rows = await sbRpc('pitch_snake_tournament_get', { p_code: code });
+      const rows = await supabaseRpc('pitch_snake_tournament_get', { p_code: code });
       const t = Array.isArray(rows) ? rows[0] : null;
       if (!t) { tSetNote('No tournament with that code.'); return; }
       tourney = { code: t.code, title: t.title, mode: t.mode, starts_at: t.starts_at, ends_at: t.ends_at };
@@ -3081,7 +3061,7 @@
     const mins = parseInt(tDurChips.querySelector('.active').dataset.mins, 10);
     tBusy = true; tCreateBtn.disabled = true; tSetNote('');
     try {
-      const rows = await sbRpc('pitch_snake_tournament_create', {
+      const rows = await supabaseRpc('pitch_snake_tournament_create', {
         p_title: (tTitle.value || '').trim(),
         p_mode: tmode,
         p_starts_in_minutes: 0,
@@ -3322,7 +3302,7 @@
       return;
     }
     if (vsBusy || vs) return;
-    if (!sbOn()) { vsSetNote('Versus needs the online service.'); return; }
+    if (!supabaseConfigured()) { vsSetNote('Versus needs the online service.'); return; }
     vsBusy = true;
     vsQuickBtn.disabled = vsCreateBtn.disabled = vsJoinBtn.disabled = true;
     vsSetNote(host ? 'Opening the room…' : 'Joining…', true);
@@ -3333,8 +3313,8 @@
     try {
       if (!vsClient) {
         const { RealtimeClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/realtime-js@2.112.3/+esm');
-        vsClient = new RealtimeClient(SB_URL.replace(/^https/, 'wss') + '/realtime/v1', {
-          params: { apikey: SB_KEY },
+        vsClient = new RealtimeClient(SUPABASE_URL.replace(/^https/, 'wss') + '/realtime/v1', {
+          params: { apikey: SUPABASE_KEY },
         });
       }
       const ref = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
@@ -3366,7 +3346,7 @@
         if (vs !== room || !room.up) return;
         if (room.trackDirty && Date.now() - room.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
         if (vsHostNow() && !vsInRound()) {
-          void sbRpc('pitch_snake_room_touch', {
+          void supabaseRpc('pitch_snake_room_touch', {
             p_code: room.code, p_count: Math.min(room.present.length || 1, VS_MAX),
           }).catch(() => {});
         }
@@ -3430,7 +3410,7 @@
   let buildStale = false;
   let buildCheckAt = 0;
   async function checkBuild() {
-    if (buildStale || !SB_URL) return false;              // already known, or local dev
+    if (buildStale || !SUPABASE_URL) return false;              // already known, or local dev
     if (Date.now() - buildCheckAt < 30000) return false;  // never hammer the origin
     buildCheckAt = Date.now();
     try {
@@ -3693,7 +3673,7 @@
     room.starting = true;
     vsRefreshPanel();
     try {
-      await sbRpc('pitch_snake_room_start', { p_code: room.code, p_roster: roster, p_ev: ENGINE_VERSION });
+      await supabaseRpc('pitch_snake_room_start', { p_code: room.code, p_roster: roster, p_ev: ENGINE_VERSION });
     } catch (e) {
       if (vs === room && !vsInRound() && String(e && e.message).includes(': 404')) {
         const m = {
@@ -3815,10 +3795,10 @@
     return document.documentElement.classList.contains('touch') ? 'web-mobile' : 'web-desktop';
   }
   function reportNet(kind, extra) {
-    if (!sbOn() || !sbToken) return;
+    if (!supabaseConfigured() || !sessionToken()) return;
     const st = (vs && vs.session && vs.session.stats) || null;
     try {
-      sbRpc('pitch_snake_log_net_event', {
+      supabaseRpc('pitch_snake_log_net_event', {
         p_kind: kind,
         p_code: (vs && vs.code) || null,
         p_reason: (extra && extra.reason) || null,
@@ -3844,10 +3824,10 @@
   // identity is: a room that cannot reach it plays the same round and simply
   // is not rated. Nothing here may ever delay a whistle.
   function vsTakeSeat() {
-    if (!sbOn() || !sbToken || !vs || !(vs.myIdx >= 0) || !vs.code) return;
+    if (!supabaseConfigured() || !sessionToken() || !vs || !(vs.myIdx >= 0) || !vs.code) return;
     const seat = vs.myIdx;
     const who = (vs.roster && vs.roster[seat] && vs.roster[seat].name) || '';
-    void sbRpc('pitch_snake_take_seat', {
+    void supabaseRpc('pitch_snake_take_seat', {
       p_code: vs.code, p_start_n: vs.startN, p_seat: seat, p_name: who,
     }).catch(() => {});
   }
@@ -3857,7 +3837,7 @@
   // rates the log a majority of the seats agree on, so one peer fabricating a
   // round it wins is outvoted by the room it claims to have played in.
   function vsReportRound() {
-    if (!sbOn() || !sbToken || !vs || !vs.code || !g || !g.log) return;
+    if (!supabaseConfigured() || !sessionToken() || !vs || !vs.code || !g || !g.log) return;
     void sbValidatePost({ room: { code: vs.code, n: vs.startN }, log: g.log })
       .catch(() => {});
   }
@@ -3877,7 +3857,7 @@
       // the room moved on: a rematch, a new room, or the tab left versus
       if (vs !== room || !vs.over || vs.startN !== startN) return;
       let rows;
-      try { rows = await sbRpc('pitch_snake_round_ratings', { p_code: code, p_start_n: startN }); }
+      try { rows = await supabaseRpc('pitch_snake_round_ratings', { p_code: code, p_start_n: startN }); }
       catch (e) { return; }
       if (!Array.isArray(rows) || !rows.length) continue;   // not sealed yet
       if (vs !== room || !vs.over || vs.startN !== startN) return;
@@ -3939,7 +3919,7 @@
     // best-effort: the first report reopens the row for the rematch and
     // credits the win server-side; a page without the rooms tier just
     // misses, harmlessly
-    void sbRpc('pitch_snake_room_finish', {
+    void supabaseRpc('pitch_snake_room_finish', {
       p_code: vs.code,
       p_results: { scores: rows.map(r => ({ n: r.name, s: r.score })), clinched },
     }).catch(() => {});
@@ -4082,7 +4062,7 @@
     if (vs || vsBusy || !vsTypedName()) return;
     let code = null;
     try {
-      const r = await sbRpc('pitch_snake_room_create', {});
+      const r = await supabaseRpc('pitch_snake_room_create', {});
       if (typeof r === 'string' && r.length === 5) code = r;
     } catch (e) {}
     void vsEnter(code || vsMakeCode(), true);
@@ -4109,7 +4089,7 @@
     if (vs || vsBusy || !vsTypedName()) return;
     vsSetNote('Looking for a room…', true);
     try {
-      const rows = await sbRpc('pitch_snake_room_quickmatch', { p_region: vsRegion() });
+      const rows = await supabaseRpc('pitch_snake_room_quickmatch', { p_region: vsRegion() });
       const r = Array.isArray(rows) ? rows[0] : null;
       if (r && typeof r.code === 'string') { void vsEnter(r.code, !!r.created); return; }
     } catch (e) {}
@@ -4198,11 +4178,11 @@
   let railLadder;    // undefined = not asked, null = in flight, false = failed
   function fillVsRail() {
     let r = railLadder;
-    if (r === undefined && sbOn() && overlay.clientWidth >= 540) {
+    if (r === undefined && supabaseConfigured() && overlay.clientWidth >= 540) {
       railLadder = null;
       Promise.all([
-        sbRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
-        sbToken ? sbRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
+        supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
+        sessionToken() ? supabaseRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
       ]).then(([board, mine]) => { railLadder = { board: asList(board), mine }; })
         .catch(() => { railLadder = false; })
         .then(() => {
@@ -4244,8 +4224,8 @@
     let board = null, mine = null;
     try {
       [board, mine] = await Promise.all([
-        sbRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
-        sbToken ? sbRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
+        supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: 10 }),
+        sessionToken() ? supabaseRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
       ]);
     } catch (e) { /* offline, or no board tier: say so below */ }
     if (gen !== ladderGen) return;
@@ -4818,9 +4798,9 @@
     profName.value = (sbProfile && sbProfile.name) || localName;
     profCountry.value = (sbProfile && sbProfile.country) || '';
     paintFlag(profFlag, cc(profCountry.value));
-    profCountryRow.style.display = sbToken ? '' : 'none';
-    profAuthAnon.hidden = !(sbToken && sbAnon());
-    profAuthOn.hidden = !(sbToken && sbUser && !sbUser.is_anonymous);
+    profCountryRow.style.display = sessionToken() ? '' : 'none';
+    profAuthAnon.hidden = !(sessionToken() && sbAnon());
+    profAuthOn.hidden = !(sessionToken() && sbUser && !sbUser.is_anonymous);
     if (!profAuthOn.hidden) profWhoEmail.textContent = sbUser.email || '';
     // the sheet names what it is for: an offer while a guest, a settings
     // panel once there is an account behind it
@@ -4984,7 +4964,7 @@
     try {
       let w;
       if (!owned) {
-        w = await sbRpc('pitch_snake_buy_item', { p_item: item.id });
+        w = await supabaseRpc('pitch_snake_buy_item', { p_item: item.id });
         // owned and paid is real the moment the buy answers, even if the
         // wear below has a bad day
         if (w && !w.error && typeof w.coins === 'number') takeWallet(w);
@@ -4993,7 +4973,7 @@
         // wearing: a fresh buy goes straight on; a WEARING tap comes off
         const off = owned && worn;
         const id = off ? '' : item.id;
-        w = await sbRpc('pitch_snake_equip',
+        w = await supabaseRpc('pitch_snake_equip',
           item.kind === 'skin' ? { p_skin: id, p_hat: null } : { p_skin: null, p_hat: id });
       }
       if (w && w.error) {
@@ -5013,15 +4993,15 @@
     shopNote.hidden = true;
     armedBuy = null;
     renderShop();
-    if (!sbOn()) {
+    if (!supabaseConfigured()) {
       shopNote.textContent = 'The shop needs the world board configured.';
       shopNote.hidden = false;
       return;
     }
     try {
       const [cat, w] = await Promise.all([
-        shopCatalog ? Promise.resolve(shopCatalog) : sbRpc('pitch_snake_shop', {}),
-        sbRpc('pitch_snake_my_wallet', {}),
+        shopCatalog ? Promise.resolve(shopCatalog) : supabaseRpc('pitch_snake_shop', {}),
+        supabaseRpc('pitch_snake_my_wallet', {}),
       ]);
       if (Array.isArray(cat) && cat.length) shopCatalog = cat;
       if (w && typeof w.coins === 'number') takeWallet(w);
@@ -5092,9 +5072,9 @@
       li.className = 'empty';
       li.textContent = '\u2026';
       boardsList.appendChild(li);
-      if (sbOn()) {
+      if (supabaseConfigured()) {
         try {
-          const got = await sbRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm });
+          const got = await supabaseRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm });
           rows = asList(got).filter(r => r && typeof r.score === 'number');
           railTops[rm] = rows;
         } catch (e) { rows = null; }
@@ -5216,12 +5196,12 @@
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
     vsNameInput.value = name;
     vsEditingName = false;
-    if (sbToken) {
+    if (sessionToken()) {
       profSaveBtn.disabled = true;
       profSay('Saving…', true);
       try {
         // '' is the NO FLAG choice and clears the flag; a code sets it
-        sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: name, p_country: profCountry.value });
+        sbProfile = await supabaseRpc('pitch_snake_set_profile', { p_name: name, p_country: profCountry.value });
         profSay('Saved.', true);
         if (claimWanted && sbProfile && sbProfile.name && state === 'dead' && !savedThisRound) {
           claimWanted = false;
@@ -5272,7 +5252,7 @@
   async function profSend() {
     const email = (profEmail.value || '').trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) { profSay('Enter a real email address.'); return; }
-    if (!sbAuth || !sbToken) { profSay('Sign-in is not reachable right now.'); return; }
+    if (!sbAuth || !sessionToken()) { profSay('Sign-in is not reachable right now.'); return; }
     profSendBtn.disabled = true;
     profSay('Sending the code…', true);
     try {
@@ -5311,7 +5291,7 @@
         type: otpKind === 'link' ? 'email_change' : 'email',
       });
       if (error) throw error;
-      if (data && data.session) { sbToken = data.session.access_token; sbUser = data.session.user || sbUser; }
+      if (data && data.session) { setSessionToken(data.session.access_token); sbUser = data.session.user || sbUser; }
       else if (data && data.user) sbUser = data.user;
       const switched = otpKind === 'signin';
       if (switched) sbProfile = null;   // that account's own name outranks this device's
@@ -5344,12 +5324,12 @@
     profSignOut.disabled = true;
     profSay('Signing out…', true);
     try { await sbAuth.signOut(); } catch (e) {}
-    sbToken = null; sbUser = null; sbProfile = null;
+    setSessionToken(null); sbUser = null; sbProfile = null;
     // the invisible tier comes straight back: a fresh anonymous identity,
     // so scores keep carrying an id even for a signed-out device
     try {
       const { data } = await sbAuth.signInAnonymously();
-      if (data && data.session) { sbToken = data.session.access_token; sbUser = data.session.user; }
+      if (data && data.session) { setSessionToken(data.session.access_token); sbUser = data.session.user; }
       await syncProfile();
     } catch (e) {}
     seedPocket = null;                  // tickets belong to an identity; remint

@@ -15,6 +15,7 @@
  *
  * @module
  */
+import { mustGetElement } from './dom.js';
 
 /**
  * Wire the easter egg to its own markup. Call once at boot.
@@ -22,13 +23,12 @@
  * Everything it needs is already in the page; nothing is returned, because
  * nothing outside this file opens or closes the terminal but the reader.
  *
- * @returns {void}
  */
-export function initEasterEggTerminal() {
-  const pEgg = document.getElementById('pEgg');
-  const terminal = document.getElementById('terminal');
-  const termBody = document.getElementById('termBody');
-  const termClose = document.getElementById('termClose');
+export function initEasterEggTerminal(): void {
+  const pEgg = mustGetElement('pEgg');
+  const terminal = mustGetElement('terminal');
+  const termBody = mustGetElement('termBody');
+  const termClose = mustGetElement('termClose');
   const TERM_TEXT =
 `$ cat interview/top-10-at-scale.md
 
@@ -45,7 +45,8 @@ At the end of a round:
 Design how you would store the scores and serve all of this.
 
 $ `;
-  let termTimer = null;
+  // the browser's timer id, not node's: this only ever runs in a page
+  let termTimer: number | undefined;
   function openTerminal() {
     terminal.hidden = false;
     clearInterval(termTimer);

@@ -18,7 +18,6 @@
  *
  * @module
  */
-
 // A regional-indicator pair is only a flag if the platform ships flag
 // glyphs, and Windows never has: there the pair degrades to two letters,
 // so the same board looked different depending on who was reading it. The
@@ -40,11 +39,12 @@ const FLAG_COLS = 16, FLAG_W = 20, FLAG_H = 15;
 // 'GU'+'GW' long before Uganda's own slot), so a search would answer with
 // somebody else's flag or, once guarded against that, with none at all.
 const FLAG_AT = new Map();
-for (let i = 0; i < FLAG_CODES.length; i += 2) FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
+for (let i = 0; i < FLAG_CODES.length; i += 2)
+    FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
 // -1 for anything the sprite does not carry, which callers read as "no flag"
 function flagIndex(code) {
-  const i = code ? FLAG_AT.get(code) : undefined;
-  return i === undefined ? -1 : i;
+    const i = code ? FLAG_AT.get(code) : undefined;
+    return i === undefined ? -1 : i;
 }
 /**
  * Paint one element as a single flag.
@@ -52,19 +52,21 @@ function flagIndex(code) {
  * Nothing is allocated per call and the sprite is one request for the whole
  * set, which is why every board and roster can afford to call this per row.
  *
- * @param {HTMLElement} el - the element to paint; it carries the `flag`
+ * @param el - the element to paint; it carries the `flag`
  *   class, whose CSS supplies the sprite as a background image.
- * @param {string|null|undefined} code - an ISO-3166 alpha-2 code, uppercase.
+ * @param code - an ISO-3166 alpha-2 code, uppercase.
  *   Anything the sprite does not carry hides the element instead.
- * @returns {void}
  */
 export function paintFlag(el, code) {
-  const i = flagIndex(code);
-  if (i < 0) { el.style.backgroundImage = ''; el.hidden = true; return; }
-  el.hidden = false;
-  el.style.backgroundPosition = `${-(i % FLAG_COLS) * FLAG_W}px ${-((i / FLAG_COLS) | 0) * FLAG_H}px`;
+    const i = flagIndex(code);
+    if (i < 0) {
+        el.style.backgroundImage = '';
+        el.hidden = true;
+        return;
+    }
+    el.hidden = false;
+    el.style.backgroundPosition = `${-(i % FLAG_COLS) * FLAG_W}px ${-((i / FLAG_COLS) | 0) * FLAG_H}px`;
 }
-
 // The country list writes itself: probe every two-letter code against the
 // browser's own region names and keep the ones that mean somewhere, minus
 // CLDR's handful of non-countries. No 250-line list to hand-maintain, and
@@ -75,7 +77,7 @@ export function paintFlag(el, code) {
 // picker was quietly offering six countries twice. CQ (Sark) goes too: it
 // resolves, but no flag set carries it, and an entry that can never show a
 // flag is worse than no entry.
-const NOT_COUNTRIES = new Set(['AC','AN','BU','CP','CQ','CS','DD','DG','DY','EA','EU','EZ','FX','HV','IC','NH','NT','QO','RH','SU','TA','TP','UK','UN','VD','XA','XB','YD','YU','ZR','ZZ']);
+const NOT_COUNTRIES = new Set(['AC', 'AN', 'BU', 'CP', 'CQ', 'CS', 'DD', 'DG', 'DY', 'EA', 'EU', 'EZ', 'FX', 'HV', 'IC', 'NH', 'NT', 'QO', 'RH', 'SU', 'TA', 'TP', 'UK', 'UN', 'VD', 'XA', 'XB', 'YD', 'YU', 'ZR', 'ZZ']);
 // keyed by element, not a single flag: more than one picker may exist
 const BUILT = new WeakSet();
 /**
@@ -84,28 +86,42 @@ const BUILT = new WeakSet();
  * Idempotent per element: a second call for the same select does nothing, so
  * a sheet that opens repeatedly does not stack duplicates.
  *
- * @param {HTMLSelectElement} select - the picker to append options to.
- * @returns {void}
+ * @param select - the picker to append options to.
  */
 export function buildCountries(select) {
-  if (BUILT.has(select)) return;
-  BUILT.add(select);
-  let dn;
-  try { dn = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) { return; }
-  const opts = [];
-  for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
-    const code = String.fromCharCode(a, b);
-    if (NOT_COUNTRIES.has(code)) continue;
-    let label;
-    try { label = dn.of(code); } catch (e) { continue; }
-    if (!label || label === code) continue;
-    opts.push([code, label]);
-  }
-  opts.sort((x, y) => x[1].localeCompare(y[1]));
-  for (const [code, label] of opts) {
-    const o = document.createElement('option');
-    o.value = code;
-    o.textContent = label;
-    select.appendChild(o);
-  }
+    if (BUILT.has(select))
+        return;
+    BUILT.add(select);
+    let dn;
+    try {
+        dn = new Intl.DisplayNames(['en'], { type: 'region' });
+    }
+    catch (e) {
+        return;
+    }
+    const opts = [];
+    for (let a = 65; a <= 90; a++)
+        for (let b = 65; b <= 90; b++) {
+            const code = String.fromCharCode(a, b);
+            if (NOT_COUNTRIES.has(code))
+                continue;
+            let label;
+            try {
+                label = dn.of(code);
+            }
+            catch (e) {
+                continue;
+            }
+            if (!label || label === code)
+                continue;
+            opts.push([code, label]);
+        }
+    opts.sort((x, y) => x[1].localeCompare(y[1]));
+    for (const [code, label] of opts) {
+        const o = document.createElement('option');
+        o.value = code;
+        o.textContent = label;
+        select.appendChild(o);
+    }
 }
+//# sourceMappingURL=country-flags.js.map

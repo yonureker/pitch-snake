@@ -1,0 +1,26 @@
+{
+  "//": "The page's browser modules. Sources are the .ts files here; tsc emits build/*.js, which is what index.html imports and what GitHub Pages serves. Same strict flags as apps/mobile/tsconfig.json, so a bug the app's compiler would catch is caught here too.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "outDir": "./build",
+    "rootDir": ".",
+    "sourceMap": true,
+    "removeComments": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true
+  },
+  "include": ["*.ts"],
+  "exclude": ["build"]
+}

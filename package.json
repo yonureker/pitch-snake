@@ -10,7 +10,9 @@
     "mobile": "npm --workspace apps/mobile run start",
     "install-hooks": "sh scripts/install-hooks.sh",
     "lint": "npm --workspace apps/mobile run lint",
-    "typecheck": "npm --workspace apps/mobile run typecheck"
+    "typecheck": "npm --workspace apps/mobile run typecheck",
+    "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
+    "build:page": "tsc -p page/tsconfig.json"
   },
   "overrides": {
     "eslint-plugin-react-hooks": "^7.1.1"
