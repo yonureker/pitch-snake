@@ -1,4 +1,8 @@
 node_modules/
+
+# tsc's staging output for the page. The SHIPPED modules are page/build/*.js,
+# which scripts/minify-page.mjs writes from this; only that is committed.
+page/.tsc/
 .expo/
 dist/
 *.log

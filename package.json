@@ -13,7 +13,7 @@
     "typecheck": "npm --workspace apps/mobile run typecheck",
     "lint:page": "eslint page",
     "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
-    "build:page": "tsc -p page/tsconfig.json",
+    "build:page": "tsc -p page/tsconfig.json && node scripts/minify-page.mjs",
     "stamp": "node scripts/stamp-assets.mjs",
     "stamp:check": "node scripts/stamp-assets.mjs --check"
   },
@@ -21,6 +21,7 @@
     "eslint-plugin-react-hooks": "^7.1.1"
   },
   "devDependencies": {
-    "@supabase/realtime-js": "^2.112.3"
+    "@supabase/realtime-js": "^2.112.3",
+    "terser": "^5.50.0"
   }
 }

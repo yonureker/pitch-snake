@@ -1,11 +1,11 @@
 {
-  "//": "The page's browser modules. Sources are the .ts files here; tsc emits build/*.js, which is what index.html imports and what GitHub Pages serves. Same strict flags as apps/mobile/tsconfig.json, so a bug the app's compiler would catch is caught here too.",
+  "//": "The page's browser modules. Sources are the .ts files here. tsc emits to .tsc/, a gitignored staging tree, and scripts/minify-page.mjs minifies that into build/*.js, which is what index.html imports and what GitHub Pages serves. Two stages rather than one so the build is never fed its own output: page/build is produced from source every time, which is what keeps the committed-output drift check meaningful. Same strict flags as apps/mobile/tsconfig.json, so a bug the app's compiler would catch is caught here too.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "./build",
+    "outDir": "./.tsc",
     "rootDir": ".",
     "sourceMap": true,
     "removeComments": false,
@@ -22,5 +22,5 @@
     "noImplicitReturns": true
   },
   "include": ["*.ts"],
-  "exclude": ["build"]
+  "exclude": ["build", ".tsc"]
 }

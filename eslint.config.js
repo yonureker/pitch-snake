@@ -13,9 +13,12 @@
 // covers the other half, which had no linter at all until 2026-09-07.
 //
 // Type-aware rules need a program, so the parser is pointed at
-// page/tsconfig.json. page/build is ignored: it is tsc's own emit, it is not
-// in that tsconfig's `include`, and linting a compiler's output tells you
-// nothing about the source that produced it.
+// page/tsconfig.json. Both generated trees are ignored, page/.tsc (tsc's own
+// emit) and page/build (that emit minified): neither is in that tsconfig's
+// `include`, and linting a compiler's output tells you nothing about the
+// source that produced it. The staging tree matters here because tsc carries
+// the sources' eslint-disable comments through into it, and a disable for a
+// type-aware rule is an error in a file no type-aware rule runs on.
 const { defineConfig } = require('eslint/config');
 const tseslint = require('typescript-eslint');
 const jsdocPlugin = require('eslint-plugin-jsdoc');
@@ -54,7 +57,8 @@ module.exports = defineConfig([
   {
     // Generated, third-party, or separately-linted trees.
     ignores: [
-      'page/build/**', // tsc's own emit; the .ts source is what gets linted
+      'page/.tsc/**', // tsc's staging emit; the .ts source is what gets linted
+      'page/build/**', // that emit, minified; the .ts source is what gets linted
       'node_modules/**',
       'apps/**', // its own workspace, its own config, its own script
       'packages/**', // the engine is plain JS on purpose: three runtimes import it raw
