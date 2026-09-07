@@ -1204,7 +1204,7 @@
      in every theme, and var(--text) hovered it to near-black once */
   .acct-later:hover { color: #e9e0cd; }
   .standings {
-    list-style: none; margin: 2px 0; padding: 10px 14px; width: 230px;
+    list-style: none; margin: 2px 0; padding: 10px 12px; width: 268px;
     background: rgba(33,30,26,0.5); border-radius: 8px;
     border: 1px solid rgba(194,162,90,0.4);
   }
@@ -1236,7 +1236,7 @@
   .standings li .rk { color: var(--gold); width: 20px; text-align: right; }
   .standings li .nm { flex: 1; text-align: left; }
   .standings li .sc { font-family: 'Anton', sans-serif; }
-  .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 42px; text-align: right; }
+  .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 32px; text-align: right; }
   /* ---- the wide result screen ----
      The overlay is always SQUARE, because it covers the square arena: 656px
      on a laptop, 836 at 1080p, 1196 at 1440p, 323 on a phone. So the question
@@ -1410,14 +1410,15 @@
      five-player room fit with nothing to scroll for at all. */
   .standings.dense { padding: 7px 14px; }
   .standings.dense li { padding: 1px 0; }
-  /* The rating a rated round moved, and which way. It takes the SERIES
-     COLUMN'S place rather than adding a fifth or wrapping to a second line:
-     the board is 230px, and a five-player room on a phone has no room for
-     either. Losing the trophy there costs almost nothing, because a rated
-     round is a quick-match room, which means strangers, which means a
-     running series against them is a tally of one. */
+  /* The rating a rated round moved, and which way. It used to TAKE the
+     series column, on the reasoning that a 230px board had room for one of
+     them; the owner watched the trophies appear and then vanish as the
+     rating arrived and asked for both, which is fair, because they answer
+     different questions: the trophy is this room's running series, the
+     rating is the ladder. So the board buys the width instead, and both
+     columns are tight enough that five players still fit. */
   .standings li .rt {
-    min-width: 66px; text-align: right; white-space: nowrap;
+    min-width: 62px; text-align: right; white-space: nowrap;
     font-size: 11px; font-weight: 700; color: #b7ac93; letter-spacing: 0.3px;
   }
   .standings li .rt .up   { color: #6fbf73; }
@@ -6013,9 +6014,8 @@
     for (const row of rows) {
       const li = standingsEl.querySelector('[data-seat="' + row.seat + '"]');
       if (!li || typeof row.rating !== 'number' || li.querySelector('.rt')) continue;
-      // the ladder takes the series column: see the note on .rt
-      const vw = li.querySelector('.vw');
-      if (vw) vw.remove();
+      // both columns stand: the trophy is the series, the rating is the
+      // ladder, and one is not the other's replacement (see the note on .rt)
       const rt = document.createElement('span');
       rt.className = 'rt';
       rt.append(String(row.rating));
@@ -6074,7 +6074,7 @@
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = row.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = row.score;
-      const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆 ' + vsWinsOf(row.name);
+      const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆' + vsWinsOf(row.name);
       li.append(rk, nm, sc, vw);
       standingsEl.appendChild(li);
     });
@@ -6185,7 +6185,7 @@
       nm.textContent = p.name + (i === 0 ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
       li.append(rk, fl, nm);
       if (seriesOn) {
-        const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆 ' + vsWinsOf(p.name);
+        const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆' + vsWinsOf(p.name);
         li.append(vw);
       }
       vsRosterEl.appendChild(li);

@@ -233,6 +233,7 @@ declare
   s         record;
   agreed    bigint;
   agree_n   integer;
+  sent_n    integer;
   n         integer;
   i         integer;
   j         integer;
@@ -268,7 +269,19 @@ begin
   group by sh.log_hash
   order by count(*) desc, sh.log_hash
   limit 1;
-  if agreed is null or agree_n < 2 then
+  -- how many seats reported AT ALL, which is a different question from how
+  -- many agreed, and the difference is what tells a no-show from a dispute
+  select count(*) into sent_n
+  from public.pitch_snake_seats sh
+  where sh.round_id = p_round and sh.log_hash is not null;
+
+  if agreed is null then
+    update public.pitch_snake_rounds set sealed_at = now() where id = p_round;
+    return 0;
+  end if;
+  if sent_n >= 2 and agree_n < 2 then
+    -- two or more reports and no majority: a forgery or a genuine desync.
+    -- Nobody's word wins that argument, so the round is sealed unrated.
     update public.pitch_snake_rounds set sealed_at = now() where id = p_round;
     return 0;
   end if;
@@ -283,29 +296,59 @@ begin
     and sh.mode is not null and sh.placings is not null
   order by sh.seat
   limit 1;
-  if agreed_mode is null or agreed_placings is null then
+  if agreed_mode is null then
+    update public.pitch_snake_rounds set sealed_at = now() where id = p_round;
+    return 0;
+  end if;
+  if sent_n >= 2 and agreed_placings is null then
     update public.pitch_snake_rounds set sealed_at = now() where id = p_round;
     return 0;
   end if;
 
-  -- The validator carries `place` on each entry rather than leaving it to be
-  -- read off the array position, because two snakes can finish level and a
-  -- draw has to rate as one; ordinality is the fallback for a placings blob
-  -- written before that was true. Equal places take the 0.5 branch below.
-  for s in
-    select sh.seat, sh.user_id,
-           (select coalesce((pl.v->>'place')::integer, pl.ord::integer)
-            from jsonb_array_elements(agreed_placings) with ordinality pl(v, ord)
-            where (pl.v->>'seat')::integer = sh.seat) as place
-    from public.pitch_snake_seats sh
-    where sh.round_id = p_round and sh.log_hash = agreed
-    order by sh.seat
-  loop
-    if s.place is null then continue; end if;      -- a seat the round never had
-    seats  := seats  || s.seat;
-    uids   := uids   || s.user_id;
-    places := places || s.place;
-  end loop;
+  -- THE NO-SHOW RULE. A seat that never reports is not a seat that escapes:
+  -- it is the disconnect the ladder always said it rated, and leaving the
+  -- room while losing must not be cheaper than playing the round out. With a
+  -- single witness the log's own placings cannot be trusted (its author is
+  -- the only one who saw it), so they are not used: the only fact taken is
+  -- the one the SERVER can check for itself, that this seat submitted a log
+  -- which replayed against the round's own seed and the others did not.
+  -- Everyone who reported places ahead of everyone who did not, and the
+  -- absentees tie with each other, which is the 0.5 branch below.
+  if sent_n = 1 then
+    -- nothing was agreed, so the round records no agreed placings: what it
+    -- keeps is the hash of the only log anyone sent and the order above
+    agreed_placings := null;
+    for s in
+      select sh.seat, sh.user_id,
+             (case when sh.log_hash is not null then 1 else 2 end) as place
+      from public.pitch_snake_seats sh
+      where sh.round_id = p_round
+      order by sh.seat
+    loop
+      seats  := seats  || s.seat;
+      uids   := uids   || s.user_id;
+      places := places || s.place;
+    end loop;
+  else
+    -- The validator carries `place` on each entry rather than leaving it to
+    -- be read off the array position, because two snakes can finish level and
+    -- a draw has to rate as one; ordinality is the fallback for a placings
+    -- blob written before that was true. Equal places take the 0.5 branch.
+    for s in
+      select sh.seat, sh.user_id,
+             (select coalesce((pl.v->>'place')::integer, pl.ord::integer)
+              from jsonb_array_elements(agreed_placings) with ordinality pl(v, ord)
+              where (pl.v->>'seat')::integer = sh.seat) as place
+      from public.pitch_snake_seats sh
+      where sh.round_id = p_round and sh.log_hash = agreed
+      order by sh.seat
+    loop
+      if s.place is null then continue; end if;    -- a seat the round never had
+      seats  := seats  || s.seat;
+      uids   := uids   || s.user_id;
+      places := places || s.place;
+    end loop;
+  end if;
 
   n := coalesce(array_length(uids, 1), 0);
   if n < 2 then
