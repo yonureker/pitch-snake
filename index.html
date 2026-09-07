@@ -1486,7 +1486,25 @@
   html.touchless .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
   .sleeping { opacity: 0.42; pointer-events: none; }
   
-  @media (max-width: 759.98px) {
+  /* Narrow desktop windows: the row SHRINKS before it ever breaks. The
+     title scales down from its 52px cap, the scoreboard tightens, and the
+     pills compact, which holds one header row to about 520px of window;
+     only below that, where no honest sizing fits three groups, does the
+     cluster wrap to its own line as the floor. */
+  @media (max-width: 899.98px) {
+    html.touchless header { gap: 12px; }
+    html.touchless header h1 { font-size: clamp(26px, 5.2vw, 52px); text-shadow: 3px 3px 0 var(--gold); }
+    html.touchless .scores { min-width: 0; gap: 8px; }
+    html.touchless .scores .val { font-size: 38px; }
+    html.touchless .scores .clock { font-size: 24px; }
+    html.touchless .scores .label { font-size: 11px; letter-spacing: 1.5px; margin-top: -2px; }
+    html.touchless .scores .best { font-size: 12px; }
+    html.touchless .hdr-cluster { gap: 6px; }
+    html.touchless .hdr-cluster .gear.who { padding: 0 10px; font-size: 11px; letter-spacing: 1px; }
+    html.touchless .hdr-tray .gear { width: 34px; }
+    html.touchless .hdr-tray .gear.purse { padding: 0 9px; }
+  }
+  @media (max-width: 519.98px) {
     html.touchless header { flex-wrap: wrap; row-gap: 10px; }
     html.touchless .hdr-cluster { order: 3; flex-basis: 100%; }
   }
