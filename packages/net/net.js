@@ -53,7 +53,15 @@ export const SNAP_SPARSE = 32;
 export const SNAP_DENSE_Q = 128;     // how far back the dense grid is kept
 export const SNAP_HORIZON_Q = 3072;  // total rollback reach in quanta (~30s), as before
 export const STALL_AT = 250;      // quanta a live peer may lag before we hold the sim
-export const BEAT_MS = 500;       // heartbeat cadence: loss and clock signals twice a second
+// How long the wire may stay SILENT before we beat. Not "how often we beat":
+// a beat carries three things, and an input already carries two of them, since
+// acceptInput reads a peer's clock off msg.q and its seq high-water off msg.s,
+// and any message at all refreshes lastHeard. So a player who is turning is
+// already announcing themselves, and a second beat on top is duplicated
+// postage. Measured over a five-player minute of real play, beats were 585 of
+// 772 messages: 76% of everything on the wire, on a service that bills by the
+// message and fans each one out to every peer in the room.
+export const BEAT_MS = 1000;
 // A LIVE peer's fresh silence holds the room (their inputs may be in
 // flight); silence older than this is a vanished client, and the room plays
 // on with their snake on the rails. Dead peers never hold the room at all.
@@ -94,7 +102,21 @@ export const SLEW_HARD = 100;     // quanta
 // covers a dropped one comfortably; past it the client is not merely unlucky
 // and the leash stops crediting them with progress they never reported.
 export const FRESH_MS = 2000;
-export const CATCHUP_MAX = 3000;  // ms one frame() may simulate before giving up
+// How far behind the room's clock this client may fall and still be allowed
+// back in. It used to be 3000, and three seconds is one notification: a phone
+// that backgrounds the tab stops rAF, and the player came back to CONNECTION
+// LOST for the crime of reading a message. Their snake had gone on the rails
+// and probably died, which the room already handles, but being told the
+// connection broke when it did not is a lie, and it fired constantly on mobile.
+// Fifteen seconds covers a glance away. Past it we still give up, because a
+// client that far behind is re-simulating more than the rollback horizon holds.
+export const CATCHUP_MAX = 15000;
+// ...but catching fifteen seconds up inside ONE frame would freeze the tab for
+// as long as the sim takes (with a ghost pack, seconds). So a single pump may
+// only close this much of the gap and the rest waits for the next frame: acc
+// carries the remainder, so the catch-up simply spreads over a handful of
+// frames instead of one long stall. Rule 2's clamp, in the netcode's dialect.
+export const CATCHUP_STEP_MS = 1200;
 export const NEED_COOLDOWN = 300; // ms between repeat resend requests per peer
 // Every input carries the sender's previous few inputs as ballast: one lost
 // packet is then healed by the NEXT turn, no resend round trip. Bytes are
@@ -157,7 +179,9 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
   const snaps = [];                                    // {q, s, h?} ascending by q
   const myHist = [];                                   // my own sends, for resend
   let mySeq = 0;
-  let lastNow = -1, acc = 0, lastBeat = -1;
+  let lastNow = -1, acc = 0;
+  // when the last beat went out; every beat carries the settled hash
+  let lastHashBeat = -1e15;
   let deadSince = -1;                                  // when the board first went still
   let ended = false, dead = false;                     // dead = desynced/aborted
   let stalled = false;
@@ -332,6 +356,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
 
   function sendBeat() {
     const s = settledSnap();
+    lastHashBeat = lastNow < 0 ? 0 : lastNow;
     transport.send({
       t: 'b', v: NET_PROTO, rd: roundId, p: myIdx, q: game.quanta, s: mySeq,
       hq: s ? s.q : -1, h: s ? snapHash(s) : 0,
@@ -342,7 +367,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
   // press that arrives between frames; lastNow keeps the two from ever
   // double-counting the same wall time.
   function pump(nowMs) {
-    if (lastNow < 0) { lastNow = nowMs; lastBeat = nowMs; }
+    if (lastNow < 0) lastNow = nowMs;
     // Apply the frame's coalesced rollback before advancing: every input that
     // arrived since the last pump is already in the table, so one restore+resim
     // to the earliest of them corrects the timeline that this frame will draw.
@@ -428,7 +453,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       const rate = lead > SLEW_HARD ? 1.15 : lead > SLEW_BAND ? 1.05
                  : lead < -SLEW_HARD ? 0.85 : lead < -SLEW_BAND ? 0.95 : 1;
       acc += dt * rate;
-      let guard = (CATCHUP_MAX / SIM_DT) | 0;
+      let guard = (CATCHUP_STEP_MS / SIM_DT) | 0;   // spread a big catch-up over frames
       while (acc >= SIM_DT && game.alive && !dead && guard-- > 0) {
         stepOne();
         acc -= SIM_DT;
@@ -572,7 +597,14 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       if (ended) return 'over';
       pump(nowMs);
       if (dead) return 'failed';
-      if (nowMs - lastBeat >= BEAT_MS) { lastBeat = nowMs; sendBeat(); }
+      // A steady cadence, deliberately, even though an input already carries
+      // our clock and our seq. Suppressing the beat while inputs flowed was
+      // tried and reverted: under sustained loss the inputs are exactly what is
+      // NOT arriving, and the beat is the backstop that still tells a peer our
+      // seq high-water so it can ask for what it missed. Starving that path
+      // made a 40% loss burst desync on the settled hash instead of repairing,
+      // and the suite says so. Halving the rate is the safe half of the saving.
+      if (nowMs - lastHashBeat >= BEAT_MS) sendBeat();
       // the ending is provisional for one grace window: a late remote turn
       // can still roll the last quanta back and un-still the board
       if (!game.alive) {
