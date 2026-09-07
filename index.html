@@ -3096,11 +3096,24 @@
   const jerseyCanvas = document.createElement('canvas');
   const jerseyCtx = jerseyCanvas.getContext('2d');
   let jerseyS = 0;
-  const JERSEY_DIGITS = [['010', '110', '010', '010', '111'], ['111', '101', '101', '101', '111']];
-  function buildJerseySprite() {
-    jerseyS = Math.ceil(cell * 0.84);
-    jerseyCanvas.width = jerseyS; jerseyCanvas.height = jerseyS;
-    const c = jerseyCtx, s = jerseyS;
+  // 3x5 pixel glyphs, 0-9, so a jersey can wear any number; the old pair was
+  // just the "1" and "0" of number ten.
+  const JERSEY_GLYPH = {
+    '0': ['111','101','101','101','111'], '1': ['010','110','010','010','111'],
+    '2': ['111','001','111','100','111'], '3': ['111','001','111','001','111'],
+    '4': ['101','101','111','001','001'], '5': ['111','100','111','001','111'],
+    '6': ['111','100','111','101','111'], '7': ['111','001','010','010','010'],
+    '8': ['111','101','111','101','111'], '9': ['111','101','111','001','111'],
+  };
+  // the shirt number each room seat wears, so a five-a-side never fields five
+  // number tens; solo keeps the classic ten, in a room every seat (mine too)
+  // wears its own
+  const VS_NUMS = [10, 7, 9, 4, 8];
+  const jerseySeat = Array.from({ length: 5 }, () => document.createElement('canvas'));
+  // Paint one shirt onto ctx c at size s: red/yellow halves, a rounded edge and
+  // a centred number. Baked at resize, never drawn per frame.
+  function paintJersey(c, s, num) {
+    c.clearRect(0, 0, s, s);
     c.save();
     roundRectOn(c, 0, 0, s, s, s * 0.3);
     c.clip();
@@ -3111,25 +3124,40 @@
     c.strokeStyle = 'rgba(33,30,26,0.55)';
     c.lineWidth = Math.max(1, s * 0.05);
     c.stroke();
+    const digits = String(num).split('');
     const px = Math.max(1, Math.round(s * 0.11));
-    const x0 = Math.round((s - (px * 7)) / 2), y0 = Math.round((s - px * 5) / 2);
+    const w = digits.length * 4 - 1;   // 3px per glyph plus a 1px gap, less the trailing gap
+    const x0 = Math.round((s - px * w) / 2), y0 = Math.round((s - px * 5) / 2);
     const ink = (color, dx, dy) => {
       c.fillStyle = color;
-      for (let d = 0; d < 2; d++)
+      for (let d = 0; d < digits.length; d++) {
+        const g = JERSEY_GLYPH[digits[d]];
+        if (!g) continue;
         for (let r = 0; r < 5; r++)
           for (let k = 0; k < 3; k++)
-            if (JERSEY_DIGITS[d][r][k] === '1')
-              c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
+            if (g[r][k] === '1') c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
+      }
     };
     ink('rgba(33,30,26,0.8)', 1, 1);   // the drop shadow keeps white legible on yellow
     ink('#ffffff', 0, 0);
   }
+  function buildJerseySprite() {
+    jerseyS = Math.ceil(cell * 0.84);
+    jerseyCanvas.width = jerseyS; jerseyCanvas.height = jerseyS;
+    paintJersey(jerseyCtx, jerseyS, 10);           // solo / the classic ten
+    for (let i = 0; i < 5; i++) {                   // one per room seat
+      jerseySeat[i].width = jerseyS; jerseySeat[i].height = jerseyS;
+      paintJersey(jerseySeat[i].getContext('2d'), jerseyS, VS_NUMS[i]);
+    }
+  }
   function drawJersey(pl, lane, prog) {
     if (!jerseyS || pl.snake.length < 2) return;
+    // in a room every seat wears its own number; solo (lane < 0) wears ten
+    const canvas = (lane >= 0 && vsView()) ? jerseySeat[lane] : jerseyCanvas;
     const rp = segRenderPos(pl, 1, prog);
     const x = wrapf(rp.cx + segOffX(lane, 1)) * cell + cell / 2;
     const y = wrapf(rp.cy + segOffY(lane, 1)) * cell + cell / 2;
-    ctx.drawImage(jerseyCanvas, Math.round(x - jerseyS / 2), Math.round(y - jerseyS / 2));
+    ctx.drawImage(canvas, Math.round(x - jerseyS / 2), Math.round(y - jerseyS / 2));
   }
 
   // The wall shape is static for its whole phase, so it is rendered once to an
@@ -3657,31 +3685,34 @@
   }
 
   // one snake segment at continuous cell coords, plus a wrapped copy in tunnels
-  function fillRoundCell(cx, cy, r, rad) {
+  function fillRoundCell(cx, cy, r, rad, stroke) {
     const x = cx * cell + cell / 2, y = cy * cell + cell / 2;
     roundRect(x - r, y - r, r * 2, r * 2, rad);
     ctx.fill();
-    ctx.stroke();
+    if (stroke) ctx.stroke();
   }
-  function drawBodyCell(cx, cy, r, rad) {
-    fillRoundCell(cx, cy, r, rad);
+  // stroke defaults on: the local snake wears the outline. The rival pass calls
+  // with false, because a ghosted rival's outline is fully transparent and the
+  // stroke was rasterising nothing on every one of its cells, every frame.
+  function drawBodyCell(cx, cy, r, rad, stroke = true) {
+    fillRoundCell(cx, cy, r, rad, stroke);
     const wx = cx < 0 ? cx + GRID : cx > GRID - 1 ? cx - GRID : null;
     const wy = cy < 0 ? cy + GRID : cy > GRID - 1 ? cy - GRID : null;
-    if (wx !== null) fillRoundCell(wx, cy, r, rad);
-    if (wy !== null) fillRoundCell(cx, wy, r, rad);
-    if (wx !== null && wy !== null) fillRoundCell(wx, wy, r, rad);
+    if (wx !== null) fillRoundCell(wx, cy, r, rad, stroke);
+    if (wy !== null) fillRoundCell(cx, wy, r, rad, stroke);
+    if (wx !== null && wy !== null) fillRoundCell(wx, wy, r, rad, stroke);
   }
 
   // ---- versus rendering: the rivals, ghosted, with small name tags ----
   // One flat colour per player index, drawn well under full alpha so they
   // never crowd your own snake off the field.
   const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'];
-  // rivals are information, not traffic: faint enough that your own snake is
-  // never the second thing you find, solid enough to read where they are.
-  // The tag stays clearer than the body, since a name is what you look FOR.
-  // 0.32 rather than the old 0.22 because rivals wear their outfits now, and
-  // a colour ramp needs a little more paint than a flat fill to read as one.
-  const VS_BODY_ALPHA = 0.32, VS_TAG_ALPHA = 0.7;
+  // Rivals are information, not traffic. The BODY ghosts well back (a touch
+  // more than before, on request) so your own snake is never the second thing
+  // you find; the KIT (jersey and hat) rides at near-full alpha over it, since
+  // clothing you cannot read is not worth wearing, and the name tag stays
+  // clearest of all because a name is what you look FOR.
+  const VS_BODY_ALPHA = 0.22, VS_KIT_ALPHA = 0.85, VS_TAG_ALPHA = 0.78;
   let vsTagFont = '';
 
   // Rollback smoothing, per segment. A late remote turn rewinds and re-runs
@@ -3740,30 +3771,38 @@
   }
   function drawRivals(progOf) {
     const r = cell * 0.38, rad = cell * 0.3;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(0,0,0,0)';
     for (let pi = 0; pi < g.players.length; pi++) {
       if (pi === vs.myIdx) continue;
       const pl = g.players[pi];
       if (!pl.snake.length) continue;
-      ctx.globalAlpha = VS_BODY_ALPHA;
-      // the body wears the rival's own outfit, ghosted; identity stays in
-      // the tag and the roster dot, which keep VS_COLORS
       const fit = vsFits[pi];
       const lut = fit ? fit.lut : SNAKE_LUT;
       const denom = Math.max(1, pl.snake.length - 1);
       const prog = progOf(pi);
+      const base = pi * VS_SEG;
+      const nSmooth = Math.min(pl.snake.length, VS_SEG);
+      // The body wears the rival's own outfit, ghosted. Each cell's resolved
+      // position (rollback smoothing offset and all) was already computed by
+      // updateVsSmoothing this same frame, so read it back rather than run
+      // segRenderPos a second time; only segments past the smoothed depth fall
+      // back. No stroke: a ghosted outline is transparent, so it painted nothing.
+      ctx.globalAlpha = VS_BODY_ALPHA;
       let lastShade = -1;
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
         if (shade !== lastShade) { ctx.fillStyle = lut[shade]; lastShade = shade; }
-        const rp = segRenderPos(pl, i, prog);
-        drawBodyCell(rp.cx + segOffX(pi, i), rp.cy + segOffY(pi, i), r, rad);
+        let cx, cy;
+        if (i < nSmooth) { const k = base + i; cx = vsLastX[k]; cy = vsLastY[k]; }
+        else { const rp = segRenderPos(pl, i, prog); cx = rp.cx; cy = rp.cy; }
+        drawBodyCell(cx, cy, r, rad, false);
       }
+      // the kit reads clearly even as the body fades back: jersey on the
+      // second segment, hat on the head, both at near-full alpha
+      ctx.globalAlpha = VS_KIT_ALPHA;
+      drawJersey(pl, pi, prog);
       if (fit && fit.hatW) {
-        const rp0 = segRenderPos(pl, 0, prog);
-        const hx = wrapf(rp0.cx + segOffX(pi, 0)) * cell + cell / 2;
-        const hy = wrapf(rp0.cy + segOffY(pi, 0)) * cell + cell / 2;
+        const hx = wrapf(vsLastX[base]) * cell + cell / 2;
+        const hy = wrapf(vsLastY[base]) * cell + cell / 2;
         ctx.drawImage(fit.hatCanvas, Math.round(hx - fit.hatW / 2), Math.round(hy + fit.dy));
       }
     }
@@ -3776,11 +3815,11 @@
       if (pi === vs.myIdx) continue;
       const pl = g.players[pi];
       if (!pl.snake.length || !vs.roster || !vs.roster[pi]) continue;
-      const rp = segRenderPos(pl, 0, progOf(pi));
+      const base = pi * VS_SEG;
       ctx.fillStyle = VS_COLORS[pi];
       ctx.fillText(vs.roster[pi].name,
-        wrapf(rp.cx + segOffX(pi, 0)) * cell + cell / 2,
-        wrapf(rp.cy + segOffY(pi, 0)) * cell - cell * 0.18);
+        wrapf(vsLastX[base]) * cell + cell / 2,
+        wrapf(vsLastY[base]) * cell - cell * 0.18);
     }
     ctx.globalAlpha = 1;
   }
