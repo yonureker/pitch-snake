@@ -371,53 +371,50 @@
      strip's slice of the column grows a little to pay for the second line
      (54px against the pill's 42), and the pitch stays exactly as clear as
      the day the list was moved off it. */
-  @media (max-width: 699.98px) {
-    .mp-hud {
-      background: #24321b; border: 1.5px solid var(--gold);
-      border-radius: 12px; padding: 3px 4px; gap: 0; align-items: stretch;
-    }
-    .mp-hud .pl { flex-direction: column; gap: 0; padding: 1px 9px; align-items: center; }
-    .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
-    .mp-hud .pl .nm { font-size: 9.5px; letter-spacing: 1.4px; }
-    .mp-hud .pl .sc { font-size: 15px; line-height: 1.05; }
-    .mp-hud .pl.me::after {
-      content: ''; position: absolute; left: 9px; right: 9px; bottom: 1px;
-      height: 2px; border-radius: 2px; background: var(--gold-bright);
-    }
-    .mp-hud .note { align-self: center; padding: 0 10px; font-size: 10px; letter-spacing: 1.4px; }
-    .wrap.mp-open { --mp-h: 54px; }
+  html.touch .mp-hud {
+    background: #24321b; border: 1.5px solid var(--gold);
+    border-radius: 12px; padding: 3px 4px; gap: 0; align-items: stretch;
   }
-  @media (min-width: 700px) {
-    /* The room rides the HEADER since 2026-09-06, at the owner's call: the
-       seat cells sit directly under the nameplate row as a second cluster
-       line, so a room opening no longer costs the board a strip of its own.
-       placeChrome moves the node; the wrap keeps it on narrow screens. The
-       pill stays DARK in both themes on purpose: the seat colors were
-       picked against the pitch and wash out on the cream table. */
-    .hdr-cluster { flex-wrap: wrap; row-gap: 8px; }
-    .hdr-cluster .mp-bar {
-      flex-basis: 100%; width: auto; display: flex; align-items: center;
-      justify-content: flex-start; gap: 9px;
-    }
-    .hdr-cluster .mp-hud {
-      display: inline-flex; align-items: stretch; gap: 0; padding: 0;
-      height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;
-      background: #24321b; overflow: hidden; flex: 0 1 auto; min-width: 0;
-    }
-    .hdr-cluster .mp-hud .pl { flex-direction: row; align-items: center; gap: 8px; padding: 0 14px; position: relative; }
-    /* the rounded ends eat into the first and last cells; pay them back */
-    .hdr-cluster .mp-hud .pl:first-child { padding-left: 18px; }
-    .hdr-cluster .mp-hud .pl:last-child { padding-right: 18px; }
-    .hdr-cluster .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
-    .hdr-cluster .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.5px; }
-    .hdr-cluster .mp-hud .pl .sc { font-size: 16px; line-height: 1; }
-    .hdr-cluster .mp-hud .pl.me::after {
-      content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px;
-      height: 2px; border-radius: 2px; background: var(--gold-bright);
-    }
-    .hdr-cluster .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
-    .hdr-cluster .mp-quit { height: 34px; padding: 0 13px; }
+  html.touch .mp-hud .pl { flex-direction: column; gap: 0; padding: 1px 9px; align-items: center; }
+  html.touch .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+  html.touch .mp-hud .pl .nm { font-size: 9.5px; letter-spacing: 1.4px; }
+  html.touch .mp-hud .pl .sc { font-size: 15px; line-height: 1.05; }
+  html.touch .mp-hud .pl.me::after {
+    content: ''; position: absolute; left: 9px; right: 9px; bottom: 1px;
+    height: 2px; border-radius: 2px; background: var(--gold-bright);
   }
+  html.touch .mp-hud .note { align-self: center; padding: 0 10px; font-size: 10px; letter-spacing: 1.4px; }
+  html.touch .wrap.mp-open { --mp-h: 54px; }
+
+  /* The room rides the HEADER since 2026-09-06, at the owner's call: the
+     seat cells sit directly under the nameplate row as a second cluster
+     line, so a room opening no longer costs the board a strip of its own.
+     placeChrome moves the node; the wrap keeps it on narrow screens. The
+     pill stays DARK in both themes on purpose: the seat colors were
+     picked against the pitch and wash out on the cream table. */
+  .hdr-cluster { flex-wrap: wrap; row-gap: 8px; }
+  .hdr-cluster .mp-bar {
+    flex-basis: 100%; width: auto; display: flex; align-items: center;
+    justify-content: flex-start; gap: 9px;
+  }
+  .hdr-cluster .mp-hud {
+    display: inline-flex; align-items: stretch; gap: 0; padding: 0;
+    height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;
+    background: #24321b; overflow: hidden; flex: 0 1 auto; min-width: 0;
+  }
+  .hdr-cluster .mp-hud .pl { flex-direction: row; align-items: center; gap: 8px; padding: 0 14px; position: relative; }
+  /* the rounded ends eat into the first and last cells; pay them back */
+  .hdr-cluster .mp-hud .pl:first-child { padding-left: 18px; }
+  .hdr-cluster .mp-hud .pl:last-child { padding-right: 18px; }
+  .hdr-cluster .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+  .hdr-cluster .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.5px; }
+  .hdr-cluster .mp-hud .pl .sc { font-size: 16px; line-height: 1; }
+  .hdr-cluster .mp-hud .pl.me::after {
+    content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px;
+    height: 2px; border-radius: 2px; background: var(--gold-bright);
+  }
+  .hdr-cluster .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
+  .hdr-cluster .mp-quit { height: 34px; padding: 0 13px; }
 
   canvas {
     display: block;
@@ -1436,52 +1433,62 @@
      settings is part of playing. The same buttons move back onto the board
      frame on narrow screens (placeChrome), where the old rules hold. */
   .hdr-cluster { display: none; }
-  @media (min-width: 700px) {
-    /* Pixel work, at the owner's call: the header's three pieces share the
-       title's own vertical bounds. The cluster's top sits on PITCH's cap
-       line, SECONDS starts on it too, and BEST ends on SNAKE's baseline,
-       with the big number centered between them. The px nudges below
-       bridge the gap between CSS boxes and where the glyphs actually
-       paint (fonts carry internal leading); they were measured off
-       rendered screenshots, not guessed. */
-    header { display: flex; align-items: stretch; gap: 22px; }
-    header h1 { margin-right: 2px; }
-    .scores { margin-left: auto; min-width: 178px; align-items: stretch; }
-    .scores .tally {
-      display: flex; flex-direction: column; justify-content: space-between;
-      height: 100%;
-    }
-    .hdr-cluster { display: flex; align-items: flex-start; gap: 9px; margin-top: -0.5px; }
-    /* the clock keeps its centered seat; a stretched one drew its divider
-       the full height of the title */
-    .scores .clock { align-self: center; }
-    /* glyphs, not boxes: the label paints below its box top and BEST ends
-       above its box bottom (screenshot-measured, re-tuned when the column
-       grew to 13/48/17px on 2026-09-06) */
-    .scores .label { margin-top: -3.5px; }
-    .scores .best { margin-bottom: -1px; }
-    /* shell tokens, not sheet tokens: these sit on the table and must flip
-       with the theme (the nameplate's ink was invisible on the dark table) */
-    .hdr-cluster .gear {
-      position: static; width: 34px; height: 34px; font-size: 15px;
-      background: transparent; border: 1.5px solid var(--gold);
-      color: var(--shell-gold); backdrop-filter: none;
-    }
-    .hdr-cluster .gear.who {
-      width: auto; min-width: 34px; padding: 0 14px; border-radius: 17px;
-      color: var(--shell-ink); font-family: 'Barlow', sans-serif; font-weight: 700;
-      font-size: 12px; letter-spacing: 1.5px;
-    }
-    .hdr-tray {
-      display: inline-flex; align-items: center; height: 34px;
-      border: 1.5px solid var(--gold); border-radius: 17px; overflow: hidden;
-    }
-    .hdr-tray .gear {
-      width: 40px; height: 100%; border: none; border-radius: 0; background: transparent;
-    }
-    .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
-    .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
-    .sleeping { opacity: 0.42; pointer-events: none; }
+  /* The chrome's home is decided by POINTER, not width, since 2026-09-06:
+     a desktop window is never so narrow that the square should carry the
+     name and the icons, so touchless screens keep the header at every
+     width and the cluster wraps to its own line when one row is tight.
+     Touch screens keep the frame overlay: their height budget is the
+     reason it exists. placeChrome moves the nodes on the same signal. */
+
+  /* Pixel work, at the owner's call: the header's three pieces share the
+     title's own vertical bounds. The cluster's top sits on PITCH's cap
+     line, SECONDS starts on it too, and BEST ends on SNAKE's baseline,
+     with the big number centered between them. The px nudges below
+     bridge the gap between CSS boxes and where the glyphs actually
+     paint (fonts carry internal leading); they were measured off
+     rendered screenshots, not guessed. */
+  html.touchless header { display: flex; align-items: stretch; gap: 22px; }
+  html.touchless header h1 { margin-right: 2px; }
+  html.touchless .scores { margin-left: auto; min-width: 178px; align-items: stretch; }
+  html.touchless .scores .tally {
+    display: flex; flex-direction: column; justify-content: space-between;
+    height: 100%;
+  }
+  html.touchless .hdr-cluster { display: flex; align-items: flex-start; gap: 9px; margin-top: -0.5px; }
+  /* the clock keeps its centered seat; a stretched one drew its divider
+     the full height of the title */
+  html.touchless .scores .clock { align-self: center; }
+  /* glyphs, not boxes: the label paints below its box top and BEST ends
+     above its box bottom (screenshot-measured, re-tuned when the column
+     grew to 13/48/17px on 2026-09-06) */
+  html.touchless .scores .label { margin-top: -3.5px; }
+  html.touchless .scores .best { margin-bottom: -1px; }
+  /* shell tokens, not sheet tokens: these sit on the table and must flip
+     with the theme (the nameplate's ink was invisible on the dark table) */
+  html.touchless .hdr-cluster .gear {
+    position: static; width: 34px; height: 34px; font-size: 15px;
+    background: transparent; border: 1.5px solid var(--gold);
+    color: var(--shell-gold); backdrop-filter: none;
+  }
+  html.touchless .hdr-cluster .gear.who {
+    width: auto; min-width: 34px; padding: 0 14px; border-radius: 17px;
+    color: var(--shell-ink); font-family: 'Barlow', sans-serif; font-weight: 700;
+    font-size: 12px; letter-spacing: 1.5px;
+  }
+  html.touchless .hdr-tray {
+    display: inline-flex; align-items: center; height: 34px;
+    border: 1.5px solid var(--gold); border-radius: 17px; overflow: hidden;
+  }
+  html.touchless .hdr-tray .gear {
+    width: 40px; height: 100%; border: none; border-radius: 0; background: transparent;
+  }
+  html.touchless .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
+  html.touchless .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
+  .sleeping { opacity: 0.42; pointer-events: none; }
+  
+  @media (max-width: 759.98px) {
+    html.touchless header { flex-wrap: wrap; row-gap: 10px; }
+    html.touchless .hdr-cluster { order: 3; flex-basis: 100%; }
   }
   /* the purse's coin is drawn, not typed: the emoji rendered as a grey moon */
   .coin-dot {
@@ -7042,9 +7049,9 @@
   const chipRowEl = whoBtn.closest('.chip-row');
   const boardFrameEl = gearBtn.parentElement;
   let chromeWide = false;
-  const wideQuery = window.matchMedia('(min-width: 700px)');
   function placeChrome() {
-    chromeWide = wideQuery.matches;
+    // pointer, not width: the square never carries the chrome on a desktop
+    chromeWide = document.documentElement.classList.contains('touchless');
     if (chromeWide) {
       hdrCluster.insertBefore(whoBtn, hdrTray);
       hdrTray.append(purseBtn, boardsBtn, gearBtn);
@@ -7062,7 +7069,7 @@
     refreshModeUI();
     refreshSettingsUI();
   }
-  wideQuery.addEventListener('change', placeChrome);
+  // rehoming rides the same pointer signals applyPointerClass tracks
   shopClose.addEventListener('click', () => { shopModal.hidden = true; });
 
   // ---- the boards sheet ----
@@ -7424,6 +7431,7 @@ $ `;
     document.documentElement.classList.toggle('touch', coarseMq.matches);
     document.documentElement.classList.toggle('touchless', !coarseMq.matches);
     resizeQueued = true;         // the class changes the column width
+    placeChrome();               // and the chrome's home rides the same signal
   }
   applyPointerClass();
   coarseMq.addEventListener('change', applyPointerClass);
@@ -7431,6 +7439,7 @@ $ `;
     document.documentElement.classList.add('touch');
     document.documentElement.classList.remove('touchless');
     resizeQueued = true;
+    placeChrome();
   }, { once: true, passive: true });
 
   resize();
