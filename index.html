@@ -346,6 +346,15 @@
     flex: 0 1 auto; min-width: 0; overflow: hidden;
   }
   .mp-hud[hidden] { display: none; }
+  /* the status chip: SPECTATING, WAITING, the clinch chase. Its own object
+     beside the scoreboard, so a long note can never stretch the seats */
+  .mp-notes {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--gold-bright); font-family: 'Barlow', sans-serif;
+    font-weight: 800; letter-spacing: 1.4px; font-size: 10px;
+    white-space: nowrap; pointer-events: none; flex: 0 1 auto; min-width: 0; overflow: hidden;
+  }
+  .mp-notes[hidden] { display: none; }
   /* the mid-round exit, arming on the first tap so a stray thumb cannot dump
      you out of a match. margin-left: auto keeps it right even alone. */
   .mp-quit {
@@ -378,29 +387,50 @@
      placeChrome moves the node; the wrap keeps it on narrow screens. The
      pill stays DARK in both themes on purpose: the seat colors were
      picked against the pitch and wash out on the cream table. */
-  .hdr-cluster { flex-wrap: wrap; row-gap: 8px; }
-  .hdr-cluster .mp-bar {
+  /* the cluster wrapped only to host the room bar on a second line; the bar
+     has its own row under the header now, so the pills stay on one */
+  .hdr-cluster { flex-wrap: nowrap; }
+  /* The room bar sits BETWEEN the header and the pitch, at the column's
+     full width. Two homes were tried and both distorted: on the board it
+     covered the top row (the old strip), and inside the header cluster it
+     could only be as wide as the cluster, which at a height-fitted column
+     is a couple of hundred pixels, so the seats pill overflowed and shoved
+     the status chip and the exit onto lines of their own (the distortion
+     the owner photographed). Wrapping the header instead dropped the
+     scoreboard to a line of its own. Its own row under the chips, which is
+     where the owner asked for it, costs the header nothing. */
+  .wrap .mp-bar {
     flex-basis: 100%; width: auto; display: flex; align-items: center;
     justify-content: flex-start; gap: 9px;
+    /* seats, status and the exit are three objects: let them wrap rather
+       than squeeze, so a full table with a note never distorts */
+    flex-wrap: wrap; row-gap: 6px;
   }
-  .hdr-cluster .mp-hud {
+  .wrap .mp-hud {
     display: inline-flex; align-items: stretch; gap: 0; padding: 0;
     height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;
     background: #24321b; overflow: hidden; flex: 0 1 auto; min-width: 0;
   }
-  .hdr-cluster .mp-hud .pl { flex-direction: row; align-items: center; gap: 8px; padding: 0 14px; position: relative; }
+  .wrap .mp-hud .pl { flex-direction: row; align-items: center; gap: 7px; padding: 0 11px; position: relative; }
   /* the rounded ends eat into the first and last cells; pay them back */
-  .hdr-cluster .mp-hud .pl:first-child { padding-left: 18px; }
-  .hdr-cluster .mp-hud .pl:last-child { padding-right: 18px; }
-  .hdr-cluster .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
-  .hdr-cluster .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.5px; }
-  .hdr-cluster .mp-hud .pl .sc { font-size: 16px; line-height: 1; }
-  .hdr-cluster .mp-hud .pl.me::after {
+  .wrap .mp-hud .pl:first-child { padding-left: 15px; }
+  .wrap .mp-hud .pl:last-child { padding-right: 15px; }
+  .wrap .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+  .wrap .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.5px; }
+  .wrap .mp-hud .pl .sc { font-size: 16px; line-height: 1; }
+  .wrap .mp-hud .pl.me::after {
     content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px;
     height: 2px; border-radius: 2px; background: var(--gold-bright);
   }
-  .hdr-cluster .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
-  .hdr-cluster .mp-quit { height: 34px; padding: 0 13px; }
+  /* my name already wears the gold; on a struck seat the bar underneath it
+     just read as a rendering fault */
+  .mp-hud .pl.dead.me::after { display: none; }
+  .wrap .mp-notes {
+    height: 34px; padding: 0 14px; font-size: 11px; letter-spacing: 1.5px;
+    border: 1.5px solid rgba(194,162,90,0.55); border-radius: 17px; background: #24321b;
+  }
+  .wrap .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
+  .wrap .mp-quit { height: 34px; padding: 0 13px; }
 
   canvas {
     display: block;
@@ -1657,6 +1687,7 @@
 
     <div class="mp-bar" id="mpBar" hidden>
       <div class="mp-hud" id="mpHud" hidden></div>
+      <div class="mp-notes" id="mpNotes" hidden></div>
       <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
     </div>
 
@@ -5175,6 +5206,7 @@
   const VS_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const VS_MIN = 2, VS_MAX = 5;
   const mpHud = document.getElementById('mpHud');
+  const mpNotes = document.getElementById('mpNotes');
   const vsPanel = document.getElementById('vsPanel');
   const vsSetup = document.getElementById('vsSetup');
   const vsLadder = document.getElementById('vsLadder');
@@ -5252,7 +5284,7 @@
   // measured again: a CSS-driven size change fires no resize event.
   const mpBar = document.getElementById('mpBar');
   function syncMpBar() {
-    const open = !mpHud.hidden || !mpQuitBtn.hidden;
+    const open = !mpHud.hidden || !mpQuitBtn.hidden || !mpNotes.hidden;
     if (mpBar.hidden !== !open) {
       mpBar.hidden = !open;
       document.querySelector('.wrap').classList.toggle('mp-open', open);
@@ -5270,7 +5302,11 @@
   function syncMpHud() {
     const show = vsView() && (state === 'playing' || state === 'countdown' || state === 'dead');
     if (!show) {
-      if (mpHudHash !== -1) { mpHudHash = -1; mpHud.hidden = true; mpHud.innerHTML = ''; syncMpBar(); }
+      if (mpHudHash !== -1) {
+        mpHudHash = -1; mpHud.hidden = true; mpHud.innerHTML = '';
+        mpNotes.hidden = true; mpNotes.innerHTML = '';
+        syncMpBar();
+      }
       return;
     }
     let h = (vs.spectating && !vs.over ? 1 : 0) | (vs.stalled ? 2 : 0) | 4;
@@ -5290,8 +5326,19 @@
       if (g.players[lastIdx].score <= bestOther) chase = bestOther + 1 - g.players[lastIdx].score;
     }
     mpHud.innerHTML = '';
-    if (vs.spectating && !vs.over) mpHud.appendChild(hudNote('SPECTATING'));
-    if (vs.stalled) mpHud.appendChild(hudNote('WAITING…'));
+    // Status lives BESIDE the scoreboard, never inside it. Packed in with
+    // the seat columns, SPECTATING and a clinch note stretched the pill
+    // into a distorted bar that read as a rendering fault; the pill is for
+    // seats, and a note is a different kind of thing.
+    mpNotes.innerHTML = '';
+    // ONE status at a time, most urgent first: a stalled wire is actionable,
+    // a clinch chase decides the round, and SPECTATING is the least of the
+    // three because a struck-through seat already says you are out. Piling
+    // them up is what made this a long bar in the first place, and it cost
+    // the exit its place on the row.
+    let noteText = vs.stalled ? 'WAITING…'
+      : (vs.spectating && !vs.over) ? 'SPECTATING'
+      : '';
     const order = g.players.map((_, i) => i).sort((a, b) => g.players[b].score - g.players[a].score || a - b);
     for (let k = 0; k < order.length; k++) {
       const i = order[k];
@@ -5310,11 +5357,13 @@
       el.append(nm, sc);
       mpHud.appendChild(el);
     }
-    if (chase > 0) {
-      mpHud.appendChild(hudNote(lastIdx === vs.myIdx
+    if (chase > 0 && !vs.stalled) {
+      noteText = lastIdx === vs.myIdx
         ? chase + ' TO CLINCH'
-        : (vs.roster[lastIdx] ? vs.roster[lastIdx].name : '?') + ' NEEDS ' + chase));
+        : (vs.roster[lastIdx] ? vs.roster[lastIdx].name : '?') + ' NEEDS ' + chase;
     }
+    if (noteText) mpNotes.appendChild(hudNote(noteText));
+    mpNotes.hidden = mpNotes.children.length === 0;
     mpHud.hidden = false;
     syncMpBar();
   }
@@ -7096,9 +7145,10 @@
   function placeChrome() {
     hdrCluster.insertBefore(whoBtn, hdrTray);
     hdrTray.append(purseBtn, boardsBtn, gearBtn);
-    // the room's seat cells ride the header too, wrapping under the
-    // nameplate row (flex-basis 100%), so a room costs the board nothing
-    hdrCluster.append(mpBar);
+    // the room bar takes its own row between the header and the pitch, at
+    // the column's full width (see the .wrap .mp-bar comment)
+    const frame = document.querySelector('.board-frame');
+    frame.parentElement.insertBefore(mpBar, frame);
     refreshModeUI();
     refreshSettingsUI();
   }
