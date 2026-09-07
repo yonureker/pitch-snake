@@ -30,6 +30,9 @@ create table if not exists public.pitch_snake_coins (
   id         bigint generated always as identity primary key,
   user_id    uuid        not null,
   delta      integer     not null check (delta <> 0 and delta between -100000 and 100000),
+  -- 'achievement' is RETIRED (2026-09-07): nothing grants one any more, and
+  -- the value stays legal because the coins it already paid are earned and
+  -- are not clawed back. Daily challenges will want their own reason.
   reason     text        not null check (reason in ('achievement', 'round', 'buy', 'backfill')),
   ref        text        not null,
   created_at timestamptz not null default now(),

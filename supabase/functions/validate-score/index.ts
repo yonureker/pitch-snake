@@ -114,54 +114,20 @@ function timingFeatures(log: Record<string, unknown>) {
   };
 }
 
-// ---- achievements ----
-// Granted HERE and nowhere else. They are about to carry coins and
-// competitive tickets, which makes them currency, and a client that can award
-// itself currency is a client that can print money. So the same rule as the
-// score: the server replays the round and decides what happened.
-//
-// The catalogue lives in this file rather than the engine on purpose. Putting
-// it in the engine would chain every new achievement to an ENGINE_VERSION
-// bump and a re-pin of this very import, which is absurd for what is content.
-// Nothing here affects a replay, so adding one is a redeploy and nothing else.
-//
-// `test` reads a context built once from the round the validator has already
-// replayed: the finished game, and the event stream the replay retained.
-// Counting is therefore free.
-// `coins` is the one-time bounty a badge pays into the ledger when it is
-// granted, in the same pass and nowhere else. Amounts are content, like the
-// names: changing one is a redeploy, and it changes only what FUTURE grants
-// pay (economy.sql's backfill was a snapshot, not a subscription).
-const ACHIEVEMENTS: { id: string; name: string; note: string; coins: number; test: (c: Ctx) => boolean }[] = [
-  { id: 'first-whistle', name: 'FIRST WHISTLE', note: 'You finished a round.', coins: 25,
-    test: () => true },
-  { id: 'ten-up', name: 'TEN UP', note: 'Ten in a single round.', coins: 30,
-    test: (c) => c.mode !== 'survival' && c.score >= 10 },
-  { id: 'half-century', name: 'HALF CENTURY', note: 'Fifty in a single round.', coins: 100,
-    test: (c) => c.mode !== 'survival' && c.score >= 50 },
-  { id: 'last-ditch', name: 'LAST DITCH', note: 'You flew into a wall and turned out of it.', coins: 40,
-    test: (c) => c.saves >= 1 },
-  { id: 'through-the-window', name: 'THROUGH THE WINDOW', note: 'You took a teleport trip.', coins: 40,
-    test: (c) => c.hops >= 1 },
-  { id: 'hat-trick', name: 'HAT-TRICK', note: 'Three window trips in one round.', coins: 75,
-    test: (c) => c.hops >= 3 },
-  { id: 'struck', name: 'STRUCK', note: 'You took a thunderbolt and dragged the pack with it.', coins: 50,
-    test: (c) => c.zaps >= 1 },
-  { id: 'clean-sheet', name: 'CLEAN SHEET', note: 'Fifteen without touching a single TNT.', coins: 75,
-    test: (c) => c.mode !== 'survival' && c.score >= 15 && c.tnts === 0 },
-  { id: 'the-full-ninety', name: 'THE FULL NINETY', note: 'Ninety seconds of survival.', coins: 100,
-    test: (c) => c.mode === 'survival' && c.score >= 90 },
-];
-
 // ---- the mint ----
-// Coins exist so achievements and honest rounds can pay for cosmetics, and
-// they are minted HERE and nowhere else, for the reason the comment above
-// gives about currency. Both mints are idempotent by the ledger's unique
-// (user, reason, ref): a badge pays once per badge id, a round once per
-// seed, so a retry of this whole request cannot pay twice. Never fatal, the
-// achievements rule: a player must not lose a validated score because the
-// bank had a bad day, and a missed payment is recoverable where a lost
-// score is not.
+// Coins exist so an honest round can pay for cosmetics, and they are minted
+// HERE and nowhere else, because a client that can award itself currency is a
+// client that can print money. The mint is idempotent by the ledger's unique
+// (user, reason, ref): a round pays once per seed, so a retry of this whole
+// request cannot pay twice. Never fatal: a player must not lose a validated
+// score because the bank had a bad day, and a missed payment is recoverable
+// where a lost score is not.
+//
+// Achievements were the other minter and were withdrawn on 2026-09-07, at the
+// owner's call, to return as DAILY challenges rather than a fixed shelf. What
+// they already paid stands: those ledger rows are earned coins and are not
+// clawed back, and reason='achievement' stays a legal row so the history
+// reads. Nothing grants one any more.
 //
 // The round pay is one coin per five points (seconds in survival), capped
 // at forty, floored at nothing for a scoreless round. Deliberately modest:
@@ -188,11 +154,6 @@ async function payRound(
   } catch {
     return 0;
   }
-}
-
-interface Ctx {
-  mode: string; score: number; quanta: number; reason: string;
-  saves: number; hops: number; zaps: number; tnts: number; eats: number; bonuses: number;
 }
 
 // ---- room rounds ----
@@ -276,26 +237,6 @@ function placingsOf(game: { players: { idx: number; score: number; diedAt: numbe
   return rows;
 }
 
-// One pass over the events the replay kept. `drainEvents` returns everything
-// that happened, because a replay never drains as it goes.
-function roundContext(game: Record<string, unknown>, mode: string): Ctx {
-  const events = (game.drainEvents as () => Record<string, unknown>[])();
-  const c: Ctx = {
-    mode, score: game.score as number, quanta: game.quanta as number,
-    reason: String(game.deadReason ?? ''),
-    saves: 0, hops: 0, zaps: 0, tnts: 0, eats: 0, bonuses: 0,
-  };
-  for (const e of events) {
-    switch (e.t) {
-      case 'save': c.saves++; break;
-      case 'hop': c.hops++; break;
-      case 'zap': c.zaps++; break;
-      case 'tnt': c.tnts++; break;
-      case 'eat': c.eats++; if (e.bonus) c.bonuses++; break;
-    }
-  }
-  return c;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -424,13 +365,12 @@ Deno.serve(async (req) => {
     .single();
   if (error || !row) return refuse('insert failed', 500);
 
-  // Achievements and coins last, and never fatal. The score is already
-  // written and a player must never lose a validated round because the badge
-  // or bank write had a bad day; a missed grant is recoverable on the next
-  // round, a lost score is not.
-  const earned = await grantAchievements(service, uid, mode, game, row.id);
+  // The pay comes last and is never fatal. The score is already written, and
+  // a player must never lose a validated round because the bank had a bad
+  // day; a missed payment is recoverable on the next round, a lost score is
+  // not.
   const coins = await payRound(service, uid, Number(issued.seed), score);
-  return reply({ id: row.id, score, earned, coins }, 200);
+  return reply({ id: row.id, score, coins }, 200);
 });
 
 /**
@@ -547,56 +487,3 @@ async function roomRound(
   return reply({ rated: true, mode, placings }, 200);
 }
 
-async function grantAchievements(
-  service: ReturnType<typeof createClient>,
-  uid: string,
-  mode: string,
-  game: Record<string, unknown>,
-  scoreId: number,
-) {
-  try {
-    // Mirror the catalogue for the shelf. The page has to be able to show
-    // the badges you have NOT earned, and a hand-kept second copy of this
-    // list is the flag-sprite mistake: one artefact in two places, drifting
-    // in silence. Pushed from the source of truth instead, so the mirror is
-    // never more than one validated round stale. Display only; nothing over
-    // there decides a grant, and a failure here must not cost a score.
-    const rpcSync = service.rpc.bind(service) as unknown as
-      (fn: string, args: Record<string, unknown>) => Promise<unknown>;
-    await rpcSync('pitch_snake_sync_achievements', {
-      p_list: ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, note: a.note, coins: a.coins })),
-    });
-
-    const ctx = roundContext(game, mode);
-    const hit = ACHIEVEMENTS.filter((a) => a.test(ctx));
-    if (hit.length === 0) return [];
-
-    // What they already have, so 'earned' means NEWLY earned: the primary key
-    // would swallow a repeat anyway, but the page announces what comes back
-    // and announcing the same badge every round is noise, not a reward.
-    const { data: had } = await service
-      .from('pitch_snake_achievements')
-      .select('achievement')
-      .eq('user_id', uid)
-      .in('achievement', hit.map((a) => a.id));
-    const already = new Set((had ?? []).map((r: { achievement: string }) => r.achievement));
-    const fresh = hit.filter((a) => !already.has(a.id));
-    if (fresh.length === 0) return [];
-
-    await service.from('pitch_snake_achievements').insert(
-      fresh.map((a) => ({ user_id: uid, achievement: a.id, score_id: scoreId })),
-    );
-    // The bounty, in the same pass as the grant it belongs to, in its OWN
-    // try: a bank failure must not eat the badge announcement the player
-    // just earned. The ledger's unique (user, 'achievement', id) means no
-    // badge pays twice however this is retried.
-    try {
-      const paid = fresh.filter((a) => a.coins > 0)
-        .map((a) => ({ user_id: uid, delta: a.coins, reason: 'achievement', ref: a.id }));
-      if (paid.length) await service.from('pitch_snake_coins').insert(paid);
-    } catch { /* recoverable by a repair pass; the grant row is the truth */ }
-    return fresh.map((a) => ({ id: a.id, name: a.name, note: a.note, coins: a.coins }));
-  } catch {
-    return [];
-  }
-}

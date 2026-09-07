@@ -786,19 +786,6 @@ export default function Index() {
                       : `${String(prevBest - loop.score)} off your best.`}
                     </Text>
                   : null}
-                  {dead &&
-                    uiMode !== 'versus' &&
-                    submit.data !== undefined &&
-                    submit.data.earned.length > 0 && (
-                      <View style={styles.badgeWrap}>
-                        {submit.data.earned.map((b) => (
-                          <View key={b.id} style={styles.badgeChip}>
-                            <Text style={styles.badgeName}>{b.name}</Text>
-                            {b.coins > 0 && <Text style={styles.badgeCoins}>+{b.coins}</Text>}
-                          </View>
-                        ))}
-                      </View>
-                    )}
                   {dead && uiMode !== 'versus' && submit.data !== undefined && submit.data.coins > 0 && (
                     <Text style={styles.coinNote}>
                       +{submit.data.coins} COINS {'\u00b7'} one per five points
@@ -1460,25 +1447,6 @@ const styles = StyleSheet.create({
   boardMine: { color: GameColors.goldBright },
   ballBox: { overflow: 'hidden', alignSelf: 'center' },
   stickerText: { fontFamily: BARLOW_BOLD, fontSize: 13, color: GameColors.goldBright, letterSpacing: 0.5 },
-  badgeWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    maxWidth: 280,
-  },
-  badgeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(194,162,90,0.5)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  badgeName: { fontFamily: BARLOW_BOLD, fontSize: 10, color: '#e9e0cd', letterSpacing: 1 },
-  badgeCoins: { fontFamily: BARLOW_BOLD, fontSize: 10, color: GameColors.goldBright },
   coinNote: { fontFamily: BARLOW, fontSize: 11, color: GameColors.goldBright, letterSpacing: 0.5 },
   purse: {
     flexDirection: 'row',

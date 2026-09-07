@@ -16,7 +16,7 @@ import { TOP_SCORES_KEY } from './use-top-scores';
 
 /**
  * Submit { name, mode, seedId, log }; resolves to the new row id for
- * highlighting plus the badges and coins the validator granted, so the
+ * highlighting plus the coins the validator paid, so the
  * whistle can announce them the way the web page does.
  */
 export function useSubmitScore() {
@@ -39,7 +39,6 @@ export function useSubmitScore() {
       // round, since the validator is the only minter and granter.
       await client.invalidateQueries({ queryKey: TOP_SCORES_KEY });
       await client.invalidateQueries({ queryKey: ['wallet'] });
-      await client.invalidateQueries({ queryKey: ['badges'] });
     },
   });
 }

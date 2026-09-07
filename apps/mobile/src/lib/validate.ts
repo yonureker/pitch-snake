@@ -58,35 +58,9 @@ export class ValidateError extends Error {
   }
 }
 
-/** A badge the validator just granted, with its one-time bounty. */
-export interface EarnedBadge {
-  id: string;
-  name: string;
-  note: string;
-  coins: number;
-}
-
-function asEarned(v: unknown): EarnedBadge[] {
-  if (!Array.isArray(v)) return [];
-  const out: EarnedBadge[] = [];
-  for (const r of v as unknown[]) {
-    if (!isRecord(r)) continue;
-    const { id, name, note, coins } = r;
-    if (typeof id === 'string' && typeof name === 'string') {
-      out.push({
-        id,
-        name,
-        note: typeof note === 'string' ? note : '',
-        coins: typeof coins === 'number' ? coins : 0,
-      });
-    }
-  }
-  return out;
-}
-
 /**
  * Submit a finished round's log; resolves to the row id, the SERVER's score,
- * the badges the validator granted for it, and the coins the round paid.
+ * and the coins the round paid.
  */
 export async function validateRound(args: {
   seedId: number;
@@ -94,7 +68,7 @@ export async function validateRound(args: {
   name: string;
   code?: string;
   log: RoundLog;
-}): Promise<{ id: number; score: number; coins: number; earned: EarnedBadge[] }> {
+}): Promise<{ id: number; score: number; coins: number }> {
   if (!SUPABASE_CONFIGURED) throw new ValidateError('not configured', false);
   const ac = new AbortController();
   const timer = setTimeout(() => {
@@ -115,9 +89,9 @@ export async function validateRound(args: {
     if (!response.ok) throw new ValidateError(`validate: ${String(response.status)}`, false);
     const out: unknown = await response.json();
     if (isRecord(out)) {
-      const { id, score, coins, earned } = out;
+      const { id, score, coins } = out;
       if (typeof id === 'number' && typeof score === 'number') {
-        return { id, score, coins: typeof coins === 'number' ? coins : 0, earned: asEarned(earned) };
+        return { id, score, coins: typeof coins === 'number' ? coins : 0 };
       }
     }
     throw new ValidateError('unexpected response', false);

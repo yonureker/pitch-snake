@@ -1,6 +1,6 @@
 /**
  * The economy data layer: wallet, shop, purchases, what is worn, and the
- * badge shelf, over the same pitch_snake_ RPCs the web page calls. Coins are
+ * outfits, over the same pitch_snake_ RPCs the web page calls. Coins are
  * minted by the validator and nowhere else; this file only reads balances
  * and spends them. Components never call this directly; the TanStack Query
  * hooks in hooks/queries/ are the sanctioned wrappers.
@@ -24,15 +24,6 @@ export interface ShopItem {
   kind: string;
   name: string;
   price: number;
-}
-
-/** One badge from the catalogue; `at` is null until it is earned. */
-export interface Badge {
-  id: string;
-  name: string;
-  note: string;
-  coins: number;
-  at: string | null;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -82,27 +73,6 @@ export async function buyItem(id: string): Promise<{ ok: boolean; error: string 
  */
 export async function equipOutfit(skin: string | null, hat: string | null): Promise<void> {
   await rpc('pitch_snake_equip', { p_skin: skin ?? '', p_hat: hat ?? '' });
-}
-
-/** The whole badge catalogue with this player's earned marks. */
-export async function fetchBadges(): Promise<Badge[]> {
-  const rows = await rpc('pitch_snake_my_achievements', {});
-  if (!Array.isArray(rows)) return [];
-  const out: Badge[] = [];
-  for (const r of rows as unknown[]) {
-    if (!isRecord(r)) continue;
-    const { id, name, note, coins, at } = r;
-    if (isId(id) && typeof name === 'string' && typeof note === 'string') {
-      out.push({
-        id,
-        name,
-        note,
-        coins: typeof coins === 'number' ? coins : 0,
-        at: typeof at === 'string' ? at : null,
-      });
-    }
-  }
-  return out;
 }
 
 // ---- what is worn, cached ----
