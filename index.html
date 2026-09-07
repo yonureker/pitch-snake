@@ -1336,6 +1336,278 @@
   }
   .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--sheet-gold); letter-spacing: 1px; }
 
+  /* ---- the boards sheet ---- */
+  .board-chips { display: flex; gap: 8px; justify-content: center; }
+  .board-chips button {
+    font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
+    font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-line);
+    color: var(--sheet-ink);
+  }
+  .board-chips button.active { background: var(--gold); border-color: var(--gold); color: #211e1a; }
+  .boards-list { list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  .boards-list li {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 9px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+    color: var(--sheet-ink);
+  }
+  .boards-list .rk { flex: 0 0 20px; color: var(--sheet-gold); font-weight: 700; }
+  .boards-list .nm { flex: 1; text-align: left; letter-spacing: 1px; }
+  .boards-list .sc { font-family: 'Anton', sans-serif; font-size: 15px; letter-spacing: 0.5px; }
+  .boards-list .empty { justify-content: center; color: var(--sheet-muted); font-weight: 500; }
+  .boards-list li.me { border: 1px solid var(--gold); }
+  .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--sheet-gold); font-weight: 700; }
+
+  /* ---- the shop ---- */
+  .modal.shop .shelf-head { width: 100%; }
+  /* No inner scroller, the shelf's own touch-trap rule: the modal scrolls */
+  .shop-list { list-style: none; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .shop-list li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 9px; border-radius: 7px;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+  }
+  .shop-list li.worn { background: rgba(194,162,90,0.16); border-color: rgba(194,162,90,0.5); }
+  .shop-prev { flex: 0 0 64px; width: 64px; height: 28px; }
+  .shop-txt { flex: 1; min-width: 0; text-align: left; }
+  .shop-txt .nm { display: block; font-weight: 700; font-size: 12px; letter-spacing: 1px; color: var(--sheet-ink); }
+  .shop-txt .st { display: block; font-size: 11px; color: var(--sheet-muted); margin-top: 1px; }
+  .shop-list .btn.small { flex: 0 0 auto; padding: 8px 12px; font-size: 12.5px; min-width: 86px; }
+  /* WEARING wears the gold it is: pressing it again undresses */
+  .shop-list .btn.small.worn-btn { background: var(--gold); color: #211e1a; box-shadow: 0 4px 0 var(--gold-deep); }
+  .shop-list .btn.small:disabled { opacity: 0.45; cursor: default; }
+  .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
+  .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
+  /* A long board buys back a row or two of its own height rather than making
+     the player scroll for them. Past four, which is what makes a full
+     five-player room fit with nothing to scroll for at all. */
+  .standings.dense { padding: 7px 14px; }
+  .standings.dense li { padding: 1px 0; }
+  /* The rating a rated round moved, and which way. It used to TAKE the
+     series column, on the reasoning that a 230px board had room for one of
+     them; the owner watched the trophies appear and then vanish as the
+     rating arrived and asked for both, which is fair, because they answer
+     different questions: the trophy is this room's running series, the
+     rating is the ladder. So the board buys the width instead, and both
+     columns are tight enough that five players still fit. */
+  .standings li .rt {
+    min-width: 62px; text-align: right; white-space: nowrap;
+    font-size: 11px; font-weight: 700; color: #b7ac93; letter-spacing: 0.3px;
+  }
+  .standings li .rt .up   { color: #6fbf73; }
+  .standings li .rt .down { color: var(--red, #e2483d); }
+  /* P for provisional, the chess convention: the number is real, it just has
+     too few rounds behind it to be read as settled. Marked rather than
+     withheld, or a new board is an empty box for weeks. */
+  .rt .prov, .lad .prov, .vs-rate .prov {
+    font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
+    color: var(--bg-deep, #211e1a); background: var(--gold);
+    border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
+  }
+
+  /* ---- on-screen D-pad: wide pad split into four triangular wedges ---- */
+  /* A rounded rectangle divided by an X (both diagonals) into four triangles:
+     tap (or slide into) the top triangle for up, the bottom for down, the sides
+     for left / right. clip-path paints each wedge; the pointer handlers resolve
+     the wedge with the same diagonal math, so hit zones work identically on
+     every browser and there is no dead-zone. The wide shape covers more of the
+     bottom of the screen so the targets are big. The arrow sits in the fat
+     outer part of its slice, where the target is unambiguous. */
+  .dpad {
+    position: relative;
+    width: min(440px, 94%);
+    aspect-ratio: 4 / 3;
+    border-radius: 22px;
+    overflow: hidden;
+    background:
+      linear-gradient(to bottom right, transparent calc(50% - 1px), var(--pad-line) calc(50% - 1px), var(--pad-line) calc(50% + 1px), transparent calc(50% + 1px)),
+      linear-gradient(to bottom left,  transparent calc(50% - 1px), var(--pad-line) calc(50% - 1px), var(--pad-line) calc(50% + 1px), transparent calc(50% + 1px)),
+      radial-gradient(ellipse at 50% 45%, var(--pad-hi), var(--pad-mid) 72%, var(--pad-lo) 100%);
+    box-shadow:
+      inset 0 2px 3px var(--pad-glare),
+      inset 0 -5px 10px var(--pad-shade),
+      inset 0 0 0 2px var(--pad-ring);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dpad .wedge {
+    position: absolute; inset: 0;
+    border: none; background: transparent; margin: 0; padding: 0;
+    color: var(--pad-ink); font-size: clamp(24px, 7vw, 38px); font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .dpad .wedge.up    { clip-path: polygon(50% 50%, 0 0, 100% 0);       align-items: flex-start;     padding-top: 8%; }
+  .dpad .wedge.down  { clip-path: polygon(50% 50%, 100% 100%, 0 100%); align-items: flex-end;       padding-bottom: 8%; }
+  .dpad .wedge.left  { clip-path: polygon(50% 50%, 0 100%, 0 0);       justify-content: flex-start; padding-left: 8%; }
+  .dpad .wedge.right { clip-path: polygon(50% 50%, 100% 0, 100% 100%); justify-content: flex-end;   padding-right: 8%; }
+  /* a pressed wedge is a gold flash, whose label is dark ink in any theme */
+  .dpad .wedge.pressed { background: var(--gold); color: #211e1a; }
+
+  /* ---- settings gear + modal ---- */
+  .gear {
+    position: absolute; top: 8px; right: 8px; z-index: 6;
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 1.5px solid rgba(194,162,90,0.6);
+    background: rgba(33,30,26,0.55); color: var(--gold-bright);
+    font-size: 20px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(2px);
+  }
+  .gear:active { transform: scale(0.94); }
+  /* ---- the scoreboard row (wide screens): option C ----
+     Identity stands alone as a nameplate; the three utilities share one
+     bordered tray. Chips never pop in and out up here: while competition
+     is live they SLEEP (dim, inert), except the gear, because pausing for
+     settings is part of playing. The same buttons move back onto the board
+     frame on narrow screens (placeChrome), where the old rules hold. */
+  .hdr-cluster { display: none; }
+  /* The chrome's home is decided by POINTER, not width, since 2026-09-06:
+     a desktop window is never so narrow that the square should carry the
+     name and the icons, so touchless screens keep the header at every
+     width and the cluster wraps to its own line when one row is tight.
+     Touch screens keep the frame overlay: their height budget is the
+     reason it exists. placeChrome moves the nodes on the same signal. */
+
+  /* Pixel work, at the owner's call: the header's three pieces share the
+     title's own vertical bounds. The cluster's top sits on PITCH's cap
+     line, SECONDS starts on it too, and BEST ends on SNAKE's baseline,
+     with the big number centered between them. The px nudges below
+     bridge the gap between CSS boxes and where the glyphs actually
+     paint (fonts carry internal leading); they were measured off
+     rendered screenshots, not guessed. */
+  html.touchless header { display: flex; align-items: stretch; gap: 22px; }
+  html.touchless header h1 { margin-right: 2px; }
+  html.touchless .scores { margin-left: auto; min-width: 178px; align-items: stretch; }
+  html.touchless .scores .tally {
+    display: flex; flex-direction: column; justify-content: space-between;
+    height: 100%;
+  }
+  .hdr-cluster { display: flex; align-items: flex-start; gap: 9px; margin-top: -0.5px; }
+  /* the clock keeps its centered seat; a stretched one drew its divider
+     the full height of the title */
+  html.touchless .scores .clock { align-self: center; }
+  /* glyphs, not boxes: the label paints below its box top and BEST ends
+     above its box bottom (screenshot-measured, re-tuned when the column
+     grew to 13/48/17px on 2026-09-06) */
+  html.touchless .scores .label { margin-top: -3.5px; }
+  html.touchless .scores .best { margin-bottom: -1px; }
+  /* shell tokens, not sheet tokens: these sit on the table and must flip
+     with the theme (the nameplate's ink was invisible on the dark table) */
+  .hdr-cluster .gear {
+    position: static; width: 34px; height: 34px; font-size: 15px;
+    background: transparent; border: 1.5px solid var(--gold);
+    color: var(--shell-gold); backdrop-filter: none;
+  }
+  .hdr-cluster .gear.who {
+    width: auto; min-width: 34px; padding: 0 14px; border-radius: 17px;
+    color: var(--shell-ink); font-family: 'Barlow', sans-serif; font-weight: 700;
+    font-size: 12px; letter-spacing: 1.5px;
+  }
+  .hdr-tray {
+    display: inline-flex; align-items: center; height: 34px;
+    border: 1.5px solid var(--gold); border-radius: 17px; overflow: hidden;
+  }
+  .hdr-tray .gear {
+    width: 40px; height: 100%; border: none; border-radius: 0; background: transparent;
+  }
+  .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
+  .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
+  .sleeping { opacity: 0.42; pointer-events: none; }
+  
+  /* Narrow desktop windows: EVERYTHING scales, and the row never breaks.
+     The owner's note, twice over: the pills must not drop under the logo,
+     and the score digits should shrink with the window. Stepped sizes plus
+     a wrap floor did both jobs badly, because a step is a cliff and a cliff
+     is what you notice. Every size here is `min(full, max(floor, Nvw))`
+     instead: flat at its full value from 900px up (N is chosen so each
+     lands exactly on its cap at 900), then shrinking smoothly to a legible
+     floor. One row now holds well under 400px of window, which is narrower
+     than a desktop browser can practically go, so no wrap rule remains.
+     Touch keeps its own two-line header: a phone has width to spare
+     vertically and none horizontally, the opposite trade. */
+  @media (max-width: 899.98px) {
+    html.touchless header { gap: min(22px, max(7px, 2.4vw)); }
+    html.touchless header h1 {
+      font-size: min(52px, max(19px, 5.78vw));
+      text-shadow: min(4px, max(2px, 0.44vw)) min(4px, max(2px, 0.44vw)) 0 var(--gold);
+    }
+    html.touchless .scores { min-width: 0; gap: min(12px, max(5px, 1.33vw)); }
+    html.touchless .scores .val { font-size: min(48px, max(21px, 5.33vw)); }
+    html.touchless .scores .clock {
+      font-size: min(30px, max(15px, 3.33vw));
+      padding-left: min(12px, max(6px, 1.33vw));
+    }
+    html.touchless .scores .label {
+      font-size: min(13px, max(8px, 1.44vw));
+      letter-spacing: min(2px, max(0.8px, 0.22vw));
+    }
+    html.touchless .scores .best { font-size: min(14px, max(9px, 1.55vw)); }
+    html.touchless .hdr-cluster { gap: min(9px, max(4px, 1vw)); }
+    html.touchless .hdr-cluster .gear {
+      width: min(34px, max(25px, 3.78vw)); height: min(34px, max(25px, 3.78vw));
+      font-size: min(15px, max(11px, 1.67vw));
+    }
+    html.touchless .hdr-cluster .gear.who {
+      padding: 0 min(14px, max(7px, 1.55vw));
+      font-size: min(12px, max(9px, 1.33vw));
+      letter-spacing: min(1.5px, max(0.6px, 0.17vw));
+    }
+    html.touchless .hdr-tray { height: min(34px, max(25px, 3.78vw)); }
+    html.touchless .hdr-tray .gear { width: min(40px, max(26px, 4.44vw)); }
+    html.touchless .hdr-tray .gear.purse { padding: 0 min(12px, max(6px, 1.33vw)); }
+  }
+  /* the purse's coin is drawn, not typed: the emoji rendered as a grey moon */
+  .coin-dot {
+    width: 11px; height: 11px; border-radius: 50%; display: inline-block;
+    background: var(--gold-bright); border: 1.5px solid var(--gold-deep);
+    margin-right: 5px; flex: none;
+  }
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(20,17,13,0.62); backdrop-filter: blur(3px); padding: 20px;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  .modal {
+    background: var(--sheet); color: var(--sheet-ink);
+    border: 2px solid var(--gold); border-radius: 14px;
+    padding: 20px 22px; width: min(320px, 90vw);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: 0 20px 40px rgba(33,30,26,0.4);
+  }
+  .modal-title {
+    font-family: 'Anton', sans-serif; font-weight: 400; font-size: 26px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--sheet-ink);
+  }
+  .modal .speed-row, .modal .toggle-row { justify-content: center; }
+  .lock-hint { font-size: 12px; color: var(--food); font-weight: 700; text-align: center; }
+  .speed-row button:disabled, .switch:disabled { opacity: 0.4; cursor: default; }
+
+  /* ---- player chip + profile sheet ---- */
+  /* the trophy sits beside the gear; a slightly smaller glyph, the same coin */
+  .gear.who {
+    left: 8px; right: auto; width: auto; min-width: 38px;
+    padding: 0 12px; border-radius: 19px; gap: 5px;
+    font-family: 'Barlow', sans-serif; font-size: 13px;
+    font-weight: 700; letter-spacing: 1.2px; color: #d8d0bd;
+  }
+  /* the chip row owns the top-left corner; its pills stop positioning
+     themselves and sit in the flow, purse beside chip whatever the name */
+  .chip-row {
+    position: absolute; top: 8px; left: 8px; z-index: 6;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .chip-row .gear { position: static; }
+  .gear.purse { font-size: 14px; }
+  .gear.purse #purseCoins {
+    font-family: 'Anton', sans-serif; font-weight: 400;
+    font-size: 14px; letter-spacing: 0.5px; color: var(--gold-bright);
+  }
   .modal.profile .entry.wide { width: 100%; }
   .modal.profile select {
     width: 100%; padding: 9px 10px; border-radius: 6px;
