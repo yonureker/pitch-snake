@@ -1480,27 +1480,47 @@
   .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
   .sleeping { opacity: 0.42; pointer-events: none; }
   
-  /* Narrow desktop windows: the row SHRINKS before it ever breaks. The
-     title scales down from its 52px cap, the scoreboard tightens, and the
-     pills compact, which holds one header row to about 520px of window;
-     only below that, where no honest sizing fits three groups, does the
-     cluster wrap to its own line as the floor. */
+  /* Narrow desktop windows: EVERYTHING scales, and the row never breaks.
+     The owner's note, twice over: the pills must not drop under the logo,
+     and the score digits should shrink with the window. Stepped sizes plus
+     a wrap floor did both jobs badly, because a step is a cliff and a cliff
+     is what you notice. Every size here is `min(full, max(floor, Nvw))`
+     instead: flat at its full value from 900px up (N is chosen so each
+     lands exactly on its cap at 900), then shrinking smoothly to a legible
+     floor. One row now holds well under 400px of window, which is narrower
+     than a desktop browser can practically go, so no wrap rule remains.
+     Touch keeps its own two-line header: a phone has width to spare
+     vertically and none horizontally, the opposite trade. */
   @media (max-width: 899.98px) {
-    html.touchless header { gap: 12px; }
-    html.touchless header h1 { font-size: clamp(26px, 5.2vw, 52px); text-shadow: 3px 3px 0 var(--gold); }
-    html.touchless .scores { min-width: 0; gap: 8px; }
-    html.touchless .scores .val { font-size: 38px; }
-    html.touchless .scores .clock { font-size: 24px; }
-    html.touchless .scores .label { font-size: 11px; letter-spacing: 1.5px; margin-top: -2px; }
-    html.touchless .scores .best { font-size: 12px; }
-    .hdr-cluster { gap: 6px; }
-    .hdr-cluster .gear.who { padding: 0 10px; font-size: 11px; letter-spacing: 1px; }
-    .hdr-tray .gear { width: 34px; }
-    .hdr-tray .gear.purse { padding: 0 9px; }
-  }
-  @media (max-width: 519.98px) {
-    html.touchless header { flex-wrap: wrap; row-gap: 10px; }
-    .hdr-cluster { order: 3; flex-basis: 100%; }
+    html.touchless header { gap: min(22px, max(7px, 2.4vw)); }
+    html.touchless header h1 {
+      font-size: min(52px, max(19px, 5.78vw));
+      text-shadow: min(4px, max(2px, 0.44vw)) min(4px, max(2px, 0.44vw)) 0 var(--gold);
+    }
+    html.touchless .scores { min-width: 0; gap: min(12px, max(5px, 1.33vw)); }
+    html.touchless .scores .val { font-size: min(48px, max(21px, 5.33vw)); }
+    html.touchless .scores .clock {
+      font-size: min(30px, max(15px, 3.33vw));
+      padding-left: min(12px, max(6px, 1.33vw));
+    }
+    html.touchless .scores .label {
+      font-size: min(13px, max(8px, 1.44vw));
+      letter-spacing: min(2px, max(0.8px, 0.22vw));
+    }
+    html.touchless .scores .best { font-size: min(14px, max(9px, 1.55vw)); }
+    html.touchless .hdr-cluster { gap: min(9px, max(4px, 1vw)); }
+    html.touchless .hdr-cluster .gear {
+      width: min(34px, max(25px, 3.78vw)); height: min(34px, max(25px, 3.78vw));
+      font-size: min(15px, max(11px, 1.67vw));
+    }
+    html.touchless .hdr-cluster .gear.who {
+      padding: 0 min(14px, max(7px, 1.55vw));
+      font-size: min(12px, max(9px, 1.33vw));
+      letter-spacing: min(1.5px, max(0.6px, 0.17vw));
+    }
+    html.touchless .hdr-tray { height: min(34px, max(25px, 3.78vw)); }
+    html.touchless .hdr-tray .gear { width: min(40px, max(26px, 4.44vw)); }
+    html.touchless .hdr-tray .gear.purse { padding: 0 min(12px, max(6px, 1.33vw)); }
   }
   /* the purse's coin is drawn, not typed: the emoji rendered as a grey moon */
   .coin-dot {
