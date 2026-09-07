@@ -6,6 +6,48 @@
 <meta name="theme-color" content="#efe6d0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12160e" media="(prefers-color-scheme: dark)">
 <title>PITCH SNAKE</title>
+
+<!-- How this game looks when somebody LINKS to it, which until now was: a bare
+     URL, no thumbnail, no description, and a blank tab icon. That is most of a
+     first impression on Reddit or in a group chat, and it was the one surface
+     with nothing on it at all.
+
+     Every URL here is absolute and points at pitchsnake.com even though these
+     same bytes also serve from yonureker.github.io. That is deliberate on both
+     counts: a scraper resolves og:image against the page it fetched, so a
+     relative path would be fine, but the canonical below already says the apex
+     is the real address and a preview card pointing anywhere else would argue
+     with it. The github.io origin stays live as the migration exporter and is
+     not somewhere anyone should be sent.
+
+     assets/og.png is generated, not drawn by hand: the card's source is in the
+     repo's scratchpad procedure and it is the page's own palette and fonts, so
+     re-rendering it after a rebrand is a screenshot rather than a design job. -->
+<link rel="canonical" href="https://pitchsnake.com/">
+<meta name="description" content="A football-flavoured snake game. Eat to grow, survive the pitch, and race up to four rivals in a shared room. Free, no download, plays in your browser.">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pitch Snake">
+<meta property="og:url" content="https://pitchsnake.com/">
+<meta property="og:title" content="Pitch Snake">
+<meta property="og:description" content="Eat to grow. Survive the pitch. Five players, one ball, and ghosts that hunt you.">
+<meta property="og:image" content="https://pitchsnake.com/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Pitch Snake: a gold snake and two ghosts on a green football pitch.">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pitch Snake">
+<meta name="twitter:description" content="Eat to grow. Survive the pitch. Five players, one ball, and ghosts that hunt you.">
+<meta name="twitter:image" content="https://pitchsnake.com/assets/og.png">
+
+<!-- SVG first for anything modern, the PNG behind it for everything else. The
+     icon is three segments turning a corner and a ball, because a tab icon is
+     read at 16px and nothing more detailed than that survives the scale. -->
+<link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
+<link rel="icon" type="image/png" sizes="64x64" href="./assets/icon-64.png">
+<link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
