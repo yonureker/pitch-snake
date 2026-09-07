@@ -14,7 +14,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   replay, MODES, SPEEDS, START_LEN,
-} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@666b86dc1cb24ffc8a7ef75b9dddaa49804877d7/packages/engine/engine.js';
+} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@940e84646529bd819effe2949106df4bebbeda25/packages/engine/engine.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
