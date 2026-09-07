@@ -1,0 +1,373 @@
+/**
+ * The outfits: what a skin, a hat and a shirt LOOK like.
+ *
+ * OWNS the catalogue of wearable art and the drawing of it. A skin is a colour
+ * ramp plus an optional crest; a hat is a footprint, a seat on the head and a
+ * draw call; a shirt is a number in 8-bit blocks. Every entry keys on its
+ * `pitch_snake_items` id, which is the economy's contract: the SERVER sells ids
+ * and prices, the client owns what those ids look like, and an id this build
+ * has never heard of falls back to classic. That fallback is what lets the
+ * catalogue grow by SQL alone without stranding a page somebody left open.
+ *
+ * MUST NEVER know what is being worn, where it is on the pitch, or how big a
+ * cell is. Nothing here reads `cell`, `ctx`, the round, or the profile: every
+ * function is told its context and its size and draws into it. That is what
+ * makes this a leaf (see page/README.md) and it is also why the shop can call
+ * the very same functions for its previews, so a preview cannot lie about what
+ * the money buys.
+ *
+ * MUST NEVER be reached from the frame loop. All of it is bake-time work: the
+ * shell renders these once into offscreen canvases on a resize or a change of
+ * clothes and blits them per frame (performance rule 7).
+ *
+ * ART IS NOT RULES. None of this crosses into packages/engine: a cosmetic in
+ * the engine would chain every new hat to an ENGINE_VERSION bump and a
+ * validator re-pin, which is absurd for content. The mobile app carries the
+ * same catalogue ported to Skia in apps/mobile/src/game/pitch-art.ts, because
+ * only the numbers are shared: `quadraticCurveTo` on a 2D context and a
+ * `Skia.Path` are different enough that a common drawing language would cost
+ * more than the duplicated coordinates.
+ *
+ * @module pitch-art
+ */
+
+/** One skin's colour ramp, outline, and the crest that some skins carry. */
+export interface SkinArt {
+  /** The head's colour, as r/g/b in 0..255. */
+  head: readonly number[];
+  /** The tail's colour; every segment interpolates between the two. */
+  tail: readonly number[];
+  /** The outline that rides every segment. */
+  line: string;
+  /** The crest's colour, or null for a skin that wears none. */
+  spikes: string | null;
+  /** The crest's second colour, alternating tooth by tooth. */
+  spikesAlt: string | null;
+}
+
+/** One hat's art: its footprint, where it sits, and how to draw it. */
+export interface HatArt {
+  /** Width as a fraction of a cell. */
+  wf: number;
+  /** Height as a fraction of a cell. */
+  hf: number;
+  /** Where it sits relative to the head's centre. */
+  dy: (cellPixels: number, height: number) => number;
+  /** How to draw it into a canvas of the given size. */
+  draw: (context: CanvasRenderingContext2D, width: number, height: number) => void;
+}
+
+/**
+ * The skins.
+ *
+ * `classic` is the bare snake and `viper` stays the blue curio with the crest
+ * that ?skin=viper has always summoned; the `skin-` ids are what the shop
+ * sells. Rival BODIES wear this clothing too, so these ramps are not the local
+ * player's alone; VS_COLORS in the page survive as name tags and roster dots,
+ * which are identity rather than clothing.
+ */
+export const SKINS = {
+  classic:      { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
+                  spikes: null, spikesAlt: null },
+  viper:        { head: [ 88, 168, 246], tail: [ 24,  74, 150], line: 'rgba(150,110,235,0.75)',
+                  spikes: '#9a5cf0', spikesAlt: '#7b3fd6' },
+  'skin-away':  { head: [248, 248, 252], tail: [172, 194, 222], line: 'rgba(70,110,180,0.65)',
+                  spikes: null, spikesAlt: null },
+  'skin-volt':  { head: [250, 240, 104], tail: [172, 142, 24],  line: 'rgba(64,60,36,0.6)',
+                  spikes: null, spikesAlt: null },
+  'skin-rosa':  { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)',
+                  spikes: null, spikesAlt: null },
+  'skin-night': { head: [226, 231, 241], tail: [ 36,  42,  56], line: 'rgba(122,132,160,0.55)',
+                  spikes: null, spikesAlt: null },
+  'skin-gilt':  { head: [252, 232, 152], tail: [194, 150, 56],  line: 'rgba(140,100,30,0.7)',
+                  spikes: null, spikesAlt: null },
+} as const satisfies Record<string, SkinArt>;
+
+/**
+ * The hats.
+ *
+ * Drawn rather than lettered, unlike the flag: there is no standalone cowboy
+ * hat in the emoji set (the one that exists is a whole face), and art beats a
+ * glyph for a skin anyway, since it depends on no platform's font and every
+ * device draws the same shapes. `classic` is the felt hat a bare hat slot has
+ * always worn; the `hat-` ids are bought.
+ */
+export const HATS = {
+  classic: {
+    wf: 1.5, hf: 0.95,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.62,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      const midX = w / 2;
+      const brimY = h * 0.72;             // where the brim sits in the sprite
+      // the crown: a tapered shape with the dented top a felt hat has
+      c.fillStyle = '#8a5a2b';
+      c.beginPath();
+      c.moveTo(midX - w * 0.2, brimY);
+      c.lineTo(midX - w * 0.165, h * 0.3);
+      c.quadraticCurveTo(midX - w * 0.1, h * 0.11, midX - w * 0.045, h * 0.2);
+      c.quadraticCurveTo(midX, h * 0.3, midX + w * 0.045, h * 0.2);
+      c.quadraticCurveTo(midX + w * 0.1, h * 0.11, midX + w * 0.165, h * 0.3);
+      c.lineTo(midX + w * 0.2, brimY);
+      c.closePath();
+      c.fill();
+      // the band, where the crown meets the brim
+      c.fillStyle = '#42291a';
+      c.fillRect(midX - w * 0.205, brimY - h * 0.16, w * 0.41, h * 0.13);
+      // the brim: wide, and curling up at the tips, which is the whole
+      // silhouette of the thing at this size
+      c.fillStyle = '#9a6631';
+      c.beginPath();
+      c.moveTo(midX - w * 0.5, brimY - h * 0.06);
+      c.quadraticCurveTo(midX, brimY + h * 0.26, midX + w * 0.5, brimY - h * 0.06);
+      c.quadraticCurveTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.06);
+      c.closePath();
+      c.fill();
+    },
+  },
+  'hat-band': {
+    wf: 1.06, hf: 0.3,
+    // across the forehead, not above it: a sweatband is worn, not perched
+    dy: (cellPixels: number) => -cellPixels * 0.38,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      c.fillStyle = '#e6402a';
+      c.beginPath();
+      c.moveTo(h / 2, 0); c.lineTo(w - h / 2, 0);
+      c.arc(w - h / 2, h / 2, h / 2, -Math.PI / 2, Math.PI / 2);
+      c.lineTo(h / 2, h);
+      c.arc(h / 2, h / 2, h / 2, Math.PI / 2, -Math.PI / 2);
+      c.closePath();
+      c.fill();
+      c.fillStyle = '#f6efde';
+      c.fillRect(w * 0.14, h * 0.38, w * 0.72, h * 0.24);
+    },
+  },
+  'hat-cap': {
+    wf: 1.35, hf: 0.62,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.38 - height * 0.58,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      // the terrace flat cap, face on: a low tweed dome over a slim brim
+      c.fillStyle = '#6b5b45';
+      c.beginPath();
+      c.moveTo(w * 0.06, h * 0.78);
+      c.quadraticCurveTo(w * 0.1, h * 0.1, w * 0.5, h * 0.08);
+      c.quadraticCurveTo(w * 0.9, h * 0.1, w * 0.94, h * 0.78);
+      c.closePath();
+      c.fill();
+      // the button on the crown
+      c.fillStyle = '#57482f';
+      c.fillRect(w * 0.46, h * 0.02, w * 0.08, h * 0.1);
+      // the brim, a darker sliver curling across the front
+      c.fillStyle = '#4c3f2c';
+      c.beginPath();
+      c.moveTo(w * 0.04, h * 0.76);
+      c.quadraticCurveTo(w * 0.5, h * 1.02, w * 0.96, h * 0.76);
+      c.quadraticCurveTo(w * 0.5, h * 0.8, w * 0.04, h * 0.76);
+      c.closePath();
+      c.fill();
+    },
+  },
+  'hat-crown': {
+    wf: 1.1, hf: 0.72,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.52,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      // three points, jewelled tips, a solid base band: royalty at 20px
+      c.fillStyle = '#f0c440';
+      c.beginPath();
+      c.moveTo(w * 0.08, h * 0.92);
+      c.lineTo(w * 0.08, h * 0.3);
+      c.lineTo(w * 0.28, h * 0.58);
+      c.lineTo(w * 0.5, h * 0.06);
+      c.lineTo(w * 0.72, h * 0.58);
+      c.lineTo(w * 0.92, h * 0.3);
+      c.lineTo(w * 0.92, h * 0.92);
+      c.closePath();
+      c.fill();
+      c.fillStyle = '#a87d1e';
+      c.fillRect(w * 0.08, h * 0.78, w * 0.84, h * 0.14);
+      c.fillStyle = '#e6402a';
+      c.beginPath();
+      c.arc(w * 0.5, h * 0.1, w * 0.05, 0, Math.PI * 2);
+      c.fill();
+    },
+  },
+} as const satisfies Record<string, HatArt>;
+
+// The catalogues are authored as literals so their keys stay literal, and read
+// through these widened views so an id from the server (or from a rival's
+// presence payload, or a URL) can be looked up without a cast. Under
+// noUncheckedIndexedAccess an unknown id reads as undefined, which is exactly
+// the fallback the economy asks for.
+const SKIN_BY_ID: Record<string, SkinArt> = SKINS;
+const HAT_BY_ID: Record<string, HatArt> = HATS;
+
+/**
+ * The skin an id resolves to. Unknown, null and empty all wear classic.
+ *
+ * @param id A `pitch_snake_items` id, or null for "nothing equipped".
+ * @returns Always a skin: this never fails, because a client that has not heard
+ *   of next month's item still has to draw a snake.
+ */
+export function skinFor(id: string | null | undefined): SkinArt {
+  return (id ? SKIN_BY_ID[id] : undefined) ?? SKINS.classic;
+}
+
+/**
+ * The hat an id resolves to. Unknown, null and empty all wear classic.
+ *
+ * @param id A `pitch_snake_items` id, or null for "nothing equipped".
+ * @returns Always a hat, for the same reason as {@link skinFor}.
+ */
+export function hatFor(id: string | null | undefined): HatArt {
+  return (id ? HAT_BY_ID[id] : undefined) ?? HATS.classic;
+}
+
+/**
+ * How many shades a body ramp holds.
+ *
+ * Exported because the renderer indexes the ramp by it: how long the table is
+ * belongs to whoever builds the table.
+ */
+export const SNAKE_SHADES = 64;
+
+/**
+ * The body's shades from head to tail, as ready-made fill strings.
+ *
+ * Performance rule 5: the per-segment loop reads this table and never builds a
+ * `rgb(...)` string, so it is computed once per change of skin and never in a
+ * frame.
+ *
+ * @param skin The skin to ramp.
+ * @returns `SNAKE_SHADES` fill styles, head first.
+ */
+export function buildLutFor(skin: SkinArt): string[] {
+  return Array.from({ length: SNAKE_SHADES }, (_, i) => {
+    const t = i / (SNAKE_SHADES - 1);
+    const h = skin.head, l = skin.tail;
+    const r = (h[0] ?? 0) + ((l[0] ?? 0) - (h[0] ?? 0)) * t;
+    const g = (h[1] ?? 0) + ((l[1] ?? 0) - (h[1] ?? 0)) * t;
+    const b = (h[2] ?? 0) + ((l[2] ?? 0) - (h[2] ?? 0)) * t;
+    return `rgb(${Math.trunc(r)}, ${Math.trunc(g)}, ${Math.trunc(b)})`;
+  });
+}
+
+/**
+ * Trace a rounded rectangle onto a context, leaving it as the current path.
+ *
+ * The caller fills or strokes it, which is why this traces rather than paints:
+ * the wall layer clips with it, the jersey fills then strokes it.
+ *
+ * @param c The context to trace onto.
+ * @param x Left edge, in pixels.
+ * @param y Top edge, in pixels.
+ * @param w Width in pixels.
+ * @param h Height in pixels.
+ * @param rad Corner radius in pixels.
+ */
+export function roundRectOn(
+  c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rad: number,
+): void {
+  c.beginPath();
+  c.moveTo(x + rad, y);
+  c.arcTo(x + w, y, x + w, y + h, rad);
+  c.arcTo(x + w, y + h, x, y + h, rad);
+  c.arcTo(x, y + h, x, y, rad);
+  c.arcTo(x, y, x + w, y, rad);
+  c.closePath();
+}
+
+/**
+ * The crest: five teeth hanging off the head, longest in the middle.
+ *
+ * Part of the SKIN rather than a thing you wear, so it takes the skin's colours
+ * and a skin with none draws nothing. The bases sit above the sprite's top so
+ * they tuck behind the head instead of ending in a straight line across it, and
+ * the fan shape (rather than a comb) is what stops it reading as teeth.
+ *
+ * @param c The context to draw into.
+ * @param w The sprite's width in pixels.
+ * @param h The sprite's height in pixels.
+ * @param skin The skin whose crest colours to use; one without a crest is a
+ *   no-op, so the caller need not check.
+ */
+export function drawCrest(
+  c: CanvasRenderingContext2D, w: number, h: number, skin: SkinArt,
+): void {
+  if (skin.spikes === null) return;
+  const n = 5, toothW = w / n;
+  for (let i = 0; i < n; i++) {
+    const mid = (i + 0.5) * toothW;
+    const fall = 1 - Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);   // 0 at the ends, 1 in the middle
+    const len = h * (0.58 + 0.42 * fall);
+    c.fillStyle = (i % 2 ? skin.spikes : skin.spikesAlt) ?? skin.spikes;
+    c.beginPath();
+    c.moveTo(mid - toothW * 0.62, -h * 0.2);
+    c.lineTo(mid + toothW * 0.62, -h * 0.2);
+    c.lineTo(mid, len);
+    c.closePath();
+    c.fill();
+  }
+}
+
+/**
+ * The shirt number each room seat wears, so a five-a-side never fields five
+ * number tens. Solo keeps the classic ten; in a room every seat (mine too)
+ * wears its own.
+ */
+export const VS_NUMS = [10, 7, 9, 4, 8] as const;
+
+/**
+ * 3x5 pixel glyphs, 0-9, so a shirt can wear any number.
+ *
+ * Blocks rather than text on purpose: 8-bit at this size, and immune to which
+ * fonts a device happens to ship, which is the same reason the flags are a
+ * sprite rather than regional-indicator pairs.
+ */
+const JERSEY_GLYPH: Record<string, readonly string[]> = {
+  '0': ['111', '101', '101', '101', '111'], '1': ['010', '110', '010', '010', '111'],
+  '2': ['111', '001', '111', '100', '111'], '3': ['111', '001', '111', '001', '111'],
+  '4': ['101', '101', '111', '001', '001'], '5': ['111', '100', '111', '001', '111'],
+  '6': ['111', '100', '111', '101', '111'], '7': ['111', '001', '010', '010', '010'],
+  '8': ['111', '101', '111', '101', '111'], '9': ['111', '101', '111', '001', '111'],
+};
+
+/**
+ * Paint one shirt: red and yellow halves, a rounded edge, a centred number.
+ *
+ * Worn on the square behind the head. A test balloon for outfits beyond hats,
+ * baked art rather than a shop item so it can be looked at in play before
+ * anything is priced.
+ *
+ * @param c The context to paint into.
+ * @param s The shirt's size in pixels; it is square.
+ * @param num The number on the back.
+ */
+export function paintJersey(c: CanvasRenderingContext2D, s: number, num: number): void {
+  c.clearRect(0, 0, s, s);
+  c.save();
+  roundRectOn(c, 0, 0, s, s, s * 0.3);
+  c.clip();
+  c.fillStyle = '#f2c114'; c.fillRect(0, 0, s / 2, s);
+  c.fillStyle = '#d8231f'; c.fillRect(s / 2, 0, s / 2, s);
+  c.restore();
+  roundRectOn(c, 0.5, 0.5, s - 1, s - 1, s * 0.3);
+  c.strokeStyle = 'rgba(33,30,26,0.55)';
+  c.lineWidth = Math.max(1, s * 0.05);
+  c.stroke();
+  // eslint-disable-next-line @typescript-eslint/no-misused-spread -- digits of a number, never text: there is nothing here for a code point to break.
+  const digits = [...String(num)];
+  const px = Math.max(1, Math.round(s * 0.11));
+  const w = digits.length * 4 - 1;   // 3px per glyph plus a 1px gap, less the trailing gap
+  const x0 = Math.round((s - px * w) / 2), y0 = Math.round((s - px * 5) / 2);
+  const ink = (color: string, dx: number, dy: number): void => {
+    c.fillStyle = color;
+    for (let d = 0; d < digits.length; d++) {
+      const glyph = JERSEY_GLYPH[digits[d] ?? ''];
+      if (!glyph) continue;
+      for (let r = 0; r < 5; r++)
+        for (let k = 0; k < 3; k++)
+          if (glyph[r]?.[k] === '1') c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
+    }
+  };
+  ink('rgba(33,30,26,0.8)', 1, 1);   // the drop shadow keeps white legible on yellow
+  ink('#ffffff', 0, 0);
+}

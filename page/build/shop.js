@@ -16,14 +16,18 @@
  * MUST NEVER be reached from the frame loop. All of it is menu-time DOM
  * work: it builds lists, sets text and paints two small preview canvases.
  *
- * The art is passed in rather than imported, because the ART lives with the
- * pitch that draws it and the shop must show exactly what the money buys. An
- * id this page has never heard of falls back to classic, which is what lets
- * the catalogue grow by SQL alone without stranding old clients.
+ * The art is IMPORTED from page/pitch-art.ts, the same module the pitch itself
+ * draws from. That is what makes a preview honest: it is not a drawing of the
+ * item, it is the item's own draw call at preview size, so it cannot drift from
+ * what the snake wears. It would stop being true the moment this file kept a
+ * copy of its own. An id this page has never heard of falls back to classic,
+ * which is what lets the catalogue grow by SQL alone without stranding old
+ * clients.
  *
  * @module
  */
 import { mustGetElement, mustGetElementOfKind } from './dom.js';
+import { hatFor, skinFor } from './pitch-art.js';
 import { supabaseConfigured, supabaseRpc } from './supabase-client.js';
 const SHOP_ERRORS = {
     'not enough coins': 'Not enough coins yet. Rounds and badges pay them.',
@@ -35,8 +39,6 @@ const SHOP_ERRORS = {
 };
 // how long an armed BUY waits for its SURE? before disarming itself
 const ARM_MS = 3500;
-let skinArt = {};
-let hatArt = {};
 let ports = null;
 let shopModal = null;
 let shopList = null;
@@ -154,9 +156,9 @@ function rampChannel(skin, channel, t) {
 // Previews are drawn with the very ramps and hat art the pitch uses, so a
 // preview cannot lie about what the money buys.
 function paintSkinPreview(canvas, id) {
-    const skin = skinArt[id] ?? skinArt.classic;
+    const skin = skinFor(id);
     const context = canvas.getContext('2d');
-    if (context === null || skin === undefined)
+    if (context === null)
         return;
     context.clearRect(0, 0, canvas.width, canvas.height);
     const count = 5;
@@ -177,9 +179,9 @@ function paintSkinPreview(canvas, id) {
     }
 }
 function paintHatPreview(canvas, id) {
-    const hat = hatArt[id] ?? hatArt.classic;
+    const hat = hatFor(id);
     const context = canvas.getContext('2d');
-    if (context === null || hat === undefined)
+    if (context === null)
         return;
     context.clearRect(0, 0, canvas.width, canvas.height);
     const cellPixels = 17;
@@ -345,15 +347,11 @@ async function open() {
 /**
  * Wire the shop to its markup. Call once at boot.
  *
- * @param art - the pitch's own art, so a preview shows exactly what the money
- *   buys rather than a drawing of it.
- * @param art.skins - skin colour ramps, keyed by pitch_snake_items id.
- * @param art.hats - hat art, keyed by pitch_snake_items id.
- * @param shellPorts - the three things the shop needs the shell to do.
+ * @param shellPorts - the three things the shop needs the shell to do. The art
+ *   is not among them: it is imported, from the same module the pitch draws
+ *   from.
  */
-export function initShop(art, shellPorts) {
-    skinArt = art.skins;
-    hatArt = art.hats;
+export function initShop(shellPorts) {
     ports = shellPorts;
     shopModal = mustGetElement('shopModal');
     shopList = mustGetElement('shopList');

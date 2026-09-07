@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=4cf2d3319b">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=5783ee49f3">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=5783ee49f3">
 </head>
 <body>
   <div class="wrap">
@@ -417,15 +417,16 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=4cf2d3319b",
-    "./packages/net/net.js": "./packages/net/net.js?v=4cf2d3319b",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=4cf2d3319b",
-    "./page/build/dom.js": "./page/build/dom.js?v=4cf2d3319b",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=4cf2d3319b",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=4cf2d3319b",
-    "./page/build/shop.js": "./page/build/shop.js?v=4cf2d3319b",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=4cf2d3319b",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=4cf2d3319b"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=5783ee49f3",
+    "./packages/net/net.js": "./packages/net/net.js?v=5783ee49f3",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=5783ee49f3",
+    "./page/build/dom.js": "./page/build/dom.js?v=5783ee49f3",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=5783ee49f3",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=5783ee49f3",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=5783ee49f3",
+    "./page/build/shop.js": "./page/build/shop.js?v=5783ee49f3",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=5783ee49f3",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=5783ee49f3"
   }
 }
 </script>
@@ -706,9 +707,17 @@
     supabaseRpc, SUPABASE_KEY, SUPABASE_URL,
   } from './page/build/supabase-client.js';
   import { buildCountries, paintFlag } from './page/build/country-flags.js';
+  // What a skin, a hat and a shirt LOOK like, and nothing about who wears one:
+  // this file still owns the baking, the seating on the head and the wardrobe.
+  // The shop draws its previews from the same module, which is what stops a
+  // preview drifting from the snake. See page/pitch-art.ts.
+  import {
+    buildLutFor, drawCrest, hatFor, paintJersey, roundRectOn, SKINS, skinFor,
+    SNAKE_SHADES, VS_NUMS,
+  } from './page/build/pitch-art.js';
   // The spend side: the shop sheet, the purse, and the wallet every reader
-  // repaints from. It is handed the pitch's own art so a preview cannot lie
-  // about what the money buys. See page/shop.ts.
+  // repaints from. It draws its previews from page/pitch-art.ts, the same art
+  // this file wears, so a preview cannot lie. See page/shop.ts.
   import { applyWallet, creditPurse, initShop, purseIsKnown } from './page/build/shop.js';
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
@@ -1029,23 +1038,7 @@
     spikeW = Math.ceil(cell * 1.02);
     spikeH = Math.ceil(cell * 0.72);
     spikeCanvas.width = spikeW; spikeCanvas.height = spikeH;
-    const c = spikeCtx;
-    // five teeth, longest in the middle, so the crest reads as a fan rather
-    // than a comb; the bases sit above the sprite's top so they tuck behind
-    // the head instead of ending in a straight purple line across it
-    const n = 5, w = spikeW / n;
-    for (let i = 0; i < n; i++) {
-      const mid = (i + 0.5) * w;
-      const fall = 1 - Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);   // 0 at the ends, 1 in the middle
-      const len = spikeH * (0.58 + 0.42 * fall);
-      c.fillStyle = i % 2 ? SKIN.spikes : SKIN.spikesAlt;
-      c.beginPath();
-      c.moveTo(mid - w * 0.62, -spikeH * 0.2);
-      c.lineTo(mid + w * 0.62, -spikeH * 0.2);
-      c.lineTo(mid, len);
-      c.closePath();
-      c.fill();
-    }
+    drawCrest(spikeCtx, spikeW, spikeH, SKIN);
   }
 
   // the crest hangs off the head's lower edge, its bases tucked under it
@@ -1057,121 +1050,13 @@
   }
 
   // ---- the hats ----
-  // Drawn rather than lettered, unlike the flag: there is no standalone
-  // cowboy hat in the emoji set (the one that exists is a whole face), and
-  // art beats a glyph for a skin anyway, since it depends on no platform's
-  // font and the phone can draw the same shapes. Baked once per resize or
-  // hat change, so a frame costs one drawImage (rule 7).
-  //
-  // A catalogue now, keyed by pitch_snake_items ids like the skins: the
-  // felt classic is what a bare hat slot has always worn, the other three
-  // are bought. Each entry is its footprint (in cells), where it sits
-  // relative to the head's centre, and how to draw it; the shop reuses the
-  // same draw calls for its previews, so the preview cannot lie.
+  // The art is page/pitch-art.ts; what stays here is the wearing of it. Baked
+  // once per resize or change of hat, so a frame costs one drawImage (rule 7).
   // ?hat=off still undresses for screenshots.
-  const HATS = {
-    classic: {
-      wf: 1.5, hf: 0.95,
-      dy: (cellPx, h) => -cellPx * 0.42 - h * 0.62,
-      draw(c, w, h) {
-        const midX = w / 2;
-        const brimY = h * 0.72;             // where the brim sits in the sprite
-        // the crown: a tapered shape with the dented top a felt hat has
-        c.fillStyle = '#8a5a2b';
-        c.beginPath();
-        c.moveTo(midX - w * 0.20, brimY);
-        c.lineTo(midX - w * 0.165, h * 0.30);
-        c.quadraticCurveTo(midX - w * 0.10, h * 0.11, midX - w * 0.045, h * 0.20);
-        c.quadraticCurveTo(midX, h * 0.30, midX + w * 0.045, h * 0.20);
-        c.quadraticCurveTo(midX + w * 0.10, h * 0.11, midX + w * 0.165, h * 0.30);
-        c.lineTo(midX + w * 0.20, brimY);
-        c.closePath();
-        c.fill();
-        // the band, where the crown meets the brim
-        c.fillStyle = '#42291a';
-        c.fillRect(midX - w * 0.205, brimY - h * 0.16, w * 0.41, h * 0.13);
-        // the brim: wide, and curling up at the tips, which is the whole
-        // silhouette of the thing at this size
-        c.fillStyle = '#9a6631';
-        c.beginPath();
-        c.moveTo(midX - w * 0.5, brimY - h * 0.06);
-        c.quadraticCurveTo(midX, brimY + h * 0.26, midX + w * 0.5, brimY - h * 0.06);
-        c.quadraticCurveTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.06);
-        c.closePath();
-        c.fill();
-      },
-    },
-    'hat-band': {
-      wf: 1.06, hf: 0.3,
-      // across the forehead, not above it: a sweatband is worn, not perched
-      dy: (cellPx) => -cellPx * 0.38,
-      draw(c, w, h) {
-        c.fillStyle = '#e6402a';
-        c.beginPath();
-        c.moveTo(h / 2, 0); c.lineTo(w - h / 2, 0);
-        c.arc(w - h / 2, h / 2, h / 2, -Math.PI / 2, Math.PI / 2);
-        c.lineTo(h / 2, h);
-        c.arc(h / 2, h / 2, h / 2, Math.PI / 2, -Math.PI / 2);
-        c.closePath();
-        c.fill();
-        c.fillStyle = '#f6efde';
-        c.fillRect(w * 0.14, h * 0.38, w * 0.72, h * 0.24);
-      },
-    },
-    'hat-cap': {
-      wf: 1.35, hf: 0.62,
-      dy: (cellPx, h) => -cellPx * 0.38 - h * 0.58,
-      draw(c, w, h) {
-        // the terrace flat cap, face on: a low tweed dome over a slim brim
-        c.fillStyle = '#6b5b45';
-        c.beginPath();
-        c.moveTo(w * 0.06, h * 0.78);
-        c.quadraticCurveTo(w * 0.10, h * 0.10, w * 0.5, h * 0.08);
-        c.quadraticCurveTo(w * 0.90, h * 0.10, w * 0.94, h * 0.78);
-        c.closePath();
-        c.fill();
-        // the button on the crown
-        c.fillStyle = '#57482f';
-        c.fillRect(w * 0.46, h * 0.02, w * 0.08, h * 0.10);
-        // the brim, a darker sliver curling across the front
-        c.fillStyle = '#4c3f2c';
-        c.beginPath();
-        c.moveTo(w * 0.04, h * 0.76);
-        c.quadraticCurveTo(w * 0.5, h * 1.02, w * 0.96, h * 0.76);
-        c.quadraticCurveTo(w * 0.5, h * 0.80, w * 0.04, h * 0.76);
-        c.closePath();
-        c.fill();
-      },
-    },
-    'hat-crown': {
-      wf: 1.1, hf: 0.72,
-      dy: (cellPx, h) => -cellPx * 0.40 - h * 0.52,
-      draw(c, w, h) {
-        // three points, jewelled tips, a solid base band: royalty at 20px
-        c.fillStyle = '#f0c440';
-        c.beginPath();
-        c.moveTo(w * 0.08, h * 0.92);
-        c.lineTo(w * 0.08, h * 0.30);
-        c.lineTo(w * 0.28, h * 0.58);
-        c.lineTo(w * 0.5, h * 0.06);
-        c.lineTo(w * 0.72, h * 0.58);
-        c.lineTo(w * 0.92, h * 0.30);
-        c.lineTo(w * 0.92, h * 0.92);
-        c.closePath();
-        c.fill();
-        c.fillStyle = '#a87d1e';
-        c.fillRect(w * 0.08, h * 0.78, w * 0.84, h * 0.14);
-        c.fillStyle = '#e6402a';
-        c.beginPath();
-        c.arc(w * 0.5, h * 0.10, w * 0.05, 0, Math.PI * 2);
-        c.fill();
-      },
-    },
-  };
   const hatCanvas = document.createElement('canvas');
   const hatCtx = hatCanvas.getContext('2d');
   let hatW = 0, hatH = 0;
-  let HAT = HATS.classic;
+  let HAT = hatFor(null);
   const hatParam = new URLSearchParams(location.search).get('hat');
   const hatOn = hatParam !== 'off';
   function buildHatSprite() {
@@ -1201,51 +1086,7 @@
   const jerseyCanvas = document.createElement('canvas');
   const jerseyCtx = jerseyCanvas.getContext('2d');
   let jerseyS = 0;
-  // 3x5 pixel glyphs, 0-9, so a jersey can wear any number; the old pair was
-  // just the "1" and "0" of number ten.
-  const JERSEY_GLYPH = {
-    '0': ['111','101','101','101','111'], '1': ['010','110','010','010','111'],
-    '2': ['111','001','111','100','111'], '3': ['111','001','111','001','111'],
-    '4': ['101','101','111','001','001'], '5': ['111','100','111','001','111'],
-    '6': ['111','100','111','101','111'], '7': ['111','001','010','010','010'],
-    '8': ['111','101','111','101','111'], '9': ['111','101','111','001','111'],
-  };
-  // the shirt number each room seat wears, so a five-a-side never fields five
-  // number tens; solo keeps the classic ten, in a room every seat (mine too)
-  // wears its own
-  const VS_NUMS = [10, 7, 9, 4, 8];
   const jerseySeat = Array.from({ length: 5 }, () => document.createElement('canvas'));
-  // Paint one shirt onto ctx c at size s: red/yellow halves, a rounded edge and
-  // a centred number. Baked at resize, never drawn per frame.
-  function paintJersey(c, s, num) {
-    c.clearRect(0, 0, s, s);
-    c.save();
-    roundRectOn(c, 0, 0, s, s, s * 0.3);
-    c.clip();
-    c.fillStyle = '#f2c114'; c.fillRect(0, 0, s / 2, s);
-    c.fillStyle = '#d8231f'; c.fillRect(s / 2, 0, s / 2, s);
-    c.restore();
-    roundRectOn(c, 0.5, 0.5, s - 1, s - 1, s * 0.3);
-    c.strokeStyle = 'rgba(33,30,26,0.55)';
-    c.lineWidth = Math.max(1, s * 0.05);
-    c.stroke();
-    const digits = String(num).split('');
-    const px = Math.max(1, Math.round(s * 0.11));
-    const w = digits.length * 4 - 1;   // 3px per glyph plus a 1px gap, less the trailing gap
-    const x0 = Math.round((s - px * w) / 2), y0 = Math.round((s - px * 5) / 2);
-    const ink = (color, dx, dy) => {
-      c.fillStyle = color;
-      for (let d = 0; d < digits.length; d++) {
-        const g = JERSEY_GLYPH[digits[d]];
-        if (!g) continue;
-        for (let r = 0; r < 5; r++)
-          for (let k = 0; k < 3; k++)
-            if (g[r][k] === '1') c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
-      }
-    };
-    ink('rgba(33,30,26,0.8)', 1, 1);   // the drop shadow keeps white legible on yellow
-    ink('#ffffff', 0, 0);
-  }
   function buildJerseySprite() {
     jerseyS = Math.ceil(cell * 0.84);
     jerseyCanvas.width = jerseyS; jerseyCanvas.height = jerseyS;
@@ -1730,15 +1571,6 @@
     }
   }
 
-  function roundRectOn(c, x, y, w, h, rad) {
-    c.beginPath();
-    c.moveTo(x + rad, y);
-    c.arcTo(x + w, y, x + w, y + h, rad);
-    c.arcTo(x + w, y + h, x, y + h, rad);
-    c.arcTo(x, y + h, x, y, rad);
-    c.arcTo(x, y, x + w, y, rad);
-    c.closePath();
-  }
   function roundRect(x, y, w, h, rad) { roundRectOn(ctx, x, y, w, h, rad); }
   const wrapf = v => ((v % GRID) + GRID) % GRID;   // wrap for fractional render coords
 
@@ -1961,35 +1793,9 @@
   // catalogue grow by SQL without stranding old clients. Rival BODIES wear
   // this clothing too (their fits ride presence, see vsRefit); VS_COLORS
   // survive as the name tags and roster dots, identity rather than clothing.
-  const SKINS = {
-    classic:     { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
-                   spikes: null, spikesAlt: null },
-    viper:       { head: [ 88, 168, 246], tail: [ 24,  74, 150], line: 'rgba(150,110,235,0.75)',
-                   spikes: '#9a5cf0', spikesAlt: '#7b3fd6' },
-    'skin-away':  { head: [248, 248, 252], tail: [172, 194, 222], line: 'rgba(70,110,180,0.65)',
-                    spikes: null, spikesAlt: null },
-    'skin-volt':  { head: [250, 240, 104], tail: [172, 142, 24],  line: 'rgba(64,60,36,0.6)',
-                    spikes: null, spikesAlt: null },
-    'skin-rosa':  { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)',
-                    spikes: null, spikesAlt: null },
-    'skin-night': { head: [226, 231, 241], tail: [ 36,  42,  56], line: 'rgba(122,132,160,0.55)',
-                    spikes: null, spikesAlt: null },
-    'skin-gilt':  { head: [252, 232, 152], tail: [194, 150, 56],  line: 'rgba(140,100,30,0.7)',
-                    spikes: null, spikesAlt: null },
-  };
   const skinParam = (new URLSearchParams(location.search).get('skin') || '').toLowerCase();
-  let SKIN = SKINS[skinParam] ?? SKINS.classic;
+  let SKIN = skinFor(skinParam);
 
-  // body shades from head to tail, precomputed once per skin change (rule 5:
-  // the per-frame loop reads this table and never builds a string)
-  const SNAKE_SHADES = 64;
-  function buildLutFor(sk) {
-    return Array.from({ length: SNAKE_SHADES }, (_, i) => {
-      const t = i / (SNAKE_SHADES - 1);
-      const h = sk.head, l = sk.tail;
-      return `rgb(${(h[0] + (l[0] - h[0]) * t) | 0}, ${(h[1] + (l[1] - h[1]) * t) | 0}, ${(h[2] + (l[2] - h[2]) * t) | 0})`;
-    });
-  }
   let SNAKE_LUT = buildLutFor(SKIN);
 
   // ---- rival outfits ----
@@ -2010,8 +1816,8 @@
       if (i === vs.myIdx) continue;
       const ref = vs.roster[i].ref;
       const src = (vs.present || []).find(x => x.ref === ref) || vs.roster[i];
-      const sk = Object.hasOwn(SKINS, src.skin ?? '') ? SKINS[src.skin] : SKINS.classic;
-      const hd = Object.hasOwn(HATS, src.hat ?? '') ? HATS[src.hat] : HATS.classic;
+      const sk = skinFor(src.skin);
+      const hd = hatFor(src.hat);
       const fit = { lut: buildLutFor(sk), hatCanvas: null, hatW: 0, dy: 0 };
       if (hatOn) {
         const hw = Math.ceil(cell * hd.wf), hh = Math.ceil(cell * hd.hf);
@@ -2035,16 +1841,16 @@
   function applyWorn(skinId, hatId) {
     worn = { skin: skinId || null, hat: hatId || null };
     try { localStorage.setItem('snakeWorn', JSON.stringify(worn)); } catch (e) {}
-    if (!(skinParam && SKINS[skinParam])) SKIN = SKINS[worn.skin] ?? SKINS.classic;
-    HAT = HATS[worn.hat] ?? HATS.classic;
+    if (!(skinParam && SKINS[skinParam])) SKIN = skinFor(worn.skin);
+    HAT = hatFor(worn.hat);
     SNAKE_LUT = buildLutFor(SKIN);
     if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
   }
 
-  // The shop is handed the pitch's own art, so a preview is drawn with the
-  // very ramps and hat art the snake wears, and three verbs it cannot do for
-  // itself. It reaches nothing here on its own.
-  initShop({ skins: SKINS, hats: HATS }, {
+  // The shop draws its previews from the same art module the pitch does, so a
+  // preview cannot lie about what the money buys. All the page owes it is three
+  // verbs it cannot do for itself; it reaches nothing here on its own.
+  initShop({
     applyWorn,
     refreshChrome: () => { refreshModeUI(); },
     stopCoinCountUp: () => { purseAnim = null; purseFloat.hidden = true; },

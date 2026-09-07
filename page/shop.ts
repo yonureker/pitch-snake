@@ -16,37 +16,20 @@
  * MUST NEVER be reached from the frame loop. All of it is menu-time DOM
  * work: it builds lists, sets text and paints two small preview canvases.
  *
- * The art is passed in rather than imported, because the ART lives with the
- * pitch that draws it and the shop must show exactly what the money buys. An
- * id this page has never heard of falls back to classic, which is what lets
- * the catalogue grow by SQL alone without stranding old clients.
+ * The art is IMPORTED from page/pitch-art.ts, the same module the pitch itself
+ * draws from. That is what makes a preview honest: it is not a drawing of the
+ * item, it is the item's own draw call at preview size, so it cannot drift from
+ * what the snake wears. It would stop being true the moment this file kept a
+ * copy of its own. An id this page has never heard of falls back to classic,
+ * which is what lets the catalogue grow by SQL alone without stranding old
+ * clients.
  *
  * @module
  */
 import { mustGetElement, mustGetElementOfKind } from './dom.js';
+import { hatFor, skinFor } from './pitch-art.js';
+import type { SkinArt } from './pitch-art.js';
 import { supabaseConfigured, supabaseRpc } from './supabase-client.js';
-
-/** One skin's colour ramp and outline, exactly as the pitch draws it. */
-export interface SkinArt {
-  /** The head's colour, as r/g/b in 0..255. */
-  head: readonly number[];
-  /** The tail's colour; every segment interpolates between the two. */
-  tail: readonly number[];
-  /** The outline that rides every segment. */
-  line: string;
-}
-
-/** One hat's art, exactly as the pitch draws it. */
-export interface HatArt {
-  /** Width as a fraction of a cell. */
-  wf: number;
-  /** Height as a fraction of a cell. */
-  hf: number;
-  /** Where it sits relative to the head's centre. */
-  dy: (cellPixels: number, height: number) => number;
-  /** How to draw it into a canvas of the given size. */
-  draw: (context: CanvasRenderingContext2D, width: number, height: number) => void;
-}
 
 /**
  * What the shop needs the shell to do for it.
@@ -98,8 +81,6 @@ const SHOP_ERRORS: Record<string, string> = {
 // how long an armed BUY waits for its SURE? before disarming itself
 const ARM_MS = 3500;
 
-let skinArt: Record<string, SkinArt> = {};
-let hatArt: Record<string, HatArt> = {};
 let ports: ShopPorts | null = null;
 
 let shopModal: HTMLElement | null = null;
@@ -222,9 +203,9 @@ function rampChannel(skin: SkinArt, channel: number, t: number): number {
 // Previews are drawn with the very ramps and hat art the pitch uses, so a
 // preview cannot lie about what the money buys.
 function paintSkinPreview(canvas: HTMLCanvasElement, id: string): void {
-  const skin = skinArt[id] ?? skinArt.classic;
+  const skin = skinFor(id);
   const context = canvas.getContext('2d');
-  if (context === null || skin === undefined) return;
+  if (context === null) return;
   context.clearRect(0, 0, canvas.width, canvas.height);
   const count = 5;
   const radius = 9;
@@ -245,9 +226,9 @@ function paintSkinPreview(canvas: HTMLCanvasElement, id: string): void {
 }
 
 function paintHatPreview(canvas: HTMLCanvasElement, id: string): void {
-  const hat = hatArt[id] ?? hatArt.classic;
+  const hat = hatFor(id);
   const context = canvas.getContext('2d');
-  if (context === null || hat === undefined) return;
+  if (context === null) return;
   context.clearRect(0, 0, canvas.width, canvas.height);
   const cellPixels = 17;
   const cx = canvas.width / 2;
@@ -405,18 +386,11 @@ async function open(): Promise<void> {
 /**
  * Wire the shop to its markup. Call once at boot.
  *
- * @param art - the pitch's own art, so a preview shows exactly what the money
- *   buys rather than a drawing of it.
- * @param art.skins - skin colour ramps, keyed by pitch_snake_items id.
- * @param art.hats - hat art, keyed by pitch_snake_items id.
- * @param shellPorts - the three things the shop needs the shell to do.
+ * @param shellPorts - the three things the shop needs the shell to do. The art
+ *   is not among them: it is imported, from the same module the pitch draws
+ *   from.
  */
-export function initShop(
-  art: { skins: Record<string, SkinArt>; hats: Record<string, HatArt> },
-  shellPorts: ShopPorts,
-): void {
-  skinArt = art.skins;
-  hatArt = art.hats;
+export function initShop(shellPorts: ShopPorts): void {
   ports = shellPorts;
   shopModal = mustGetElement('shopModal');
   shopList = mustGetElement('shopList');
