@@ -212,8 +212,13 @@
   @media (prefers-reduced-motion: reduce) {
     .res-stick, .purse-float { animation: none; }
   }
- { gap: 11px; max-height: 86vh; overflow-y: auto; }
-  /* a hundred rows since the board grew: the sheet scrolls like the profile
-     does, one scroller only, since the backdrop itself never scrolls */
-  /* the LIST scrolls, never the modal: with a hundred rows, a modal that
-     scrolled whole buried DONE under the entire board and locked the
+  /* The selector on the next line went missing in the stylesheet split: the
+     cut landed INSIDE this rule, leaving `.modal.profile` at the end of one
+     file and its body at the start of another, and the two dangling comment
+     lines that used to follow it belong with the boards sheet, where they now
+     sit complete. The split was proven by concatenating the files back and
+     checking byte-identity with the original, which passes even when every
+     individual file is invalid, because the pieces only make sense joined and
+     the browser never joins them. This rule was dead from the split until
+     2026-09-07: the profile sheet had no height cap and did not scroll. */
+  .modal.profile { gap: 11px; max-height: 86vh; overflow-y: auto; }

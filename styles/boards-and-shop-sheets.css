@@ -11,7 +11,18 @@
  * here in the single block they came from. Add a rule where it belongs in
  * that order, never appended for tidiness.
  */
-     player in (this shipped wrong once, at the top-10 to top-100 growth) */
+  /* a hundred rows since the board grew: the sheet scrolls like the profile
+     does, one scroller only, since the backdrop itself never scrolls */
+  /* The LIST scrolls, never the modal: with a hundred rows, a modal that
+     scrolled whole buried DONE under the entire board and locked the player
+     in. That shipped wrong once at the top-10 to top-100 growth, and again on
+     2026-09-07, when a doc block added at the top of this file absorbed the
+     first two lines of this very comment and left the third stranded outside
+     any comment at all. A stray comment-close is not a no-op: CSS error
+     recovery skips forward to the end of the next block, so the rule below
+     was silently discarded and the sheet grew to four screens tall. The list
+     rule survived, which is why it looked like a layout bug rather than a
+     parse error. scripts/check-stylesheets.mjs now refuses that shape. */
   .modal.boards { max-height: 86vh; }
   .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
   /* the header row the SHOP still wears; it outlived the achievement shelf
