@@ -1,0 +1,70 @@
+/* modal shell, settings, the profile sheet */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(20,17,13,0.62); backdrop-filter: blur(3px); padding: 20px;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  .modal {
+    background: var(--sheet); color: var(--sheet-ink);
+    border: 2px solid var(--gold); border-radius: 14px;
+    padding: 20px 22px; width: min(320px, 90vw);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: 0 20px 40px rgba(33,30,26,0.4);
+  }
+  .modal-title {
+    font-family: 'Anton', sans-serif; font-weight: 400; font-size: 26px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--sheet-ink);
+  }
+  .modal .speed-row, .modal .toggle-row { justify-content: center; }
+  .lock-hint { font-size: 12px; color: var(--food); font-weight: 700; text-align: center; }
+  .speed-row button:disabled, .switch:disabled { opacity: 0.4; cursor: default; }
+
+  /* ---- player chip + profile sheet ---- */
+  /* the trophy sits beside the gear; a slightly smaller glyph, the same coin */
+  .gear.who {
+    left: 8px; right: auto; width: auto; min-width: 38px;
+    padding: 0 12px; border-radius: 19px; gap: 5px;
+    font-family: 'Barlow', sans-serif; font-size: 13px;
+    font-weight: 700; letter-spacing: 1.2px; color: #d8d0bd;
+  }
+  /* the chip row owns the top-left corner; its pills stop positioning
+     themselves and sit in the flow, purse beside chip whatever the name */
+  .chip-row {
+    position: absolute; top: 8px; left: 8px; z-index: 6;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .chip-row .gear { position: static; }
+  .gear.purse { font-size: 14px; }
+  .gear.purse #purseCoins {
+    font-family: 'Anton', sans-serif; font-weight: 400;
+    font-size: 14px; letter-spacing: 0.5px; color: var(--gold-bright);
+  }
+  .modal.profile .entry.wide { width: 100%; }
+  .modal.profile select {
+    width: 100%; padding: 9px 10px; border-radius: 6px;
+    border: 2px solid var(--gold); background: var(--sheet-field);
+    color: var(--sheet-field-ink); font-family: 'Barlow', sans-serif; font-size: 14px;
+    font-weight: 600; letter-spacing: 0.5px; outline: none;
+  }
+  .modal.profile input.prof-email {
+    font-family: 'Barlow', sans-serif; font-size: 15px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: none; width: 100%;
+  }
+  .prof-auth {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    width: 100%; border-top: 1px solid rgba(194,162,90,0.35); padding-top: 12px;
+  }
+  .prof-auth[hidden] { display: none; }
+  .prof-auth .vs-hint { text-align: center; margin: 0; }
+  /* the ghost button was dressed for the dark overlay; on a sheet it wears
+     the sheet's own muted ink, whichever theme the sheet is in */
+  .modal .btn.ghostbtn { color: var(--sheet-muted); border-color: var(--sheet-ghost-line); box-shadow: none; }
+  .prof-auth b { color: var(--gold-bright); letter-spacing: 0.5px; text-transform: none; }
+  .linkline {
+    background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+    font-family: 'Barlow', sans-serif; letter-spacing: 0.8px;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+
+  /* ---- terminal easter egg (click the P in PITCH) ---- */

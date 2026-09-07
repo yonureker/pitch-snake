@@ -1,0 +1,110 @@
+/* palette and the three theme states */
+  @import url('https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #efe6d0;
+    --panel: #f6efde;
+    --text: #211e1a;
+    --muted: #6b6553;
+    --gold: #c2a25a;
+    --gold-bright: #d8b35e;
+    --gold-deep: #8a6f33;
+    --gold-glow: rgba(194,162,90,0.85);
+    --snake-glow: rgba(216,179,94,0.75);
+    --food: #e6402a;
+    --food-glow: rgba(230,64,42,0.6);
+    --arena: #24321b;
+    --arena-edge: #1b2614;
+    --line: rgba(244,236,216,0.06);
+    /* ---- the shell's own tokens ----
+       The table the pitch sits on, and the ink written straight onto it:
+       the poster title, the score column, the hint line, the touch pad.
+       These are what the theme swaps. The base tokens (--text, --panel,
+       --muted) never swap: they mean ink on cream wherever they appear,
+       and the sheets stopped using them directly for exactly that reason. */
+    --shell-ink: var(--text);
+    --shell-muted: var(--muted);
+    --shell-gold: var(--gold-deep);
+    /* ---- the sheet tokens ----
+       The modals (settings, profile, shop, boards) follow the theme too,
+       since 2026-09-06 at the owner's call: a cream sheet over the dark
+       table read as a light-mode leak. Every color inside a sheet routes
+       through these; a sheet rule reaching for --text directly is a bug. */
+    --sheet: var(--panel);
+    --sheet-ink: var(--text);
+    --sheet-muted: var(--muted);
+    --sheet-gold: var(--gold-deep);
+    --sheet-line: rgba(33,30,26,0.18);
+    --sheet-tint: rgba(33,30,26,0.06);
+    --sheet-tint-line: rgba(33,30,26,0.10);
+    --sheet-track: rgba(33,30,26,0.25);
+    --sheet-ghost-line: rgba(107,98,80,0.55);
+    --sheet-field: rgba(246,239,222,0.96);
+    --sheet-field-ink: var(--text);
+    --pad-hi: #fbf6e8;
+    --pad-mid: var(--panel);
+    --pad-lo: #ded2b4;
+    --pad-line: rgba(33,30,26,0.22);
+    --pad-glare: rgba(255,255,255,0.5);
+    --pad-shade: rgba(33,30,26,0.18);
+    --pad-ring: rgba(33,30,26,0.28);
+    --pad-ink: var(--text);
+  }
+  /* The dark table, reachable two ways: the system says dark and the THEME
+     chips say AUTO (no class), or the chips force DARK outright. LIGHT
+     forces the defaults back by exempting the media block. The two value
+     lists are the same on purpose; CSS has no way to share them. */
+  @media (prefers-color-scheme: dark) {
+    html:not(.theme-light) {
+      color-scheme: dark;
+      --bg: #12160e;
+      --shell-ink: #f6efde;
+      --shell-muted: #b7ac93;
+      --shell-gold: #d8b35e;
+      --pad-hi: #333d2c;
+      --pad-mid: #232d1f;
+      --pad-lo: #131a11;
+      --pad-line: rgba(244,236,216,0.12);
+      --pad-glare: rgba(244,236,216,0.16);
+      --pad-shade: rgba(0,0,0,0.45);
+      --pad-ring: rgba(194,162,90,0.5);
+      --pad-ink: #f6efde;
+      --sheet: #1f2a1d;
+      --sheet-ink: #e9e0cd;
+      --sheet-muted: #b7ac93;
+      --sheet-gold: #d8b35e;
+      --sheet-line: rgba(244,236,216,0.22);
+      --sheet-tint: rgba(244,236,216,0.07);
+      --sheet-tint-line: rgba(244,236,216,0.12);
+      --sheet-track: rgba(244,236,216,0.28);
+      --sheet-ghost-line: rgba(183,172,147,0.55);
+      --sheet-field: rgba(15,20,12,0.7);
+      --sheet-field-ink: #f6efde;
+    }
+  }
+  html.theme-dark {
+    color-scheme: dark;
+    --bg: #12160e;
+    --shell-ink: #f6efde;
+    --shell-muted: #b7ac93;
+    --shell-gold: #d8b35e;
+    --pad-hi: #333d2c;
+    --pad-mid: #232d1f;
+    --pad-lo: #131a11;
+    --pad-line: rgba(244,236,216,0.12);
+    --pad-glare: rgba(244,236,216,0.16);
+    --pad-shade: rgba(0,0,0,0.45);
+    --pad-ring: rgba(194,162,90,0.5);
+    --pad-ink: #f6efde;
+    --sheet: #1f2a1d;
+    --sheet-ink: #e9e0cd;
+    --sheet-muted: #b7ac93;
+    --sheet-gold: #d8b35e;
+    --sheet-line: rgba(244,236,216,0.22);
+    --sheet-tint: rgba(244,236,216,0.07);
+    --sheet-tint-line: rgba(244,236,216,0.12);
+    --sheet-track: rgba(244,236,216,0.28);
+    --sheet-ghost-line: rgba(183,172,147,0.55);
+    --sheet-field: rgba(15,20,12,0.7);
+    --sheet-field-ink: #f6efde;
+  }

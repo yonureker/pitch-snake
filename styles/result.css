@@ -1,0 +1,298 @@
+/* the result screen, legend and stickers */
+  .ov-body.two-col {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+  }
+  .ov-body.two-col > .res-col {
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .ov-body.two-col .result { display: block; text-align: center; width: auto; }
+  .ov-body.two-col .entry,
+  .ov-body.two-col .save-note,
+  .ov-body.two-col .badges,
+  .ov-body.two-col .acct { margin-top: 12px; }
+  /* ---- the wide chooser ----
+     Same threshold and the same two measurement traps as the result screen
+     above. The six modes become glyph tiles, two columns, CENTERED: play
+     testing tried them beside a facts rail and the half empty column read
+     as clutter next to a game whose whole character is centered, so the
+     numbers live behind the trophy's boards sheet and the tiles keep the
+     stage. On a
+     narrow panel none of this exists and the stack renders exactly as it
+     always has. */
+  @container ov (min-width: 520px) {
+    .ov-body.modes-grid > .mode-row {
+      /* one column, stacked, and BARELY wider than the narrow list: the
+         same compact pills the phone has always had, dressed with the
+         glyph and the sentence. 480 was tried and read as stretched. */
+      width: min(100%, 340px); max-width: none;
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-auto-rows: 1fr;
+      gap: clamp(8px, 1.4cqw, 12px);
+    }
+    /* The tile: the mode's own border and ledge, the name wearing the slab
+       treatment (Anton in cream with a hard offset shadow in the mode's own
+       colour, the MODES title's own clothes), and one line of what it is.
+       Selected fills with the accent and the slab flips dark, which is the
+       narrow list's fill rule wearing the same costume. */
+    .ov-body.modes-grid .stack-choice button {
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      gap: clamp(10px, 1.8cqw, 16px);
+      /* compact rows: six of them have to fit the smallest wide panel
+         without scrolling, and the fade cutting TOURNAMENTS in half is how
+         the first stack shipped */
+      min-height: 42px;
+      padding: clamp(5px, 1cqw, 10px) clamp(12px, 2.2cqw, 20px);
+      border-radius: 9px;
+      background: rgba(33,30,26,0.34);
+      box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 55%, #12180f);
+    }
+    .ov-body.modes-grid .stack-choice button:not(.active):hover {
+      background: color-mix(in srgb, var(--accent, var(--gold)) 14%, transparent);
+    }
+    /* restated because the tile rule above outranks the narrow list's
+       .active fill; without this the lit tile went dark-on-dark */
+    .ov-body.modes-grid .stack-choice button.active {
+      background: var(--accent, var(--gold));
+      box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
+    }
+    /* no glyph chips any more: the name and its one line, centered, carry
+       the tile; colour identity stays in the border, the slab and the fill */
+    .ov-body.modes-grid .m-txt {
+      display: flex; flex-direction: column; align-items: center;
+      gap: clamp(2px, 0.5cqw, 5px); min-width: 0;
+    }
+    /* A slab shadow only reads as depth when it sits closer to the
+       background than the letters do, and scales with the type. The MODES
+       title gets away with 4px because that is 7% of 56px type and gold is
+       far dimmer than cream; a raw accent at 3px on 15px names was 20% and
+       nearly as bright as the text, which read as misprinting. So the tile
+       shadow is the accent mixed most of the way into the tile's own dark,
+       at about a fifteenth of the type size; the colour identity stays in
+       the border, the glyph box and the fill. */
+    .ov-body.modes-grid .m-t {
+      display: block;
+      font-size: clamp(14px, 2.5cqw, 21px);
+      letter-spacing: 1.2px; line-height: 1.05;
+      color: #f6efde;
+      text-shadow: clamp(1px, 0.16cqw, 2px) clamp(1px, 0.16cqw, 2px) 0
+                   color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
+    }
+    .ov-body.modes-grid button.active .m-t {
+      color: #1a281e;
+      text-shadow: clamp(1px, 0.16cqw, 2px) clamp(1px, 0.16cqw, 2px) 0 rgba(18,24,15,0.28);
+    }
+    .ov-body.modes-grid .m-d {
+      display: block;
+      font-family: 'Barlow', sans-serif; font-weight: 500;
+      font-size: clamp(10.5px, 1.75cqw, 13.5px);
+      letter-spacing: 0.3px; text-transform: none; line-height: 1.25;
+      color: #8e8672;
+    }
+    .ov-body.modes-grid button.active .m-d { color: rgba(26,40,30,0.72); }
+  }
+  /* ---- the wide kickoff ----
+     The ready screen, solo board modes only. The legend stays the CENTERED
+     hero it always was and grows a second line per row saying what the
+     thing IS (the narrow rows keep their single line untouched); your
+     numbers moved behind the trophy, because play testing put them in a
+     right rail first and the half empty column read as clutter. */
+  @container ov (min-width: 520px) {
+    .ov-body.kick-grid > .legend {
+      /* the chooser's compact column, not a table across the panel: at
+         520px the values sat a hand's width from the words they price */
+      width: min(100%, 360px);
+      max-width: none; margin: 0; gap: 0;
+      text-align: left;
+    }
+    /* a pseudo-element so applyLegend's children indexing stays untouched */
+    .ov-body.kick-grid .legend::before {
+      content: 'HOW IT SCORES';
+      align-self: center;
+      font-family: 'Barlow', sans-serif; font-weight: 700;
+      font-size: 11px; letter-spacing: 3px; color: var(--gold);
+      margin-bottom: clamp(6px, 1.2cqw, 12px);
+    }
+    .ov-body.kick-grid .lg-row {
+      gap: clamp(12px, 2cqw, 18px);
+      padding: clamp(8px, 1.7cqw, 15px) 0;
+      border-bottom: 1px solid rgba(194,162,90,0.15);
+    }
+    .ov-body.kick-grid .lg-ic {
+      width: clamp(28px, 4.6cqw, 40px); height: clamp(28px, 4.6cqw, 40px);
+      font-size: clamp(18px, 3cqw, 26px);
+    }
+    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(15px, 2.4cqw, 20px); }
+    .ov-body.kick-grid .lg-ic.tnt { font-size: clamp(7px, 1.2cqw, 10px); }
+    .ov-body.kick-grid .lg-txt { display: none; }
+    .ov-body.kick-grid .lg-two {
+      display: flex; flex-direction: column; gap: 2px;
+      flex: 1; min-width: 0; text-align: left;
+    }
+    .lg-name {
+      font-size: clamp(13px, 2cqw, 17px); font-weight: 600; color: #e9e0cd;
+    }
+    .lg-sub {
+      font-size: clamp(10.5px, 1.7cqw, 13px); font-weight: 500;
+      color: #8e8672; letter-spacing: 0.2px; line-height: 1.3;
+    }
+    .ov-body.kick-grid .lg-val { font-size: clamp(17px, 2.8cqw, 22px); }
+  }
+  /* ---- the wide multiplayer doors ----
+     Same split, fourth screen: the three ways in become cards (quick match
+     wearing multiplayer's green as the hero, since it is the door the game
+     wants taken and the only rated one) and the rail answers the one
+     question this screen never answered anywhere: what is my rating, who is
+     above me, and the fact that only quick match counts. The room and
+     ladder sub-screens keep their own layouts. */
+  @container ov (min-width: 520px) {
+    /* the panel wrapper is content-sized everywhere else; the grid needs
+       the full body or its right column runs off the edge */
+    .overlay.vs-open #vsPanel { width: 100%; max-width: 900px; }
+    .overlay.vs-open .vs-setup {
+      display: grid;
+      /* minmax(0, ...) because the code input's intrinsic width otherwise
+         sets a min-content floor that shoves the rail off the panel */
+      grid-template-columns: minmax(0, 1fr) clamp(206px, 32cqw, 320px);
+      column-gap: clamp(20px, 3.6cqw, 34px);
+      align-items: start;
+      align-content: center;
+      width: 100%;
+      max-width: 900px;
+      text-align: left;
+    }
+    .overlay.vs-open .vs-setup > #vsNameRow { grid-column: 1; width: auto; max-width: none; }
+    .overlay.vs-open .vs-setup > .vs-actions {
+      grid-column: 1; width: auto; max-width: none; min-width: 0;
+      gap: clamp(10px, 1.8cqw, 16px);
+    }
+    .overlay.vs-open .vs-card {
+      display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+      border: 1px solid rgba(194,162,90,0.25); border-radius: 9px;
+      padding: clamp(12px, 2.2cqw, 18px);
+      background: rgba(33,30,26,0.34);
+      text-align: left;
+    }
+    .overlay.vs-open .vs-card.hero { border-color: #7dbf5c; background: rgba(125,191,92,0.08); }
+    .overlay.vs-open .vs-card.hero .btn {
+      background: #7dbf5c; color: #1a281e; box-shadow: 0 6px 0 #4e7d38;
+    }
+    .overlay.vs-open .vs-card .vs-hint { margin: 0; text-align: left; }
+    /* JOIN is an ordinary door, not a whistle: gold in the card, and the
+       ladder door keeps its ghost clothes at full width */
+    .overlay.vs-open .vs-card .entry .btn {
+      background: var(--gold); color: #211e1a;
+      box-shadow: 0 6px 0 var(--gold-deep);
+    }
+    /* the narrow list has always given this ghost a red ledge (a later
+       .btn.small rule outranks .ghostbtn); at full card width that ledge
+       reads as a wound, so the wide door dresses like BACK instead */
+    .overlay.vs-open #vsLadderBtn {
+      box-shadow: none; border: 2px solid var(--gold); color: var(--gold-bright);
+    }
+    .overlay.vs-open .h-n { display: none; }
+    .overlay.vs-open .h-w { display: contents; }
+    .overlay.vs-open .vs-setup > .vs-rail {
+      display: flex; flex-direction: column; align-items: flex-start;
+      grid-column: 2; grid-row: 1 / span 2;
+      align-self: stretch; text-align: left;
+      border-left: 1px solid rgba(194,162,90,0.28);
+      padding-left: clamp(20px, 3.6cqw, 32px);
+    }
+    .vs-rate-card {
+      display: flex; align-items: center; gap: clamp(10px, 2cqw, 16px);
+      margin-top: clamp(8px, 1.6cqw, 14px);
+      border: 1px solid rgba(194,162,90,0.25); border-radius: 9px;
+      padding: clamp(10px, 2cqw, 16px);
+      background: rgba(33,30,26,0.34);
+      width: 100%;
+    }
+    .vs-rate {
+      font-family: 'Anton', sans-serif; font-weight: 400;
+      font-size: clamp(28px, 5cqw, 42px); line-height: 1; color: #f6efde;
+      text-shadow: clamp(2px, 0.3cqw, 3px) clamp(2px, 0.3cqw, 3px) 0
+                   color-mix(in srgb, var(--gold) 55%, #12180f);
+    }
+    .vs-rate-note {
+      font-size: clamp(10.5px, 1.7cqw, 12.5px); color: #8e8672; line-height: 1.35;
+    }
+    .vs-rail-gap { margin-top: clamp(14px, 2.6cqw, 22px); }
+    .vs-rail .standings.vs-mini { width: 100%; margin: 8px 0 0; }
+    .vs-rail-foot {
+      font-size: clamp(10px, 1.6cqw, 12px); color: #8e8672;
+      margin-top: 10px; line-height: 1.4;
+    }
+  }
+  /* a panel taller than its board says so, instead of looking guillotined */
+  .ov-body.is-scrollable {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), rgba(0,0,0,0.12));
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), rgba(0,0,0,0.12));
+  }
+  html.touch .vs-actions .btn { padding: 10px 14px; font-size: 16px; }
+  html.touch .vs-hint { font-size: 10.5px; margin: -2px 0 2px; }
+  html.touch .entry input { padding: 8px 10px; font-size: 18px; }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .overlay h2 {
+    font-family: 'Anton', sans-serif;
+    font-weight: 400;
+    font-size: clamp(34px, 10vw, 56px);
+    letter-spacing: 1px;
+    color: #f6efde;
+    text-transform: uppercase;
+    text-shadow: 3px 3px 0 var(--gold);
+  }
+  .overlay h2.dead {
+    color: #f6efde;
+    text-shadow: 3px 3px 0 var(--food);
+  }
+  .overlay p {
+    font-size: 14px; color: #d8d0bd; max-width: 300px; line-height: 1.5;
+    font-weight: 500;
+  }
+
+  /* scoring legend on the intro screen */
+  .legend {
+    display: flex; flex-direction: column; gap: 6px;
+    width: 286px; max-width: 82%; margin: 2px 0;
+  }
+  .lg-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: #e9e0cd; font-weight: 600; letter-spacing: 0.3px;
+  }
+  .lg-ic {
+    width: 28px; height: 28px; flex-shrink: 0; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; line-height: 1;
+  }
+  .lg-ic.ring { border: 2px solid var(--gold-bright); border-radius: 50%; font-size: 15px; }
+  .lg-ic.tnt {
+    background: linear-gradient(#d8461f 0 32%, #dadad8 32% 58%, #a9a9a7 58% 66%, #d8461f 66% 100%);
+    color: #111; border-radius: 2px;
+    font-family: Barlow, "Arial Black", sans-serif; font-weight: 700; font-size: 7px;
+  }
+  .lg-txt { flex: 1; text-align: left; }
+  .lg-val {
+    font-family: 'Anton', sans-serif; font-size: 17px;
+    min-width: 36px; text-align: right;
+  }
+  /* the two teleport windows, as legend swatches */
+  .tp {
+    display: inline-block; width: 17px; height: 17px; border-radius: 50%;
+    box-sizing: border-box; vertical-align: middle;
+  }
+  .tp.pair {
+    border: 3px solid; border-color: #2ad4ff #c561ff #c561ff #2ad4ff;
+    background: linear-gradient(135deg, rgba(42,212,255,0.3) 0 50%, rgba(197,97,255,0.3) 50%);
+  }
+  .lg-val { line-height: 1; }
+  /* The legend's two-line form and the kickoff's side rail exist only where
+     the wide kickoff lays them out; on a narrow panel the rows render
+     exactly the single line they always have. */
+  .lg-two { display: none; }
+  .kick-rail { display: none; }
+  .lg-val.pos { color: var(--gold-bright); }
+  .lg-val.neg { color: var(--food); }
+  .lg-val.die { color: var(--food); font-size: 13px; letter-spacing: 1px; }

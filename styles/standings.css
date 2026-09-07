@@ -1,0 +1,199 @@
+/* notes, the account line, standings, flags and stickers */
+  .board-head {
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--gold); font-weight: 700; margin-bottom: -8px;
+  }
+  .save-note {
+    font-size: 12px; font-weight: 600; color: var(--food);
+    max-width: 260px; text-align: center;
+  }
+  .save-note[hidden] { display: none; }
+  /* guidance is not failure: only a genuine error wears the red. Named
+     `soft` rather than `hint`, which is already the control legend's class
+     under the board and would drag its flex layout in here. */
+  .save-note.soft { color: #b7ac93; font-weight: 600; }
+  /* The account offer. It sits where the round just ended rather than behind
+     the player chip, because that is where the thing worth keeping just
+     happened. Plain words on purpose: the game's own voice belongs to the
+     game, and an account is the one place a player wants the wording every
+     other app already taught them. "Not now" is a real, equal-weight choice,
+     never a greyed-out afterthought: nothing here may ever gate play. */
+  /* what the round just earned. Gold, because it is a reward and not a
+     warning, and above the account offer because it is the reason to want
+     an account in the first place. */
+  /* Four at once is not the rare case, it is what a good round looks like,
+     and four centred sentences wrapping mid-phrase read as an error log
+     rather than a reward. One row each, left aligned, the mark carrying the
+     "earned" so the name does not have to. */
+  .badges {
+    display: flex; flex-direction: column; gap: 4px; align-items: stretch;
+    max-width: 300px; text-align: left;
+  }
+  .badges .bg-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 9px; border-radius: 6px;
+    background: rgba(194,162,90,0.14); border: 1px solid rgba(194,162,90,0.4);
+  }
+  .badges .bg-pip {
+    flex: 0 0 16px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); color: #1a281e;
+    display: grid; place-items: center; font-size: 9px; font-weight: 800;
+  }
+  .badges .bg-txt { min-width: 0; }
+  .badges .bg-note {
+    display: block; font-family: 'Barlow', sans-serif; font-weight: 500;
+    font-size: 10.5px; letter-spacing: 0; color: #b7ac93; margin-top: 1px;
+  }
+  /* the bounty the badge just paid, pinned to the row's right edge */
+  .badges .bg-coins {
+    margin-left: auto; padding-left: 10px;
+    font-family: 'Anton', sans-serif; font-size: 15px; color: var(--gold-bright);
+  }
+  .badges[hidden] { display: none; }
+  .badges b {
+    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 12px;
+    letter-spacing: 1.2px; color: var(--gold-bright);
+  }
+  .badges span { font-family: 'Barlow', sans-serif; font-size: 12px; color: #b7ac93; }
+  .acct {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    max-width: 280px; text-align: center;
+  }
+  .acct[hidden] { display: none; }
+  .acct-line {
+    margin: 0; font-family: 'Barlow', sans-serif; font-size: 13px; font-weight: 600;
+    color: #d8d0bd; line-height: 1.35;
+  }
+  /* Gold, not red. Red on this pitch means play, and the whistle button is
+     always the loudest thing on the screen; an offer that shouts as loud as
+     REMATCH is an offer competing with the game. */
+  .acct-row { display: flex; align-items: center; gap: 12px; }
+  .acct-later {
+    background: none; border: 0; padding: 4px 2px; cursor: pointer;
+    font-family: 'Barlow', sans-serif; font-size: 12px; font-weight: 600;
+    color: #b7ac93; text-decoration: underline; text-underline-offset: 3px;
+  }
+  /* brighten, never darken: this link lives on the overlay, which is dark
+     in every theme, and var(--text) hovered it to near-black once */
+  .acct-later:hover { color: #e9e0cd; }
+  .standings {
+    list-style: none; margin: 2px 0; padding: 10px 12px; width: 268px;
+    background: rgba(33,30,26,0.5); border-radius: 8px;
+    border: 1px solid rgba(194,162,90,0.4);
+  }
+  /* One flag rule for every surface. The sprite is a 16-wide grid of 60x45
+     cells; drawn at 20x15 that is a third, so the background is scaled to
+     320x240 and each cell lands on a whole pixel. */
+  .flag {
+    width: 20px; height: 15px; flex: 0 0 20px;
+    background-image: url(assets/flags.png);
+    background-size: 320px 240px;
+    background-repeat: no-repeat;
+    border-radius: 2px;
+    align-self: center;
+  }
+  .flag[hidden] { display: none; }
+  /* on the chip the flag sits inline with the name rather than in a column */
+  .chip-flag { flex: 0 0 20px; }
+  /* the option list is text (an <option> can hold nothing else), so the
+     chosen flag is shown for real right beside the control */
+  .country-row { display: flex; align-items: center; gap: 9px; }
+  .country-row select { flex: 1 1 auto; min-width: 0; }
+  /* a row with no flag still lines its names up with the rows that have one */
+  .standings .fl-gap { width: 20px; flex: 0 0 20px; }
+  .standings li {
+    display: flex; align-items: baseline; gap: 10px;
+    font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 14px;
+    color: #e9e0cd; padding: 3px 0; letter-spacing: 1px;
+  }
+  .standings li .rk { color: var(--gold); width: 20px; text-align: right; }
+  .standings li .nm { flex: 1; text-align: left; }
+  .standings li .sc { font-family: 'Anton', sans-serif; }
+  .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 32px; text-align: right; }
+  /* ---- the wide result screen ----
+     The overlay is always SQUARE, because it covers the square arena: 656px
+     on a laptop, 836 at 1080p, 1196 at 1440p, 323 on a phone. So the question
+     "is there room for two columns" is about the panel, never the window,
+     which is what a container query is for. Below the threshold every screen
+     keeps the single column it has always had, and the phone never sees any
+     of this. */
+  .res-col { display: contents; }
+  .result { display: none; text-align: left; width: 100%; }
+  .res-tag {
+    font-family: 'Barlow', sans-serif; font-weight: 700;
+    font-size: 11px; letter-spacing: 3px; color: var(--gold);
+  }
+  .res-score {
+    font-family: 'Anton', sans-serif; line-height: 0.9;
+    /* the hero shows on phones now too: cqw scales it to the panel */
+    font-size: clamp(54px, 15cqw, 96px);
+    color: #f6efde; text-shadow: clamp(3px, 0.6cqw, 4px) clamp(3px, 0.6cqw, 4px) 0 var(--gold);
+    margin-top: 4px;
+  }
+  /* ---- the score stickers ----
+     NEW BEST and TOP 100 are die-cut stickers riding the hero's corner, not
+     sentences under it: the number is the story and the stickers are slapped
+     on it. The cream border is the die-cut edge. Sized in cqw like the hero
+     so a phone's smaller number wears smaller stickers, and anchored to
+     .res-hero (the number's own box) so centering never moves them. */
+  .res-hero { position: relative; display: inline-block; }
+  .res-stick {
+    position: absolute; left: 100%; margin-left: clamp(2px, 0.8cqw, 6px);
+    font-family: 'Anton', sans-serif; letter-spacing: 1.5px;
+    font-size: clamp(11px, 2.3cqw, 15px); text-transform: uppercase;
+    border: 3px solid var(--panel); border-radius: 8px;
+    padding: clamp(3px, 0.8cqw, 5px) clamp(7px, 1.7cqw, 11px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    white-space: nowrap; text-align: center; line-height: 1.15;
+  }
+  .res-stick i {
+    display: block; font-style: normal; font-family: 'Barlow', sans-serif;
+    font-weight: 800; font-size: clamp(7px, 1.2cqw, 8px); letter-spacing: 2px;
+  }
+  /* two slots: best on top, top-100 under it, and the lower sticker takes
+     the top slot when it is alone ([hidden] is display:none, but the
+     sibling selector reads the DOM, which is exactly what is wanted) */
+  .stick-best {
+    top: clamp(-14px, -2cqw, -10px); transform: rotate(8deg);
+    background: var(--gold-bright); color: #211e1a;
+    animation: stickPopA 0.26s ease-out 1s both;
+  }
+  .stick-top {
+    cursor: pointer;
+    top: clamp(28px, 6.4cqw, 42px); transform: rotate(-7deg);
+    background: var(--food); color: #ffffff;
+    animation: stickPopB 0.26s ease-out 0.25s both;
+  }
+  .stick-best[hidden] ~ .stick-top { top: clamp(-14px, -2cqw, -10px); }
+  @keyframes stickPopA {
+    0% { opacity: 0; transform: rotate(8deg) scale(0.3); }
+    70% { opacity: 1; transform: rotate(8deg) scale(1.12); }
+    100% { opacity: 1; transform: rotate(8deg) scale(1); }
+  }
+  @keyframes stickPopB {
+    0% { opacity: 0; transform: rotate(-7deg) scale(0.3); }
+    70% { opacity: 1; transform: rotate(-7deg) scale(1.12); }
+    100% { opacity: 1; transform: rotate(-7deg) scale(1); }
+  }
+  /* the round's pay flying to the purse: a float beside the chip while the
+     number inside it counts up (the count runs off the loop clock) */
+  .purse-float {
+    align-self: center;
+    font-family: 'Anton', sans-serif; font-size: 14px;
+    color: var(--gold-bright); text-shadow: 1px 1px 0 #1a281e;
+    animation: purseFloat 1.8s ease-out both;
+  }
+  @keyframes purseFloat {
+    0% { opacity: 0; transform: translateY(5px); }
+    14% { opacity: 1; transform: none; }
+    72% { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: translateY(-7px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .res-stick, .purse-float { animation: none; }
+  }
+ { gap: 11px; max-height: 86vh; overflow-y: auto; }
+  /* a hundred rows since the board grew: the sheet scrolls like the profile
+     does, one scroller only, since the backdrop itself never scrolls */
+  /* the LIST scrolls, never the modal: with a hundred rows, a modal that
+     scrolled whole buried DONE under the entire board and locked the

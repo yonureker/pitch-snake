@@ -1,0 +1,34 @@
+/* the easter egg terminal */
+  .p-egg { cursor: pointer; }
+  .terminal {
+    position: fixed; z-index: 30;
+    width: min(430px, 94vw); max-height: 72vh;
+    left: 50%; bottom: 12px; transform: translateX(-50%);
+    background: #0f130d; border: 1px solid #2b3a22; border-radius: 10px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .terminal[hidden] { display: none; }
+  @media (min-width: 1040px) {
+    .terminal { left: auto; right: 24px; bottom: auto; top: 50%; transform: translateY(-50%); }
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 12px; background: #1a2416; border-bottom: 1px solid #2b3a22;
+  }
+  .term-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .term-dot.red { background: #ff5f56; cursor: pointer; }
+  .term-dot.yellow { background: #ffbd2e; }
+  .term-dot.green { background: #27c93f; }
+  .term-title { margin-left: 8px; color: #7a8f63; font-size: 12px; letter-spacing: 0.5px; }
+  .term-body {
+    margin: 0; padding: 14px 16px; color: #9ef01a; font-size: 12.5px; line-height: 1.5;
+    white-space: pre-wrap; overflow-wrap: break-word;
+    overflow-y: auto; max-height: calc(72vh - 42px);
+  }
+  .term-cursor {
+    display: inline-block; width: 7px; height: 14px; background: #9ef01a;
+    vertical-align: text-bottom; animation: term-blink 1s steps(1) infinite;
+  }
+  @keyframes term-blink { 50% { opacity: 0; } }

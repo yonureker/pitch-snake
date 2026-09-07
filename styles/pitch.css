@@ -1,0 +1,192 @@
+/* the board frame, the room bar, canvas and countdown */
+  .board-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 14px;
+    padding: 6px;
+  }
+
+
+  /* Versus furniture lives in its own strip ABOVE the pitch, never on it: a
+     scoreboard chip per player on the left, the exit on the right. Drawn over
+     the board these two covered the top row, and food landing up there was
+     hard to read. The strip costs real height, which the touch layout pays
+     for through --mp-h (see the board sizing below). */
+  .mp-bar {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  /* the live scoreboard: leader first with the crown, your own chip bright,
+     the fallen struck through */
+  .mp-hud {
+    display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;
+    padding: 4px 11px; border-radius: 999px;
+    background: rgba(20, 17, 13, 0.6);
+    color: #d8d0bd; font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px;
+    pointer-events: none; white-space: nowrap;
+    flex: 0 1 auto; min-width: 0; overflow: hidden;
+  }
+  .mp-hud[hidden] { display: none; }
+  /* the status chip: SPECTATING, WAITING, the clinch chase. Its own object
+     beside the scoreboard, so a long note can never stretch the seats */
+  .mp-notes {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--gold-bright); font-family: 'Barlow', sans-serif;
+    font-weight: 800; letter-spacing: 1.4px; font-size: 10px;
+    white-space: nowrap; pointer-events: none; flex: 0 1 auto; min-width: 0; overflow: hidden;
+  }
+  .mp-notes[hidden] { display: none; }
+  /* the stale-build banner: quiet, never blocking, and only ever asks for a
+     reload, because a stale engine is fatal to a ROOM and harmless solo */
+  .build-note {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    flex-wrap: wrap; margin: 0 auto 8px; padding: 8px 14px;
+    border: 1.5px solid var(--gold); border-radius: 12px;
+    background: rgba(36, 50, 27, 0.92); color: #e9e0cd;
+    font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 12.5px;
+    letter-spacing: 0.4px; text-align: center;
+  }
+  .build-note[hidden] { display: none; }
+  .build-note .btn { padding: 6px 14px; font-size: 12px; box-shadow: 0 3px 0 #b32f1c; }
+  /* the mid-round exit, arming on the first tap so a stray thumb cannot dump
+     you out of a match. margin-left: auto keeps it right even alone. */
+  .mp-quit {
+    flex: none; margin-left: auto;
+    border: 1.5px solid rgba(244,236,216,0.35); border-radius: 999px;
+    background: rgba(20,17,13,0.55); color: #e9e0cd;
+    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
+    padding: 7px 13px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(2px);
+  }
+  .mp-quit[hidden] { display: none; }
+  .mp-quit.armed { background: var(--food); border-color: var(--food); color: #fff; }
+  /* seat cells: the name in its seat's own colour, the score under it on
+     wide (the match bar), beside it on narrow (the compact pill) */
+  .mp-hud .pl { display: inline-flex; gap: 5px; align-items: center; }
+  .mp-hud .pl .nm { font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1.2px; }
+  .mp-hud .pl .sc { font-family: 'Anton', sans-serif; letter-spacing: 0.5px; color: #f4ecd8; }
+  .mp-hud .pl.dead { opacity: 0.5; text-decoration: line-through; text-decoration-thickness: 2px; }
+  .mp-hud .pl.me { position: relative; }
+  .mp-hud .note { color: var(--gold-bright); font-weight: 800; }
+  /* On the phone the strip wears the same scoreboard the header wears wide:
+     seat columns, crown, the gold underline, the fallen struck through. The
+     strip's slice of the column grows a little to pay for the second line
+     (54px against the pill's 42), and the pitch stays exactly as clear as
+     the day the list was moved off it. */
+
+  /* The room rides the HEADER since 2026-09-06, at the owner's call: the
+     seat cells sit directly under the nameplate row as a second cluster
+     line, so a room opening no longer costs the board a strip of its own.
+     placeChrome moves the node; the wrap keeps it on narrow screens. The
+     pill stays DARK in both themes on purpose: the seat colors were
+     picked against the pitch and wash out on the cream table. */
+  /* the cluster wrapped only to host the room bar on a second line; the bar
+     has its own row under the header now, so the pills stay on one */
+  .hdr-cluster { flex-wrap: nowrap; }
+  /* The room bar rides the header's SECOND line, level with SNAKE, which
+     is the empty space the two-line logo leaves. Getting it there took a
+     grid: as a flex child it could only be as wide as the cluster (a couple
+     of hundred pixels on a height-fitted column), which overflowed the
+     seats pill and shoved the status chip and the exit onto lines of their
+     own, and wrapping the header instead dropped the scoreboard to a line
+     of its own. On the grid the logo and the scoreboard each span both
+     rows, and the middle column belongs to the chips above and the room
+     below, so the bar gets the full width between them. The grid only
+     applies while a room is open; without one the header is the flex row
+     it always was. */
+  html.touchless .wrap.mp-open header {
+    display: grid; align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 22px; row-gap: 7px;
+  }
+  html.touchless .wrap.mp-open header h1 { grid-row: 1 / span 2; grid-column: 1; }
+  html.touchless .wrap.mp-open .hdr-cluster { grid-row: 1; grid-column: 2; }
+  html.touchless .wrap.mp-open header > .mp-bar { grid-row: 2; grid-column: 2; }
+  html.touchless .wrap.mp-open .scores { grid-row: 1 / span 2; grid-column: 3; margin-left: 0; min-width: 150px; }
+  /* Once your seat is out, the score block has nothing left to say: the
+     round is settled and BEST is a solo number. So the corner it owns goes
+     to the exit instead, which is the owner's "save space" ask taken at its
+     word, and it frees the middle column for the seats and their status. */
+  html.touchless .wrap.mp-open > header > .mp-quit {
+    grid-row: 1 / span 2; grid-column: 3; justify-self: end; align-self: center;
+  }
+  .wrap.seat-out .scores { display: none; }
+  .wrap .mp-bar {
+    flex-basis: 100%; width: auto; display: flex; align-items: center;
+    justify-content: flex-start; gap: 9px;
+    /* seats, status and the exit are three objects: let them wrap rather
+       than squeeze, so a full table with a note never distorts */
+    flex-wrap: wrap; row-gap: 6px;
+  }
+  .wrap .mp-hud {
+    display: inline-flex; align-items: stretch; gap: 0; padding: 0;
+    height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;
+    background: #24321b; overflow: hidden; flex: 0 1 auto; min-width: 0;
+  }
+  .wrap .mp-hud .pl { flex-direction: row; align-items: center; gap: 6px; padding: 0 8px; position: relative; }
+  /* the rounded ends eat into the first and last cells; pay them back */
+  .wrap .mp-hud .pl:first-child { padding-left: 12px; }
+  .wrap .mp-hud .pl:last-child { padding-right: 12px; }
+  .wrap .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
+  .wrap .mp-hud .pl .nm { font-size: 10.5px; letter-spacing: 1.2px; }
+  .wrap .mp-hud .pl .sc { font-size: 15px; line-height: 1; }
+  .wrap .mp-hud .pl.me::after {
+    content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px;
+    height: 2px; border-radius: 2px; background: var(--gold-bright);
+  }
+  /* my name already wears the gold; on a struck seat the bar underneath it
+     just read as a rendering fault */
+  .mp-hud .pl.dead.me::after { display: none; }
+  .wrap .mp-notes {
+    height: 34px; padding: 0 14px; font-size: 11px; letter-spacing: 1.5px;
+    border: 1.5px solid rgba(194,162,90,0.55); border-radius: 17px; background: #24321b;
+  }
+  .wrap .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
+  /* compact in the header: the middle column is what the logo and the
+     scoreboard leave, so the actions earn their place beside the seats
+     rather than wrapping under them at every table size */
+  .wrap .mp-quit { height: 34px; padding: 0 10px; font-size: 10.5px; letter-spacing: 1px; }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 9px;
+    background: var(--arena);
+    box-shadow: 0 14px 30px rgba(33,30,26,0.28);
+    touch-action: none;
+  }
+
+  /* pre-round countdown: a light scrim knocks the field back so the beat reads
+     over it, while the snake, food and any live walls stay visible underneath */
+  .countdown {
+    position: absolute;
+    inset: 6px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26,40,30,0.42);
+    z-index: 4;
+    pointer-events: none;
+  }
+  .countdown[hidden] { display: none; }
+  .count-num {
+    font-family: 'Anton', sans-serif;
+    font-weight: 400;
+    font-size: clamp(88px, 30vw, 168px);
+    line-height: 1;
+    letter-spacing: 2px;
+    color: #f6efde;
+    text-shadow: 6px 6px 0 var(--gold);
+  }
+  .count-num.go {
+    font-size: clamp(40px, 13vw, 76px);
+    letter-spacing: 3px;
+    text-shadow: 5px 5px 0 var(--food);
+  }
+
+  /* The overlay is a fixed head over a centred body: the title and its line
+     sit in the same place on every screen, and only what is underneath
+     changes when a panel opens. */

@@ -1,0 +1,122 @@
+/* buttons, speeds, toggles, entry fields, versus setup */
+  .btn {
+    font-family: 'Anton', sans-serif;
+    font-weight: 400;
+    letter-spacing: 2px;
+    font-size: 18px;
+    color: #fff;
+    background: var(--food);
+    border: none;
+    padding: 14px 38px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 5px 0 #b32f1c;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 0 #b32f1c; }
+  .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #b32f1c; }
+
+  .hint {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--shell-muted);
+    letter-spacing: 0.5px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-weight: 500;
+  }
+  .hint b { color: var(--food); font-weight: 700; }
+
+  .speed-row {
+    display: flex; gap: 8px; align-items: center;
+    font-size: 12px; color: var(--sheet-muted); letter-spacing: 1px; font-weight: 600;
+  }
+  .speed-row button {
+    background: var(--sheet);
+    border: 1.5px solid var(--sheet-line);
+    color: var(--sheet-ink);
+    font-family: 'Barlow', sans-serif;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .speed-row button.active {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #211e1a;
+  }
+
+  .toggle-row {
+    display: flex; gap: 10px; align-items: center;
+    font-size: 12px; color: var(--sheet-muted); letter-spacing: 1px; font-weight: 600;
+  }
+  .switch {
+    width: 46px; height: 26px; border-radius: 999px; border: none; padding: 0;
+    background: var(--sheet-track); position: relative; cursor: pointer;
+    transition: background 0.18s ease;
+  }
+  .switch.on { background: var(--food); }
+  .switch .knob {
+    position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+    border-radius: 50%; background: #f6efde; transition: left 0.18s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  }
+  .switch.on .knob { left: 23px; }
+  .toggle-row .state { font-weight: 700; color: var(--sheet-ink); width: 28px; }
+
+  .entry { display: flex; gap: 8px; align-items: center; }
+  /* the name field is the gate to a versus room, so it gets the full width */
+  .entry.wide { width: min(300px, 84%); }
+  .entry.wide input { width: 100%; }
+  .vs-setup { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  /* The doors screen's furniture exists only where the wide layout builds
+     it: the card wrappers and the narrow hint texts leave no box behind,
+     the wide hint texts and the rail render as nothing at all. */
+  .vs-card, .h-n { display: contents; }
+  .h-w { display: none; }
+  .vs-rail { display: none; }
+  /* three ways into a game, each one button, none of them hidden behind a
+     choice you have to make first */
+  .vs-actions {
+    display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+    width: min(300px, 84%);
+  }
+  .vs-actions .btn { width: 100%; padding: 12px 16px; font-size: 17px; }
+  .vs-actions .entry { gap: 8px; }
+  .vs-actions .entry input { flex: 1 1 auto; min-width: 0; width: auto; }
+  .vs-actions .entry .btn { width: auto; flex: 0 0 auto; padding: 12px 22px; }
+  /* opening a room belongs to multiplayer, so it wears multiplayer's green */
+  #vsCreateBtn { --go-fill: #7dbf5c; --go-deep: #4e7d38; }
+  /* one line saying what the door above it does */
+  .vs-hint {
+    margin: -3px 0 4px; font-size: 11.5px; line-height: 1.3;
+    color: #9a927f; font-weight: 500; letter-spacing: 0.2px;
+  }
+  /* the name, asked once and then just stated */
+  .overlay p.vs-who {
+    margin: 0; font-size: 11.5px; letter-spacing: 1.5px; font-weight: 700;
+    color: #9a927f; text-transform: uppercase; max-width: none;
+  }
+  .vs-who b { color: var(--gold-bright); letter-spacing: 2px; }
+  .vs-who button {
+    margin-left: 6px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    background: transparent; border: 1.5px solid rgba(244,236,216,0.3);
+    color: #d8d0bd; font-family: 'Barlow', sans-serif;
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+  }
+  .entry input {
+    width: 130px; padding: 10px 12px; border-radius: 6px;
+    border: 2px solid var(--gold);
+    background: var(--sheet-field); color: var(--sheet-field-ink);
+    font-family: 'Anton', sans-serif; font-size: 20px; letter-spacing: 4px;
+    text-align: center; text-transform: uppercase; outline: none;
+  }
+  .entry input::placeholder { color: #9a917c; letter-spacing: 2px; }
+  .btn.small { padding: 11px 20px; font-size: 16px; box-shadow: 0 4px 0 #b32f1c; }
+  .btn.small:active { transform: translateY(3px); box-shadow: 0 1px 0 #b32f1c; }
+  .btn:disabled { opacity: 0.5; cursor: default; }

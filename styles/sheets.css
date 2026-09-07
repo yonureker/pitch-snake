@@ -1,0 +1,91 @@
+/* the boards and shop sheets */
+     player in (this shipped wrong once, at the top-10 to top-100 growth) */
+  .modal.boards { max-height: 86vh; }
+  .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+  /* the header row the SHOP still wears; it outlived the achievement shelf
+     it was first written for, so it keeps the class and loses the rest */
+  .shelf-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px;
+    letter-spacing: 2px; color: var(--sheet-muted); margin-bottom: 7px;
+  }
+  .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--sheet-gold); letter-spacing: 1px; }
+
+  /* ---- the boards sheet ---- */
+  .board-chips { display: flex; gap: 8px; justify-content: center; }
+  .board-chips button {
+    font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
+    font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-line);
+    color: var(--sheet-ink);
+  }
+  .board-chips button.active { background: var(--gold); border-color: var(--gold); color: #211e1a; }
+  .boards-list { list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  .boards-list li {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 9px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+    color: var(--sheet-ink);
+  }
+  .boards-list .rk { flex: 0 0 20px; color: var(--sheet-gold); font-weight: 700; }
+  .boards-list .nm { flex: 1; text-align: left; letter-spacing: 1px; }
+  .boards-list .sc { font-family: 'Anton', sans-serif; font-size: 15px; letter-spacing: 0.5px; }
+  .boards-list .empty { justify-content: center; color: var(--sheet-muted); font-weight: 500; }
+  .boards-list li.me { border: 1px solid var(--gold); }
+  .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--sheet-gold); font-weight: 700; }
+
+  /* ---- the shop ---- */
+  .modal.shop .shelf-head { width: 100%; }
+  /* No inner scroller, the shelf's own touch-trap rule: the modal scrolls */
+  .shop-list { list-style: none; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .shop-list li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 9px; border-radius: 7px;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+  }
+  .shop-list li.worn { background: rgba(194,162,90,0.16); border-color: rgba(194,162,90,0.5); }
+  .shop-prev { flex: 0 0 64px; width: 64px; height: 28px; }
+  .shop-txt { flex: 1; min-width: 0; text-align: left; }
+  .shop-txt .nm { display: block; font-weight: 700; font-size: 12px; letter-spacing: 1px; color: var(--sheet-ink); }
+  .shop-txt .st { display: block; font-size: 11px; color: var(--sheet-muted); margin-top: 1px; }
+  .shop-list .btn.small { flex: 0 0 auto; padding: 8px 12px; font-size: 12.5px; min-width: 86px; }
+  /* WEARING wears the gold it is: pressing it again undresses */
+  .shop-list .btn.small.worn-btn { background: var(--gold); color: #211e1a; box-shadow: 0 4px 0 var(--gold-deep); }
+  .shop-list .btn.small:disabled { opacity: 0.45; cursor: default; }
+  .standings li.me .nm, .standings li.me .sc { color: var(--gold-bright); }
+  .standings .empty { color: #b9b09c; font-weight: 500; text-align: center; display: block; }
+  /* A long board buys back a row or two of its own height rather than making
+     the player scroll for them. Past four, which is what makes a full
+     five-player room fit with nothing to scroll for at all. */
+  .standings.dense { padding: 7px 14px; }
+  .standings.dense li { padding: 1px 0; }
+  /* The rating a rated round moved, and which way. It used to TAKE the
+     series column, on the reasoning that a 230px board had room for one of
+     them; the owner watched the trophies appear and then vanish as the
+     rating arrived and asked for both, which is fair, because they answer
+     different questions: the trophy is this room's running series, the
+     rating is the ladder. So the board buys the width instead, and both
+     columns are tight enough that five players still fit. */
+  .standings li .rt {
+    min-width: 62px; text-align: right; white-space: nowrap;
+    font-size: 11px; font-weight: 700; color: #b7ac93; letter-spacing: 0.3px;
+  }
+  .standings li .rt .up   { color: #6fbf73; }
+  .standings li .rt .down { color: var(--red, #e2483d); }
+  /* P for provisional, the chess convention: the number is real, it just has
+     too few rounds behind it to be read as settled. Marked rather than
+     withheld, or a new board is an empty box for weeks. */
+  .rt .prov, .lad .prov, .vs-rate .prov {
+    font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
+    color: var(--bg-deep, #211e1a); background: var(--gold);
+    border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 2px;
+  }
+
+  /* ---- on-screen D-pad: wide pad split into four triangular wedges ---- */
+  /* A rounded rectangle divided by an X (both diagonals) into four triangles:
+     tap (or slide into) the top triangle for up, the bottom for down, the sides
+     for left / right. clip-path paints each wedge; the pointer handlers resolve
+     the wedge with the same diagonal math, so hit zones work identically on
+     every browser and there is no dead-zone. The wide shape covers more of the
+     bottom of the screen so the targets are big. The arrow sits in the fat
+     outer part of its slice, where the target is unambiguous. */

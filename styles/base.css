@@ -1,0 +1,89 @@
+/* reset, the page column, header and scoreboard */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* a class that sets `display` outranks the hidden attribute, and every
+     panel here is a flex row or column: hidden must win regardless */
+  [hidden] { display: none !important; }
+
+  html, body {
+    min-height: 100%;
+    background: var(--bg);
+    /* the SHELL ink, not the sheet ink: anything inheriting this sits on
+       the table (or the always-dark overlay, where cream is right too);
+       the sheets are safe because .modal sets its own color */
+    color: var(--shell-ink);
+    font-family: 'Barlow', sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle at 15% 0%, rgba(194,162,90,0.10), transparent 40%),
+      radial-gradient(circle at 90% 100%, rgba(230,64,42,0.06), transparent 42%),
+      var(--bg);
+  }
+
+  .wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    width: 100%;
+    max-width: 540px;
+    /* the versus strip's height plus its gap, claimed only while a room is on
+       screen; every height sum below subtracts it, so solo layouts are
+       untouched and the pitch never has to share its surface */
+    --mp-h: 0px;
+  }
+  .wrap.mp-open { --mp-h: 42px; }
+
+  header {
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  h1 {
+    font-family: 'Anton', sans-serif;
+    font-weight: 400;
+    font-size: clamp(30px, 9vw, 52px);
+    line-height: 0.9;
+    letter-spacing: 1px;
+    color: var(--shell-ink);
+    text-shadow: 4px 4px 0 var(--gold);
+    text-transform: uppercase;
+  }
+
+  /* The clock stands BESIDE the tally, not under it: stacked, a timed round
+     pushed the count of seconds below BEST, where it read as a third score
+     and cost height a phone does not have. */
+  .scores { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+  .scores .tally { text-align: right; line-height: 1.1; }
+  .scores .label {
+    font-size: 13px; letter-spacing: 2px; color: var(--shell-muted);
+    text-transform: uppercase; font-weight: 600;
+  }
+  .scores .val {
+    font-family: 'Anton', sans-serif; font-size: 48px; color: var(--shell-ink);
+  }
+  .scores .best {
+    color: var(--gold); font-size: 17px; font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .scores .clock {
+    font-family: 'Anton', sans-serif; font-size: 30px; color: var(--shell-ink);
+    letter-spacing: 1px; line-height: 1;
+    padding-left: 12px; border-left: 2px solid var(--shell-gold);
+  }
+  .scores .clock.late { color: var(--food); }
+  .scores .clock[hidden] { display: none; }
+
+  /* A choice list: one full-width button per option, stacked, wearing the
+     same clothes as START and DONE. The taken option is filled gold. */
