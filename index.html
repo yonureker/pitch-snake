@@ -4611,6 +4611,7 @@
   // deathGen retires a decision still in the air, so a restart, a mode switch
   // or a save that lands first can never be overruled by a late board.
   let deathGen = 0;
+  let nudgeGen = -1;   // the death that owns a shown account nudge
   function retireEntry() { deathGen++; entryWanted = false; claimWanted = false; }
   async function askIfItPlaces(gen, sc) {
     const list = await renderStandings();
@@ -4930,11 +4931,17 @@
     resultPanel.hidden = !deadResult;
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
     claimBtn.hidden = !(deadPanels && claimWanted);
-    // one quiet line, at the one moment the pitch sells itself: a score just
-    // went onto the world board and the identity under it is still anonymous
-    // the offer, on an earned moment only, and it says which one it was
-    const askNow = deadPanels && nudgeDue();
-    if (askNow) {
+    // One quiet line, at the one moment the pitch sells itself: a score just
+    // went onto the world board and the identity under it is still anonymous.
+    // The offer STICKS to the death that earned it (nudgeGen): refreshModeUI
+    // runs several times back to back on a death screen, and the old code
+    // set nudgedThisSession on the first pass, which made the second pass
+    // compute the nudge as no-longer-due and hide what it had just shown.
+    // The owner watched it flash and vanish. Not-now and a linked account
+    // both release the stick; a new round expires it through deathGen.
+    const askNow = deadPanels && (nudgeDue() || (nudgeGen === deathGen && sbAnon()));
+    if (askNow && nudgeGen !== deathGen) {
+      nudgeGen = deathGen;
       nudgedThisSession = true;
       acctLine.textContent = (savedThisRound && !boardIsLocal)
         ? 'You made the world board. Create an account to save your scores.'
@@ -7216,6 +7223,7 @@
   whoBtn.addEventListener('click', openProfile);
   acctGo.addEventListener('click', openProfile);
   acctLater.addEventListener('click', () => {
+    nudgeGen = -1;             // released: a refresh must not resurrect it
     refuseNudge();                 // asked and answered; ask less from here
     authNudge.hidden = true;
   });
