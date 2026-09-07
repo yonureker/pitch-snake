@@ -114,6 +114,35 @@ function timingFeatures(log: Record<string, unknown>) {
   };
 }
 
+// ---- what actually gets kept ----
+// The evidence trail is worth keeping; the CLIENT'S OBJECT is not. This used
+// to insert `log` exactly as it arrived, and only the keys below were ever
+// looked at, so every other key rode in unread and was stored for ever. The
+// request cap is 256KB and every round submits now, not only the ones that
+// reach a board, so a caller could pair a one-quantum round with a quarter of
+// a megabyte of padding and write it once per seed, forty times per ten
+// minutes, from as many free anonymous accounts as they cared to make. That is
+// a disk bill with a rate limit on it rather than a wall.
+//
+// Rebuilding the row from the fields this function VERIFIED costs nothing:
+// each one has already been read and checked by the time we get here, and a
+// key nobody validated is a key nothing can ever honestly ask about later.
+// This is also what makes the stored log genuinely replayable, since it now
+// contains exactly the shape replay() reads and no shadow of anything else.
+function storableLog(log: Record<string, unknown>): Record<string, unknown> {
+  const kept: Record<string, unknown> = {
+    v: log.v,
+    seed: log.seed,
+    tickMs: log.tickMs,
+    wallsEnabled: log.wallsEnabled,
+    end: log.end,
+    players: log.players ?? 1,
+    inputs: log.inputs,
+  };
+  for (const [k, dflt] of Object.entries(KNOBS)) kept[k] = log[k] ?? dflt;
+  return kept;
+}
+
 // ---- the mint ----
 // Coins exist so an honest round can pay for cosmetics, and they are minted
 // HERE and nowhere else, because a client that can award itself currency is a
@@ -360,7 +389,7 @@ Deno.serve(async (req) => {
 
   const { data: row, error } = await service
     .from('pitch_snake_scores')
-    .insert({ name: clean, score, mode, user_id: uid, seed: Number(issued.seed), log, ...feat })
+    .insert({ name: clean, score, mode, user_id: uid, seed: Number(issued.seed), log: storableLog(log), ...feat })
     .select('id')
     .single();
   if (error || !row) return refuse('insert failed', 500);

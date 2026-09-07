@@ -225,6 +225,21 @@ begin
   if r.status = 'playing' and r.started_at > now() - interval '15 minutes' then
     raise exception 'room is mid-round';
   end if;
+  -- A three-second cooldown was tried here and REMOVED before it ever shipped,
+  -- which is worth recording so it is not reinvented. The idea was to stop a
+  -- stranger holding a room code from whistling the room in a loop. It cannot
+  -- happen: the check immediately above already refuses every start while the
+  -- room is 'playing', and the first kickoff sets exactly that, so a looping
+  -- caller is stopped by the first repeat and stays stopped for fifteen
+  -- minutes. The cooldown therefore blocked nothing an attacker could do.
+  --
+  -- What it COULD block was an honest rematch. A round ends, room_finish
+  -- reopens the room, and the only caller in that window is a person pressing
+  -- REMATCH on a results screen. A fast round puts that press inside three
+  -- seconds of started_at, where the cooldown would have refused it silently
+  -- (vsStart swallows every refusal that is not a 404), so the button would
+  -- simply do nothing and the player would press it again. All cost, no
+  -- benefit, so it is not here.
 
   update public.pitch_snake_rooms
   set status = 'playing', start_n = public.pitch_snake_rooms.start_n + 1,
@@ -281,6 +296,27 @@ begin
     raise exception 'results too large';
   end if;
   winner := left(upper(regexp_replace(coalesce(p_results->'scores'->0->>'n', ''), '[^A-Za-z0-9]', '', 'g')), 5);
+  -- This door reopens a PLAYING room and credits a caller-named winner, and it
+  -- is open to anyone holding the code. Without a way to prove the caller sat
+  -- in the room, a stranger can end a real round part-way through and credit a
+  -- name of their choosing. Closing that properly needs a membership check, and
+  -- the only membership this server actually holds is a seat, which is claimed
+  -- with a session. The tally is cosmetic and the ladder does not read it, so
+  -- it is documented here rather than half-closed.
+  --
+  -- A `started_at < now() - interval '3 seconds'` floor was tried on the WHERE
+  -- clause below and REMOVED, because it wedged rooms. The arithmetic: the
+  -- kickoff broadcast carries the server's own clock as 'at', and every client
+  -- pre-elapses its countdown by the transit time so all screens whistle at
+  -- exactly started_at + COUNT_TOTAL, which is 2400ms (650 * 3 + 450). A
+  -- three-second floor therefore demanded that real play last more than 600ms.
+  -- A room where every snake dies inside that (two players idling or both
+  -- forfeiting at the whistle, a two-player room whose other tab is already
+  -- gone) reported full time and matched ZERO rows, so status stayed
+  -- 'playing' and room_start's fifteen-minute guard then refused every
+  -- rematch. A silent no-op on the write path is how a cosmetic guard turns
+  -- into a room nobody can use, and the guard was not buying anything anyway:
+  -- a caller who waits 3.1 seconds passes it.
   update public.pitch_snake_rooms
   set status = 'waiting',
       last_results = p_results,

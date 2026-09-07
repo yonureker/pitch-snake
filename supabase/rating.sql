@@ -99,6 +99,13 @@ create table if not exists public.pitch_snake_seats (
 alter table public.pitch_snake_seats add column if not exists mode     text;
 alter table public.pitch_snake_seats add column if not exists placings jsonb;
 
+-- The seat cap in pitch_snake_take_seat counts a user's recent claims, and the
+-- unique on (round_id, user_id) cannot serve that: its leading column is the
+-- round. Without this the cap would sequentially scan every seat ever claimed,
+-- on a call that happens at every kickoff.
+create index if not exists pitch_snake_seats_user_recent_idx
+  on public.pitch_snake_seats (user_id, claimed_at desc);
+
 alter table public.pitch_snake_seats enable row level security;
 revoke all on table public.pitch_snake_seats from anon, authenticated;
 
@@ -137,9 +144,47 @@ security definer
 set search_path = ''
 as $$
 declare
-  r record;
+  r      record;
+  recent integer;
 begin
   if auth.uid() is null then return; end if;
+  -- A CAP, for the one thing this door cannot check. It verifies the round
+  -- exists and that the caller is claiming a seat that round has, but nothing
+  -- here can prove the caller actually sat in the room: the roster is gathered
+  -- from presence and its refs are public in the kickoff, so there is no
+  -- membership fact on this server to test against. A caller who learns a code
+  -- (quick match hands them out) could therefore walk the free seats of live
+  -- rounds, which both denies real players their own seat, since the insert
+  -- below does nothing on conflict, and puts the squatter in the rating the
+  -- agreed placings hand that seat. The cap does not make that impossible; it
+  -- prices it at an account per hundred seats, which is what every other abuse
+  -- here costs.
+  --
+  -- THE NUMBER IS SET BY THE HONEST PLAYER, NOT BY THE ABUSER, because the two
+  -- failures are not the same size. A squatter slowed down is an inconvenience
+  -- to a squatter. An honest player refused here is silently unrated for a
+  -- round they actually played, with nothing on screen to explain it, and this
+  -- door is already deliberately silent about every refusal. So the cap sits
+  -- far above any rate a person can produce rather than close to it.
+  --
+  -- One claim per kickoff (vsTakeSeat runs once from vsBegin, and the insert
+  -- below does nothing on conflict, so retries never count twice). A hundred in
+  -- ten minutes is a round every six seconds, sustained. A room round cannot go
+  -- near that: 2400ms of countdown (COUNT_TOTAL, 650 * 3 + 450), then the
+  -- round, then a results screen somebody has to click REMATCH on. Even the
+  -- pathological case, a player rematching instantly into rounds that end at
+  -- once, is about 4.5 seconds a round and only reaches this cap after some
+  -- seven minutes of doing nothing else. Forty was the first number here
+  -- and it was too tight, at one round every fifteen seconds; a two-player
+  -- classic room where both snakes die early genuinely lands in that range.
+  -- The reasoning offered for forty was also simply wrong, that a player
+  -- cannot be in more rounds than they have seeds for: room rounds are seeded
+  -- by pitch_snake_room_start and spend no issue_seed ticket at all, so the
+  -- two limits are independent and there was never any symmetry to borrow.
+  select count(*) into recent from public.pitch_snake_seats
+  where user_id = auth.uid() and claimed_at > now() - interval '10 minutes';
+  if recent >= 100 then return; end if;
+
   select id, players into r
   from public.pitch_snake_rounds
   where code = upper(trim(coalesce(p_code, ''))) and start_n = p_start_n
