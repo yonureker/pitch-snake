@@ -184,6 +184,7 @@ The numbered rules above govern the hot path. Away from it:
 
 ## Verify before shipping
 
+0. **Every URL `index.html` loads carries `?v=<content hash>`,** written by `scripts/stamp-assets.mjs` and enforced by the pre-commit hook and CI (`npm run stamp:check`). This is not a nicety: Pages serves `index.html` with `max-age=600` and everything else with `max-age=14400`, so a returning player picks up a fresh page while keeping its modules for up to four hours, and a deploy that changes a module's EXPORTS then kills the whole module graph with a SyntaxError rather than merely being stale. The game does not boot at all, for hours, for exactly the players who came back. The modules are versioned through an import map so the imports BETWEEN modules move too (`shop.js` asking for `./dom.js`), and so `page/build` stays exactly what `tsc` emitted and the drift check above still means something. A stale cached `engine.js` is the same trap wearing a worse hat: silent room refusals and refused scores.
 1. `npm test` (the engine suite, `node --test`) must pass - behaviour lives there now.
 2. Page/module syntax: extract the script body to a `.mjs` and `node --check` it.
 3. Drive the page headless with a temporary `?vtest` hook (scratchpad `hook.py on/off`) plus the browser harness for render/UI, and a headless Chrome screenshot; remove the hook before committing (zero `vtest` references may remain).

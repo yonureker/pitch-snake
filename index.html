@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css">
-<link rel="stylesheet" href="./styles/page-and-header.css">
-<link rel="stylesheet" href="./styles/mode-chooser.css">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css">
-<link rel="stylesheet" href="./styles/result-and-legend.css">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css">
-<link rel="stylesheet" href="./styles/modals-and-profile.css">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=4cf2d3319b">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=4cf2d3319b">
 </head>
 <body>
   <div class="wrap">
@@ -413,6 +413,22 @@
 
   </div>
 
+<!-- module versions: written by scripts/stamp-assets.mjs -->
+<script type="importmap">
+{
+  "imports": {
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=4cf2d3319b",
+    "./packages/net/net.js": "./packages/net/net.js?v=4cf2d3319b",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=4cf2d3319b",
+    "./page/build/dom.js": "./page/build/dom.js?v=4cf2d3319b",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=4cf2d3319b",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=4cf2d3319b",
+    "./page/build/shop.js": "./page/build/shop.js?v=4cf2d3319b",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=4cf2d3319b",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=4cf2d3319b"
+  }
+}
+</script>
 <script type="module">
   // The page is a renderer and an app shell. The rules live in
   // packages/engine/engine.js, shared verbatim with the mobile app and the

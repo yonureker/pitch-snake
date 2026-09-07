@@ -13,7 +13,9 @@
     "typecheck": "npm --workspace apps/mobile run typecheck",
     "lint:page": "eslint page",
     "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
-    "build:page": "tsc -p page/tsconfig.json"
+    "build:page": "tsc -p page/tsconfig.json",
+    "stamp": "node scripts/stamp-assets.mjs",
+    "stamp:check": "node scripts/stamp-assets.mjs --check"
   },
   "overrides": {
     "eslint-plugin-react-hooks": "^7.1.1"

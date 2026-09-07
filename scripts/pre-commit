@@ -26,6 +26,25 @@ if ! git diff --quiet -- page/build; then
   exit 1
 fi
 
+# index.html is cached for ten minutes and everything it loads for four hours,
+# so a fresh page can meet its own stale modules. When a deploy changes a
+# module's exports that pairing does not degrade, it kills the module graph and
+# the game does not boot at all. Every URL the page asks for therefore carries a
+# content version, and this refuses a commit where the stamp no longer matches
+# what is being committed. It runs after build:page because it hashes the built
+# output. See scripts/stamp-assets.mjs for the full reasoning.
+echo "pre-commit: asset versions"
+npm run stamp --silent
+if ! git diff --quiet -- index.html; then
+  echo
+  echo "  index.html asset versions were stale and have just been restamped."
+  echo "  Stage it and commit again:"
+  echo
+  echo "    git add index.html"
+  echo
+  exit 1
+fi
+
 if [ -d apps/mobile/node_modules ]; then
   echo "pre-commit: mobile lint + typecheck"
   npm --workspace apps/mobile run lint --silent

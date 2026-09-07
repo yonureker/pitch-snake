@@ -55,6 +55,15 @@ jobs:
             exit 1
           fi
 
+      # index.html caches for ten minutes and everything it loads for four
+      # hours, so a fresh page can meet its own stale modules. When a deploy
+      # changes a module's exports that does not degrade, it kills the module
+      # graph and the game does not boot. Every URL therefore carries a content
+      # version; this fails the build if the stamp does not match what is
+      # committed. See scripts/stamp-assets.mjs.
+      - name: index.html asset versions match their content
+        run: npm run stamp:check
+
   mobile:
     name: mobile lint + typecheck
     runs-on: ubuntu-latest
