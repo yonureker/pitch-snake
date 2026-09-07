@@ -693,7 +693,7 @@
   // The spend side: the shop sheet, the purse, and the wallet every reader
   // repaints from. It is handed the pitch's own art so a preview cannot lie
   // about what the money buys. See page/shop.ts.
-  import { applyWallet, initShop, purseIsKnown } from './page/build/shop.js';
+  import { applyWallet, creditPurse, initShop, purseIsKnown } from './page/build/shop.js';
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
@@ -2099,8 +2099,12 @@
     if (!(paid > 0) || !purseIsKnown()) return;
     const from = parseInt(purseCoins.textContent, 10) || 0;
     const to = from + paid;
-    if (shopWallet) shopWallet.coins = to;
-    shopCoins.textContent = to;
+    // The wallet belongs to the shop module: tell it, never reach into it. This
+    // line used to assign to `shopWallet` and to `shopCoins`, neither of which
+    // is declared here. `shopCoins` happened to work because an element id
+    // becomes a property of window, so the page was reading the DOM through a
+    // legacy accident; `shopWallet` had no element to stand in for it and threw.
+    creditPurse(paid);
     if (reducedMotion()) { purseCoins.textContent = to; return; }
     purseFloat.textContent = '+' + paid;
     purseFloat.hidden = false;      // [hidden] toggling restarts the float

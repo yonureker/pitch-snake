@@ -174,6 +174,35 @@ export function applyWallet(value: unknown): void {
 }
 
 /**
+ * Credit the wallet with what a round just paid, and repaint the shop's number.
+ *
+ * The validator's answer is the authority on what a round paid and the ledger
+ * is idempotent, so crediting here and re-fetching the wallet later agree by
+ * construction; the boot-time fetch stays the reconciler either way.
+ *
+ * This exists because the page used to do it by hand, assigning to a
+ * `shopWallet` binding that is not in its scope and never was: the wallet is
+ * private to this module. That threw a ReferenceError on every round that
+ * actually PAID (a round earning no coins returns before reaching it, which is
+ * why it looked fine), and the throw was swallowed by the save path's catch and
+ * shown to the player as "Could not reach the leaderboard" on a score that had
+ * in fact saved. It also aborted the rest of that path, so the board never
+ * rendered. One undeclared name, two bugs, and no error anywhere on screen.
+ *
+ * The purse's own count-up stays with the page, which owns that animation; this
+ * only moves the number the shop shelf reads.
+ *
+ * @param paid - coins the round paid; anything not positive is ignored.
+ * @returns the new balance, or null if no wallet has answered on this device yet.
+ */
+export function creditPurse(paid: number): number | null {
+  if (!(paid > 0) || wallet === null) return null;
+  wallet = { ...wallet, coins: wallet.coins + paid };
+  if (shopCoins !== null) shopCoins.textContent = String(wallet.coins);
+  return wallet.coins;
+}
+
+/**
  * Has a wallet ever answered on this device?
  *
  * The purse stays hidden until one has, because an empty coin pill reads as

@@ -98,7 +98,15 @@
      320x240 and each cell lands on a whole pixel. */
   .flag {
     width: 20px; height: 15px; flex: 0 0 20px;
-    background-image: url(assets/flags.png);
+    /* ../ because a url() in a stylesheet resolves against the STYLESHEET, not
+       the page. This read `url(assets/flags.png)` while it lived in the inline
+       <style> block in index.html, where that was right, and the split into
+       styles/ silently repointed it at styles/assets/flags.png, which is a 404.
+       Every flag on the site vanished: the player chip, the boards, the room.
+       Nothing threw and nothing logged, because a background image that will
+       not load is not an error, which is exactly the class of accident the
+       split was meant to make visible in a diff and this one slipped through. */
+    background-image: url(../assets/flags.png);
     background-size: 320px 240px;
     background-repeat: no-repeat;
     border-radius: 2px;
