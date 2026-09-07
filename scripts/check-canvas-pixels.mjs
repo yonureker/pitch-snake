@@ -37,6 +37,15 @@
 //      moves every interpolated segment by a fraction of a pixel: 0.6% of
 //      pixels, spread across the whole board, at antialiasing magnitude. The
 //      shot is taken inside the rAF wrapper at an exact frame instead.
+//   5. THE OTHER CLOCK. Stubbing performance.now is not stubbing time.
+//      index.html reads Date.now in twenty places (the engine reads it in
+//      none), so under machine load the wall clock and the frame clock drift
+//      apart and anything phased off Date.now lands differently at frame 500.
+//      This survived fixes 1 to 4 and showed up as two of the six frames
+//      hashing differently across runs of identical code: the survival frame
+//      differed from ITSELF by 48 pixels of 430,336, the same 48 that
+//      separated it from the baseline. Both clocks are stubbed now, and they
+//      advance together off the same counter.
 //
 // The mode comes from localStorage before load, never from clicking the
 // chooser, because a click fires newRound() at an arbitrary frame and puts
@@ -72,10 +81,25 @@ const beforeLoad = (mode) => `
   try { localStorage.setItem('snakeMode', ${JSON.stringify(mode)}); } catch (e) {}
   (() => {
     const STEP = 1000 / 60;
+    // a fixed epoch so Date.now is reproducible across runs as well as
+    // monotonic with the frame clock; the value itself is arbitrary
+    const EPOCH = 1_767_225_600_000;
     let t = 0;
     window.__frames = 0;
     const realRaf = window.requestAnimationFrame.bind(window);
     performance.now = () => t;
+    // BOTH clocks, advancing off the same counter. Stubbing only
+    // performance.now leaves everything phased off the wall clock free to
+    // drift under load, which is cause 5 above.
+    Date.now = () => EPOCH + t;
+    const RealDate = Date;
+    window.Date = class extends RealDate {
+      constructor(...args) {
+        if (args.length === 0) super(EPOCH + t);
+        else super(...args);
+      }
+      static now() { return EPOCH + t; }
+    };
     window.requestAnimationFrame = (cb) => realRaf((ts) => {
       t += STEP;
       window.__frames++;
