@@ -22,8 +22,36 @@ import { SIM_DT } from '../engine/engine.js';
 
 export const NET_PROTO = 1;
 
-export const SNAP_EVERY = 32;     // quanta between keyframes (320ms)
-export const SNAP_KEEP = 96;      // keyframes retained: ~30s of rollback horizon
+// Keyframes are kept at TWO densities, because rollbacks are not spread evenly
+// through the past. A remote input lands about a wire trip late, so very nearly
+// every rollback targets the last fraction of a second; the deep horizon exists
+// only for the rare repair, a resend after a socket blip. One uniform grid has
+// to choose between a shallow resim and a long reach, and the old single grid
+// of 32 chose reach: restoring the newest keyframe at or before an input meant
+// replaying up to 31 quanta that the input never touched, on top of the wire
+// trip itself. Two densities buy both ends.
+//
+// Measured on a five-player room over a 150ms lossy wire, 60s: the uniform 32
+// grid re-simulated 13.25 quanta for every quantum actually lived (34 per
+// rollback); this pair re-simulates 8.6 (about 22 per rollback). That matters
+// because a re-simulated quantum is not free: with a ghost pack each one costs
+// about eight times one on an empty board, since every ghost re-runs its
+// breadth-first sweep.
+//
+// 8 rather than 4 is the knee of that curve. Halving again only takes the depth
+// from 22 quanta to 20 while doubling the keyframes written (8,887 to 17,528
+// over the same minute), and a keyframe is a full deep copy of the round: on a
+// phone that allocation becomes garbage collection, which is the same stutter
+// this is removing. Densifying the WHOLE grid to 4 instead of splitting it
+// bought the identical 20 with four times the retained keyframes.
+export const SNAP_EVERY = 8;         // dense grid: keyframes near the present
+// The deep grid. Must stay a multiple of SNAP_EVERY (so those quanta are
+// actually snapshotted) and must stay 32: a peer compares settled hashes by
+// exact quantum, so every build has to hold a keyframe at the same deep quanta
+// or the desync check silently stops finding anything to compare.
+export const SNAP_SPARSE = 32;
+export const SNAP_DENSE_Q = 128;     // how far back the dense grid is kept
+export const SNAP_HORIZON_Q = 3072;  // total rollback reach in quanta (~30s), as before
 export const STALL_AT = 250;      // quanta a live peer may lag before we hold the sim
 export const BEAT_MS = 500;       // heartbeat cadence: loss and clock signals twice a second
 // A LIVE peer's fresh silence holds the room (their inputs may be in
@@ -165,18 +193,33 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
     const last = snaps[snaps.length - 1];
     if (last && last.q === game.quanta) return;
     snaps.push({ q: game.quanta, s: game.snapshot(), h: 0 });
-    if (snaps.length > SNAP_KEEP) {
-      snaps.shift();
-      // inputs older than the horizon can never be re-applied (a rollback
-      // past snaps[0] fails anyway), so a long round does not hoard them.
-      // Only the applied prefix is eligible, which keeps applied[p] >= 0.
-      const floor = snaps[0].q;
-      for (let p = 0; p < N; p++) {
-        const list = table[p];
-        let cut = 0;
-        while (cut < applied[p] && list[cut].q < floor) cut++;
-        if (cut) { list.splice(0, cut); applied[p] -= cut; }
-      }
+    pruneSnaps();
+  }
+
+  // Thin the dense grid once it falls behind the window and drop whatever has
+  // passed the horizon, in one compaction pass. What survives past the window
+  // sits on the SNAP_SPARSE grid, so every peer still holds a keyframe at the
+  // same deep quanta and the settled-hash exchange keeps lining up (including
+  // against a build that still keeps one uniform grid of 32).
+  function pruneSnaps() {
+    const nowQ = game.quanta;
+    let w = 0;
+    for (let i = 0; i < snaps.length; i++) {
+      const s = snaps[i];
+      const age = nowQ - s.q;
+      if (age <= SNAP_DENSE_Q || (age <= SNAP_HORIZON_Q && s.q % SNAP_SPARSE === 0)) snaps[w++] = s;
+    }
+    if (w === snaps.length) return;
+    snaps.length = w;
+    // inputs older than the oldest keyframe can never be re-applied (a rollback
+    // past snaps[0] fails anyway), so a long round does not hoard them.
+    // Only the applied prefix is eligible, which keeps applied[p] >= 0.
+    const floor = snaps.length ? snaps[0].q : nowQ;
+    for (let p = 0; p < N; p++) {
+      const list = table[p];
+      let cut = 0;
+      while (cut < applied[p] && list[cut].q < floor) cut++;
+      if (cut) { list.splice(0, cut); applied[p] -= cut; }
     }
   }
 

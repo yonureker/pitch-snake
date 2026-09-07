@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, MODES, SIM_DT } from '../engine/engine.js';
-import { createSession, loopbackBus, foldHash, SNAP_KEEP, SNAP_EVERY, FRESH_MS, STALL_AT, LAG_GIVEUP_MS, STALL_GIVEUP_MS } from './net.js';
+import { createSession, loopbackBus, foldHash, SNAP_HORIZON_Q, FRESH_MS, STALL_AT, LAG_GIVEUP_MS, STALL_GIVEUP_MS } from './net.js';
 
 const QUIET = { seed: 90210, tickMs: 100, wallsEnabled: false };
 
@@ -174,7 +174,7 @@ test('an input from beyond the snapshot horizon fails loudly, never silently for
   a.frame(40010);
   assert.equal(why, 'horizon', 'the session refused to invent a timeline it cannot verify');
   assert.equal(a.failed, true);
-  assert.ok(40000 / 10 - 100 > SNAP_KEEP * SNAP_EVERY, 'the stamp really was outside the horizon');
+  assert.ok(40000 / 10 - 100 > SNAP_HORIZON_Q, 'the stamp really was outside the horizon');
 });
 
 test('a room runs at real time and stays together, clean wire or rough', () => {
@@ -231,7 +231,7 @@ test('a silent peer stalls the sim; dropPeer releases it', () => {
   const runAhead = g0.quanta - qAtSilence;
   const bound = FRESH_MS / SIM_DT + STALL_AT + 20;
   assert.ok(runAhead <= bound, `the sim held instead of running away (${runAhead} > ${bound})`);
-  assert.ok(bound * 4 < SNAP_KEEP * SNAP_EVERY, 'and the hold arrives well inside the horizon');
+  assert.ok(bound * 4 < SNAP_HORIZON_Q, 'and the hold arrives well inside the horizon');
   s0.dropPeer(1);
   for (let now = 12010; now <= 13000; now += 10) { bus.pump(now); s0.frame(now); }
   assert.equal(s0.stalled, false, 'a departed peer no longer holds the room');
