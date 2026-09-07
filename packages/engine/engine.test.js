@@ -13,6 +13,7 @@ import {
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
   BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress, slowTick,
+  CLINCH_GRACE_MS, CLINCH_GHOST_MS,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -2184,6 +2185,92 @@ test('multi-snake: a leader outliving the last rival clinches on the same quantu
 });
 
 // ------------------------------------------------------------- rollback
+// ---- sudden death: the room's last un-clinched survivor ----
+// The clinch ends a WINNING survivor on the spot, so a round only carries on
+// with one snake when that snake is behind or level. In that state the ghost
+// ladder reads a DEAD rival's frozen score, so it cannot move: the pressure
+// used to be pinned for the whole endgame. Now the clock hires instead.
+
+// a room down to one snake that is behind, so the round carries on
+function loneSurvivor(behindBy = 2) {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  const p1 = g.players[1];
+  p1.alive = false; p1.deadReason = 'wall'; p1.diedAt = 1;
+  p1.snake.length = 0; p1.snakeSet.clear();
+  p1.score = behindBy + 1;         // the fallen leader, still ahead
+  g.players[0].score = 1;
+  return g;
+}
+
+test('sudden death: the clock arms when a room comes down to one snake still behind', () => {
+  const g = loneSurvivor();
+  assert.equal(g.aloneAt, 0, 'unarmed while the round still has two snakes on it');
+  g.advanceQuanta(1);
+  assert.equal(g.alive, true, 'behind on points, the survivor plays on');
+  assert.ok(g.aloneAt > 0, 'the clock arms the quantum the room goes down to one');
+  assert.equal(g.aloneGhosts, 0, 'and remembers the pack it counts up from');
+});
+
+test('sudden death: a survivor who clinches never arms it', () => {
+  const g = loneSurvivor();
+  g.players[1].score = 1;
+  g.players[0].score = 3;          // already past the field
+  g.advanceQuanta(1);
+  assert.equal(g.alive, false, 'the clinch ended the round instead');
+  assert.equal(g.players[0].deadReason, 'won');
+  assert.equal(g.aloneAt, 0, 'a round that ended never armed the ramp');
+});
+
+test('sudden death: one more ghost every interval once the grace is out', () => {
+  const g = loneSurvivor();
+  g.advanceQuanta(1);              // arms the clock
+  assert.equal(g.ghosts.length, 0, 'the score ladder has brought nobody: the leader sits on 3');
+  // the grace and the first interval, in real quanta, to one short of the hire
+  g.advanceQuanta((CLINCH_GRACE_MS + CLINCH_GHOST_MS) / SIM_DT - 1);
+  assert.equal(g.ghosts.length, 0, 'the breather really is quiet');
+  g.advanceQuanta(1);
+  assert.equal(g.ghosts.length, 1, 'the first hire lands one interval after the grace');
+  // the cadence after that, wound on the clock rather than lived through, so
+  // the assertion is about the ladder and not about surviving five seconds
+  g.clockMs += CLINCH_GHOST_MS;
+  g.advanceQuanta(1);
+  assert.equal(g.ghosts.length, 2, 'and one more every interval after that');
+});
+
+test('sudden death: the ramp climbs past the classic five and pins at GHOST_MAX', () => {
+  const g = loneSurvivor();
+  g.advanceQuanta(1);
+  g.clockMs += CLINCH_GRACE_MS + CLINCH_GHOST_MS * (GHOST_MAX + 10);   // hours of squeeze
+  // one hire per quantum, so a handful of quanta covers the whole climb, and a
+  // ghost only steps twice a second: the survivor is in no danger inside it
+  for (let i = 0; i < GHOST_MAX + 10 && g.alive; i++) g.advanceQuanta(1);
+  assert.ok(g.ghosts.length > GHOST_SCORES.length,
+    `the ramp passes the classic five, which is the whole point (${g.ghosts.length})`);
+  assert.ok(g.ghosts.length <= GHOST_MAX, `and pins at the cap (${g.ghosts.length})`);
+});
+
+test('sudden death: a solo round never arms it', () => {
+  const g = quietGame();           // one snake: a board, not a room
+  foodFar(g);
+  g.advanceQuanta(400);
+  assert.equal(g.aloneAt, 0, 'the ramp is a room rule, and a solo board is not a room');
+  assert.equal(g.ghosts.length, 0, 'so the clock hires nobody and old boards stay comparable');
+});
+
+test('sudden death: the armed clock survives a rollback', () => {
+  const g = loneSurvivor();
+  g.advanceQuanta(1);
+  const at = g.aloneAt, pack = g.aloneGhosts;
+  assert.ok(at > 0);
+  const snap = g.snapshot();
+  g.advanceQuanta(40);
+  g.restore(snap);
+  assert.equal(g.aloneAt, at, 'a rollback puts the armed clock back where it was');
+  assert.equal(g.aloneGhosts, pack, 'and the pack it counts up from');
+});
+
 test('snapshot/restore: a rollback resim reproduces the straight run exactly', () => {
   const mk = () => createGame({ seed: 777, tickMs: 100, players: 2, ...MODES.survival });
   const inputs = [[120, 0, -1, 0], [180, -1, 0, 1], [260, 0, 1, 0], [400, 1, 0, 1]];

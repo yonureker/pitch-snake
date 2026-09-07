@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 23;  // 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 24;  // 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -64,6 +64,25 @@ export const GHOST_MS = 500;       // ms per ghost step, fixed at every speed se
 // stops). The caps bound the sim, not the difficulty a human will ever meet:
 // twenty ghosts arrive two and a half minutes in.
 export const GHOST_MAX = 20;
+
+// ---- sudden death: the room's last survivor ----
+// The clinch ends a WINNING survivor's round on the spot, so the only round
+// that carries on with one snake left is one where that snake is behind or
+// level and has to score to pass. That endgame had no escalation in it at all,
+// and not by oversight of degree: the ghost ladder reads leaderScore(), which
+// in that state is a DEAD rival's frozen number, so the count of marks passed
+// cannot move, and the moment the survivor passes it the clinch ends the round
+// anyway. The pressure was therefore mathematically pinned for the whole
+// endgame while up to four fallen players watched someone farm a static board.
+//
+// So in a room, once one snake is left, the ladder comes off the score and
+// onto the clock: a breather first, then one more ghost every five seconds,
+// pinned at GHOST_MAX like every other ladder (rule 22: time only ever
+// scales). Rooms only, and never a solo round, whose boards would otherwise
+// stop being comparable with every score already on them. Both a multiple of
+// SIM_DT, like every timing constant here.
+export const CLINCH_GRACE_MS = 10_000;   // room to start chasing before it tightens
+export const CLINCH_GHOST_MS = 5000;     // then one more ghost every five seconds
 export const BOMB_MAX = 15;
 
 // The bolt: the one thing that changes a ghost's pace, and it is earned,
@@ -448,6 +467,11 @@ export function createGame(cfg = {}) {
     bombs: [], bombsUnlocked: 0, bombPhase: 'gap', bombNextAt: 0, bombExpireAt: 0,
 
     ghosts: [],         // {x, y, px, py, dir, warped, moveAt}
+    // When a room first came down to one snake that had NOT yet clinched, and
+    // how many ghosts stood on the pitch at that moment: the sudden-death
+    // ladder counts from there. Set once and never cleared (a fallen snake
+    // never stands back up), so the ramp cannot be re-armed.
+    aloneAt: 0, aloneGhosts: 0,
 
     portal: null,       // {ax, ay, bx, by, used}: the blue end, then the violet end
     portalsUnlocked: 0, portalMarksSpent: 0, portalRetryAt: 0,
@@ -1012,10 +1036,31 @@ export function createGame(cfg = {}) {
     // On the clock (survival): one joins every ghostEveryMs for ever, one
     // spawn attempt per quantum, pinned at GHOST_MAX. On the score: the
     // classic five marks.
-    const ghostsDue = ghostEveryMs
-      ? Math.min(GHOST_MAX, startGhosts + ((S.clockMs / ghostEveryMs) | 0)) > S.ghosts.length
-      : S.ghosts.length < GHOST_SCORES.length && leaderScore() >= GHOST_SCORES[S.ghosts.length];
-    if (ghostsDue) {
+    let target;
+    if (ghostEveryMs) {
+      target = Math.min(GHOST_MAX, startGhosts + ((S.clockMs / ghostEveryMs) | 0));
+    } else if (S.ghosts.length < GHOST_SCORES.length) {
+      const lead = leaderScore();
+      let marks = 0;
+      while (marks < GHOST_SCORES.length && lead >= GHOST_SCORES[marks]) marks++;
+      target = marks;
+    } else {
+      target = S.ghosts.length;              // the classic ladder is spent
+    }
+    // Sudden death, rooms only: once one snake is left and has not clinched,
+    // the ladder comes off the score and onto the clock (see CLINCH_GHOST_MS).
+    // Taken as a MAXIMUM against whatever the ordinary ladder wanted, so it can
+    // only ever add: the score ladder is frozen in this state by definition,
+    // and a survival room's clock may still be climbing on its own.
+    if (S.aloneAt > 0) {
+      const since = S.clockMs - S.aloneAt;
+      if (since >= CLINCH_GRACE_MS) {
+        const extra = ((since - CLINCH_GRACE_MS) / CLINCH_GHOST_MS) | 0;
+        if (S.aloneGhosts + extra > target) target = S.aloneGhosts + extra;
+      }
+    }
+    if (target > GHOST_MAX) target = GHOST_MAX;
+    if (target > S.ghosts.length) {
       const before = S.ghosts.length;
       spawnGhost();
       if (S.ghosts.length > before) emit({ t: 'ghost', n: S.ghosts.length });
@@ -1569,6 +1614,11 @@ export function createGame(cfg = {}) {
         let bestOther = -Infinity;
         for (const p of players) if (p !== last && p.score > bestOther) bestOther = p.score;
         if (last.score > bestOther) die(last, 'won');
+        // Not past them yet, so the round carries on with one snake: this is
+        // the exact state sudden death exists for, and the only state that
+        // reaches this line. Stamped once; a fallen snake never stands up, so
+        // the ramp can never re-arm.
+        else if (!S.aloneAt) { S.aloneAt = S.clockMs; S.aloneGhosts = S.ghosts.length; }
       }
     }
   }
@@ -1681,6 +1731,7 @@ export function createGame(cfg = {}) {
       bombsUnlocked: S.bombsUnlocked, bombPhase: S.bombPhase,
       bombNextAt: S.bombNextAt, bombExpireAt: S.bombExpireAt,
       ghosts: S.ghosts.map(cloneGhost),
+      aloneAt: S.aloneAt, aloneGhosts: S.aloneGhosts,
       portal: S.portal ? { ...S.portal } : null,
       portalsUnlocked: S.portalsUnlocked, portalMarksSpent: S.portalMarksSpent,
       portalRetryAt: S.portalRetryAt, portalExpireAt: S.portalExpireAt, portalOpenedAt: S.portalOpenedAt,
@@ -1718,6 +1769,7 @@ export function createGame(cfg = {}) {
     S.bombsUnlocked = s.bombsUnlocked; S.bombPhase = s.bombPhase;
     S.bombNextAt = s.bombNextAt; S.bombExpireAt = s.bombExpireAt;
     S.ghosts = s.ghosts.map(cloneGhost);
+    S.aloneAt = s.aloneAt; S.aloneGhosts = s.aloneGhosts;
     S.portal = s.portal ? { ...s.portal } : null;
     S.portalsUnlocked = s.portalsUnlocked; S.portalMarksSpent = s.portalMarksSpent;
     S.portalRetryAt = s.portalRetryAt; S.portalExpireAt = s.portalExpireAt; S.portalOpenedAt = s.portalOpenedAt;

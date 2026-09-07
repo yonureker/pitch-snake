@@ -30,6 +30,15 @@ export declare const GHOST_MS: number;
 /** Absolute pack / wave caps for time-laddered (survival) rounds. */
 export declare const GHOST_MAX: number;
 export declare const BOMB_MAX: number;
+/**
+ * Sudden death, rooms only (players > 1). The clinch ends a winning survivor
+ * on the spot, so a round only carries on with one snake when that snake is
+ * behind, and there the score ladder is frozen on a dead rival's number. Once
+ * the room is down to one un-clinched snake, ghosts come on the clock instead:
+ * a grace, then one more every interval, pinned at GHOST_MAX.
+ */
+export declare const CLINCH_GRACE_MS: number;
+export declare const CLINCH_GHOST_MS: number;
 export declare const BOLT_EVERY: number;
 export declare const BOLT_LIFE_MS: number;
 export declare const BOLT_SLOW_MS: number;
@@ -177,6 +186,9 @@ export interface Game {
   bombs: Cell[]; bombsUnlocked: number; bombPhase: 'gap' | 'active';
   bombNextAt: number; bombExpireAt: number;
   ghosts: Ghost[];
+  /** Sim clock at which a room first came down to one snake that had NOT
+   *  clinched, and the pack size then; 0 while unarmed. Rooms only. */
+  aloneAt: number; aloneGhosts: number;
   portal: Portal | null; warpedIn: boolean;
   portalsUnlocked: number;
   /** Teleport marks consumed; a pair closed unused hands its mark back. */
