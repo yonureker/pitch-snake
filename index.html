@@ -355,6 +355,18 @@
     white-space: nowrap; pointer-events: none; flex: 0 1 auto; min-width: 0; overflow: hidden;
   }
   .mp-notes[hidden] { display: none; }
+  /* the stale-build banner: quiet, never blocking, and only ever asks for a
+     reload, because a stale engine is fatal to a ROOM and harmless solo */
+  .build-note {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    flex-wrap: wrap; margin: 0 auto 8px; padding: 8px 14px;
+    border: 1.5px solid var(--gold); border-radius: 12px;
+    background: rgba(36, 50, 27, 0.92); color: #e9e0cd;
+    font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 12.5px;
+    letter-spacing: 0.4px; text-align: center;
+  }
+  .build-note[hidden] { display: none; }
+  .build-note .btn { padding: 6px 14px; font-size: 12px; box-shadow: 0 3px 0 #b32f1c; }
   /* the mid-round exit, arming on the first tap so a stray thumb cannot dump
      you out of a match. margin-left: auto keeps it right even alone. */
   .mp-quit {
@@ -390,15 +402,34 @@
   /* the cluster wrapped only to host the room bar on a second line; the bar
      has its own row under the header now, so the pills stay on one */
   .hdr-cluster { flex-wrap: nowrap; }
-  /* The room bar sits BETWEEN the header and the pitch, at the column's
-     full width. Two homes were tried and both distorted: on the board it
-     covered the top row (the old strip), and inside the header cluster it
-     could only be as wide as the cluster, which at a height-fitted column
-     is a couple of hundred pixels, so the seats pill overflowed and shoved
-     the status chip and the exit onto lines of their own (the distortion
-     the owner photographed). Wrapping the header instead dropped the
-     scoreboard to a line of its own. Its own row under the chips, which is
-     where the owner asked for it, costs the header nothing. */
+  /* The room bar rides the header's SECOND line, level with SNAKE, which
+     is the empty space the two-line logo leaves. Getting it there took a
+     grid: as a flex child it could only be as wide as the cluster (a couple
+     of hundred pixels on a height-fitted column), which overflowed the
+     seats pill and shoved the status chip and the exit onto lines of their
+     own, and wrapping the header instead dropped the scoreboard to a line
+     of its own. On the grid the logo and the scoreboard each span both
+     rows, and the middle column belongs to the chips above and the room
+     below, so the bar gets the full width between them. The grid only
+     applies while a room is open; without one the header is the flex row
+     it always was. */
+  html.touchless .wrap.mp-open header {
+    display: grid; align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 22px; row-gap: 7px;
+  }
+  html.touchless .wrap.mp-open header h1 { grid-row: 1 / span 2; grid-column: 1; }
+  html.touchless .wrap.mp-open .hdr-cluster { grid-row: 1; grid-column: 2; }
+  html.touchless .wrap.mp-open header > .mp-bar { grid-row: 2; grid-column: 2; }
+  html.touchless .wrap.mp-open .scores { grid-row: 1 / span 2; grid-column: 3; margin-left: 0; min-width: 150px; }
+  /* Once your seat is out, the score block has nothing left to say: the
+     round is settled and BEST is a solo number. So the corner it owns goes
+     to the exit instead, which is the owner's "save space" ask taken at its
+     word, and it frees the middle column for the seats and their status. */
+  html.touchless .wrap.mp-open > header > .mp-quit {
+    grid-row: 1 / span 2; grid-column: 3; justify-self: end; align-self: center;
+  }
+  .wrap.seat-out .scores { display: none; }
   .wrap .mp-bar {
     flex-basis: 100%; width: auto; display: flex; align-items: center;
     justify-content: flex-start; gap: 9px;
@@ -411,13 +442,13 @@
     height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;
     background: #24321b; overflow: hidden; flex: 0 1 auto; min-width: 0;
   }
-  .wrap .mp-hud .pl { flex-direction: row; align-items: center; gap: 7px; padding: 0 11px; position: relative; }
+  .wrap .mp-hud .pl { flex-direction: row; align-items: center; gap: 6px; padding: 0 8px; position: relative; }
   /* the rounded ends eat into the first and last cells; pay them back */
-  .wrap .mp-hud .pl:first-child { padding-left: 15px; }
-  .wrap .mp-hud .pl:last-child { padding-right: 15px; }
+  .wrap .mp-hud .pl:first-child { padding-left: 12px; }
+  .wrap .mp-hud .pl:last-child { padding-right: 12px; }
   .wrap .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
-  .wrap .mp-hud .pl .nm { font-size: 11px; letter-spacing: 1.5px; }
-  .wrap .mp-hud .pl .sc { font-size: 16px; line-height: 1; }
+  .wrap .mp-hud .pl .nm { font-size: 10.5px; letter-spacing: 1.2px; }
+  .wrap .mp-hud .pl .sc { font-size: 15px; line-height: 1; }
   .wrap .mp-hud .pl.me::after {
     content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px;
     height: 2px; border-radius: 2px; background: var(--gold-bright);
@@ -430,7 +461,10 @@
     border: 1.5px solid rgba(194,162,90,0.55); border-radius: 17px; background: #24321b;
   }
   .wrap .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
-  .wrap .mp-quit { height: 34px; padding: 0 13px; }
+  /* compact in the header: the middle column is what the logo and the
+     scoreboard leave, so the actions earn their place beside the seats
+     rather than wrapping under them at every table size */
+  .wrap .mp-quit { height: 34px; padding: 0 10px; font-size: 10.5px; letter-spacing: 1px; }
 
   canvas {
     display: block;
@@ -1685,10 +1719,15 @@
       </div>
     </header>
 
+    <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
+    <div class="build-note" id="buildNote" hidden>
+      <span>A newer build of the game is live. Reload to play multiplayer.</span>
+      <button class="btn small" id="buildReload">RELOAD</button>
+    </div>
     <div class="mp-bar" id="mpBar" hidden>
       <div class="mp-hud" id="mpHud" hidden></div>
       <div class="mp-notes" id="mpNotes" hidden></div>
-      <button class="mp-quit" id="mpQuitBtn" hidden>&#10005; LEAVE</button>
+      <button class="mp-quit" id="mpGiveBtn" hidden>FORFEIT</button>
     </div>
 
     <div class="board-frame">
@@ -2228,7 +2267,10 @@
     if (state !== 'playing' && state !== 'countdown') return;
     // the press's own clock rides along so the session can advance to the
     // true instant before stamping (rule 12, netcode edition)
-    if (vsInRound()) vs.session.localDir(x, y, performance.now());
+    if (vsInRound()) {
+      if (vs.forfeited) return;     // given up: the seat sends nothing more
+      vs.session.localDir(x, y, performance.now());
+    }
     else g.setDir(x, y);
   }
 
@@ -4121,6 +4163,7 @@
         syncScoreDom();
         syncMpFlags();
         syncMpHud();
+        syncMpQuit();     // FORFEIT retires the moment my seat goes down
       } else {
         g.advance(dt);
         handleEvents(g.drainEvents());
@@ -5215,6 +5258,8 @@
   const VS_MIN = 2, VS_MAX = 5;
   const mpHud = document.getElementById('mpHud');
   const mpNotes = document.getElementById('mpNotes');
+  const buildNote = document.getElementById('buildNote');
+  const buildReload = document.getElementById('buildReload');
   const vsPanel = document.getElementById('vsPanel');
   const vsSetup = document.getElementById('vsSetup');
   const vsLadder = document.getElementById('vsLadder');
@@ -5292,7 +5337,7 @@
   // measured again: a CSS-driven size change fires no resize event.
   const mpBar = document.getElementById('mpBar');
   function syncMpBar() {
-    const open = !mpHud.hidden || !mpQuitBtn.hidden || !mpNotes.hidden;
+    const open = !mpHud.hidden || !mpGiveBtn.hidden || !mpNotes.hidden;
     if (mpBar.hidden !== !open) {
       mpBar.hidden = !open;
       document.querySelector('.wrap').classList.toggle('mp-open', open);
@@ -5345,6 +5390,7 @@
     // them up is what made this a long bar in the first place, and it cost
     // the exit its place on the row.
     let noteText = vs.stalled ? 'WAITING…'
+      : vs.forfeited ? 'FORFEITED'
       : (vs.spectating && !vs.over) ? 'SPECTATING'
       : '';
     const order = g.players.map((_, i) => i).sort((a, b) => g.players[b].score - g.players[a].score || a - b);
@@ -5388,6 +5434,13 @@
 
   // ---- room lifecycle ----
   async function vsEnter(code, host) {
+    // the second moment staleness matters: a stale tab cannot play a room, so
+    // find out BEFORE a code is minted and a lobby is joined, not at kickoff
+    if (await checkBuild()) {
+      vsSetNote('A newer build is live. Reload the page, then start a room.');
+      vsRefreshPanel();
+      return;
+    }
     if (vsBusy || vs) return;
     if (!sbOn()) { vsSetNote('Versus needs the online service.'); return; }
     vsBusy = true;
@@ -5483,6 +5536,69 @@
     }
   }
 
+  // ---- staying on the live build ----
+  // A room refuses peers on different ENGINE_VERSIONs, by design: a round is
+  // only fair if every peer simulates identically. The cost was that an open
+  // tab kept its old engine in memory for ever and only found out at kickoff,
+  // as a dead-end message. So the page checks for itself instead.
+  //
+  // The check reads the FIRST few KB of the deployed engine (the version
+  // constant lives at the top) with a range request, so it costs almost
+  // nothing. It runs when the tab comes back to the foreground and before a
+  // room can be joined, which are the two moments staleness matters, never
+  // on a timer during play.
+  let buildStale = false;
+  let buildCheckAt = 0;
+  async function checkBuild() {
+    if (buildStale || !SB_URL) return false;              // already known, or local dev
+    if (Date.now() - buildCheckAt < 30000) return false;  // never hammer the origin
+    buildCheckAt = Date.now();
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 6000);
+      const res = await fetch('./packages/engine/engine.js?v=' + Date.now(), {
+        cache: 'no-store', headers: { Range: 'bytes=0-4095' }, signal: ac.signal,
+      });
+      clearTimeout(timer);
+      const head = await res.text();
+      const m = head.match(/ENGINE_VERSION\s*=\s*(\d+)/);
+      if (!m) return false;                               // range missed it: say nothing
+      if (Number(m[1]) === ENGINE_VERSION) return false;
+      buildStale = true;
+      syncBuildNote();
+      return true;
+    } catch (e) { return false; }                         // offline: the game plays on
+  }
+  // The banner is quiet and never blocks play: a stale build is only fatal to
+  // MULTIPLAYER, and a solo round on an old engine is a perfectly good round.
+  function syncBuildNote() {
+    buildNote.hidden = !buildStale;
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkBuild(); });
+  buildReload.addEventListener('click', () => location.reload());
+
+  // ---- giving up ----
+  // FORFEIT gives up the ROUND and keeps your seat; LEAVE gives up the room.
+  // Both are rated exactly as the round you played, and that is deliberate.
+  // The ladder already treats a disconnect as an ordinary placing ("a quitter
+  // still places, and places badly"), so a forfeit is only the honest,
+  // explicit version of the same thing: making it unrated would let anyone
+  // dodge a loss by quitting, and making it EXTRA costly would push players
+  // towards the dishonest exit of pulling the plug instead.
+  //
+  // Mechanically it is that same disconnect: your presses stop reaching the
+  // session, so your snake runs on its last heading in the shared simulation
+  // and crashes on its own. Every peer sees the identical round, which is
+  // what keeps the log corroborated and the round sealable. Nothing is sent,
+  // nothing is special-cased, and no engine rule changes.
+  function vsForfeit() {
+    if (!vs || vs.forfeited || !vsInRound()) return;
+    vs.forfeited = true;
+    mpHudHash = -1;                 // the status chip has something new to say
+    syncMpHud();
+    syncMpQuit();
+  }
+
   function vsLeave() {
     if (!vs) return;
     const wasLive = vsInRound() && (state === 'playing' || state === 'countdown');
@@ -5511,17 +5627,31 @@
   // First tap arms it, second tap within the window leaves; the arm decays
   // so a stray thumb never dumps anyone out of a match.
   const mpQuitBtn = document.getElementById('mpQuitBtn');
+  const mpGiveBtn = document.getElementById('mpGiveBtn');
   const vsBailBtn = document.getElementById('vsBailBtn');
-  let mpQuitArmTs = 0;
+  let mpQuitArmTs = 0, mpGiveArmTs = 0;
   function disarmMpQuit() {
-    mpQuitArmTs = 0;
+    mpQuitArmTs = 0; mpGiveArmTs = 0;
     mpQuitBtn.classList.remove('armed');
     mpQuitBtn.innerHTML = '&#10005; LEAVE';
+    mpGiveBtn.classList.remove('armed');
+    mpGiveBtn.textContent = 'FORFEIT';
   }
+  // One action at a time, and each in the place that has room for it.
+  // While your seat is ALIVE the only way out of a live round is to give it
+  // up, so FORFEIT sits beside the seats and there is no LEAVE to press by
+  // accident: you cannot walk out of a round without conceding it, which is
+  // what forfeiting means. Once you are OUT (crashed or conceded) the round
+  // is settled for you, so the score block hands its corner to LEAVE.
   function syncMpQuit() {
-    const show = !!vs && vsView() && (state === 'playing' || state === 'countdown');
-    if (mpQuitBtn.hidden === !show) return;
-    mpQuitBtn.hidden = !show;
+    const live = !!vs && vsView() && (state === 'playing' || state === 'countdown');
+    const mine = live ? g.players[vs.myIdx] : null;
+    const canGive = live && !vs.forfeited && !!mine && mine.alive;
+    const out = live && !canGive;                 // dead, or already conceded
+    if (mpQuitBtn.hidden === !out && mpGiveBtn.hidden === !canGive) return;
+    mpQuitBtn.hidden = !out;
+    mpGiveBtn.hidden = !canGive;
+    document.querySelector('.wrap').classList.toggle('seat-out', out);
     disarmMpQuit();
     syncMpBar();
   }
@@ -5531,6 +5661,13 @@
     mpQuitBtn.classList.add('armed');
     mpQuitBtn.textContent = 'SURE?';
     setTimeout(() => { if (mpQuitArmTs && Date.now() - mpQuitArmTs >= 2500) disarmMpQuit(); }, 2700);
+  });
+  mpGiveBtn.addEventListener('click', () => {
+    if (Date.now() - mpGiveArmTs < 2600) { vsForfeit(); return; }
+    mpGiveArmTs = Date.now();
+    mpGiveBtn.classList.add('armed');
+    mpGiveBtn.textContent = 'GIVE UP?';
+    setTimeout(() => { if (mpGiveArmTs && Date.now() - mpGiveArmTs >= 2500) disarmMpQuit(); }, 2700);
   });
   vsBailBtn.addEventListener('click', vsLeave);
 
@@ -5696,7 +5833,10 @@
 
   function vsBegin(m) {
     if (m.ev !== undefined && m.ev !== ENGINE_VERSION) {
-      vsSetNote('This room runs a different build of the game. Reload the page to match it.');
+      // not a dead end any more: say it, and put the fix on screen
+      buildStale = true;
+      syncBuildNote();
+      vsSetNote('This room runs a newer build. Reload the page to join it.');
       vsRefreshPanel();
       return;
     }
@@ -5713,6 +5853,7 @@
     vsTakeSeat();               // on the record before a single input exists
     vs.over = false;
     vs.spectating = false;
+    vs.forfeited = false;         // a new round is a new chance to play it
     vs.stalled = false;
     // Readiness is consent for ONE kickoff; the next round asks again. Every
     // client clears its own tick on the same message, so the held broadcasts
@@ -7153,10 +7294,10 @@
   function placeChrome() {
     hdrCluster.insertBefore(whoBtn, hdrTray);
     hdrTray.append(purseBtn, boardsBtn, gearBtn);
-    // the room bar takes its own row between the header and the pitch, at
-    // the column's full width (see the .wrap .mp-bar comment)
-    const frame = document.querySelector('.board-frame');
-    frame.parentElement.insertBefore(mpBar, frame);
+    // the room bar is the header's own second line, level with SNAKE, and
+    // the exit is a header item so it can take the score block's corner
+    const hd = document.querySelector('header');
+    hd.append(mpBar, mpQuitBtn);
     refreshModeUI();
     refreshSettingsUI();
   }
