@@ -625,6 +625,10 @@
     supabaseRpc, SUPABASE_KEY, SUPABASE_URL,
   } from './page/build/supabase-client.js';
   import { buildCountries, paintFlag } from './page/build/country-flags.js';
+  // The spend side: the shop sheet, the purse, and the wallet every reader
+  // repaints from. It is handed the pitch's own art so a preview cannot lie
+  // about what the money buys. See page/shop.ts.
+  import { applyWallet, initShop, purseIsKnown } from './page/build/shop.js';
   import {
     audioHook, audioWake, crowdPulse, crowdSync, crowdVerdict,
     isCrowdOn, isPageSoundOn, setCrowdOn, setPageSound,
@@ -1951,6 +1955,15 @@
     if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
   }
 
+  // The shop is handed the pitch's own art, so a preview is drawn with the
+  // very ramps and hat art the snake wears, and three verbs it cannot do for
+  // itself. It reaches nothing here on its own.
+  initShop({ skins: SKINS, hats: HATS }, {
+    applyWorn,
+    refreshChrome: () => { refreshModeUI(); },
+    stopCoinCountUp: () => { purseAnim = null; purseFloat.hidden = true; },
+  });
+
 
   // ---- pre-round countdown: page-owned; the engine does not advance ----
   const countdownEl = document.getElementById('countdown');
@@ -2013,7 +2026,7 @@
   // is idempotent, so displayed + paid is the server's own arithmetic. The
   // boot-time wallet fetch stays the reconciler if anything ever drifts.
   function pursePay(paid) {
-    if (!(paid > 0) || !purseKnown) return;
+    if (!(paid > 0) || !purseIsKnown()) return;
     const from = parseInt(purseCoins.textContent, 10) || 0;
     const to = from + paid;
     if (shopWallet) shopWallet.coins = to;
@@ -2306,7 +2319,7 @@
     // and account switch, applied through applyWorn, the one door. Fire and
     // forget: a dead network keeps the cached outfit, never blocks the game.
     supabaseRpc('pitch_snake_my_wallet', {})
-      .then(w => { if (w && typeof w.coins === 'number') takeWallet(w); })
+      .then(w => { if (w && typeof w.coins === 'number') applyWallet(w); })
       .catch(() => {});
     try {
       const prof = await supabaseRpc('pitch_snake_get_profile', {});
@@ -2808,14 +2821,14 @@
     // sheet's own lock is the real gate on identity.
     if (chromeWide) {
       boardsBtn.hidden = false;
-      purseBtn.hidden = !purseKnown;
+      purseBtn.hidden = !purseIsKnown();
       const asleep = !onMenu;
       whoBtn.classList.toggle('sleeping', asleep);
       purseBtn.classList.toggle('sleeping', asleep);
       boardsBtn.classList.toggle('sleeping', asleep);
     } else {
       boardsBtn.hidden = !onMenu;
-      purseBtn.hidden = !onMenu || !purseKnown;
+      purseBtn.hidden = !onMenu || !purseIsKnown();
     }
     modeDesc.hidden = !listScreen;
     modeDesc.textContent = listScreen ? (MODE_DESC[mode] || '') : '';
@@ -4700,6 +4713,11 @@
 
   // ---- settings modal (locked during a round) ----
   const gearBtn = document.getElementById('gearBtn');
+  // the page owns only whether the purse is SHOWN; page/shop.ts owns what
+  // it says and what happens when it is pressed
+  const purseBtn = document.getElementById('purseBtn');
+  const purseFloat = document.getElementById('purseFloat');
+  const purseCoins = document.getElementById('purseCoins');
   const settingsModal = document.getElementById('settingsModal');
   const settingsClose = document.getElementById('settingsClose');
   const lockHint = document.getElementById('lockHint');
@@ -4806,200 +4824,6 @@
   }
 
 
-  // ---- the shop ----
-  // The spend side. The catalogue and its prices are the server's word,
-  // fetched once a session; the wallet is fetched fresh on every open; and
-  // every purchase or change of clothes repaints from the wallet the SERVER
-  // hands back, so this screen can never disagree with the ledger. Buying
-  // asks twice (BUY, then SURE?) because coins take rounds to earn and one
-  // stray tap should not spend them; buying also wears the thing at once,
-  // since buying paint and not wearing it is a support ticket. All of it
-  // menu-time DOM work; nothing here is reachable from the frame loop.
-  const shopModal = document.getElementById('shopModal');
-  const shopList = document.getElementById('shopList');
-  const shopCoins = document.getElementById('shopCoins');
-  const shopNote = document.getElementById('shopNote');
-  const shopClose = document.getElementById('shopClose');
-  const purseBtn = document.getElementById('purseBtn');
-  const purseCoins = document.getElementById('purseCoins');
-  const purseFloat = document.getElementById('purseFloat');
-  // the float hides itself once its fade has played out, no timer involved
-  purseFloat.addEventListener('animationend', () => { purseFloat.hidden = true; });
-  let purseKnown = false;   // the purse waits until a wallet has answered
-  let shopCatalog = null;   // [{id, kind, name, price}], the server's word
-  let shopWallet = null;    // the last wallet json the server handed back
-  let shopBusy = false;
-  let armedBuy = null;      // the item whose BUY waits for its SURE?
-  let armTimer = 0;
-
-  const SHOP_ERRS = {
-    'not enough coins': 'Not enough coins yet. Rounds and badges pay them.',
-    'no such item': 'That item is no longer sold.',
-    'already owned': 'Already yours.',
-    'skin not owned': 'Not yours yet.',
-    'hat not owned': 'Not yours yet.',
-    'no session': 'Sign-in has not settled. Try again in a moment.',
-  };
-
-  // one wallet, every reader: the shop's number, the purse beside the
-  // player chip, and the snake's clothes all repaint from the same server
-  // answer
-  function takeWallet(w) {
-    shopWallet = w;
-    // the server's number outranks a count-up mid-flight
-    purseAnim = null;
-    purseFloat.hidden = true;
-    shopCoins.textContent = w.coins;
-    purseCoins.textContent = w.coins;
-    purseKnown = true;
-    refreshModeUI();   // the purse shows once there is a number to show
-    applyWorn(w.skin, w.hat);
-  }
-
-  // Previews are drawn with the very ramps and hat art the pitch uses, so a
-  // preview cannot lie about what the money buys.
-  function paintSkinPrev(cv, id) {
-    const s = SKINS[id] ?? SKINS.classic;
-    const c = cv.getContext('2d');
-    c.clearRect(0, 0, cv.width, cv.height);
-    const n = 5, r = 9, y = cv.height / 2;
-    c.lineWidth = 1.5;
-    c.strokeStyle = s.line;
-    for (let i = n - 1; i >= 0; i--) {          // tail first, the head over it
-      const t = i / (n - 1);
-      const cx = cv.width - 11 - i * 10.5;
-      c.fillStyle = `rgb(${(s.head[0] + (s.tail[0] - s.head[0]) * t) | 0}, ${(s.head[1] + (s.tail[1] - s.head[1]) * t) | 0}, ${(s.head[2] + (s.tail[2] - s.head[2]) * t) | 0})`;
-      c.beginPath(); c.arc(cx, y, r, 0, Math.PI * 2); c.fill(); c.stroke();
-    }
-  }
-  function paintHatPrev(cv, id) {
-    const def = HATS[id] ?? HATS.classic;
-    const c = cv.getContext('2d');
-    c.clearRect(0, 0, cv.width, cv.height);
-    const cellPx = 17, cx = cv.width / 2, cy = cv.height / 2 + 5;
-    c.fillStyle = 'rgb(244,236,216)';
-    c.strokeStyle = 'rgba(194,162,90,0.65)';
-    c.lineWidth = 1.5;
-    c.beginPath(); c.arc(cx, cy, 8.5, 0, Math.PI * 2); c.fill(); c.stroke();
-    const w = Math.ceil(cellPx * def.wf), h = Math.ceil(cellPx * def.hf);
-    const tmp = document.createElement('canvas');
-    tmp.width = w; tmp.height = h;
-    def.draw(tmp.getContext('2d'), w, h);
-    c.drawImage(tmp, Math.round(cx - w / 2), Math.round(cy + def.dy(cellPx, h)));
-  }
-
-  function renderShop() {
-    shopCoins.textContent = shopWallet ? shopWallet.coins : '\u2014';
-    shopList.innerHTML = '';
-    const cat = shopCatalog || [];
-    if (!cat.length) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = 'Fetching the catalogue…';
-      shopList.appendChild(li);
-      return;
-    }
-    const ownedSet = new Set((shopWallet && shopWallet.items) || []);
-    for (const item of cat) {
-      const li = document.createElement('li');
-      const prev = document.createElement('canvas');
-      prev.className = 'shop-prev';
-      prev.width = 64; prev.height = 28;
-      (item.kind === 'skin' ? paintSkinPrev : paintHatPrev)(prev, item.id);
-      const txt = document.createElement('span');
-      txt.className = 'shop-txt';
-      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = item.name;
-      const st = document.createElement('span'); st.className = 'st';
-      const worn = !!shopWallet && (shopWallet.skin === item.id || shopWallet.hat === item.id);
-      st.textContent = worn ? 'On the pitch now.'
-        : ownedSet.has(item.id) ? 'Yours.'
-        : item.price + ' coins';
-      txt.append(nm, st);
-      const btn = document.createElement('button');
-      btn.className = 'btn small';
-      if (worn) { btn.textContent = 'WEARING'; btn.classList.add('worn-btn'); li.classList.add('worn'); }
-      else if (ownedSet.has(item.id)) btn.textContent = 'WEAR';
-      else if (armedBuy === item.id) btn.textContent = 'SURE?';
-      else {
-        btn.textContent = 'BUY ' + item.price;
-        btn.disabled = !!shopWallet && shopWallet.coins < item.price;
-      }
-      if (!shopWallet || shopBusy) btn.disabled = true;   // browse-only until the wallet answers
-      btn.addEventListener('click', () => shopAct(item));
-      li.append(prev, txt, btn);
-      shopList.appendChild(li);
-    }
-  }
-
-  async function shopAct(item) {
-    if (shopBusy || !shopWallet) return;
-    const owned = new Set(shopWallet.items || []).has(item.id);
-    const worn = shopWallet.skin === item.id || shopWallet.hat === item.id;
-    // the two-tap buy: arming is free and disarms itself
-    if (!owned && armedBuy !== item.id) {
-      armedBuy = item.id;
-      clearTimeout(armTimer);
-      armTimer = setTimeout(() => { armedBuy = null; renderShop(); }, 3500);
-      renderShop();
-      return;
-    }
-    armedBuy = null;
-    clearTimeout(armTimer);
-    shopBusy = true;
-    shopNote.hidden = true;
-    renderShop();
-    try {
-      let w;
-      if (!owned) {
-        w = await supabaseRpc('pitch_snake_buy_item', { p_item: item.id });
-        // owned and paid is real the moment the buy answers, even if the
-        // wear below has a bad day
-        if (w && !w.error && typeof w.coins === 'number') takeWallet(w);
-      }
-      if (!w || !w.error) {
-        // wearing: a fresh buy goes straight on; a WEARING tap comes off
-        const off = owned && worn;
-        const id = off ? '' : item.id;
-        w = await supabaseRpc('pitch_snake_equip',
-          item.kind === 'skin' ? { p_skin: id, p_hat: null } : { p_skin: null, p_hat: id });
-      }
-      if (w && w.error) {
-        shopNote.textContent = SHOP_ERRS[w.error] || 'The shop said no: ' + w.error;
-        shopNote.hidden = false;
-      } else if (w && typeof w.coins === 'number') takeWallet(w);
-    } catch (e) {
-      shopNote.textContent = 'Could not reach the shop. Check the wallet before retrying.';
-      shopNote.hidden = false;
-    }
-    shopBusy = false;
-    renderShop();
-  }
-
-  async function openShop() {
-    shopModal.hidden = false;
-    shopNote.hidden = true;
-    armedBuy = null;
-    renderShop();
-    if (!supabaseConfigured()) {
-      shopNote.textContent = 'The shop needs the world board configured.';
-      shopNote.hidden = false;
-      return;
-    }
-    try {
-      const [cat, w] = await Promise.all([
-        shopCatalog ? Promise.resolve(shopCatalog) : supabaseRpc('pitch_snake_shop', {}),
-        supabaseRpc('pitch_snake_my_wallet', {}),
-      ]);
-      if (Array.isArray(cat) && cat.length) shopCatalog = cat;
-      if (w && typeof w.coins === 'number') takeWallet(w);
-    } catch (e) {
-      shopNote.textContent = 'Could not reach the shop.';
-      shopNote.hidden = false;
-    }
-    renderShop();
-  }
-
-  purseBtn.addEventListener('click', openShop);
 
   // ---- the scoreboard row's movers ----
   // One set of buttons, two homes. Wide screens put the nameplate and the
