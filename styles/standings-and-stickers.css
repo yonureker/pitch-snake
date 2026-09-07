@@ -1,4 +1,16 @@
-/* notes, the account line, standings, flags and stickers */
+/**
+ * What a finished round shows: the save note, the coin line, the account
+ * nudge, the standings list, country flags, and the NEW BEST / TOP 100
+ * stickers with their pop animations.
+ *
+ * Must never: Respect prefers-reduced-motion; the sticker pops are decoration and must
+ * never be the only way a result is communicated.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .board-head {
     font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
     color: var(--gold); font-weight: 700; margin-bottom: -8px;

@@ -1,4 +1,15 @@
-/* the result screen, legend and stickers */
+/**
+ * The FULL TIME screen (its two-column body and hero) and the HOW IT SCORES
+ * legend that teaches the same numbers before the round.
+ *
+ * Must never: Never state a score value here that the engine does not actually pay;
+ * the legend has been wrong that way before.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .ov-body.two-col {
     width: 100%;
     max-width: 480px;

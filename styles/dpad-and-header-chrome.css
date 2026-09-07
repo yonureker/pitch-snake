@@ -1,4 +1,16 @@
-/* the d-pad, the header cluster and its narrow band */
+/**
+ * The on-screen d-pad, and the header chrome: the nameplate, the icon tray
+ * (purse, trophy, gear), their sleeping state during a round, and the band
+ * that scales them all down on a narrow window.
+ *
+ * Must never: Nothing here may sit on the board. The square carries no chrome, on any
+ * surface, since 2026-09-06.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .dpad {
     position: relative;
     width: min(440px, 94%);

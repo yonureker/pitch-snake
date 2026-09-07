@@ -1,4 +1,15 @@
-/* reset, the page column, header and scoreboard */
+/**
+ * The reset, the page column (.wrap) that every screen sits in, the header
+ * row, and the scoreboard on its right.
+ *
+ * Must never: Never put a screen's own furniture here; this is the frame the screens
+ * hang inside.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   /* a class that sets `display` outranks the hidden attribute, and every
      panel here is a flex row or column: hidden must win regardless */

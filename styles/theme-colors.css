@@ -1,4 +1,17 @@
-/* palette and the three theme states */
+/**
+ * The palette, and the three theme states the page can be in: the light
+ * default, the dark one the system asks for, and the dark one a player
+ * chose. Every colour in every other file comes from here as a custom
+ * property.
+ *
+ * Must never: Never hard-code a colour anywhere else. A literal that only works in
+ * one theme is the bug this file exists to prevent.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   @import url('https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&display=swap');
 
   :root {

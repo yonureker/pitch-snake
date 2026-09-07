@@ -1,4 +1,16 @@
-/* the board frame, the room bar, canvas and countdown */
+/**
+ * The playing field itself: the board frame, the canvas, the countdown over
+ * it, and the multiplayer room bar that sits above it (seat scoreboard,
+ * status chip, forfeit and leave).
+ *
+ * Must never: The room bar must never be drawn ON the board again; it covered the top
+ * row and hid food there, which is why it lives above it.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .board-frame {
     position: relative;
     width: 100%;

@@ -1,4 +1,16 @@
-/* the overlay shell and the touch/pointer layouts */
+/**
+ * The overlay panel every screen renders into (head, scrolling body, pinned
+ * foot), and the two layouts the page chooses between by POINTER type:
+ * touchless keeps a one-row header, touch gets its own two-line one.
+ *
+ * Must never: Never branch these layouts on viewport width or user agent. Pointer type
+ * is the question; width is not.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .overlay {
     /* the size question every wide layout below asks is about THIS box, not
        the window: it is square and tracks the arena, so a 1512x900 laptop

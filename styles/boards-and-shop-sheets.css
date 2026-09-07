@@ -1,4 +1,16 @@
-/* the boards and shop sheets */
+/**
+ * The two sheets behind the header: the world TOP 100 boards (mode chips,
+ * the scrolling list, your own row in gold) and the shop (prices, previews,
+ * the worn marker), plus the ladder rating cell those lists share.
+ *
+ * Must never: The list scrolls, never the whole sheet: a sheet that scrolls buries its
+ * own DONE button under a hundred rows.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
      player in (this shipped wrong once, at the top-10 to top-100 growth) */
   .modal.boards { max-height: 86vh; }
   .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }

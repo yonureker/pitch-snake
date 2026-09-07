@@ -1,4 +1,16 @@
-/* modal shell, settings, the profile sheet */
+/**
+ * The modal shell every sheet uses (backdrop, panel, title), the settings
+ * sheet with its locked-during-a-round state, and the profile sheet where
+ * a player edits their name, flag and account.
+ *
+ * Must never: Identity edits freeze while competition is live; the lock hint styled
+ * here is the visible half of that rule (see supabase/RATING_RULES.md).
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .modal-backdrop {
     position: fixed; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;

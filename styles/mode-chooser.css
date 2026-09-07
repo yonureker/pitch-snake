@@ -1,4 +1,14 @@
-/* the mode chooser, tournament chips and buttons */
+/**
+ * The MODES screen: the stacked mode tiles, the tournament chips and code
+ * field, and the button variants those screens use.
+ *
+ * Must never: Nothing here decides what a mode IS; the engine owns that.
+ *
+ * ORDER MATTERS. The stylesheet is one cascade split across files and
+ * linked in a fixed order from index.html; these rules used to sit exactly
+ * here in the single block they came from. Add a rule where it belongs in
+ * that order, never appended for tidiness.
+ */
   .stack-choice {
     display: flex; flex-direction: column; gap: 6px;
     align-items: stretch; width: min(290px, 84%);

@@ -6,22 +6,21 @@
 <meta name="theme-color" content="#efe6d0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12160e" media="(prefers-color-scheme: dark)">
 <title>PITCH SNAKE</title>
-<!-- The stylesheet is split by concern under styles/, linked IN ORDER:
-     the cascade depends on it, and the files concatenate byte for byte back
-     to the single block they came from. Order is the contract; if you add a
-     file, put it where its rules used to sit. -->
-<link rel="stylesheet" href="./styles/tokens.css">
-<link rel="stylesheet" href="./styles/base.css">
-<link rel="stylesheet" href="./styles/chooser.css">
-<link rel="stylesheet" href="./styles/pitch.css">
-<link rel="stylesheet" href="./styles/overlay.css">
-<link rel="stylesheet" href="./styles/result.css">
-<link rel="stylesheet" href="./styles/controls.css">
-<link rel="stylesheet" href="./styles/standings.css">
-<link rel="stylesheet" href="./styles/sheets.css">
-<link rel="stylesheet" href="./styles/chrome.css">
-<link rel="stylesheet" href="./styles/modals.css">
-<link rel="stylesheet" href="./styles/terminal.css">
+<!-- The stylesheet lives in styles/, split by what each file owns and
+     linked IN THE ORDER the cascade needs. Every file opens with a block
+     saying what it owns and what it must never do. -->
+<link rel="stylesheet" href="./styles/theme-colors.css">
+<link rel="stylesheet" href="./styles/page-and-header.css">
+<link rel="stylesheet" href="./styles/mode-chooser.css">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css">
+<link rel="stylesheet" href="./styles/result-and-legend.css">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css">
+<link rel="stylesheet" href="./styles/modals-and-profile.css">
+<link rel="stylesheet" href="./styles/terminal-easter-egg.css">
 </head>
 <body>
   <div class="wrap">
