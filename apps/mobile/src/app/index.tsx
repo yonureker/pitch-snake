@@ -361,12 +361,16 @@ export default function Index() {
     else setShowModes(false);
   };
 
-  const saveScore = (): void => {
+  // `chosen` exists for the claim: a name saved a moment ago is not in
+  // `entryName` yet (setState is not synchronous), so the caller hands the
+  // name in rather than trusting state that has not landed.
+  const saveScore = (chosen?: string): void => {
     if (submit.isPending || tSubmit.isPending || submittedId !== null || submittedName !== null) return;
     // the validator wants the round itself, not our opinion of its score
     const round = loop.roundForSubmit();
     if (round === null) return;
-    const name = entryName.trim() === '' ? 'YOU' : entryName;
+    const typed = (chosen ?? entryName).trim();
+    const name = typed === '' ? 'YOU' : typed;
     if (uiMode === 'tourney' && tourney !== null) {
       tSubmit.mutate(
         { code: tourney.code, mode: tourney.mode, name, seedId: round.seedId, log: round.log },
@@ -837,7 +841,9 @@ export default function Index() {
                       />
                       <Pressable
                         accessibilityRole="button"
-                        onPress={saveScore}
+                        onPress={() => {
+                          saveScore();
+                        }}
                         disabled={saving}
                         style={[styles.saveBtn, saving && styles.saveBtnBusy]}
                       >
@@ -1035,17 +1041,23 @@ export default function Index() {
               }
             </View>
           )}
-          {profileOpen && (
+          {profileOpen && !profile.isLoading && (
             <View style={styles.sheetWrap}>
               <ProfileSheet
+                // keyed by what loaded: the sheet seeds its fields once at
+                // mount, so a profile that arrives late must re-seed them
+                // rather than leave a blank name that would clear the flag
+                key={`${profile.data?.name ?? ''}-${profile.data?.country ?? ''}`}
                 profile={profile.data ?? null}
                 locked={identityLocked}
                 onSaved={(p) => {
                   void profile.refetch();
-                  // the claim's payoff: the name exists, so the round that
-                  // was waiting for one goes onto the board under it
+                  // The claim's payoff, and it SUBMITS rather than leaving a
+                  // second button to press: the name is handed straight in,
+                  // because state set a moment ago is not readable yet.
                   setEntryName(p.name);
                   setProfileOpen(false);
+                  if (wantsEntry && placed) saveScore(p.name);
                 }}
                 onClose={() => {
                   setProfileOpen(false);

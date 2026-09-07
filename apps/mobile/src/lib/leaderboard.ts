@@ -57,7 +57,20 @@ export async function rpc(fn: string, args: Record<string, unknown>): Promise<un
       body: JSON.stringify(args),
       signal: ac.signal,
     });
-    if (!response.ok) throw new Error(`${fn}: HTTP ${String(response.status)}`);
+    if (!response.ok) {
+      // Carry the server's OWN words, not just the status. PostgREST answers a
+      // raised exception with {message}, and callers read it: set_profile's
+      // 'That name is taken.' is a refusal to show the player, not a network
+      // fault to apologise for. Falls back to the status when there is no body.
+      let said = '';
+      try {
+        const body: unknown = await response.json();
+        if (isRecord(body) && typeof body.message === 'string') said = body.message;
+      } catch {
+        // no JSON body; the status alone will have to do
+      }
+      throw new Error(said === '' ? `${fn}: HTTP ${String(response.status)}` : said);
+    }
     const data: unknown = await response.json();
     return data;
   } finally {
