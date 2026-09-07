@@ -623,14 +623,21 @@
 
   // Sound and the crowd live in their own module: they own the AudioContext
   // and every noise the page makes, and need nothing from here but the
-  // round's phase, which crowdSync is told. See scripts/sound-and-crowd.js.
+  // round's phase, which crowdSync is told. See page/sound-and-crowd.js.
+  // Countries: the flag sprite's own index order, and the picker that
+  // writes itself from the browser's region names. See
+  // page/country-flags.js, which is one third of a single artefact.
+  import { buildCountries, paintFlag } from './page/country-flags.js';
+  // The hidden brief behind the "P" in PITCH, wired at boot and otherwise
+  // invisible to the rest of the page. See page/easter-egg-terminal.js.
+  import { initEasterEggTerminal } from './page/easter-egg-terminal.js';
   import {
     audioHook, audioWake, crowdPulse, crowdSync, crowdVerdict,
     isCrowdOn, isPageSoundOn, setCrowdOn, setPageSound,
     sfxBonus, sfxCrash, sfxEat, sfxFlourish, sfxFullTime, sfxGhostIn, sfxHop,
     sfxKickoff, sfxPortalOpen, sfxSave, sfxTick, sfxTnt, sfxWallSolid,
     sfxWallWarn, sfxZap,
-  } from './scripts/sound-and-crowd.js';
+  } from './page/sound-and-crowd.js';
   // ---- engine events -> effects (bursts, sprites, the death overlay) ----
   // In a versus round a rollback re-runs recent quanta and re-emits their
   // events. State mirrors (food sprite, wall layer) must always apply, but a
@@ -4776,42 +4783,6 @@
   const profSignOut = document.getElementById('profSignOut');
   const profStatus = document.getElementById('profStatus');
 
-  // ---- flags: drawn, not typed ----
-  // A regional-indicator pair is only a flag if the platform ships flag
-  // glyphs, and Windows never has: there the pair degrades to two letters,
-  // so the same board looked different depending on who was reading it. The
-  // flags are artwork now (assets/flags.png, 250 of them from flag-icons,
-  // MIT, see assets/flags.LICENSE.txt), which renders identically on every
-  // platform including the ones
-  // that have no emoji at all: a television, a Steam machine, a phone with
-  // the emoji font stripped.
-  //
-  // The sprite is a 16-wide grid of 60x45 cells in alphabetical code order,
-  // so the index IS the position and no lookup table has to be shipped or
-  // kept in step with the art. FLAG_CODES is that order, two characters per
-  // country; a code that is not in it simply has no flag, which is the same
-  // answer as before for anything unknown.
-  const FLAG_CODES = 'ADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW';
-  const FLAG_COLS = 16, FLAG_W = 20, FLAG_H = 15;
-  // Read the pairs into a map once rather than searching the string. Not a
-  // micro-optimisation: indexOf finds the FIRST occurrence, and 98 of the 250
-  // codes also appear straddling two of their neighbours ('UG' sits inside
-  // 'GU'+'GW' long before Uganda's own slot), so a search would answer with
-  // somebody else's flag or, once guarded against that, with none at all.
-  const FLAG_AT = new Map();
-  for (let i = 0; i < FLAG_CODES.length; i += 2) FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
-  function flagIndex(c) {
-    const i = c ? FLAG_AT.get(c) : undefined;
-    return i === undefined ? -1 : i;
-  }
-  // Paint a span as one flag. Nothing is created per call and the sprite is
-  // one request for the whole set, shared by every board and every roster.
-  function paintFlag(el, c) {
-    const i = flagIndex(c);
-    if (i < 0) { el.style.backgroundImage = ''; el.hidden = true; return; }
-    el.hidden = false;
-    el.style.backgroundPosition = `${-(i % FLAG_COLS) * FLAG_W}px ${-((i / FLAG_COLS) | 0) * FLAG_H}px`;
-  }
 
   // the chip states who you are wherever a name is known; the silhouette
   // stands in until one exists anywhere
@@ -4830,40 +4801,6 @@
     refreshModeUI();
   }
 
-  // The country list writes itself: probe every two-letter code against the
-  // browser's own region names and keep the ones that mean somewhere, minus
-  // CLDR's handful of non-countries. No 250-line list to hand-maintain, and
-  // new countries arrive with browser updates.
-  // The blocklist also drops deprecated ALIASES, which is a bug the flag work
-  // surfaced: CLDR still resolves DY, HV, NH, RH and VD to Benin, Burkina
-  // Faso, Vanuatu, Zimbabwe and Vietnam, and UK to the United Kingdom, so the
-  // picker was quietly offering six countries twice. CQ (Sark) goes too: it
-  // resolves, but no flag set carries it, and an entry that can never show a
-  // flag is worse than no entry.
-  const NOT_COUNTRIES = new Set(['AC','AN','BU','CP','CQ','CS','DD','DG','DY','EA','EU','EZ','FX','HV','IC','NH','NT','QO','RH','SU','TA','TP','UK','UN','VD','XA','XB','YD','YU','ZR','ZZ']);
-  let countriesBuilt = false;
-  function buildCountries() {
-    if (countriesBuilt) return;
-    countriesBuilt = true;
-    let dn;
-    try { dn = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) { return; }
-    const opts = [];
-    for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
-      const code = String.fromCharCode(a, b);
-      if (NOT_COUNTRIES.has(code)) continue;
-      let label;
-      try { label = dn.of(code); } catch (e) { continue; }
-      if (!label || label === code) continue;
-      opts.push([code, label]);
-    }
-    opts.sort((x, y) => x[1].localeCompare(y[1]));
-    for (const [code, label] of opts) {
-      const o = document.createElement('option');
-      o.value = code;
-      o.textContent = label;
-      profCountry.appendChild(o);
-    }
-  }
 
   function profSay(msg, calm) {
     profStatus.textContent = msg || '';
@@ -5247,7 +5184,7 @@
   }
 
   function openProfile() {
-    buildCountries();
+    buildCountries(profCountry);
     refreshProfileSheet(true);
     syncProfileLock();
     profileModal.hidden = false;
@@ -5425,52 +5362,9 @@
 
   refreshWho();
 
-  // ---- terminal easter egg: click the "P" in PITCH to reveal the hidden brief ----
-  const pEgg = document.getElementById('pEgg');
-  const terminal = document.getElementById('terminal');
-  const termBody = document.getElementById('termBody');
-  const termClose = document.getElementById('termClose');
-  const TERM_TEXT =
-`$ cat interview/top-10-at-scale.md
-
-TOP 10 HIGH SCORES AT SCALE
-
-Hundreds of thousands of players are playing concurrently. Every round ends with a score, and there is one global Top 10.
-
-At the end of a round:
-
-- If the score makes the Top 10, ask the player for their name. After they submit it, show them the Top 10 with their entry in it.
-
-- If it does not make the Top 10, still show them the Top 10, and tell them how many points short of 10th place they were.
-
-Design how you would store the scores and serve all of this.
-
-$ `;
-  let termTimer = null;
-  function openTerminal() {
-    terminal.hidden = false;
-    clearInterval(termTimer);
-    termBody.textContent = '';
-    let i = 0;
-    termTimer = setInterval(() => {
-      i += 3;
-      if (i < TERM_TEXT.length) {
-        termBody.textContent = TERM_TEXT.slice(0, i);
-        termBody.scrollTop = termBody.scrollHeight;
-      } else {
-        termBody.textContent = TERM_TEXT;
-        clearInterval(termTimer);
-        const cur = document.createElement('span');
-        cur.className = 'term-cursor';
-        termBody.appendChild(cur);
-      }
-    }, 14);
-  }
-  function closeTerminal() { clearInterval(termTimer); terminal.hidden = true; }
-  pEgg.addEventListener('click', () => { if (terminal.hidden) openTerminal(); else closeTerminal(); });
-  termClose.addEventListener('click', closeTerminal);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !terminal.hidden) closeTerminal(); });
-
+  // the hidden brief behind the "P" in PITCH, which wires itself and is
+  // otherwise invisible to everything here
+  initEasterEggTerminal();
 
   // desktop web, mobile web, or the app: the app is its own build, and the
   // two webs split by what the PRIMARY pointer is, never by user agent
