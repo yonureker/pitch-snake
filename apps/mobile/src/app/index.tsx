@@ -16,6 +16,7 @@ import { ShopSheet } from '@/components/shop-sheet';
 import { GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
 import { useCrowd } from '@/hooks/use-crowd';
+import { useUpdates } from '@/hooks/use-updates';
 import { useRoom } from '@/hooks/use-room';
 import { useWallet } from '@/hooks/queries/use-wallet';
 import { useCreateTournament } from '@/hooks/queries/use-create-tournament';
@@ -207,6 +208,9 @@ export default function Index() {
   // conceding arms on the first tap, like the page's exit: giving up a round
   // is not something a stray thumb should be able to do
   const [giveArmed, setGiveArmed] = useState(false);
+  // a newer build waiting to be applied; offered, never forced, and never
+  // mid-round (see use-updates)
+  const update = useUpdates();
   const { crowdOn, setCrowdOn } = crowd;
   const room = useRoom(loop, { skin: wallet.data?.skin ?? null, hat: wallet.data?.hat ?? null }, boardPx);
   // the stand's verdict fires once when a room reaches full time: the roar
@@ -492,6 +496,16 @@ export default function Index() {
             </Pressable>
           }
           {loop.forfeited && <Text style={styles.vsNote}>FORFEITED</Text>}
+        </View>
+      )}
+      {/* the app's stale-build banner, the page's twin: quiet, never
+          blocking, and only shown where a restart is safe */}
+      {update.ready && menuPhase && (
+        <View style={styles.updateNote}>
+          <Text style={styles.updateText}>A newer build of the game is ready.</Text>
+          <Pressable accessibilityRole="button" onPress={update.apply} style={styles.updateBtn}>
+            <Text style={styles.updateBtnText}>RESTART</Text>
+          </Pressable>
         </View>
       )}
       <View style={styles.boardWrap}>
@@ -1032,6 +1046,28 @@ const styles = StyleSheet.create({
   scoreValue: { fontFamily: ANTON, fontSize: 30, color: GameColors.ink, lineHeight: 32 },
   bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   boardWrap: { alignItems: 'center' },
+  updateNote: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+    backgroundColor: 'rgba(36,50,27,0.92)',
+  },
+  updateText: { fontFamily: BARLOW, fontSize: 11.5, color: '#e9e0cd' },
+  updateBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: GameColors.food,
+  },
+  updateBtnText: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 1, color: '#ffffff' },
   vsActions: {
     flexDirection: 'row',
     gap: 8,
