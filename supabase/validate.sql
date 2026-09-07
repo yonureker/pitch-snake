@@ -38,6 +38,10 @@ create index if not exists pitch_snake_seeds_user_idx
   on public.pitch_snake_seeds (user_id, issued_at desc);
 
 alter table public.pitch_snake_seeds enable row level security;
+-- As with pitch_snake_profiles: RLS was on but the default grants were never
+-- revoked, so this table answered the Data API. Unclaimed seeds are the
+-- currency the whole validator rests on, so it gets both halves of rule 1.
+revoke all on table public.pitch_snake_seeds from anon, authenticated;
 
 -- tournament rows learn the seed column scores always had, so validated
 -- tournament entries carry their evidence too

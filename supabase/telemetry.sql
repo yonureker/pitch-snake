@@ -99,8 +99,14 @@ begin
   ) values (
     auth.uid(),
     p_kind,
-    -- a room code is six characters from a known alphabet or it is nothing
-    case when p_code ~ '^[A-Z0-9]{6}$' then p_code else null end,
+    -- A room code is FIVE characters from rooms.sql's alphabet, or it is
+    -- nothing. This said six, which is the TOURNAMENT code's length, so every
+    -- room code ever reported was silently discarded: `code` was null in all
+    -- 146 rows, the index on it was dead, and the one triage query that
+    -- matters during an incident ("is this one bad room or the whole system?")
+    -- could never return anything. Kept as a whitelist rather than widened,
+    -- since this column is written by the client.
+    case when p_code ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$' then p_code else null end,
     left(regexp_replace(coalesce(p_reason, ''), '[^a-z]', '', 'g'), 16),
     least(greatest(coalesce(p_peers, 0), 0), 8),
     least(greatest(coalesce(p_quanta, 0), 0), 2000000),

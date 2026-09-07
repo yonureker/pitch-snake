@@ -63,6 +63,13 @@ create table if not exists public.pitch_snake_profiles (
 alter table public.pitch_snake_profiles add column if not exists levels text[];
 
 alter table public.pitch_snake_profiles enable row level security;
+-- Rule 1 of leaderboard.sql has TWO halves, and this table was only carrying
+-- one: RLS on with no policies, but the default grants left in place, so it
+-- answered the Data API (an empty array rather than a 401, which is RLS doing
+-- the work alone). Nothing leaked, because neither anon nor authenticated has
+-- rolbypassrls, but the publishable key's safety rested on a single mechanism,
+-- and TRUNCATE is not filtered by RLS at all. The RPCs are the door.
+revoke all on table public.pitch_snake_profiles from anon, authenticated;
 
 -- ------------------------------------------------- profile read / write ----
 -- get returns the caller's row as one json object, or null: exactly what a

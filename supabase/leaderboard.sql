@@ -77,6 +77,19 @@ drop index if exists public.pitch_snake_scores_board_idx;
 create index if not exists pitch_snake_scores_mode_board_idx
   on public.pitch_snake_scores (mode, score desc, created_at asc);
 
+-- The player's own bests (pitch_snake_my_bests, auth.sql) filter this table by
+-- user_id, and without this they SEQUENTIALLY SCAN it. That is worse here than
+-- the row count suggests, because a score row carries the whole round LOG
+-- inline: about a kilobyte of heap each, mostly too small to be pushed out to
+-- TOAST. So the scan reads the logs too. my_bests runs at every boot and is
+-- already the slowest read RPC, and at twenty thousand rounds each call would
+-- drag ~20 MB through a 224 MB shared_buffers, evicting the board index that
+-- every other query depends on. One player's BEST would then be paid for by
+-- everybody's leaderboard. Ordered by score so the per-mode max is the first
+-- row of each group rather than a sort.
+create index if not exists pitch_snake_scores_user_best_idx
+  on public.pitch_snake_scores (user_id, mode, score desc);
+
 alter table public.pitch_snake_scores enable row level security;
 revoke all on table public.pitch_snake_scores from anon, authenticated;
 

@@ -1,0 +1,69 @@
+# The gate that a teammate cannot forget to install and cannot skip.
+#
+# scripts/pre-commit already runs these checks, but it is local: a clone without
+# `npm run install-hooks` has no gate at all, and `git commit --no-verify` walks
+# past the one it has. This repo deploys by pushing to main, so an unchecked
+# push is a live site. The same three checks therefore run here too, on every
+# push and pull request.
+#
+# The engine suite is the important one and takes under a second, so there is no
+# reason to sample or shard it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine-and-page:
+    name: engine tests, netcode tests, page build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # Workspaces are packages/* and apps/*; the mobile app is heavy and is
+      # checked in its own job, so the root install is enough here.
+      - run: npm ci --ignore-scripts
+
+      # The rules and the netcode contract. 136 tests, about half a second.
+      - name: engine + netcode tests
+        run: npm test
+
+      - name: page lint
+        run: npm run lint:page
+
+      # page/build is COMMITTED because a push is the whole deploy, so it can
+      # drift from page/*.ts and the drift is invisible: the page keeps working,
+      # just not the way the source says. Rebuild and fail if anything moved.
+      - name: page typescript builds and matches its committed output
+        run: |
+          npm run build:page
+          if ! git diff --quiet -- page/build; then
+            echo "::error::page/build is out of date with page/*.ts. Run 'npm run build:page' and commit page/build."
+            git --no-pager diff --stat -- page/build
+            exit 1
+          fi
+
+  mobile:
+    name: mobile lint + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm --workspace apps/mobile run lint
+      - run: npm --workspace apps/mobile run typecheck

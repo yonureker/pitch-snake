@@ -57,6 +57,20 @@ alter table public.pitch_snake_rooms add column if not exists region text;
 -- 'quick', so a client cannot ask to be rated.
 alter table public.pitch_snake_rooms add column if not exists origin text not null default 'code';
 
+-- Quick match is the multiplayer front door, and it reads this table with
+-- `status = 'waiting' and origin = 'quick' and last_seen > now() - 25 seconds`.
+-- A room stops being joinable 25 SECONDS after its last touch, but the sweep
+-- only deletes it 24 HOURS after creation, so in between it is a corpse that
+-- every later search still had to scan (thousands of sequential scans already,
+-- before any crowd). It degrades exactly when a crowd arrives, because every
+-- searcher who finds an empty pool leaves another corpse behind. Leading on
+-- last_seen makes the live rooms a short range scan and leaves the corpses
+-- unread; the partial predicate keeps the index small. Declared after the
+-- origin column it reads, or a first run on a fresh database would fail.
+create index if not exists pitch_snake_rooms_quick_idx
+  on public.pitch_snake_rooms (last_seen desc)
+  where status = 'waiting' and origin = 'quick';
+
 alter table public.pitch_snake_rooms enable row level security;
 revoke all on table public.pitch_snake_rooms from anon, authenticated;
 
