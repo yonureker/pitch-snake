@@ -371,7 +371,7 @@
      strip's slice of the column grows a little to pay for the second line
      (54px against the pill's 42), and the pitch stays exactly as clear as
      the day the list was moved off it. */
-  @media (max-width: 899.98px) {
+  @media (max-width: 699.98px) {
     .mp-hud {
       background: #24321b; border: 1.5px solid var(--gold);
       border-radius: 12px; padding: 3px 4px; gap: 0; align-items: stretch;
@@ -387,7 +387,7 @@
     .mp-hud .note { align-self: center; padding: 0 10px; font-size: 10px; letter-spacing: 1.4px; }
     .wrap.mp-open { --mp-h: 54px; }
   }
-  @media (min-width: 900px) {
+  @media (min-width: 700px) {
     /* The room rides the HEADER since 2026-09-06, at the owner's call: the
        seat cells sit directly under the nameplate row as a second cluster
        line, so a room opening no longer costs the board a strip of its own.
@@ -1231,6 +1231,7 @@
     animation: stickPopA 0.26s ease-out 1s both;
   }
   .stick-top {
+    cursor: pointer;
     top: clamp(28px, 6.4cqw, 42px); transform: rotate(-7deg);
     background: var(--food); color: #ffffff;
     animation: stickPopB 0.26s ease-out 0.25s both;
@@ -1435,7 +1436,7 @@
      settings is part of playing. The same buttons move back onto the board
      frame on narrow screens (placeChrome), where the old rules hold. */
   .hdr-cluster { display: none; }
-  @media (min-width: 900px) {
+  @media (min-width: 700px) {
     /* Pixel work, at the owner's call: the header's three pieces share the
        title's own vertical bounds. The cluster's top sits on PITCH's cap
        line, SECONDS starts on it too, and BEST ends on SNAKE's baseline,
@@ -1782,7 +1783,7 @@
           <div class="res-hero">
             <div class="res-score" id="resScore">0</div>
             <span class="res-stick stick-best" id="stickBest" hidden>NEW BEST</span>
-            <span class="res-stick stick-top" id="stickTop" hidden>TOP 100<i>WORLDWIDE</i></span>
+            <span class="res-stick stick-top" id="stickTop" title="See the top 100" hidden>TOP 100<i>WORLDWIDE</i></span>
           </div>
         </div>
         <div class="entry" id="entry" style="display:none">
@@ -1791,7 +1792,7 @@
         </div>
         <div class="save-note" id="saveNote" hidden></div>
         <div class="badges" id="badgeNote" hidden></div>
-        <button class="btn small ghostbtn" id="seeBoardBtn" hidden>SEE THE TOP 100</button>
+        <button class="btn small" id="claimBtn" hidden>SAVE YOUR HIGHSCORE</button>
         <div class="acct" id="authNudge" hidden>
           <p class="acct-line" id="acctLine">Create an account to save your scores.</p>
           <div class="acct-row">
@@ -4549,7 +4550,7 @@
   // deathGen retires a decision still in the air, so a restart, a mode switch
   // or a save that lands first can never be overruled by a late board.
   let deathGen = 0;
-  function retireEntry() { deathGen++; entryWanted = false; }
+  function retireEntry() { deathGen++; entryWanted = false; claimWanted = false; }
   async function askIfItPlaces(gen, sc) {
     const list = await renderStandings();
     if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
@@ -4563,9 +4564,10 @@
       // a known name is never asked for again: the profile answered it, so
       // the round goes straight to the board under it
       if (sbProfile && sbProfile.name) { autoSubmit(gen); return; }
-      entryWanted = true;
+      // no name yet: offer the claim, which opens the profile sheet (name
+      // and account in one place) instead of a bare name field
+      claimWanted = true;
       refreshModeUI();
-      setTimeout(() => nameInput.focus(), 60);
       return;
     }
     // a miss shows nothing extra: the target lives behind the trophy, and a
@@ -4632,6 +4634,7 @@
       boardWanted = true;   // a saved row is a row worth showing
       await renderStandings(key);
       entryWanted = false;
+      claimWanted = false;
       refreshModeUI();
     } catch (e) {
       // a failed save must not lock the entry for the round; let them retry, and
@@ -4690,6 +4693,12 @@
   let lastRunKey = null;     // which fixture the finished round belonged to
   let tScreen = false;       // inside the chooser: the tournament step instead of the list
   let entryWanted = false;   // the death screen decided an entry belongs; refreshModeUI applies it
+  // A placed round with no profile name behind it: the ask is not "type a
+  // name" but "claim this", and the claim door is the profile sheet, where
+  // the name and the account live together. Set by askIfItPlaces, resumed
+  // by the sheet's own SAVE, and the round submits itself the moment a name
+  // exists, exactly like autoSubmit always did.
+  let claimWanted = false;
   let boardWanted = false;   // the board shows on death only when this round placed on it
 
   function persistModeState() {
@@ -4854,12 +4863,12 @@
     // entry belongs to (a tournament).
     const soloDead = deadResult && mode !== 'tourney';
     const showBoard = (deadResult && mode === 'tourney' && boardWanted) || (deadPanels && mode === 'versus');
-    seeBoardBtn.hidden = !(soloDead && boardWanted);
     standingsEl.style.display = showBoard ? 'block' : 'none';
     boardHead.style.display = showBoard ? 'block' : 'none';
     ovBody.classList.toggle('two-col', deadResult);
     resultPanel.hidden = !deadResult;
     entry.style.display = (deadPanels && entryWanted) ? 'flex' : 'none';
+    claimBtn.hidden = !(deadPanels && claimWanted);
     // one quiet line, at the one moment the pitch sells itself: a score just
     // went onto the world board and the identity under it is still anonymous
     // the offer, on an earned moment only, and it says which one it was
@@ -6994,7 +7003,7 @@
   const chipRowEl = whoBtn.closest('.chip-row');
   const boardFrameEl = gearBtn.parentElement;
   let chromeWide = false;
-  const wideQuery = window.matchMedia('(min-width: 900px)');
+  const wideQuery = window.matchMedia('(min-width: 700px)');
   function placeChrome() {
     chromeWide = wideQuery.matches;
     if (chromeWide) {
@@ -7029,7 +7038,8 @@
   const boardChips = document.getElementById('boardChips');
   const boardsBtn = document.getElementById('boardsBtn');
   const boardsClose = document.getElementById('boardsClose');
-  const seeBoardBtn = document.getElementById('seeBoardBtn');
+  const claimBtn = document.getElementById('claimBtn');
+  claimBtn.addEventListener('click', openProfile);
   let boardsMode = 'classic';
   function localListFor(rm) {
     try {
@@ -7102,10 +7112,12 @@
   // scrolled to the row the save just made
   let lastSaveKey = null;
   let boardsHighlight = null;
-  seeBoardBtn.addEventListener('click', () => {
+  // the sticker itself is the door since 2026-09-06: it already says TOP
+  // 100, and a second button under it said the same thing twice
+  stickTop.addEventListener('click', () => {
     const rm = ruleMode();
     boardsMode = (rm === 'classic' || rm === 'speedrun' || rm === 'survival') ? rm : 'classic';
-    boardsHighlight = lastSaveKey;
+    boardsHighlight = savedThisRound ? lastSaveKey : null;
     boardsModal.hidden = false;
     renderBoards();
   });
@@ -7180,8 +7192,18 @@
         // '' is the NO FLAG choice and clears the flag; a code sets it
         sbProfile = await sbRpc('pitch_snake_set_profile', { p_name: name, p_country: profCountry.value });
         profSay('Saved.', true);
+        if (claimWanted && sbProfile && sbProfile.name && state === 'dead' && !savedThisRound) {
+          claimWanted = false;
+          profileModal.hidden = true;    // step aside: the board is the payoff
+          void autoSubmit(deathGen);
+        }
       } catch (e) {
-        profSay('Could not reach your account. The name is kept on this device.');
+        // the unique-name refusal arrives as the RPC's own message; anything
+        // else is the network having a day
+        const words = String((e && e.message) || '');
+        profSay(words.toLowerCase().includes('taken')
+          ? 'That name is taken. Pick another.'
+          : 'Could not reach your account. The name is kept on this device.');
       }
       profSaveBtn.disabled = false;
     } else {

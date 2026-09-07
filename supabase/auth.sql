@@ -116,6 +116,19 @@ begin
     clean_country := null;
   end if;
 
+  -- Names are unique since 2026-09-06, at the owner's call, except the
+  -- un-name YOU that every unnamed player shares (equip and set_levels
+  -- upsert rows under it, so it can never be scarce). Case-insensitive,
+  -- the False9 team-name rule ported. This check exists for the friendly
+  -- message; the partial unique index below is the source of truth and
+  -- catches the race two saves can win together.
+  if clean_name <> 'YOU' and exists (
+    select 1 from public.pitch_snake_profiles
+    where upper(name) = clean_name and user_id <> auth.uid()
+  ) then
+    raise exception 'That name is taken.';
+  end if;
+
   insert into public.pitch_snake_profiles (user_id, name, country)
   values (auth.uid(), clean_name, clean_country)
   on conflict (user_id) do update
@@ -237,6 +250,34 @@ drop function if exists public.pitch_snake_tournament_submit(text, text, integer
 -- Postgres grants EXECUTE to PUBLIC on every new function; take that back,
 -- then hand it to exactly the two roles the publishable key can become.
 revoke all on function public.pitch_snake_get_profile()                from public;
+-- The uniqueness itself: a functional partial index, so ONUR and onur
+-- cannot coexist while any number of players stay YOU. Existing duplicates
+-- were folded to YOU (keeping each name's newest holder) in the 2026-09-06
+-- migration before this index could exist.
+create unique index if not exists pitch_snake_profiles_name_uniq
+  on public.pitch_snake_profiles (upper(name)) where upper(name) <> 'YOU';
+
+-- The pre-check the clients may ask before saving: is this name someone
+-- else's? Washes exactly as set_profile does, and never counts the caller's
+-- own row, so renaming yourself to yourself is never "taken".
+create or replace function public.pitch_snake_name_taken(p_name text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.pitch_snake_profiles
+    where upper(name) = left(upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]', '', 'g')), 5)
+      and upper(name) <> 'YOU'
+      and user_id is distinct from auth.uid()
+  );
+$$;
+
+revoke all on function public.pitch_snake_name_taken(text)         from public;
+grant execute on function public.pitch_snake_name_taken(text)      to anon, authenticated;
+
 revoke all on function public.pitch_snake_set_profile(text, text)      from public;
 revoke all on function public.pitch_snake_my_bests()                   from public;
 
