@@ -12,10 +12,12 @@ import flagSheet from '@/assets/flags.png';
 import skullIcon from '@/assets/icon-skull.png';
 import { Dpad } from '@/components/dpad';
 import { RoomPanel } from '@/components/room-panel';
+import { ProfileSheet } from '@/components/profile-sheet';
 import { ShopSheet } from '@/components/shop-sheet';
 import { GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
 import { useCrowd } from '@/hooks/use-crowd';
+import { useProfile } from '@/hooks/queries/use-profile';
 import { useUpdates } from '@/hooks/use-updates';
 import { useRoom } from '@/hooks/use-room';
 import { useWallet } from '@/hooks/queries/use-wallet';
@@ -183,6 +185,7 @@ export default function Index() {
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
   const [tCreating, setTCreating] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [prevBest, setPrevBest] = useState(0);
   const [joinCode, setJoinCode] = useState('');
   const [createTitle, setCreateTitle] = useState('');
@@ -211,8 +214,22 @@ export default function Index() {
   // a newer build waiting to be applied; offered, never forced, and never
   // mid-round (see use-updates)
   const update = useUpdates();
+  const profile = useProfile();
   const { crowdOn, setCrowdOn } = crowd;
   const room = useRoom(loop, { skin: wallet.data?.skin ?? null, hat: wallet.data?.hat ?? null }, boardPx);
+
+  // Identity freezes while competition is live: any round, and any held room
+  // seat. The series tally and the roster are keyed by NAME, so a rename
+  // mid-series would fork them (supabase/RATING_RULES.md).
+  // the profile's name, or null while the player is still nameless (YOU is
+  // the shared un-name every unnamed player carries, so it counts as none)
+  const profileName =
+    profile.data && profile.data.name !== '' && profile.data.name !== 'YOU' ? profile.data.name : null;
+  const identityLocked =
+    loop.phase === 'playing' ||
+    loop.phase === 'countdown' ||
+    loop.phase === 'paused' ||
+    room.status === 'lobby';
   // the stand's verdict fires once when a room reaches full time: the roar
   // for a win. Watching over, not a callback, keeps useRoom uncoupled from
   // the audio; the ref guards against a re-render re-firing it.
@@ -449,6 +466,20 @@ export default function Index() {
       </View>
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
+      {/* the player chip, the page's twin: the door to the name, the flag and
+          the account, and the only place identity is edited */}
+      {menuPhase && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setProfileOpen(true);
+          }}
+          style={styles.whoChip}
+        >
+          <Flag code={profile.data?.country ?? null} />
+          <Text style={styles.whoText}>{profileName ?? 'PLAYER'}</Text>
+        </Pressable>
+      )}
       {menuPhase && wallet.isSuccess && (
         <Pressable
           accessibilityRole="button"
@@ -769,7 +800,23 @@ export default function Index() {
                       +{submit.data.coins} COINS {'\u00b7'} one per five points
                     </Text>
                   )}
-                  {wantsEntry && placed && (
+                  {/* A placing round with no profile name behind it is offered
+                      the CLAIM rather than a bare name field: the sheet is
+                      where the name and the account live together, and the
+                      round submits itself the moment a name exists. A player
+                      who already has one never sees either. */}
+                  {wantsEntry && placed && profileName === null && (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setProfileOpen(true);
+                      }}
+                      style={styles.claimBtn}
+                    >
+                      <Text style={styles.claimText}>SAVE YOUR HIGHSCORE</Text>
+                    </Pressable>
+                  )}
+                  {wantsEntry && placed && profileName !== null && (
                     <View style={styles.entryRow}>
                       <TextInput
                         style={styles.nameInput}
@@ -988,6 +1035,24 @@ export default function Index() {
               }
             </View>
           )}
+          {profileOpen && (
+            <View style={styles.sheetWrap}>
+              <ProfileSheet
+                profile={profile.data ?? null}
+                locked={identityLocked}
+                onSaved={(p) => {
+                  void profile.refetch();
+                  // the claim's payoff: the name exists, so the round that
+                  // was waiting for one goes onto the board under it
+                  setEntryName(p.name);
+                  setProfileOpen(false);
+                }}
+                onClose={() => {
+                  setProfileOpen(false);
+                }}
+              />
+            </View>
+          )}
           <ShopSheet
             open={shopOpen && menuPhase}
             onClose={() => {
@@ -1046,6 +1111,40 @@ const styles = StyleSheet.create({
   scoreValue: { fontFamily: ANTON, fontSize: 30, color: GameColors.ink, lineHeight: 32 },
   bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   boardWrap: { alignItems: 'center' },
+  whoChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    alignSelf: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+  },
+  whoText: { fontFamily: BARLOW_BOLD, fontSize: 11.5, letterSpacing: 1.4, color: GameColors.ink },
+  claimBtn: {
+    alignSelf: 'center',
+    marginTop: 4,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: GameColors.food,
+  },
+  claimText: { fontFamily: ANTON, fontSize: 15, letterSpacing: 1.2, color: '#ffffff' },
+  sheetWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(20,17,13,0.72)',
+    zIndex: 30,
+    padding: 12,
+  },
   updateNote: {
     flexDirection: 'row',
     gap: 10,
