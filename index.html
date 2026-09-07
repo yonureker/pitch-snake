@@ -371,20 +371,6 @@
      strip's slice of the column grows a little to pay for the second line
      (54px against the pill's 42), and the pitch stays exactly as clear as
      the day the list was moved off it. */
-  html.touch .mp-hud {
-    background: #24321b; border: 1.5px solid var(--gold);
-    border-radius: 12px; padding: 3px 4px; gap: 0; align-items: stretch;
-  }
-  html.touch .mp-hud .pl { flex-direction: column; gap: 0; padding: 1px 9px; align-items: center; }
-  html.touch .mp-hud .pl + .pl { border-left: 1px solid rgba(244,236,216,0.14); }
-  html.touch .mp-hud .pl .nm { font-size: 9.5px; letter-spacing: 1.4px; }
-  html.touch .mp-hud .pl .sc { font-size: 15px; line-height: 1.05; }
-  html.touch .mp-hud .pl.me::after {
-    content: ''; position: absolute; left: 9px; right: 9px; bottom: 1px;
-    height: 2px; border-radius: 2px; background: var(--gold-bright);
-  }
-  html.touch .mp-hud .note { align-self: center; padding: 0 10px; font-size: 10px; letter-spacing: 1.4px; }
-  html.touch .wrap.mp-open { --mp-h: 54px; }
 
   /* The room rides the HEADER since 2026-09-06, at the owner's call: the
      seat cells sit directly under the nameplate row as a second cluster
@@ -575,31 +561,39 @@
        height; the pad takes what is left, with a floor so a short phone
        still has something to hit and a cap so a tall one does not hand it
        half the screen. */
-    --pad-h: clamp(190px, calc(100svh - min(100vw, 540px) - 62px - var(--mp-h)), 320px);
+    --pad-h: clamp(190px, calc(100svh - min(100vw, 540px) - 108px - var(--mp-h)), 320px);
   }
   /* the legend under the pad is desktop's: a phone has the pad in front of
      it and the gear on the board, and the room is worth more than the words */
   html.touch .wrap > .hint { display: none; }
-  html.touch h1 { font-size: clamp(17px, 5.4vw, 25px); line-height: 1; text-shadow: 2px 2px 0 var(--gold); }
-  html.touch h1 br { display: none; }
+  html.touch h1 { font-size: clamp(20px, 6vw, 26px); line-height: 0.92; text-shadow: 2px 2px 0 var(--gold); }
   html.touch .scores .val { font-size: 28px; }
   html.touch .scores .label, html.touch .scores .best { font-size: 11px; }
   html.touch .scores .clock { font-size: 19px; padding-left: 8px; }
   html.touch .scores { gap: 8px; }
-  html.touch header { padding: 0 10px; }
+  /* the chrome rides the header on touch too (2026-09-06, owner's call):
+     logo left, scoreboard right, and the nameplate-and-tray cluster on its
+     own line below, off the field for good. The shell pays the height in
+     the sizing constants below. */
+  html.touch header { padding: 0 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 6px; }
+  html.touch .scores { margin-left: auto; }
+  html.touch .hdr-cluster { display: flex; order: 3; flex-basis: 100%; gap: 6px; align-items: center; }
+  html.touch .hdr-cluster .gear.who { padding: 0 10px; font-size: 11px; letter-spacing: 1px; }
+  html.touch .hdr-tray .gear { width: 34px; }
+  html.touch .hdr-tray .gear.purse { padding: 0 9px; }
   html.touch .board-frame {
     /* The pitch takes the full width too, and stays square: the height term
        is what stops it, so a board that fits sideways can never push the pad
        off the screen. 62px is the rest of the shell: header, the two gaps
        and the padding. Anything added to the touch layout comes out of it. */
-    width: min(100%, calc(100svh - var(--pad-h) - 62px - var(--mp-h)));
+    width: min(100%, calc(100svh - var(--pad-h) - 108px - var(--mp-h)));
     flex: 0 0 auto;
     border-radius: 12px;
   }
   /* the strip tracks the pitch's own width so the chips line up with the
      touchline rather than the screen edge */
   html.touch .mp-bar {
-    width: min(100%, calc(100svh - var(--pad-h) - 62px - var(--mp-h)));
+    width: min(100%, calc(100svh - var(--pad-h) - 108px - var(--mp-h)));
     flex: 0 0 auto;
   }
   /* the pad runs to both edges: a thumb that misses it sideways would
@@ -1454,7 +1448,7 @@
     display: flex; flex-direction: column; justify-content: space-between;
     height: 100%;
   }
-  html.touchless .hdr-cluster { display: flex; align-items: flex-start; gap: 9px; margin-top: -0.5px; }
+  .hdr-cluster { display: flex; align-items: flex-start; gap: 9px; margin-top: -0.5px; }
   /* the clock keeps its centered seat; a stretched one drew its divider
      the full height of the title */
   html.touchless .scores .clock { align-self: center; }
@@ -1465,25 +1459,25 @@
   html.touchless .scores .best { margin-bottom: -1px; }
   /* shell tokens, not sheet tokens: these sit on the table and must flip
      with the theme (the nameplate's ink was invisible on the dark table) */
-  html.touchless .hdr-cluster .gear {
+  .hdr-cluster .gear {
     position: static; width: 34px; height: 34px; font-size: 15px;
     background: transparent; border: 1.5px solid var(--gold);
     color: var(--shell-gold); backdrop-filter: none;
   }
-  html.touchless .hdr-cluster .gear.who {
+  .hdr-cluster .gear.who {
     width: auto; min-width: 34px; padding: 0 14px; border-radius: 17px;
     color: var(--shell-ink); font-family: 'Barlow', sans-serif; font-weight: 700;
     font-size: 12px; letter-spacing: 1.5px;
   }
-  html.touchless .hdr-tray {
+  .hdr-tray {
     display: inline-flex; align-items: center; height: 34px;
     border: 1.5px solid var(--gold); border-radius: 17px; overflow: hidden;
   }
-  html.touchless .hdr-tray .gear {
+  .hdr-tray .gear {
     width: 40px; height: 100%; border: none; border-radius: 0; background: transparent;
   }
-  html.touchless .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
-  html.touchless .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
+  .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
+  .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
   .sleeping { opacity: 0.42; pointer-events: none; }
   
   /* Narrow desktop windows: the row SHRINKS before it ever breaks. The
@@ -1499,14 +1493,14 @@
     html.touchless .scores .clock { font-size: 24px; }
     html.touchless .scores .label { font-size: 11px; letter-spacing: 1.5px; margin-top: -2px; }
     html.touchless .scores .best { font-size: 12px; }
-    html.touchless .hdr-cluster { gap: 6px; }
-    html.touchless .hdr-cluster .gear.who { padding: 0 10px; font-size: 11px; letter-spacing: 1px; }
-    html.touchless .hdr-tray .gear { width: 34px; }
-    html.touchless .hdr-tray .gear.purse { padding: 0 9px; }
+    .hdr-cluster { gap: 6px; }
+    .hdr-cluster .gear.who { padding: 0 10px; font-size: 11px; letter-spacing: 1px; }
+    .hdr-tray .gear { width: 34px; }
+    .hdr-tray .gear.purse { padding: 0 9px; }
   }
   @media (max-width: 519.98px) {
     html.touchless header { flex-wrap: wrap; row-gap: 10px; }
-    html.touchless .hdr-cluster { order: 3; flex-basis: 100%; }
+    .hdr-cluster { order: 3; flex-basis: 100%; }
   }
   /* the purse's coin is drawn, not typed: the emoji rendered as a grey moon */
   .coin-dot {
@@ -1537,7 +1531,6 @@
 
   /* ---- player chip + profile sheet ---- */
   /* the trophy sits beside the gear; a slightly smaller glyph, the same coin */
-  .gear.boards { right: 54px; font-size: 16px; }
   .gear.who {
     left: 8px; right: auto; width: auto; min-width: 38px;
     padding: 0 12px; border-radius: 19px; gap: 5px;
@@ -7064,26 +7057,17 @@
   // frame exactly where it always lived. Moving nodes keeps listeners.
   const hdrCluster = document.getElementById('hdrCluster');
   const hdrTray = document.getElementById('hdrTray');
-  const chipRowEl = whoBtn.closest('.chip-row');
-  const boardFrameEl = gearBtn.parentElement;
-  let chromeWide = false;
+  // ONE home since 2026-09-06, at the owner's call: the header carries the
+  // chrome on every surface, and the field carries nothing. The frame
+  // overlay era (chips on the square, per-pointer homes) is over; the touch
+  // shell pays the header's height in its sizing constants instead.
+  const chromeWide = true;
   function placeChrome() {
-    // pointer, not width: the square never carries the chrome on a desktop
-    chromeWide = document.documentElement.classList.contains('touchless');
-    if (chromeWide) {
-      hdrCluster.insertBefore(whoBtn, hdrTray);
-      hdrTray.append(purseBtn, boardsBtn, gearBtn);
-      // the room's seat cells ride the header too, wrapping under the
-      // nameplate row (flex-basis 100%), so a room costs the board nothing
-      hdrCluster.append(mpBar);
-    } else {
-      chipRowEl.append(whoBtn, purseBtn);
-      boardFrameEl.append(boardsBtn, gearBtn);
-      boardFrameEl.parentElement.insertBefore(mpBar, boardFrameEl);
-      for (const b of [whoBtn, purseBtn, boardsBtn]) b.classList.remove('sleeping');
-      gearBtn.style.display = '';
-      whoBtn.style.display = '';
-    }
+    hdrCluster.insertBefore(whoBtn, hdrTray);
+    hdrTray.append(purseBtn, boardsBtn, gearBtn);
+    // the room's seat cells ride the header too, wrapping under the
+    // nameplate row (flex-basis 100%), so a room costs the board nothing
+    hdrCluster.append(mpBar);
     refreshModeUI();
     refreshSettingsUI();
   }
