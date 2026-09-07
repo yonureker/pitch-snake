@@ -11,6 +11,7 @@
     "install-hooks": "sh scripts/install-hooks.sh",
     "lint": "npm --workspace apps/mobile run lint",
     "typecheck": "npm --workspace apps/mobile run typecheck",
+    "lint:page": "eslint page",
     "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
     "build:page": "tsc -p page/tsconfig.json"
   },

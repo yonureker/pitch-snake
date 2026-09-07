@@ -24,10 +24,26 @@
  * @module
  */
 
+// Both are widened to `string` deliberately. As literal types the compiler
+// knew they could never be empty and marked supabaseConfigured() below as
+// always-true dead code, which would have made "a fork with the keys stripped"
+// unreachable instead of merely untested. That fallback is a supported way to
+// run this game and the type must not argue with it.
+
 /** The project's REST and auth origin. */
 export const SUPABASE_URL = 'https://vyqlwoqvsnxyziutmgqz.supabase.co';
 
-/** The publishable key: public by design, and the tables behind it are shut. */
+/**
+ * The publishable key: public by design, and the tables behind it are shut.
+ *
+ * The secret scanner is right that this is a high-entropy string and wrong
+ * about what it is. `sb_publishable_` keys name the project to the Data API
+ * and grant nothing on their own: every `pitch_snake_` table has RLS on with
+ * no policies and no grants, so this reaches exactly the `pitch_snake_`
+ * functions. A `service_role` key really would be a secret, and the same rule
+ * is what would catch one arriving.
+ */
+// eslint-disable-next-line no-secrets/no-secrets -- publishable by design, see above
 export const SUPABASE_KEY = 'sb_publishable_tbNA8JWlc3V9twrk2knWtg__g6-K8lj';
 
 // A request that never answers must not leave FULL TIME sitting there with a
@@ -43,6 +59,11 @@ const REQUEST_TIMEOUT_MS = 6000;
  *
  */
 export function supabaseConfigured(): boolean {
+  // Always true as the constants stand, and the rule is right to say so. It
+  // stops being true the moment a fork blanks them, which is a supported way
+  // to run this game and the reason the check exists at all; the type system
+  // cannot see an edit that has not happened yet.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
   return !!(SUPABASE_URL && SUPABASE_KEY);
 }
 
@@ -65,6 +86,8 @@ export function sessionToken(): string | null {
  *   Anything falsy clears it.
  */
 export function setSessionToken(token: string | null | undefined): void {
+  // not `??`: an empty string is not a token either, and must clear.
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- '' must clear too
   currentSessionToken = token || null;
 }
 
@@ -76,7 +99,7 @@ export function setSessionToken(token: string | null | undefined): void {
  *
  */
 export function authorizationHeader(): string {
-  return 'Bearer ' + (currentSessionToken || SUPABASE_KEY);
+  return `Bearer ${currentSessionToken ?? SUPABASE_KEY}`;
 }
 
 /**
@@ -94,7 +117,9 @@ export function authorizationHeader(): string {
  */
 export async function supabaseRpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => {
+    ac.abort();
+  }, REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, {
       method: 'POST',
@@ -106,7 +131,7 @@ export async function supabaseRpc(fn: string, args: Record<string, unknown>): Pr
       body: JSON.stringify(args),
       signal: ac.signal,
     });
-    if (!res.ok) throw new Error(fn + ': ' + res.status);
+    if (!res.ok) throw new Error(`${fn}: ${res.status}`);
     return await res.json();
   } finally {
     clearTimeout(timer);

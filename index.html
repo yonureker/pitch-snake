@@ -20,12 +20,11 @@
 <link rel="stylesheet" href="./styles/boards-and-shop-sheets.css">
 <link rel="stylesheet" href="./styles/dpad-and-header-chrome.css">
 <link rel="stylesheet" href="./styles/modals-and-profile.css">
-<link rel="stylesheet" href="./styles/terminal-easter-egg.css">
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1><span class="p-egg" id="pEgg">P</span>ITCH<br> SNAKE</h1>
+      <h1>PITCH<br> SNAKE</h1>
       <div class="hdr-cluster" id="hdrCluster"><span class="hdr-tray" id="hdrTray"></span></div>
       <div class="scores">
         <div class="tally">
@@ -370,15 +369,6 @@
       </div>
     </div>
 
-    <div class="terminal" id="terminal" hidden>
-      <div class="term-bar">
-        <span class="term-dot red" id="termClose" title="close"></span>
-        <span class="term-dot yellow"></span>
-        <span class="term-dot green"></span>
-        <span class="term-title">pitch-snake - interview</span>
-      </div>
-      <pre class="term-body" id="termBody"></pre>
-    </div>
   </div>
 
 <script type="module">
@@ -635,9 +625,6 @@
     supabaseRpc, SUPABASE_KEY, SUPABASE_URL,
   } from './page/build/supabase-client.js';
   import { buildCountries, paintFlag } from './page/build/country-flags.js';
-  // The hidden brief behind the "P" in PITCH, wired at boot and otherwise
-  // invisible to the rest of the page. See page/easter-egg-terminal.ts.
-  import { initEasterEggTerminal } from './page/build/easter-egg-terminal.js';
   import {
     audioHook, audioWake, crowdPulse, crowdSync, crowdVerdict,
     isCrowdOn, isPageSoundOn, setCrowdOn, setPageSound,
@@ -5341,10 +5328,6 @@
   });
 
   refreshWho();
-
-  // the hidden brief behind the "P" in PITCH, which wires itself and is
-  // otherwise invisible to everything here
-  initEasterEggTerminal();
 
   // desktop web, mobile web, or the app: the app is its own build, and the
   // two webs split by what the PRIMARY pointer is, never by user agent

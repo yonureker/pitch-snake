@@ -23,10 +23,10 @@
  * @throws {Error} when no element carries that id.
  */
 export function mustGetElement(id) {
-    const el = document.getElementById(id);
-    if (el === null)
+    const element = document.getElementById(id);
+    if (element === null)
         throw new Error(`index.html has no element with id "${id}"`);
-    return el;
+    return element;
 }
 /**
  * The element with this id, checked to be the kind you expect.
@@ -43,10 +43,10 @@ export function mustGetElement(id) {
  * @throws {Error} when the element is missing or is a different kind.
  */
 export function mustGetElementOfKind(id, kind) {
-    const el = mustGetElement(id);
-    if (!(el instanceof kind)) {
-        throw new Error(`element "${id}" is a ${el.tagName}, not a ${kind.name}`);
+    const element = mustGetElement(id);
+    if (!(element instanceof kind)) {
+        throw new TypeError(`element "${id}" is a ${element.tagName}, not a ${kind.name}`);
     }
-    return el;
+    return element;
 }
 //# sourceMappingURL=dom.js.map

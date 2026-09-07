@@ -1,3 +1,10 @@
+/* eslint-disable no-restricted-syntax --
+ * Math.random is used throughout this file for AUDIO JITTER and nothing else:
+ * the noise buffers, the surge interval, a tape's start offset, the scatter of
+ * the boo's whistles. None of it is reachable from the simulation, which is
+ * what the rule guards; this module decides no gameplay and is handed no game
+ * state. Seeding it would make the crowd identical every round for no gain.
+ */
 /**
  * Sound and the crowd: every noise the page makes.
  *
@@ -23,7 +30,11 @@
 /** The phases a round moves through; the crowd only sings through two. */
 export type RoundPhase = 'ready' | 'countdown' | 'playing' | 'paused' | 'dead';
 
-// Safari still only has the prefixed constructor.
+// Safari still only has the prefixed constructor, and some browsers have
+// neither. The DOM lib types `window.AudioContext` as always present, which
+// made both the fallback and the guard below look like dead code to the
+// compiler; they are not dead at runtime, so the lookup is typed as what it
+// actually is.
 declare global {
   interface Window {
     webkitAudioContext?: typeof AudioContext;
@@ -82,9 +93,16 @@ function audioResume(): void {
 }
 
 function audioBuild(): void {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;
-  const ctx = new AC();
+  // The DOM lib insists window.AudioContext always exists. It does not: old
+  // Safari carries only the prefixed name, and a browser with Web Audio turned
+  // off has neither. Both lines below are live at runtime and dead only to the
+  // type system, which cannot know what this actually ships to.
+  /* eslint-disable @typescript-eslint/no-unnecessary-condition -- see above */
+  const AudioContextCtor: typeof AudioContext | undefined =
+    window.AudioContext ?? window.webkitAudioContext;
+  if (AudioContextCtor === undefined) return;
+  /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+  const ctx = new AudioContextCtor();
   const limiter = ctx.createDynamicsCompressor();
   limiter.threshold.value = -16;
   limiter.knee.value = 10;
@@ -99,15 +117,15 @@ function audioBuild(): void {
   const d = noise.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   rig = { ctx, master, noise };
-  ctx.onstatechange = (): void => {
+  ctx.addEventListener('statechange', () => {
     if (ctx.state === 'running') audioUnhook();
     else audioHook();
     // the context often unlocks AFTER the kickoff gesture's own sync ran
     // and saw it suspended; this is where the bed catches up
     crowdSync();
-  };
-  if (ctx.state !== 'running') audioResume(); // some browsers hand it back suspended
-  else audioUnhook();
+  });
+  if (ctx.state === 'running') audioUnhook();
+  else audioResume(); // some browsers hand it back suspended
 }
 
 const WAKE_EVENTS = ['pointerdown', 'touchend', 'keydown', 'click'] as const;
@@ -147,7 +165,7 @@ document.addEventListener('visibilitychange', () => {
  * believed might be null.
  */
 function liveRig(): AudioRig | null {
-  if (!pageSound || rig === null || rig.ctx.state !== 'running') return null;
+  if (!pageSound || rig?.ctx.state !== 'running') return null;
   return rig;
 }
 
@@ -222,7 +240,11 @@ function sfxPeep(r: AudioRig, at: number, dur: number, vol: number): void {
 // own play sits in front of the room's.
 const PENTA = [0, 2, 4, 7, 9]; // the eat ladder climbs these, then the bonus
 
-/** The food note, climbing the pentatonic ladder as a streak builds. */
+/**
+ * The food note, climbing the pentatonic ladder as a streak builds. *
+ * @param step - how far up the pentatonic ladder this streak has climbed.
+ * @param vol - loudness; a rival's events in a room pass a lower one.
+ */
 export function sfxEat(step: number, vol: number): void {
   const r = liveRig();
   if (r === null) return;
@@ -232,18 +254,24 @@ export function sfxEat(step: number, vol: number): void {
   sfxTone(r, 'triangle', f * 2, f * 2, at, 0.07, 0.22 * vol);
 }
 
-/** The bonus: the ladder's top three, arpeggiated. */
+/**
+ * The bonus: the ladder's top three, arpeggiated. *
+ * @param vol - loudness; rivals are quieter than you.
+ */
 export function sfxBonus(vol: number): void {
   const r = liveRig();
   if (r === null) return;
   const at = r.ctx.currentTime;
-  [659, 880, 1319].forEach((f, i) => {
+  for (const [i, f] of [659, 880, 1319].entries()) {
     sfxTone(r, 'square', f, f, at + i * 0.06, 0.14, 0.32 * vol);
     sfxTone(r, 'triangle', f * 2, f * 2, at + i * 0.06, 0.12, 0.16 * vol);
-  });
+  }
 }
 
-/** A teleport trip: a dive in and a surface out. */
+/**
+ * A teleport trip: a dive in and a surface out. *
+ * @param vol - loudness; rivals are quieter than you.
+ */
 export function sfxHop(vol: number): void {
   const r = liveRig();
   if (r === null) return;
@@ -252,7 +280,11 @@ export function sfxHop(vol: number): void {
   sfxTone(r, 'sine', 400, 1400, at + 0.1, 0.16, 0.3 * vol); // surface out
 }
 
-/** TNT, sized by how much length it cost. */
+/**
+ * TNT, sized by how much length it cost. *
+ * @param lost - how much length it cost, which sizes the blast.
+ * @param vol - loudness; rivals are quieter than you.
+ */
 export function sfxTnt(lost: number, vol: number): void {
   const r = liveRig();
   if (r === null) return;
@@ -298,7 +330,10 @@ export function sfxGhostIn(): void {
   sfxTone(r, 'triangle', 255, 810, at + 0.06, 0.44, 0.1);
 }
 
-/** The fall. */
+/**
+ * The fall. *
+ * @param vol - loudness; rivals are quieter than you.
+ */
 export function sfxCrash(vol: number): void {
   const r = liveRig();
   if (r === null) return;
@@ -312,9 +347,9 @@ export function sfxFlourish(): void {
   const r = liveRig();
   if (r === null) return;
   const at = r.ctx.currentTime;
-  [523, 659, 784, 1047].forEach((f, i) => {
+  for (const [i, f] of [523, 659, 784, 1047].entries()) {
     sfxTone(r, 'square', f, f, at + i * 0.07, 0.14, 0.3);
-  });
+  }
   sfxTone(r, 'square', 1047, 1047, at + 0.28, 0.4, 0.25);
   sfxTone(r, 'square', 1319, 1319, at + 0.28, 0.4, 0.2);
 }
@@ -326,7 +361,10 @@ export function sfxTick(): void {
   sfxTone(r, 'square', 1050, 1050, r.ctx.currentTime, 0.05, 0.22);
 }
 
-/** The great escape: a doom window converted into a turn. */
+/**
+ * The great escape: a doom window converted into a turn. *
+ * @param vol - loudness; rivals are quieter than you.
+ */
 export function sfxSave(vol: number): void {
   const r = liveRig();
   if (r === null) return;
@@ -335,7 +373,10 @@ export function sfxSave(vol: number): void {
   sfxTone(r, 'triangle', 960, 2080, at + 0.03, 0.11, 0.18 * vol);
 }
 
-/** The bolt: a crack, then the drag. */
+/**
+ * The bolt: a crack, then the drag. *
+ * @param vol - loudness; rivals are quieter than you.
+ */
 export function sfxZap(vol: number): void {
   const r = liveRig();
   if (r === null) return;
@@ -419,11 +460,11 @@ function crowdFetch(r: AudioRig, path: string, then: (buf: AudioBuffer) => void)
     ctl.abort();
   }, 12000);
   void fetch(path, { signal: ctl.signal })
-    .then((res) => {
-      if (!res.ok) throw new Error('http ' + String(res.status));
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`http ${res.status}`);
       return res.arrayBuffer();
     })
-    .then((b) => r.ctx.decodeAudioData(b))
+    .then(async (b) => r.ctx.decodeAudioData(b))
     .then((buf) => {
       clearTimeout(timer);
       then(buf);
@@ -577,7 +618,7 @@ function crowdBuild(r: AudioRig): void {
   crowdVoice(r, buf, 0.82, 'lowpass', 240, 0.7, 0.65, synth);
   // two vowel-ish bands rather than one: a formant pair is what makes
   // filtered noise read as thousands of voices instead of rainfall
-  const voxA = crowdVoice(r, buf, 1.0, 'bandpass', 620, 1.2, 0.38, synth);
+  const voxA = crowdVoice(r, buf, 1, 'bandpass', 620, 1.2, 0.38, synth);
   const voxB = crowdVoice(r, buf, 0.93, 'bandpass', 1150, 1.4, 0.22, synth);
   crowdVoice(r, buf, 1.31, 'bandpass', 2600, 0.8, 0.06, synth);
   // the cheer sits beside the synth bed, not inside it: it must stay full
@@ -658,7 +699,7 @@ export function crowdSync(phase?: RoundPhase): void {
   if (bed === null) return;
   if (wanted !== null) crowdTapeLoad(r);
   bed.gain.cancelScheduledValues(r.ctx.currentTime);
-  bed.gain.setTargetAtTime(wanted !== null ? CROWD_LEVEL : 0, r.ctx.currentTime, wanted !== null ? 0.8 : 0.4);
+  bed.gain.setTargetAtTime(wanted === null ? 0 : CROWD_LEVEL, r.ctx.currentTime, wanted === null ? 0.4 : 0.8);
   if (wanted !== null) crowdArm();
   else if (crowdSurgeTimer) {
     clearTimeout(crowdSurgeTimer);

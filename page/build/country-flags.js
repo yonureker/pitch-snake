@@ -31,6 +31,11 @@
 // kept in step with the art. FLAG_CODES is that order, two characters per
 // country; a code that is not in it simply has no flag, which is the same
 // answer as before for anything unknown.
+// The secret scanner sees a long high-entropy string; it is a public
+// ISO-3166 list whose ORDER is the sprite's layout, so it cannot be broken
+// up or reordered without moving every flag. The app's copy carries the
+// same disable for the same reason.
+// eslint-disable-next-line no-secrets/no-secrets -- public ISO-3166 list, see above
 const FLAG_CODES = 'ADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW';
 const FLAG_COLS = 16, FLAG_W = 20, FLAG_H = 15;
 // Read the pairs into a map once rather than searching the string. Not a
@@ -44,7 +49,7 @@ for (let i = 0; i < FLAG_CODES.length; i += 2)
 // -1 for anything the sprite does not carry, which callers read as "no flag"
 function flagIndex(code) {
     const i = code ? FLAG_AT.get(code) : undefined;
-    return i === undefined ? -1 : i;
+    return i ?? -1;
 }
 /**
  * Paint one element as a single flag.
@@ -52,20 +57,20 @@ function flagIndex(code) {
  * Nothing is allocated per call and the sprite is one request for the whole
  * set, which is why every board and roster can afford to call this per row.
  *
- * @param el - the element to paint; it carries the `flag`
- *   class, whose CSS supplies the sprite as a background image.
+ * @param element - the element to paint; it carries the `flag` class, whose
+ *   CSS supplies the sprite as a background image.
  * @param code - an ISO-3166 alpha-2 code, uppercase.
  *   Anything the sprite does not carry hides the element instead.
  */
-export function paintFlag(el, code) {
+export function paintFlag(element, code) {
     const i = flagIndex(code);
     if (i < 0) {
-        el.style.backgroundImage = '';
-        el.hidden = true;
+        element.style.backgroundImage = '';
+        element.hidden = true;
         return;
     }
-    el.hidden = false;
-    el.style.backgroundPosition = `${-(i % FLAG_COLS) * FLAG_W}px ${-((i / FLAG_COLS) | 0) * FLAG_H}px`;
+    element.hidden = false;
+    element.style.backgroundPosition = `${-(i % FLAG_COLS) * FLAG_W}px ${-Math.trunc(i / FLAG_COLS) * FLAG_H}px`;
 }
 // The country list writes itself: probe every two-letter code against the
 // browser's own region names and keep the ones that mean somewhere, minus
@@ -96,20 +101,20 @@ export function buildCountries(select) {
     try {
         dn = new Intl.DisplayNames(['en'], { type: 'region' });
     }
-    catch (e) {
+    catch {
         return;
     }
     const opts = [];
     for (let a = 65; a <= 90; a++)
         for (let b = 65; b <= 90; b++) {
-            const code = String.fromCharCode(a, b);
+            const code = String.fromCodePoint(a, b);
             if (NOT_COUNTRIES.has(code))
                 continue;
             let label;
             try {
                 label = dn.of(code);
             }
-            catch (e) {
+            catch {
                 continue;
             }
             if (!label || label === code)
@@ -121,7 +126,7 @@ export function buildCountries(select) {
         const o = document.createElement('option');
         o.value = code;
         o.textContent = label;
-        select.appendChild(o);
+        select.append(o);
     }
 }
 //# sourceMappingURL=country-flags.js.map

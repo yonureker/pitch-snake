@@ -11,7 +11,8 @@ npm test --silent
 # its source, and the drift would be invisible: the page keeps working, just
 # not the way the source says. So rebuild and refuse the commit if anything
 # moved. Rebuilding also type-checks, which is the point of the .ts files.
-echo "pre-commit: page typescript"
+echo "pre-commit: page lint + typescript"
+npm run lint:page --silent
 npm run build:page --silent
 if ! git diff --quiet -- page/build; then
   echo

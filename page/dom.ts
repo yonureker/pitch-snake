@@ -24,9 +24,9 @@
  * @throws {Error} when no element carries that id.
  */
 export function mustGetElement(id: string): HTMLElement {
-  const el = document.getElementById(id);
-  if (el === null) throw new Error(`index.html has no element with id "${id}"`);
-  return el;
+  const element = document.getElementById(id);
+  if (element === null) throw new Error(`index.html has no element with id "${id}"`);
+  return element;
 }
 
 /**
@@ -47,9 +47,9 @@ export function mustGetElementOfKind<T extends HTMLElement>(
   id: string,
   kind: new () => T,
 ): T {
-  const el = mustGetElement(id);
-  if (!(el instanceof kind)) {
-    throw new Error(`element "${id}" is a ${el.tagName}, not a ${kind.name}`);
+  const element = mustGetElement(id);
+  if (!(element instanceof kind)) {
+    throw new TypeError(`element "${id}" is a ${element.tagName}, not a ${kind.name}`);
   }
-  return el;
+  return element;
 }
