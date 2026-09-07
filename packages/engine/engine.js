@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 22;  // 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 23;  // 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -535,7 +535,28 @@ export function createGame(cfg = {}) {
     return { x: pool[i], y: pool[i + 1] };
   }
 
+  // Survival's relief economy sleeps at the floor (v23, owner's call). In a
+  // scoreByTime round food and teleport pairs exist to TRIM a snake: no
+  // points ride on either, and every shrink floors at START_LEN. A snake
+  // already at the floor can be trimmed no further, so the board stops
+  // offering what cannot pay: food despawns and due pairs wait, and the
+  // moment TNT feeds anyone back over the floor both return. The bolt is
+  // untouched: slowing the pack is relief at any length. Point modes are
+  // untouched too: the gate is scoreByTime's alone.
+  // Effective length counts a trim already owed (negative pendingGrowth),
+  // so the eat that lands a snake ON the floor parks the board in the same
+  // quantum instead of flashing one more food for a frame. Positive growth
+  // deliberately does not count: the ball returns when the body actually
+  // stands over the floor, not when TNT merely promises it will.
+  const reliefNeeded = () =>
+    !scoreByTime || players.some(p =>
+      p.alive && p.snake.length + Math.min(0, p.pendingGrowth) > START_LEN);
+
   function placeFood() {
+    if (!reliefNeeded()) {
+      if (S.food !== null) { S.food = null; S.foodAge = 0; emit({ t: 'food' }); }
+      return;
+    }
     const c = spawnCell(0);
     if (!c) { S.foodAge = 0; return; }        // board full: keep the current food
     c.bonus = S.bonusStreak >= BONUS_EVERY;  // ringed +5 only after a full streak
@@ -1093,8 +1114,12 @@ export function createGame(cfg = {}) {
       // a used pair is finished but cannot vanish mid-body: portalBusy holds
       // it open until the tail is clear, then it snaps shut
       if ((S.portal.used || S.clockMs >= S.portalExpireAt) && !portalBusy()) closePortal(false);
+      // v23: an unused pair with nobody left to trim parks like a walled-over
+      // one: closed with its mark refunded, owed again when TNT feeds someone
+      else if (!S.portal.used && !reliefNeeded() && !portalBusy()) closePortal(true);
       return;
     }
+    if (!reliefNeeded()) return;             // v23: pairs wait for a snake worth trimming
     if (S.portalMarksSpent >= S.portalsUnlocked || S.clockMs < S.portalRetryAt) return;
     if (spawnPortal()) {
       S.portalMarksSpent++;
@@ -1156,7 +1181,7 @@ export function createGame(cfg = {}) {
     // SELF collision only, O(1): another snake's body is thin air (snakes
     // race, they never fence). The tail cell is exempt when it glides out
     // this tick; whether this tick grows decides that, so settle it first.
-    const ate = nx === S.food.x && ny === S.food.y;
+    const ate = S.food !== null && nx === S.food.x && ny === S.food.y;
     const grows = stepGrows(p, ate);
     const tail = p.snake[p.snake.length - 1];
     if (p.snakeSet.has(nk) && (grows || nk !== K(tail.x, tail.y))) return 'self';
@@ -1211,7 +1236,7 @@ export function createGame(cfg = {}) {
   // end for a pardoned doom (the drawn glide can't tell the difference).
   function commitMove(p, nx, ny, portalEnd) {
     const nk = K(nx, ny);
-    const ate = nx === S.food.x && ny === S.food.y;
+    const ate = S.food !== null && nx === S.food.x && ny === S.food.y;
     const grows = stepGrows(p, ate);
 
     // move: pop the vacated tail first so the set stays exact, then add the head
@@ -1355,10 +1380,18 @@ export function createGame(cfg = {}) {
     updateGhosts();
     updatePortals();
     updateBolt();
-    S.foodAge += SIM_DT;
-    if (S.foodAge >= FOOD_TTL) {
-      if (S.food.bonus) S.bonusStreak = 0;   // missed the bonus in time: lose the streak
-      placeFood();
+    if (S.food !== null && !reliefNeeded()) {
+      // the last trimmable segment just went: the ball leaves with it
+      S.food = null; S.foodAge = 0; emit({ t: 'food' });
+    }
+    if (S.food === null) {
+      if (reliefNeeded()) placeFood();       // relief owed again: the ball returns
+    } else {
+      S.foodAge += SIM_DT;
+      if (S.foodAge >= FOOD_TTL) {
+        if (S.food.bonus) S.bonusStreak = 0; // missed the bonus in time: lose the streak
+        placeFood();
+      }
     }
     // Every living snake advances on its own clock, in index order. They used
     // to share one, which made them cross cell boundaries together; a bolt

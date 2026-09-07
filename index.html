@@ -3526,20 +3526,24 @@
     // foodPulse advances by real time so every refresh rate shows the same speed.
     foodPulse += dt * 0.0048;
     const pulse = 1 + Math.sin(foodPulse) * 0.12;
-    const fx = g.food.x * cell + cell / 2;
-    const fy = g.food.y * cell + cell / 2;
-    // in its final moment the bonus blinks, so you know to grab it
-    const foodDim = g.food.bonus && g.foodAge > FOOD_TTL - 1500 && ((g.foodAge / 130) | 0) % 2 !== 0;
-    if (foodDim) ctx.globalAlpha = 0.28;
-    if (g.food.bonus) {
-      const ringR = cell * 0.5 * pulse;
-      ctx.strokeStyle = getCss('--gold-bright');
-      ctx.lineWidth = Math.max(2, cell * 0.08);
-      ctx.beginPath(); ctx.arc(fx, fy, ringR, 0, Math.PI * 2); ctx.stroke();
+    // v23: a survival board at the floor holds no food; the pulse clock
+    // still ticks so the ball returns mid-beat, not with a hiccup
+    if (g.food) {
+      const fx = g.food.x * cell + cell / 2;
+      const fy = g.food.y * cell + cell / 2;
+      // in its final moment the bonus blinks, so you know to grab it
+      const foodDim = g.food.bonus && g.foodAge > FOOD_TTL - 1500 && ((g.foodAge / 130) | 0) % 2 !== 0;
+      if (foodDim) ctx.globalAlpha = 0.28;
+      if (g.food.bonus) {
+        const ringR = cell * 0.5 * pulse;
+        ctx.strokeStyle = getCss('--gold-bright');
+        ctx.lineWidth = Math.max(2, cell * 0.08);
+        ctx.beginPath(); ctx.arc(fx, fy, ringR, 0, Math.PI * 2); ctx.stroke();
+      }
+      const fd = Math.round(foodS * pulse);
+      ctx.drawImage(foodSpriteCanvas, Math.round(fx - fd / 2), Math.round(fy + cell * 0.02 - fd / 2), fd, fd);
+      if (foodDim) ctx.globalAlpha = 1;
     }
-    const fd = Math.round(foodS * pulse);
-    ctx.drawImage(foodSpriteCanvas, Math.round(fx - fd / 2), Math.round(fy + cell * 0.02 - fd / 2), fd, fd);
-    if (foodDim) ctx.globalAlpha = 1;
 
     drawBolt();
     drawBombs();

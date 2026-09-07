@@ -161,7 +161,8 @@ export interface Game {
   headFrom: Cell; headMajX: number; headMajY: number;
   score: number; pendingGrowth: number;
   doom: Doom | null;
-  food: Food; foodAge: number;
+  /** null while survival's relief sleeps at the floor (v23) */
+  food: Food | null; foodAge: number;
   /** Regular items eaten since the last ringed bonus; resets on one, or on missing one. */
   bonusStreak: number;
   /** Items eaten by anyone this round; every BOLT_EVERY of them drops a bolt. */

@@ -1423,6 +1423,47 @@ test('survival: seconds are the score, and nothing else may touch it', () => {
   assert.equal(g.score, 5, 'only the clock moves it');
 });
 
+test('survival: the relief economy sleeps at the floor (v23)', () => {
+  // At START_LEN nothing can be trimmed, so food despawns and stays away;
+  // TNT feeds five, and the ball is back the moment the snake stands over
+  // the floor again. The clock ladders are untouched.
+  const g = quietGame({ scoreByTime: true, eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5 });
+  foodFar(g);
+  setSnake(g, [[5, 5], [4, 5], [3, 5], [2, 5]], 1, 0);
+  eatOne(g);                                    // 4 -> 3: the floor
+  assert.equal(g.snake.length, START_LEN, 'at the floor');
+  g.advance(SIM_DT);                            // the board notices next quantum
+  assert.equal(g.food, null, 'and the board holds no food');
+  g.advance(400);
+  assert.equal(g.food, null, 'none returns while the floor holds');
+  g.bombs.push({ x: g.snake[0].x + g.dir.x, y: g.snake[0].y + g.dir.y });
+  g.bombPhase = 'active'; g.bombExpireAt = 1e12;
+  g._step();                                    // eats the TNT: five owed
+  g.advance(800);                               // growth delivers step by step
+  assert.ok(g.snake.length > START_LEN, 'TNT fed the snake over the floor');
+  assert.notEqual(g.food, null, 'and the ball is back');
+});
+
+test('survival: an unused pair parks at the floor with its mark refunded (v23)', () => {
+  const g = quietGame({ scoreByTime: true, eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5 });
+  foodFar(g);
+  setSnake(g, [[7, 5], [6, 5], [5, 5], [4, 5]], 1, 0);
+  g.portal = { ax: 2, ay: 15, bx: 15, by: 15, used: false };
+  g.portalsUnlocked = 1; g.portalMarksSpent = 1;
+  g.portalExpireAt = 1e12;                      // a real spawn always sets one
+  eatOne(g);                                    // to the floor
+  g.advance(SIM_DT);                            // the board notices next quantum
+  assert.equal(g.portal, null, 'the pair closed: nobody left to trim');
+  assert.equal(g.portalMarksSpent, 0, 'and its mark was refunded, the wall rule');
+  g.advance(400);
+  assert.equal(g.portal, null, 'no pair returns while the floor holds');
+  g.bombs.push({ x: g.snake[0].x + g.dir.x, y: g.snake[0].y + g.dir.y });
+  g.bombPhase = 'active'; g.bombExpireAt = 1e12;
+  g._step();                                    // TNT: relief owed again
+  g.advance(3500);                              // past the refund's 2s retry
+  assert.notEqual(g.portal, null, 'the refunded pair respawns once someone is worth trimming');
+});
+
 test('survival: a teleport trip is free travel when the clock is the score', () => {
   const g = quietGame({ scoreByTime: true });
   foodFar(g);

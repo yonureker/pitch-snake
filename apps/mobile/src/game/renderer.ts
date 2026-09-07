@@ -775,31 +775,34 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
 
   // food: atlas sprite with the pulse; gold ring on a bonus
   const pulse = 1 + Math.sin(rc.pulseMs * 0.0048) * 0.12;
+  // a survival board at the floor holds no food (engine v23): skip the draw
   const food = game.food;
-  const fx = food.x * cell + cell / 2;
-  const fy = food.y * cell + cell / 2;
-  const foodDim = food.bonus && game.foodAge > FOOD_TTL - 1500 && ((game.foodAge / 130) | 0) % 2 !== 0;
-  const foodAlpha = foodDim ? 0.28 : 1;
-  if (food.bonus) {
-    strokePaint.setColor(C.goldBright);
-    strokePaint.setStrokeWidth(Math.max(2, cell * 0.08));
-    strokePaint.setAlphaf(foodAlpha);
-    canvas.drawCircle(fx, fy, cell * 0.5 * pulse, strokePaint);
-    strokePaint.setAlphaf(1);
-  }
-  if (rc.atlas !== null) {
-    const kind = food.kind + (food.bonus ? BONUS_KIND_OFFSET : 0);
-    const sx = (kind % ATLAS_COLS) * ATLAS_CELL;
-    const sy = ((kind / ATLAS_COLS) | 0) * ATLAS_CELL;
-    const d = cell * 1.02 * pulse;
-    fillPaint.setAlphaf(foodAlpha);
-    canvas.drawImageRect(
-      rc.atlas,
-      Skia.XYWHRect(sx, sy, ATLAS_CELL, ATLAS_CELL),
-      Skia.XYWHRect(fx - d / 2, fy - d / 2, d, d),
-      fillPaint,
-    );
-    fillPaint.setAlphaf(1);
+  if (food !== null) {
+    const fx = food.x * cell + cell / 2;
+    const fy = food.y * cell + cell / 2;
+    const foodDim = food.bonus && game.foodAge > FOOD_TTL - 1500 && ((game.foodAge / 130) | 0) % 2 !== 0;
+    const foodAlpha = foodDim ? 0.28 : 1;
+    if (food.bonus) {
+      strokePaint.setColor(C.goldBright);
+      strokePaint.setStrokeWidth(Math.max(2, cell * 0.08));
+      strokePaint.setAlphaf(foodAlpha);
+      canvas.drawCircle(fx, fy, cell * 0.5 * pulse, strokePaint);
+      strokePaint.setAlphaf(1);
+    }
+    if (rc.atlas !== null) {
+      const kind = food.kind + (food.bonus ? BONUS_KIND_OFFSET : 0);
+      const sx = (kind % ATLAS_COLS) * ATLAS_CELL;
+      const sy = ((kind / ATLAS_COLS) | 0) * ATLAS_CELL;
+      const d = cell * 1.02 * pulse;
+      fillPaint.setAlphaf(foodAlpha);
+      canvas.drawImageRect(
+        rc.atlas,
+        Skia.XYWHRect(sx, sy, ATLAS_CELL, ATLAS_CELL),
+        Skia.XYWHRect(fx - d / 2, fy - d / 2, d, d),
+        fillPaint,
+      );
+      fillPaint.setAlphaf(1);
+    }
   }
 
   // The bolt, baked in pitch-art with its halo: bake-time work, so the
