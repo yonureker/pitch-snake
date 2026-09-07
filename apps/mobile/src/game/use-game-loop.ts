@@ -66,6 +66,12 @@ export interface GameLoop {
   ) => void;
   /** The session says the round ended (or desynced): show FULL TIME. */
   endVersus: () => void;
+  /** Concede the round: the seat stops steering and the snake runs out. */
+  forfeit: () => void;
+  /** Whether this seat has conceded the round it is in. */
+  forfeited: boolean;
+  /** In a room: whether MY snake is still running. Solo rounds read true. */
+  mySeatAlive: boolean;
   /** Out of the room, back to a solo ready screen. */
   leaveVersus: () => void;
   /** 3, 2, 1 or START! while counting down, empty otherwise. */
@@ -148,6 +154,9 @@ interface LoopBox {
   /** A room's round: the session drives the sim and myIdx is my seat. */
   session: NetSession | null;
   vsIdx: number;
+  /** conceded this round: the seat sends nothing more (see forfeit) */
+  forfeited: boolean;
+  lastMineAlive: boolean;
   vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] } | null;
   lastScore: number;
   lastCount: string;
@@ -188,6 +197,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     boardPx: 1,
     worn: { skin: null, hat: null },
     session: null,
+    forfeited: false,
+    lastMineAlive: true,
     vsIdx: -1,
     vsRc: null,
     lastScore: -1,
@@ -196,6 +207,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const picture = useSharedValue<SkPicture>(makeEmptyPicture());
 
   const [phase, setPhase] = useState<RoundPhase>('ready');
+  // mirrored into state because the render reads it; the ref is the truth the
+  // frame loop consults (refs are not readable during render)
+  const [forfeited, setForfeited] = useState(false);
+  const [mySeatAlive, setMySeatAlive] = useState(true);
   // whether the round in play carries a ticket, as state so the entry form
   // can gate on it without reading refs mid-render
   const [canSubmit, setCanSubmit] = useState(false);
@@ -341,6 +356,15 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         else g.advance(dt);
         handleEvents(g, g.drainEvents(), cellPx);
         const myScore = box.vsIdx >= 0 ? (g.players[box.vsIdx]?.score ?? 0) : g.score;
+        // FORFEIT retires the moment my own seat goes down, so the actions
+        // follow the round rather than waiting for a phase change
+        if (box.vsIdx >= 0) {
+          const alive = g.players[box.vsIdx]?.alive ?? false;
+          if (alive !== box.lastMineAlive) {
+            box.lastMineAlive = alive;
+            setMySeatAlive(alive);
+          }
+        }
         if (myScore !== box.lastScore) {
           box.lastScore = myScore;
           setScore(myScore);
@@ -442,6 +466,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     const g = game.current;
     if (g === null) return;
     if (box.session !== null) {
+      // a conceded seat sends nothing more, which is exactly what a dropped
+      // peer does: the snake runs on its last heading and crashes on its own,
+      // every peer sees the identical round, and the rating is whatever the
+      // placing was worth (see supabase/RATING_RULES.md)
+      if (box.forfeited) return;
       // the session stamps the true press time, broadcasts it, and feeds
       // the shared timeline (the web's dirInput, netcode edition)
       box.session.localDir(x, y, nowMs());
@@ -520,6 +549,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     g.drainEvents();
     box.session = session;
     box.vsIdx = myIdx;
+    box.forfeited = false; // a new round is a new chance to play it
+    setForfeited(false);
+    box.lastMineAlive = true;
+    setMySeatAlive(true);
     box.vsRc = vsRc;
     roundTicket.current = null;
     setCanSubmit(false);
@@ -537,6 +570,16 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   };
 
   // full time (or a desync): the session said the round is over
+  // Concede the ROUND, keeping the seat. Mechanically this is the disconnect
+  // the ladder already rates: stop sending inputs and the snake crashes on
+  // its own, identically on every peer, so the log still corroborates.
+  const forfeit = (): void => {
+    const box = boxRef.current;
+    if (box.session === null || box.forfeited) return;
+    box.forfeited = true;
+    setForfeited(true);
+  };
+
   const endVersus = (): void => {
     const box = boxRef.current;
     if (box.vsIdx < 0) return;
@@ -598,6 +641,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setWorn,
     startVersus,
     endVersus,
+    forfeit,
+    forfeited,
+    mySeatAlive,
     leaveVersus,
     score,
     best,

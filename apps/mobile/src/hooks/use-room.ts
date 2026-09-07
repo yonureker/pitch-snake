@@ -31,6 +31,7 @@ import {
   roomStart,
   roomTouch,
   takeSeat,
+  fetchRoundRatings,
 } from '@/lib/rooms';
 
 /** One person at the table, as presence describes them. */
@@ -51,6 +52,13 @@ export interface StandingRow {
   score: number;
   me: boolean;
   wins: number;
+  /** the seat this row is, so a sealed rating can find it again */
+  seat: number;
+  /** the ladder, once the round seals: null until then, and for ever if the
+   *  round is not a rated one (a code room, or nobody corroborated it) */
+  rating: number | null;
+  delta: number | null;
+  provisional: boolean;
 }
 
 interface RoomBox {
@@ -247,7 +255,17 @@ export function useRoom(
       const tied = prev?.score === row.score && prev.diedAt === row.diedAt;
       const place = tied ? (out[i - 1]?.place ?? i + 1) : i + 1;
       const name = r.roster[row.seat]?.name ?? '?';
-      out.push({ place, name, score: row.score, me: row.seat === r.myIdx, wins: 0 });
+      out.push({
+        place,
+        name,
+        score: row.score,
+        me: row.seat === r.myIdx,
+        wins: 0,
+        seat: row.seat,
+        rating: null,
+        delta: null,
+        provisional: false,
+      });
     }
     // the round goes on the series before anything renders; every client
     // credits the same winner, so the tallies agree without a word
@@ -260,7 +278,42 @@ export function useRoom(
     setStandings(out);
     setOver(true);
     reportRoomRound(r.code, r.startN, g.log);
+    void pollRatings(r, r.code, r.startN);
     loopRef.current.endVersus();
+  };
+
+  // The ladder lands a moment after the whistle: sealing waits, because the
+  // server cannot know a submission is the last one. So this polls, takes the
+  // first non-empty answer, and paints it BESIDE the series trophy rather
+  // than over it, exactly as the page does. A round that is never rated (a
+  // code room, or one nobody corroborated) simply never answers, and the
+  // standings keep the trophy alone.
+  const pollRatings = async (r: RoomBox, code: string, startN: number): Promise<void> => {
+    for (let tries = 0; tries < 6; tries++) {
+      await new Promise((res) => setTimeout(res, tries === 0 ? 800 : 1500));
+      // the room moved on: a rematch, a new room, or the panel left
+      if (box.current !== r || !r.over || r.startN !== startN) return;
+      let rows;
+      try {
+        rows = await fetchRoundRatings(code, startN);
+      } catch {
+        return;
+      }
+      if (rows.length === 0) continue;
+      // the round moved on during the await. `over` is not re-tested here:
+      // the guard above narrowed it, and a rematch changes startN anyway
+      if (box.current !== r || r.startN !== startN) return;
+      const bySeat = new Map(rows.map((row) => [row.seat, row]));
+      setStandings((prev) =>
+        prev.map((row) => {
+          const hit = bySeat.get(row.seat);
+          return hit === undefined ? row : (
+              { ...row, rating: hit.rating, delta: hit.delta, provisional: hit.provisional }
+            );
+        }),
+      );
+      return;
+    }
   };
 
   const begin = (r: RoomBox, m: Record<string, unknown>): void => {

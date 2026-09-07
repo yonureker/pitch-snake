@@ -122,8 +122,24 @@ export function RoomPanel({ room, phase, initialName, onBack }: RoomPanelProps) 
               <Text style={[styles.nm, row.me && styles.mine]}>{row.name}</Text>
               <Text style={[styles.sc, row.me && styles.mine]}>{row.score}</Text>
               <Text style={styles.vw}>
-                {'\u{1F3C6}'} {row.wins}
+                {'\u{1F3C6}'}
+                {row.wins}
               </Text>
+              {/* the ladder beside the series, never instead of it: the
+                  trophy is this room's tally, the rating is the ladder */}
+              {row.rating !== null && (
+                <Text style={styles.rt}>
+                  {row.rating}
+                  {row.provisional ?
+                    <Text style={styles.prov}>P</Text>
+                  : null}
+                  <Text style={row.delta !== null && row.delta >= 0 ? styles.up : styles.down}>
+                    {' '}
+                    {row.delta !== null && row.delta >= 0 ? '+' : ''}
+                    {row.delta}
+                  </Text>
+                </Text>
+              )}
             </View>
           ))}
         </View>
@@ -251,7 +267,19 @@ const styles = StyleSheet.create({
   rk: { width: 18, textAlign: 'center', fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold },
   nm: { flex: 1, fontFamily: BARLOW_BOLD, fontSize: 13, letterSpacing: 1, color: '#e9e0cd' },
   sc: { fontFamily: ANTON, fontSize: 13, color: '#e9e0cd' },
-  vw: { fontFamily: BARLOW_BOLD, fontSize: 11, color: GameColors.goldBright },
+  vw: {
+    fontFamily: BARLOW_BOLD,
+    fontSize: 11,
+    color: GameColors.goldBright,
+    minWidth: 28,
+    textAlign: 'right',
+  },
+  // the ladder: the number, a chess P while it has fewer than ten rounds
+  // behind it, and the move this round made
+  rt: { fontFamily: BARLOW_BOLD, fontSize: 10, color: '#b7ac93', minWidth: 62, textAlign: 'right' },
+  prov: { fontSize: 8, color: GameColors.ink, backgroundColor: GameColors.gold },
+  up: { color: '#6fbf73' },
+  down: { color: GameColors.food },
   mine: { color: GameColors.goldBright },
   btnRow: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', justifyContent: 'center' },
 });

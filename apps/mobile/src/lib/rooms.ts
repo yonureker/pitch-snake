@@ -19,6 +19,55 @@ import { rpc } from './leaderboard';
 import { SUPABASE_ANON_KEY, SUPABASE_CONFIGURED, SUPABASE_URL } from './supabase-config';
 
 /** The fewest snakes a round seats. */
+/**
+ * The ratings a sealed round moved, per seat. Sealing runs on a delay (the
+ * server has no way to know a submission is the last one), so a caller polls
+ * this and takes the first answer that is not empty. An unsealed or unrated
+ * round answers with nothing at all, which is not an error: a code room, a
+ * round nobody corroborated and a round still settling look the same here,
+ * and the standings simply carry no rating line.
+ */
+/** One seat's ladder line from a sealed round. */
+export interface RoundRating {
+  seat: number;
+  delta: number;
+  rating: number;
+  provisional: boolean;
+}
+
+/** A guard rather than a cast: the rows come off the wire as unknown. */
+function isRoundRating(v: unknown): v is RoundRating {
+  if (typeof v !== 'object' || v === null) return false;
+  const r: Record<string, unknown> = { ...v };
+  return typeof r.seat === 'number' && typeof r.rating === 'number' && typeof r.delta === 'number';
+}
+
+/**
+ * The ratings a sealed round moved, per seat.
+ *
+ * @param code - the room code the round was played in.
+ * @param startN - which round of that room.
+ * @returns one line per rated seat, or nothing at all when the round is not
+ *   sealed yet and when it is never going to be rated (a code room, or one
+ *   nobody corroborated). The caller polls and paints the first real answer.
+ */
+export async function fetchRoundRatings(code: string, startN: number): Promise<RoundRating[]> {
+  const rows = await rpc('pitch_snake_round_ratings', { p_code: code, p_start_n: startN });
+  if (!Array.isArray(rows)) return [];
+  const out: RoundRating[] = [];
+  for (const raw of rows) {
+    if (!isRoundRating(raw)) continue;
+    out.push({
+      seat: raw.seat,
+      delta: raw.delta,
+      rating: raw.rating,
+      provisional: raw.provisional,
+    });
+  }
+  return out;
+}
+
+/** The fewest snakes a round seats. */
 export const VS_MIN = 2;
 /** The most snakes a round seats. */
 export const VS_MAX = 5;

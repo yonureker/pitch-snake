@@ -204,6 +204,9 @@ export default function Index() {
   const loopSetWorn = loop.setWorn;
   const wallet = useWallet();
   const crowd = useCrowd(loop.phase);
+  // conceding arms on the first tap, like the page's exit: giving up a round
+  // is not something a stray thumb should be able to do
+  const [giveArmed, setGiveArmed] = useState(false);
   const { crowdOn, setCrowdOn } = crowd;
   const room = useRoom(loop, { skin: wallet.data?.skin ?? null, hat: wallet.data?.hat ?? null }, boardPx);
   // the stand's verdict fires once when a room reaches full time: the roar
@@ -455,6 +458,41 @@ export default function Index() {
             {wallet.data.coins} {'\u00b7'} SHOP
           </Text>
         </Pressable>
+      )}
+      {/* The room's mid-round actions, on the same rule the page uses: while
+          your seat is alive the only way out of a live round is to concede
+          it (there is no stray LEAVE to press, because walking out of a round
+          IS conceding it), and once you are out, crashed or conceded, LEAVE
+          is all that is left. Both cost the same on the ladder as playing the
+          round out badly; see supabase/RATING_RULES.md. */}
+      {room.status === 'lobby' && !room.over && (loop.phase === 'playing' || loop.phase === 'countdown') && (
+        <View style={styles.vsActions}>
+          {loop.mySeatAlive && !loop.forfeited ?
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                if (giveArmed) {
+                  loop.forfeit();
+                  setGiveArmed(false);
+                } else {
+                  setGiveArmed(true);
+                  setTimeout(() => {
+                    setGiveArmed(false);
+                  }, 2600);
+                }
+              }}
+              style={[styles.vsAction, giveArmed && styles.vsActionArmed]}
+            >
+              <Text style={[styles.vsActionText, giveArmed && styles.vsActionTextArmed]}>
+                {giveArmed ? 'GIVE UP?' : 'FORFEIT'}
+              </Text>
+            </Pressable>
+          : <Pressable accessibilityRole="button" onPress={room.leave} style={styles.vsAction}>
+              <Text style={styles.vsActionText}>{'\u2715'} LEAVE</Text>
+            </Pressable>
+          }
+          {loop.forfeited && <Text style={styles.vsNote}>FORFEITED</Text>}
+        </View>
       )}
       <View style={styles.boardWrap}>
         <View style={[styles.boardFrame, frameSize]}>
@@ -994,6 +1032,26 @@ const styles = StyleSheet.create({
   scoreValue: { fontFamily: ANTON, fontSize: 30, color: GameColors.ink, lineHeight: 32 },
   bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   boardWrap: { alignItems: 'center' },
+  vsActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  vsAction: {
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(244,236,216,0.35)',
+    backgroundColor: 'rgba(20,17,13,0.55)',
+  },
+  vsActionArmed: { backgroundColor: GameColors.food, borderColor: GameColors.food },
+  vsActionText: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 1.2, color: '#e9e0cd' },
+  vsActionTextArmed: { color: '#ffffff' },
+  vsNote: { fontFamily: BARLOW_BOLD, fontSize: 10, letterSpacing: 1.4, color: GameColors.goldBright },
   perf: {
     position: 'absolute',
     top: 2,
