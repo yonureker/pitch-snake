@@ -53,14 +53,19 @@ export const SNAP_SPARSE = 32;
 export const SNAP_DENSE_Q = 128;     // how far back the dense grid is kept
 export const SNAP_HORIZON_Q = 3072;  // total rollback reach in quanta (~30s), as before
 export const STALL_AT = 250;      // quanta a live peer may lag before we hold the sim
-// How long the wire may stay SILENT before we beat. Not "how often we beat":
-// a beat carries three things, and an input already carries two of them, since
-// acceptInput reads a peer's clock off msg.q and its seq high-water off msg.s,
-// and any message at all refreshes lastHeard. So a player who is turning is
-// already announcing themselves, and a second beat on top is duplicated
-// postage. Measured over a five-player minute of real play, beats were 585 of
-// 772 messages: 76% of everything on the wire, on a service that bills by the
-// message and fans each one out to every peer in the room.
+// Heartbeat cadence. Measured over a five-player minute of real play, beats
+// were 585 of 772 messages: 76% of everything on the wire, on a service that
+// bills per message and fans each one out to every peer in the room. So this
+// was 500 and is now 1000, which halves the room's standing cost.
+//
+// It is a flat metronome on purpose. Skipping the beat whenever an input had
+// just gone out looks free, because an input already carries our clock and our
+// seq high-water, and it cut traffic much further. It was tried and reverted:
+// under sustained loss the inputs are precisely what is NOT arriving, and the
+// beat is the backstop that still tells a peer our seq so it can ask for what
+// it missed. Starving it turned a 40% loss burst from "repairs" into a hash
+// desync, which the suite catches. Halving the rate is the half of the saving
+// that costs no resilience.
 export const BEAT_MS = 1000;
 // A LIVE peer's fresh silence holds the room (their inputs may be in
 // flight); silence older than this is a vanished client, and the room plays
