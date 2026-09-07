@@ -404,7 +404,18 @@
   // into a fresh browser: a visitor who already has bests on the new origin
   // keeps them, and the stale import is dropped rather than merged.
   const MIG_OLD_HOST = 'yonureker.github.io';
+  const MIG_OLD_ORIGIN = 'https://yonureker.github.io';
   const MIG_NEW_HOME = 'https://pitchsnake.com/';
+  // `snakeAuth` is the anonymous SESSION, and it is the one key in the bag
+  // that is worth stealing: whoever holds it owns the account, its coins and
+  // its rating. A #mig= link is not evidence of anything, because anybody can
+  // send one. Planting a session that way is textbook session fixation: the
+  // victim plays on the attacker's account, and if they later attach their
+  // email in the profile sheet the attacker keeps a live refresh token for an
+  // account that now carries the victim's address. The empty-storage test
+  // below never guarded against that; it answers "has this browser moved
+  // yet", which is a different question entirely.
+  const MIG_ONLY_FROM_OLD_HOME = new Set(['snakeAuth']);
   (() => {
     try {
       if (location.hash.startsWith('#mig=')) {
@@ -416,11 +427,23 @@
         history.replaceState(null, '', location.pathname + location.search);
         b64 += '='.repeat((4 - (b64.length % 4)) % 4);
         const payload = JSON.parse(atob(b64));
+        // The exporter hands over by NAVIGATING here, so a genuine move
+        // always carries the old origin as its referrer; the default
+        // cross-origin policy trims it to the bare origin, which is all this
+        // asks for. A framed copy of this page is never a move either, so the
+        // top-frame test stands beside it: an attacker who cannot navigate
+        // the victim can still embed us and let the importer run same-origin.
+        let fromOldHome = false;
+        try { fromOldHome = new URL(document.referrer).origin === MIG_OLD_ORIGIN; } catch (e) {}
+        fromOldHome = fromOldHome && window === window.top;
         if (payload && typeof payload === 'object' && !localStorage.getItem('snakeBestModes')) {
           for (const [k, v] of Object.entries(payload)) {
-            if (typeof k === 'string' && k.startsWith('snake') && typeof v === 'string') {
-              localStorage.setItem(k, v);
-            }
+            if (typeof k !== 'string' || !k.startsWith('snake') || typeof v !== 'string') continue;
+            // Bests, level progress and preferences ride in regardless: they
+            // are worth nothing to an attacker, and a browser that strips
+            // referrers must not lose them. Only the session waits for proof.
+            if (MIG_ONLY_FROM_OLD_HOME.has(k) && !fromOldHome) continue;
+            localStorage.setItem(k, v);
           }
         }
       }
@@ -633,6 +656,7 @@
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
   import { initGamepads, pollGamepads, rehomeFocus } from './page/build/gamepad.js';
+  import { initErrorReporting, reportIssue } from './page/build/error-reporting.js';
   import {
     audioHook, audioWake, crowdPulse, crowdSync, crowdVerdict,
     isCrowdOn, isPageSoundOn, setCrowdOn, setPageSound,
@@ -2062,7 +2086,28 @@
     }
   }
 
+  // The frame. Everything in it runs inside a try whose FINALLY re-schedules
+  // the next one, and that is not tidiness: requestAnimationFrame(loop) used to
+  // be the last statement, so anything above it that threw escaped the callback
+  // and the next frame was never asked for. One unlucky exception, in draw or a
+  // sync or the session, stopped the game dead: a frozen board, no error on
+  // screen, nothing sent anywhere, and no way back but a manual reload. A
+  // transient fault should cost a frame, not the session.
+  //
+  // The pair to this is the budget in error-reporting: a loop that survives a
+  // throw repeats it at the refresh rate, so the reporter has to refuse to send
+  // the same thing sixty times a second.
   function loop(now) {
+    try {
+      frame(now);
+    } catch (e) {
+      reportIssue('frame-threw', { message: String((e && e.message) || e) });
+    } finally {
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function frame(now) {
     const t0 = showFps ? performance.now() : 0;
     if (resizeQueued) { resizeQueued = false; resize(); markOverflow(); }
     if (!lastTick) lastTick = now;
@@ -2103,7 +2148,6 @@
         fpsCount = 0; fpsWork = 0; fpsSince = now;
       }
     }
-    requestAnimationFrame(loop);
   }
 
   // ---- standings ----
@@ -3120,6 +3164,15 @@
   // the prototype tier, and codes are the only door.
   const VS_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const VS_MIN = 2, VS_MAX = 5;
+  // The kickoff counter's ceiling. A client that joins a long-lived room
+  // legitimately inherits whatever the server's counter has reached, so this
+  // cannot be tight; it only has to stop a forged kickoff parking vs.startN
+  // somewhere no honest counter can ever climb past, which would leave the
+  // room reading every real start as an echo of an older one.
+  const VS_MAX_START_N = 100000;
+  // A room seats five, and a family evening rotating through it will not name
+  // many more than that. Generous, and still a ceiling.
+  const VS_MAX_WIN_KEYS = 64;
   const mpHud = document.getElementById('mpHud');
   const mpNotes = document.getElementById('mpNotes');
   const buildNote = document.getElementById('buildNote');
@@ -3581,9 +3634,17 @@
   function vsPersistWins() {
     try { localStorage.setItem('snakeVsWins.' + vs.code, JSON.stringify(vs.wins)); } catch (e) {}
   }
+  // The series tally rides in on the kickoff, which means it arrives from the
+  // same open channel the kickoff does. Values were already coerced, so the
+  // worst a forged one could do was inflate somebody's win count; the KEYS
+  // were not, and they become localStorage under snakeVsWins.<code>, so an
+  // unbounded roll of them is a way to fill a stranger's disk quota from
+  // across the internet. Names are washed to five characters everywhere else
+  // in this room, so anything longer was never a player here.
   function vsMergeWins(incoming) {
     if (!incoming || typeof incoming !== 'object') return;
-    for (const k of Object.keys(incoming)) {
+    for (const k of Object.keys(incoming).slice(0, VS_MAX_WIN_KEYS)) {
+      if (!/^[A-Z0-9]{1,5}$/.test(k)) continue;
       const n = parseInt(incoming[k], 10) || 0;
       if (n > (vs.wins[k] | 0)) vs.wins[k] = n;
     }
@@ -3654,9 +3715,32 @@
     refreshModeUI();
   }
 
+  // A kickoff off the wire is a STRANGER'S WORD until every field has been
+  // read. The room topic is open to anyone holding the publishable key, which
+  // is public by design, and pitch_snake_room_quickmatch hands live room codes
+  // to any caller that asks, so "it arrived on our channel" proves nothing
+  // about who sent it. This used to check the counter and nothing else, and
+  // then handed the whole message to vsBegin, which spread m.roster.length
+  // straight into createGame: a remote "start a two-hundred-snake round in
+  // someone else's room" button, and a remote crash for every tab in it, since
+  // a roster that was not an array threw out of the broadcast handler. It also
+  // took m.n on trust, so a single message carrying a huge counter left the
+  // room permanently unable to kick off again, every later start reading as an
+  // echo. None of this makes a forged kickoff impossible; it makes one no more
+  // dangerous than a real one, which is as far as an open channel can go.
   function vsLobbyMsg(m) {
-    if (!m || m.t !== 'start' || typeof m.n !== 'number') return;
-    if (m.n <= vs.startN) return;                  // an echo of an old kickoff
+    if (!m || m.t !== 'start') return;
+    // A counter, not a number: NaN and Infinity both walk past a typeof test,
+    // and the cap is what keeps a wild one from wedging the room for good.
+    if (!Number.isInteger(m.n) || m.n <= vs.startN || m.n > VS_MAX_START_N) return;
+    if (typeof m.seed !== 'number' || !Number.isFinite(m.seed)) return;
+    // The roster decides how many snakes the engine builds, so it is checked
+    // to the same shape pitch_snake_room_start would have washed it into.
+    if (!Array.isArray(m.roster) || m.roster.length < VS_MIN || m.roster.length > VS_MAX) return;
+    for (const seat of m.roster) {
+      if (!seat || typeof seat.ref !== 'string' || seat.ref.length > 16) return;
+      if (typeof seat.name !== 'string' || seat.name.length > 5) return;
+    }
     vs.startN = m.n;
     vsBegin(m);
   }
@@ -3952,6 +4036,12 @@
 
   function vsDesync(why) {
     reportNet('desync', { reason: why });   // read the stats before dropping the session
+    // The same fact, told twice on purpose: pitch_snake_net_events is the
+    // per-room record that answers "is this one bad room or the whole system",
+    // and this is the alert that says a room died at all. Realtime's signature
+    // failure is silence, sockets fine and frames simply never arriving, so a
+    // rise here is the earliest sign the transport has stopped delivering.
+    reportIssue('versus-desync', { reason: String(why || 'unknown') });
     vs.session = null;
     vs.game = null;
     vs.over = true;
@@ -4811,6 +4901,45 @@
 
   // the preview answers the moment you change the choice, not on save
   profCountry.addEventListener('change', () => { paintFlag(profFlag, cc(profCountry.value)); });
+
+  // Find a free name close to the one the player wanted.
+  //
+  // A name is five characters, and the ones people actually reach for are a
+  // tiny corner of that space: first names and club names, which is precisely
+  // where several thousand players will pile up on each other. The old answer
+  // was "That name is taken. Pick another." on a sheet that shows nothing about
+  // what IS free, so the player guesses blind against a namespace they cannot
+  // see and the second guess collides about as readily as the first. A dead end
+  // at the exact moment somebody is trying to join in.
+  //
+  // (The table is still mostly empty, so this is a fix landing ahead of the
+  // problem rather than after it. Worth saying, since it is invisible until the
+  // day it is not: on an empty namespace this branch never runs at all.)
+  //
+  // Candidates are probed IN PARALLEL, which is the difference between this
+  // costing one round trip and costing six: name_taken is a cheap indexed
+  // read, and asking six times at once is one wait. The order of preference
+  // survives the parallelism because the answers are zipped back onto the
+  // candidate list rather than raced.
+  async function freeNameNear(name) {
+    const base = name.length >= 5 ? name.slice(0, 4) : name;
+    const digits = ['2', '3', '4', '5', '6', '7', '8', '9', '0', '1'];
+    // Shuffled so two players colliding on the same name at the same moment
+    // are not both handed the same alternative and sent round again.
+    for (let i = digits.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      const t = digits[i]; digits[i] = digits[j]; digits[j] = t;
+    }
+    const tries = digits.slice(0, 6).map(d => base + d);
+    try {
+      const taken = await Promise.all(
+        tries.map(n => supabaseRpc('pitch_snake_name_taken', { p_name: n }).catch(() => true))
+      );
+      for (let i = 0; i < tries.length; i++) if (taken[i] === false) return tries[i];
+    } catch (e) { /* fall through: the plain refusal is still a true answer */ }
+    return null;
+  }
+
   profSaveBtn.addEventListener('click', async () => {
     const name = (profName.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
     if (!name) { profSay('Pick a name first.'); return; }
@@ -4834,9 +4963,21 @@
         // the unique-name refusal arrives as the RPC's own message; anything
         // else is the network having a day
         const words = String((e && e.message) || '');
-        profSay(words.toLowerCase().includes('taken')
-          ? 'That name is taken. Pick another.'
-          : 'Could not reach your account. The name is kept on this device.');
+        if (words.toLowerCase().includes('taken')) {
+          profSay('That name is taken. Looking for a free one…', true);
+          const free = await freeNameNear(name);
+          if (free) {
+            // Put it in the field rather than saving it: a name is the one
+            // thing here a player chose, and taking one they never typed is
+            // worse than the dead end this replaces. One more press commits it.
+            profName.value = free;
+            profSay(name + ' is taken. ' + free + ' is free, or type your own.');
+          } else {
+            profSay('That name is taken, and so is everything near it. Try another.');
+          }
+        } else {
+          profSay('Could not reach your account. The name is kept on this device.');
+        }
       }
       profSaveBtn.disabled = false;
     } else {
@@ -4989,6 +5130,9 @@
   refreshSettingsUI();
   loadPersonalBest();
   refreshModeUI();
+  // Inert until a DSN is set in page/error-reporting.ts, and incapable of
+  // failing loudly either way: the game plays identically if it never loads.
+  initErrorReporting();
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
