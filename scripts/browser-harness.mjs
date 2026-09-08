@@ -31,7 +31,17 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 9412;
+
+// Chrome picks the debug port, and we read back the one it chose.
+//
+// This used to be a fixed 9412, which is fine for one browser and a trap for
+// a run that opens several in a row. Chrome does not release the port the
+// instant it is killed, so the NEXT launch failed to bind, and the wait loop
+// then connected happily to the DYING previous browser: same port, different
+// process, previous profile, and none of the pre-load scripts this run had
+// installed. It presented as a page that rendered two different pictures at
+// random, and cost most of an afternoon being mistaken for a clock problem in
+// the page. With port 0 every browser is unambiguously its own.
 
 const TYPES = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
@@ -76,7 +86,7 @@ async function launchChrome() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pitch-snake-check-'));
   const child = spawn(CHROME, [
     '--headless=new',
-    `--remote-debugging-port=${PORT}`,
+    '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run', '--noerrdialogs', '--disable-gpu', '--disable-extensions',
     '--no-default-browser-check',
@@ -86,15 +96,21 @@ async function launchChrome() {
     '--window-position=-32000,-32000',
     'about:blank',
   ], { stdio: 'ignore', detached: false });
+  // Chrome writes the port it actually took into its own profile directory,
+  // which is the only way to know it without guessing.
+  const portFile = path.join(profile, 'DevToolsActivePort');
   for (let i = 0; i < 60; i++) {
     await sleep(400);
     try {
-      const res = await fetch(`http://127.0.0.1:${PORT}/json/version`);
-      if (res.ok) return { child, profile };
+      const port = Number(fs.readFileSync(portFile, 'utf8').split('\n')[0]);
+      if (Number.isInteger(port) && port > 0) {
+        const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+        if (res.ok) return { child, profile, port };
+      }
     } catch { /* not listening yet; that is what the loop is for */ }
   }
   child.kill();
-  throw new Error(`Chrome did not open a debug port on ${PORT} within 24s`);
+  throw new Error('Chrome did not open a debug port within 24s');
 }
 
 /**
@@ -113,7 +129,7 @@ export async function withPage(options, body) {
   const { path: page = '/index.html', width = 1512, height = 900, beforeLoad, block } = options;
   const server = await serve();
   const chrome = await launchChrome();
-  const target = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: 'PUT' })).json();
+  const target = await (await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, { method: 'PUT' })).json();
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   let id = 0;
   const pending = new Map();
@@ -161,7 +177,7 @@ export async function withPage(options, body) {
     return await body({ evaluate, send, sleep, thrown, url, goto: async () => send('Page.navigate', { url }) });
   } finally {
     ws.close();
-    try { await fetch(`http://127.0.0.1:${PORT}/json/close/${target.id}`); } catch { /* closing anyway */ }
+    try { await fetch(`http://127.0.0.1:${chrome.port}/json/close/${target.id}`); } catch { /* closing anyway */ }
     server.close();
     // wait for Chrome to actually exit before removing its profile: it is
     // still writing when kill() returns, and a half-written profile makes

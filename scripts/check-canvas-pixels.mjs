@@ -12,12 +12,25 @@
 // is the signature of a race with two outcomes rather than of a clock, which
 // is why fixing four separate clock problems never closed it.
 //
-// The obvious suspect, unverified: the capture navigates twice, so the second
-// load may find the fonts already cached, and document.fonts.ready then
-// resolves either side of the page's own initialisation. Everything the clock
-// gates on hangs off that resolution. Whoever tests this should look there
-// first, and the measurement is to capture twice from ONE unchanged tree and
-// diff, which separates "the tree changed" from "the gate drifted".
+// THE STRONGEST CLUE, and it points away from the page entirely. Captured in
+// ISOLATION, a frame is perfectly stable: four runs of a script that opens one
+// browser and captures classic at frames 499, 500 and 501 gave the same hash
+// for all twelve captures. Not two states. One. The identical capture inside
+// THIS script, which opens six browsers in a row, still alternates.
+//
+// So the fault is in running several captures in one process, not in what the
+// page draws. One cause has already been found and fixed there: the browser
+// used a fixed debug port, and Chrome does not release a port the moment it is
+// killed, so the next launch failed to bind and the wait loop connected to the
+// DYING previous browser instead, with the previous profile and none of this
+// run's pre-load scripts. That is now port 0 with the real port read back from
+// the profile, which reduced the failure rate and did not close it.
+//
+// Whoever picks this up: keep looking at what one capture leaves behind for
+// the next, not at the page. The isolation result is the measurement to
+// reproduce first, because it is the one that says where NOT to look. A useful
+// next step is to run the six shots in six separate processes and see whether
+// the flake survives; if it does not, the shared node process is the carrier.
 //
 // The failure direction matters and is the safer one. A PASS is a genuine
 // byte-for-byte match of that capture and means what it says. A FAIL may be
