@@ -1,7 +1,8 @@
 /**
  * The overlay panel every screen renders into (head, scrolling body, pinned
  * foot), and the two layouts the page chooses between by POINTER type:
- * touchless keeps a one-row header, touch gets its own two-line one.
+ * touchless sizes its column off the viewport height, touch claims exactly
+ * one screen and never scrolls. Both share ONE header.
  *
  * Must never: Never branch these layouts on viewport width or user agent. Pointer type
  * is the question; width is not.
@@ -130,30 +131,22 @@
        half the screen. */
     /* Everything that is not the board or the pad: the header, the two gaps
        and the padding. It is a variable because it is not one number. The
-       header rides ONE row and measures 55px wherever the logo, the cluster
-       and the scoreboard fit across, which is every phone at 340px and up.
-       Below that it wraps to two rows and measures 98, and a budget that
-       still claimed 69 handed the difference to the board and took it out of
-       the pad: at 320px that cost the pad 43px, which is the opposite of the
-       point. Measured, not guessed. */
+       header rides ONE row on every phone size measured, 37px at 320 through
+       46px at 430, since it took the desktop's own scaling. It was 94px when
+       the nameplate sat on a line of its own, and there was briefly a
+       narrow-width override here for a wrap that no longer happens: with the
+       smaller pills the row fits at 320 too, so one number is honest again.
+       Measured, not guessed. */
     --chrome-h: 69px;
     --pad-h: clamp(190px, calc(100svh - min(100vw, 540px) - var(--chrome-h) - var(--mp-h)), 320px);
-  }
-  /* Under about 340px the header cannot hold logo, cluster and scoreboard
-     across one line, so it wraps to the two-row shape it always had and the
-     shell costs 98px rather than 55. Telling the budget the truth here is
-     what stops the board eating the difference out of the pad. */
-  @media (max-width: 339.98px) {
-    html.touch .wrap { --chrome-h: 108px; }
   }
   /* the legend under the pad is desktop's: a phone has the pad in front of
      it and the gear on the board, and the room is worth more than the words */
   html.touch .wrap > .hint { display: none; }
-  html.touch h1 { font-size: clamp(20px, 6vw, 26px); line-height: 0.92; text-shadow: 2px 2px 0 var(--gold); }
-  html.touch .scores .val { font-size: 28px; }
-  html.touch .scores .label, html.touch .scores .best { font-size: 11px; }
-  html.touch .scores .clock { font-size: 19px; padding-left: 8px; }
-  html.touch .scores { gap: 8px; }
+  /* The logo keeps its tighter leading; every SIZE here now comes from the
+     shared narrow-window block, which scales with the viewport instead of
+     pinning phone-only pixels that drifted away from the desktop's. */
+  html.touch h1 { line-height: 0.92; text-shadow: 2px 2px 0 var(--gold); }
   /* The chrome rides the header on touch too (2026-09-06, owner's call), and
      since 2026-09-07 it rides the SAME ROW the desktop uses rather than a
      line of its own. The second line was costing about forty pixels of
@@ -163,16 +156,19 @@
      320px cap and the row cost nothing, which is why this survived; on a
      short one the pad sits on its 190px floor and the row came straight out
      of it.
-     It fits because the cluster's CONTENT is about 197px, not the 370 it
-     stretched to when it was told to fill a line: logo 60, cluster 197,
-     scoreboard 43 and two gaps is 324 of 390. Narrower than that the header
-     still wraps, which is the old layout and a fine floor to fall back to. */
-  html.touch header { padding: 0 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 6px; }
+     It fits because the cluster's CONTENT is about 184px, not the 370 it
+     stretched to when it was told to fill a line: at 390px the logo is 58,
+     the cluster 184, the scoreboard 34, and two gaps make 276 of 390. At
+     320px it is 266 of 320 and still one row, which is why the narrow-width
+     two-row budget this file briefly carried is gone. If it ever does wrap,
+     that is the old layout and a fine floor to fall back to. */
+  /* align-items comes from the shared rule (stretch), which is what hangs the
+     logo, the pills and the scoreboard from one top line rather than centring
+     them against each other. Only the padding and the wrap are the phone's. */
+  html.touch header { padding: 0 10px; flex-wrap: wrap; row-gap: 6px; }
   html.touch .scores { margin-left: auto; }
-  html.touch .hdr-cluster { display: flex; gap: 6px; align-items: center; }
-  html.touch .hdr-cluster .gear.who { padding: 0 10px; font-size: 11px; letter-spacing: 1px; }
-  html.touch .hdr-tray .gear { width: 34px; }
-  html.touch .hdr-tray .gear.purse { padding: 0 9px; }
+  /* the cluster's gap, its pill sizes and the tray all come from the shared
+     block too: the phone was carrying a 34px pill against the desktop's 25 */
   html.touch .board-frame {
     /* The pitch takes the full width too, and stays square: the height term
        is what stops it, so a board that fits sideways can never push the pad
