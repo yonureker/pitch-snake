@@ -130,5 +130,8 @@ await withPage({}, async ({ evaluate, sleep, goto }) => {
       lines.push(`ok   ${file.padEnd(30)} browser kept ${got}`);
     }
   }
-  report(lines);
 });
+
+// AFTER the browser is shut, never inside the body: report() ends the
+// process, and a process that ends inside withPage never runs its cleanup.
+report(lines);

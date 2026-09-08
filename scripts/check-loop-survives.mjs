@@ -22,10 +22,11 @@
 // machine to itself: see the note in scripts/browser-harness.mjs.
 import { check, report, withPage } from './browser-harness.mjs';
 
+const lines = [];
+
 await withPage({}, async ({ evaluate, sleep, goto, thrown }) => {
   await goto();
   await sleep(3000);
-  const lines = [];
 
   // count the page's own frames from outside, by wrapping the rAF it uses
   await evaluate(`(() => {
@@ -69,5 +70,8 @@ await withPage({}, async ({ evaluate, sleep, goto, thrown }) => {
   lines.push(check('no unexpected exceptions', unexpected.length, 0));
   if (unexpected.length) lines.push('       ' + unexpected[0]);
 
-  report(lines);
 });
+
+// AFTER the browser is shut, never inside the body: report() ends the
+// process, and a process that ends inside withPage never runs its cleanup.
+report(lines);

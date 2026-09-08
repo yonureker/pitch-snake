@@ -79,6 +79,37 @@ function serve() {
   });
 }
 
+// Chrome must not outlive this process by ANY exit route, and withPage's
+// `finally` only covers the ordinary one. It covered nothing else, and that
+// shipped as a leak with teeth: report() ends with process.exit(), two of the
+// three checks called it from INSIDE the body, and process.exit runs no
+// finally, so every one of those runs left a headless Chrome and its profile
+// behind for ever. They accumulated one per verify run across a day, thirty
+// three of them holding 23GB, until the machine was swapping continuously and
+// the load average sat two orders of magnitude over the core count. The tests
+// all passed while doing it, which is why nobody saw it.
+//
+// So the cleanup is registered against the PROCESS as well: an exit handler
+// catches process.exit() and a natural end, and the signal handlers catch
+// ctrl-C, which runs no exit handler of its own. It can only SIGKILL and
+// try the directory, because an exit handler must be synchronous and cannot
+// wait for Chrome to finish writing; a leftover temp directory is the OS's
+// problem, 700MB of resident browser is the machine's.
+const live = new Set();
+
+function reapOne(rec) {
+  try { rec.child.kill('SIGKILL'); } catch { /* already gone */ }
+  try { fs.rmSync(rec.profile, { recursive: true, force: true }); } catch { /* tmp gets swept */ }
+  live.delete(rec);
+}
+
+function reap() { for (const rec of [...live]) reapOne(rec); }
+
+process.on('exit', reap);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => { reap(); process.exit(1); });
+}
+
 async function launchChrome() {
   if (!CHROME) {
     throw new Error('no Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.');
@@ -96,6 +127,8 @@ async function launchChrome() {
     '--window-position=-32000,-32000',
     'about:blank',
   ], { stdio: 'ignore', detached: false });
+  const rec = { child, profile };
+  live.add(rec);            // from here on, no exit route can leave it running
   // Chrome writes the port it actually took into its own profile directory,
   // which is the only way to know it without guessing.
   const portFile = path.join(profile, 'DevToolsActivePort');
@@ -105,11 +138,11 @@ async function launchChrome() {
       const port = Number(fs.readFileSync(portFile, 'utf8').split('\n')[0]);
       if (Number.isInteger(port) && port > 0) {
         const res = await fetch(`http://127.0.0.1:${port}/json/version`);
-        if (res.ok) return { child, profile, port };
+        if (res.ok) return { child, profile, port, rec };
       }
     } catch { /* not listening yet; that is what the loop is for */ }
   }
-  child.kill();
+  reapOne(rec);             // a browser that never answered is still a browser
   throw new Error('Chrome did not open a debug port within 24s');
 }
 
@@ -191,15 +224,26 @@ export async function withPage(options, body) {
     try {
       fs.rmSync(chrome.profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } catch { /* tmp gets swept anyway */ }
+    live.delete(chrome.rec);  // handled patiently here; nothing left for reap()
   }
 }
 
-/** Print results and exit non-zero if any line failed. */
+/**
+ * Print results and fail the run if any line failed.
+ *
+ * This sets `exitCode` rather than calling process.exit(), which is the
+ * difference between a checked exit and a severed one: the process now ends
+ * when its own work is finished, running every finally on the way out. The
+ * exit status is identical. It used to exit on the spot, and since two checks
+ * called it from inside withPage, each run abandoned a live headless Chrome
+ * (see the note above `live`). Call it after the browser is shut anyway; this
+ * only means that forgetting no longer costs 700MB.
+ */
 export function report(lines) {
   console.log(lines.join('\n'));
   const failed = lines.some((line) => line.startsWith('FAIL'));
   console.log(failed ? 'FAILURES' : 'ALL PASS');
-  process.exit(failed ? 1 : 0);
+  process.exitCode = failed ? 1 : 0;
 }
 
 /** A pass/fail line, so every check prints the same shape. */
