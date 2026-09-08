@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=391c597448">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=391c597448">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=391c597448">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=391c597448">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=391c597448">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=391c597448">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=391c597448">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=391c597448">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=391c597448">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=391c597448">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=391c597448">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=20711d2d3e">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=20711d2d3e">
 </head>
 <body>
   <div class="wrap">
@@ -410,16 +410,16 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=391c597448",
-    "./packages/net/net.js": "./packages/net/net.js?v=391c597448",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=391c597448",
-    "./page/build/dom.js": "./page/build/dom.js?v=391c597448",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=391c597448",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=391c597448",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=391c597448",
-    "./page/build/shop.js": "./page/build/shop.js?v=391c597448",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=391c597448",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=391c597448"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=20711d2d3e",
+    "./packages/net/net.js": "./packages/net/net.js?v=20711d2d3e",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=20711d2d3e",
+    "./page/build/dom.js": "./page/build/dom.js?v=20711d2d3e",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=20711d2d3e",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=20711d2d3e",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=20711d2d3e",
+    "./page/build/shop.js": "./page/build/shop.js?v=20711d2d3e",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=20711d2d3e",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=20711d2d3e"
   }
 }
 </script>
@@ -903,11 +903,34 @@
     }
   }
 
+  // A resize that changes nothing must cost nothing, which is not what this
+  // did. Assigning canvas.width CLEARS the canvas and resets its state even
+  // when the value is identical, and rebuildStaticArt regenerates all ten
+  // sprite sheets and the wall layer behind it. That is a real bill to pay for
+  // an event carrying no news.
+  //
+  // Mobile is where it hurt. The address bar showing or hiding fires a resize
+  // event on every scroll, and the layout deliberately measures in svh so the
+  // board does NOT move when it does (see styles/overlay-and-layouts.css): the
+  // event therefore arrives with dimensions identical to the ones we already
+  // have, every time. Measured on a phone viewport with the CPU throttled 4x,
+  // thirty such events cost 9 dropped frames out of 209 and a 33.4ms spike,
+  // against zero dropped frames while quiet. A 33ms frame is a four-frame
+  // hitch at 120Hz, which is exactly the stutter it looked like.
+  //
+  // Skipping is safe by construction rather than by hope: rebuildStaticArt is a
+  // pure function of the cell size and the loaded fonts, cell derives from
+  // canvas.width, and a late-arriving font repaints through its own
+  // document.fonts.ready path rather than through here. Same size, same art.
+  let lastW = -1, lastH = -1, lastDpr = -1;
   function resize() {
     const rect = canvas.getBoundingClientRect();
     DPR = window.devicePixelRatio || 1;
-    canvas.width = rect.width * DPR;
-    canvas.height = rect.height * DPR;
+    const w = rect.width * DPR, h = rect.height * DPR;
+    if (w === lastW && h === lastH && DPR === lastDpr) return;
+    lastW = w; lastH = h; lastDpr = DPR;
+    canvas.width = w;
+    canvas.height = h;
     cell = canvas.width / GRID;
     rebuildStaticArt();
   }
