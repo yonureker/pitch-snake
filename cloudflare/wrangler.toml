@@ -31,13 +31,42 @@ main = "pitchsnake-router.js"
 # wrangler refuses to boot a date newer than its own binary knows.
 compatibility_date = "2026-04-28"
 
-# The apex and www both route here. www is folded into the apex by the worker
-# itself for pages, and answered directly for room sockets, because a WebSocket
-# does not follow a redirect.
-routes = [
-  { pattern = "pitchsnake.com/*", zone_name = "pitchsnake.com" },
-  { pattern = "www.pitchsnake.com/*", zone_name = "pitchsnake.com" },
-]
+# ONE ROUTE, and deliberately not the page.
+#
+# What is actually live on 2026-09-08, measured rather than assumed: nothing.
+# pitchsnake.com is Cloudflare DNS proxying straight to GitHub Pages, and this
+# worker has never been deployed. The give-aways are that none of the security
+# headers below are present on a cache-busted response, that x-github-edge-region
+# and Fastly's via header come through untouched, and that www.pitchsnake.com
+# does not resolve at all. The 405 on a POST looks like the method gate here and
+# is not: github.io answers 405 to a POST by itself.
+#
+# So attaching `pitchsnake.com/*` would put the proxy, the CSP, the www fold and
+# the method gate into production for the first time, all at once, as a side
+# effect of a netcode change. The CSP is the one that matters: it has never run
+# in production, it fails silently by design, and a missing allowance takes the
+# game down for everyone with nothing logged.
+#
+# The room socket needs none of that. It is its own path, so it gets its own
+# route, and the page carries on being served exactly as it is today. Putting
+# the full proxy live is worth doing (it is the only way this deployment can
+# set a security header at all) and it deserves its own change, its own test
+# pass and its own bad afternoon if it has one.
+# NO ROUTE, as of 2026-09-08, and the measurement is why. Deployed and probed
+# from California: the SJC edge answers in 32ms, and edge-plus-object takes 166
+# to 480ms, which is 80 to 240ms to deliver one message to a peer against
+# Supabase Broadcast's 15ms on the same machine in the same minute. Placement is
+# not following the request on this account: a fresh room made from San Jose
+# lands somewhere far and somewhere different each time, a wnam hint made it
+# worse rather than better, and turning hibernation off changed nothing, so it
+# is neither a cold object nor a wake cost.
+#
+# The client is safe either way and that is not luck: dualTransport keeps
+# Broadcast until every seat is heard on the fast wire, so with no route the
+# socket 404s, refuses cleanly, and every room plays exactly as it did before
+# any of this. Re-attach this line only with a measurement that beats
+# `node scripts/wire-latency.mjs` on the same machine in the same minute.
+routes = []
 
 [[durable_objects.bindings]]
 name = "ROOM_WIRE"

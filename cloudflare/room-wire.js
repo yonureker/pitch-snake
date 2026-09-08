@@ -137,6 +137,22 @@ export class RoomWire {
       return new Response('room full', { status: 409 });
     }
     const pair = new WebSocketPair();
+    // EXPERIMENT (2026-09-08): ?hib=off accepts the socket the ordinary way,
+    // keeping this object in memory for as long as it is open, so the cost of
+    // hibernation's per-message wake can be measured rather than guessed.
+    if (new URL(request.url).searchParams.get('hib') === 'off') {
+      pair[1].accept();
+      this.awake ??= new Set();
+      this.awake.add(pair[1]);
+      pair[1].addEventListener('message', (ev) => {
+        for (const peer of this.awake) {
+          if (peer === pair[1]) continue;
+          try { peer.send(ev.data); } catch { /* going away */ }
+        }
+      });
+      pair[1].addEventListener('close', () => { this.awake.delete(pair[1]); });
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
     this.state.acceptWebSocket(pair[1]);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }

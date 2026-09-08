@@ -91,6 +91,37 @@ const SECURITY_HEADERS = {
 export { RoomWire } from './room-wire.js';
 
 /**
+ * Where a room may ask to be put.
+ *
+ * Only the FIRST get() for an object honours a hint, so this is the room
+ * creator's suggestion and nobody else's, and it is a suggestion: Cloudflare
+ * picks a data centre that minimises latency from the hinted region rather
+ * than the region itself. Anything not on this list is ignored rather than
+ * refused, because a hint is never worth failing a room over.
+ */
+const LOCATION_HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'oc', 'afr', 'me']);
+
+// THE RELAY IS OFF, and the measurement is the reason. Deployed and probed
+// from California on 2026-09-08: the SJC edge answers a request in 32ms, and
+// the same request through a Durable Object takes 166 to 480ms. One message
+// reaching a peer cost 80 to 240ms against Supabase Broadcast's 15ms, measured
+// on the same machine in the same minute.
+//
+// Four things it is NOT, each tested rather than assumed: not the custom
+// domain (workers.dev was just as slow), not hibernation (accepting the socket
+// the ordinary way was no faster), not a cold object (kept-alive requests in a
+// row stayed slow), and not a missing hint (a wnam hint from San Jose was
+// worse than none, while eeur was correctly much worse still, so hints are
+// honoured and placement simply is not following the request on this account).
+//
+// While this is false the room path falls through to the page proxy and 404s,
+// the client's socket refuses cleanly, and every room plays on Broadcast
+// exactly as it did before any of this existed. Turn it back on only with a
+// number that beats `node scripts/wire-latency.mjs` on the same machine in the
+// same minute, not with a theory about why it should.
+const RELAY_ENABLED = false;
+
+/**
  * Is this a room socket, and if so which room?
  *
  * `/room/<CODE>`, five characters of the room alphabet. Anything else is a
@@ -118,10 +149,16 @@ export default {
     // Every room code reaches the same object from anywhere in the world
     // because the id comes from the code by name; the object is created in the
     // data centre nearest whoever opens the room first. See room-wire.js.
-    const code = roomCode(url);
+    const code = RELAY_ENABLED ? roomCode(url) : null;
     if (code !== null) {
       const id = env.ROOM_WIRE.idFromName(code);
-      return env.ROOM_WIRE.get(id).fetch(request);
+      const hint = LOCATION_HINTS.has(url.searchParams.get('loc') ?? '')
+        ? url.searchParams.get('loc')
+        : null;
+      const stub = hint === null
+        ? env.ROOM_WIRE.get(id)
+        : env.ROOM_WIRE.get(id, { locationHint: hint });
+      return stub.fetch(request);
     }
     // one canonical host: www folds into the apex before anything serves
     if (url.hostname.startsWith('www.')) {
