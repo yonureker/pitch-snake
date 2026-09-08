@@ -59,8 +59,24 @@ Never rewrite the file with `json.dump`: it is pretty-printed, and reserialising
 collapses 460 lines into one and destroys the diff. Edit surgically, keep the
 logs untouched, and add a line to the test's comment saying what moved and why.
 
-**3. Verify, commit, push.** `npm test` must be green. Push, and note the
-commit SHA: that is the pin.
+**3. Verify, RESTAMP, commit, push.** `npm test` must be green. Then
+`npm run build:page && npm run stamp`, because `packages/engine/engine.js` is
+one of the files `index.html` carries a content token for, and the token has
+just changed.
+
+This step was learned the hard way on 2026-09-07. The bump was pushed with a
+stamp computed over an older tree, so every module URL in the commit still
+pointed at the pre-bump token. `index.html` caches for ten minutes and
+everything it loads for four hours, so a returning player would have fetched
+the new page and kept the OLD engine for up to four hours: a page expecting 25
+running 24, which looks exactly like the pin being wrong and is not. Another
+session caught it and restamped, and that restamp is the only reason the new
+engine reached anyone.
+
+Confirm before pushing: `npm run stamp:check` must say current, and it must
+say so in a CLEAN CHECKOUT of what you are about to push, not in a working
+tree that has other changes in it. `git archive HEAD | tar -x -C /tmp/x` and
+run it there. Push, and note the commit SHA: that is the pin.
 
 **4. Wait for jsDelivr.** It serves from GitHub and needs the commit to exist:
 
@@ -74,6 +90,24 @@ curl -s "https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@<SHA>/packages/engine
 read the live function (`get_edge_function`) and confirm it matches git apart
 from that one line, so a dashboard edit is never clobbered. Deploy with
 `verify_jwt: true`. Commit the pin change as a follow-up.
+
+**The deploy path is not the CLI.** `supabase functions deploy` answers 403 on
+this machine, on both `list` and `deploy`, because the token in `~/.supabase`
+lacks the privilege; `--use-api` fails the same way. So the deploy goes through
+the `deploy_edge_function` MCP tool, which takes the function body INLINE.
+That means reading all of `index.ts` and re-emitting it, and it is worth doing
+carefully rather than fast: a dropped character in the validator is a worse
+outage than a late deploy. Read the deployed source back afterwards and confirm
+it matches the local file. If somebody ever fixes that token, this becomes one
+command and this paragraph can go.
+
+**The window between the push and the deploy is a live outage**, so close it
+in minutes and say out loud that you are mid-deploy if anyone else is working.
+Measured on 2026-09-07: Pages served the new engine 143 seconds before the
+validator caught up. In that window one seed was minted, none burned and no
+score written, so nobody actually lost a round. That was luck, not headroom. On
+a busy evening every submission in those 143 seconds would have been refused
+and had its single-use seed spent.
 
 **6. Prove it end to end, without writing a score.** Mint a real seed, build a
 log that replays but has not ended, and submit it. The function checks
