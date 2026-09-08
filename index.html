@@ -339,7 +339,7 @@
           <p class="vs-hint">Your name, flag and scores will work on any device.</p>
           <div class="entry wide"><input id="profEmail" class="prof-email" type="email" placeholder="EMAIL" autocomplete="email" autocapitalize="off" spellcheck="false"></div>
           <div class="entry wide" id="profCodeRow" hidden>
-            <input id="profCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="CODE" spellcheck="false">
+            <input id="profCode" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="CODE" spellcheck="false">
           </div>
           <button class="btn small" id="profSendBtn">CREATE ACCOUNT</button>
         </div>
@@ -4848,7 +4848,7 @@
 
   async function profVerify() {
     const code = (profCode.value || '').replace(/\D/g, '');
-    if (code.length !== 6 || !otpKind) return;
+    if (code.length < OTP_MIN || code.length > OTP_MAX || !otpKind) return;
     profCode.disabled = true;
     profSay('Checking…', true);
     try {
@@ -4874,13 +4874,40 @@
     profCode.disabled = false;
   }
 
-  // the sixth digit is the submit, with a guard so editing a wrong code
-  // does not re-fire until it reaches six again
+  // HOW LONG IS THE CODE. Not the page's business, and it used to think it
+  // was: this field was maxlength six and submitted on the sixth digit, which
+  // is only right while Supabase's email OTP length sits at its default. That
+  // is a PROJECT SETTING (six to ten), and when it read eight the field
+  // truncated 19007064 to 190070 and then cheerfully submitted that, so the
+  // sheet said "Wrong or expired code" about a code that was neither. The page
+  // cannot read the setting, so it stops guessing: six to ten digits are
+  // accepted, and the submit is a PAUSE in typing rather than a magic length.
+  // An autofilled code arrives whole and fires at once; a typed one waits for
+  // the hand to stop. Enter submits immediately for anyone who would rather
+  // not wait.
+  const OTP_MIN = 6, OTP_MAX = 10, OTP_SETTLE_MS = 450;
+  let otpSettle = 0;
+  function otpArm(delay) {
+    clearTimeout(otpSettle);
+    const code = (profCode.value || '').replace(/\D/g, '');
+    if (code.length < OTP_MIN) { autoVerified = false; return; }
+    otpSettle = setTimeout(() => {
+      if (autoVerified) return;      // the guard still stops a re-fire on an unchanged code
+      autoVerified = true;
+      profVerify();
+    }, delay);
+  }
   profCode.addEventListener('input', () => {
-    const digits = (profCode.value || '').replace(/\D/g, '').slice(0, 6);
+    const digits = (profCode.value || '').replace(/\D/g, '').slice(0, OTP_MAX);
     if (profCode.value !== digits) profCode.value = digits;
-    if (digits.length < 6) { autoVerified = false; return; }
-    if (!autoVerified) { autoVerified = true; profVerify(); }
+    autoVerified = false;            // an edit is a new attempt
+    otpArm(OTP_SETTLE_MS);
+  });
+  profCode.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    autoVerified = false;
+    otpArm(0);
   });
 
   profSendBtn.addEventListener('click', profSend);

@@ -266,12 +266,15 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
                 style={styles.emailInput}
                 value={code}
                 onChangeText={(t) => {
-                  setCode(t.replace(/\D/g, '').slice(0, 6));
+                  // Six to ten, because the code's length is a Supabase project
+                  // setting the client cannot read. Hard-coding six truncated an
+                  // eight-digit code to its first six and then submitted it.
+                  setCode(t.replace(/\D/g, '').slice(0, 10));
                 }}
-                placeholder="123456"
+                placeholder="CODE"
                 placeholderTextColor="#9a917c"
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={10}
               />
               <Pressable
                 accessibilityRole="button"
