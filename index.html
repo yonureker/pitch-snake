@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=50231fed93">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=979c346e24">
 </head>
 <body>
   <div class="wrap">
@@ -478,18 +478,18 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=50231fed93",
-    "./packages/net/net.js": "./packages/net/net.js?v=50231fed93",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=50231fed93",
-    "./page/build/dom.js": "./page/build/dom.js?v=50231fed93",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=50231fed93",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=50231fed93",
-    "./page/build/kit.js": "./page/build/kit.js?v=50231fed93",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=50231fed93",
-    "./page/build/shop.js": "./page/build/shop.js?v=50231fed93",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=50231fed93",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=50231fed93",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=50231fed93"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=979c346e24",
+    "./packages/net/net.js": "./packages/net/net.js?v=979c346e24",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=979c346e24",
+    "./page/build/dom.js": "./page/build/dom.js?v=979c346e24",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=979c346e24",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=979c346e24",
+    "./page/build/kit.js": "./page/build/kit.js?v=979c346e24",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=979c346e24",
+    "./page/build/shop.js": "./page/build/shop.js?v=979c346e24",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=979c346e24",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=979c346e24",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=979c346e24"
   }
 }
 </script>
@@ -5014,9 +5014,15 @@
           void autoSubmit(deathGen);
         }
       } catch (e) {
-        // the unique-name refusal arrives as the RPC's own message; anything
-        // else is the network having a day
+        // Three different things, and this told the player one story for all
+        // three until 2026-09-08. The unique-name refusal is the server's own
+        // sentence and has the answer in it; any other ANSWER is a refusal we
+        // did not plan for, and the account was plainly reachable; only a call
+        // that never got a status is the network having a day. Saying "could
+        // not reach your account" to a server that replied in 80ms sent a
+        // player looking at their Wi-Fi over a name somebody else had taken.
         const words = String((e && e.message) || '');
+        const answered = typeof (e && e.status) === 'number';
         if (words.toLowerCase().includes('taken')) {
           profSay('That username is taken. Looking for a free one…', true);
           const free = await freeNameNear(name);
@@ -5029,6 +5035,8 @@
           } else {
             profSay('That username is taken, and so is everything near it. Try another.');
           }
+        } else if (answered) {
+          profSay('Your account would not take that change. It is kept on this device.');
         } else {
           profSay('Could not reach your account. The username is kept on this device.');
         }

@@ -103,6 +103,64 @@ export function authorizationHeader(): string {
 }
 
 /**
+ * A refusal the server actually sent, as opposed to one the network invented.
+ *
+ * The difference matters to every caller and could not be told apart before
+ * 2026-09-08: a 400 and a dead Wi-Fi arrived as the same bare `Error`, so the
+ * sheet that renames a player answered "could not reach your account" to a
+ * server that had answered immediately and clearly. `status` is how a caller
+ * knows the server spoke at all, and `serverMessage` is what it said.
+ *
+ * The message still opens `<fn>: <status>` because callers match on that
+ * (`vsJoin` reads `': 404'` to tell a missing room from a broken one), and the
+ * server's own words are appended rather than substituted.
+ */
+export class SupabaseRpcError extends Error {
+  /** The HTTP status the Data API answered with. */
+  readonly status: number;
+  /** PostgREST's `message` field, or '' when the body carried none. */
+  readonly serverMessage: string;
+
+  /**
+   * Build the refusal from what the Data API actually answered.
+   *
+   * @param fn - the RPC that refused, e.g. `pitch_snake_set_profile`.
+   * @param status - the HTTP status the Data API answered with.
+   * @param serverMessage - PostgREST's own `message`, or '' when it sent none.
+   */
+  constructor(fn: string, status: number, serverMessage: string) {
+    super(serverMessage === '' ? `${fn}: ${status}` : `${fn}: ${status} ${serverMessage}`);
+    this.name = 'SupabaseRpcError';
+    this.status = status;
+    this.serverMessage = serverMessage;
+  }
+}
+
+/**
+ * What PostgREST said went wrong, if it managed to say anything.
+ *
+ * A refusal body is JSON with `message`, `details`, `hint` and `code`, and a
+ * `raise exception` inside an RPC arrives as `message` under code P0001. Any
+ * of that can be missing, and a gateway can answer with HTML instead, so this
+ * never throws and answers '' when it cannot read a sentence out of the body.
+ *
+ * @param res - the failed response, whose body has not been read yet.
+ * @returns the server's own message, or '' when there is none to have.
+ */
+async function refusalMessage(res: Response): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    // `in` on an unknown-typed object narrows it without an assertion, which
+    // is the house rule: a guard tells the compiler something true.
+    if (body === null || typeof body !== 'object' || !('message' in body)) return '';
+    const said: unknown = body.message;
+    return typeof said === 'string' ? said : '';
+  } catch {
+    return '';                 // not JSON, or no body at all: the status stands alone
+  }
+}
+
+/**
  * Call one `pitch_snake_` RPC.
  *
  * The key goes in both headers with the same value, which is what a
@@ -112,8 +170,10 @@ export function authorizationHeader(): string {
  * @param args - its named arguments, sent as the JSON body.
  * @returns whatever the function returns, parsed. It is `unknown` on purpose:
  *   the server's shape is not the page's to assume, so every caller narrows.
- * @throws {Error} on a non-2xx answer (the message carries the status) or
- *   when the abort timer fires. Callers fall back; this never decides.
+ * @throws {SupabaseRpcError} on a non-2xx answer, carrying the status and the
+ *   server's own message; {Error} when the abort timer fires or the fetch
+ *   itself fails, which is the case with no status. Callers fall back; this
+ *   never decides.
  */
 export async function supabaseRpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
   const ac = new AbortController();
@@ -131,7 +191,7 @@ export async function supabaseRpc(fn: string, args: Record<string, unknown>): Pr
       body: JSON.stringify(args),
       signal: ac.signal,
     });
-    if (!res.ok) throw new Error(`${fn}: ${res.status}`);
+    if (!res.ok) throw new SupabaseRpcError(fn, res.status, await refusalMessage(res));
     return await res.json();
   } finally {
     clearTimeout(timer);
