@@ -1,10 +1,23 @@
 // A pixel gate for the renderer.
 //
 // STATUS: NOT YET RELIABLE. Do not put this in CI and do not treat a failure
-// as proof of a regression until it has been reproduced. Measured over four
-// consecutive runs against an unchanged tree, one run failed: the frames
-// mostly settle and then one of them does not. Six causes of nondeterminism
-// have been found and fixed (below) and at least one remains.
+// as proof of a regression until it has been reproduced. Seven causes of
+// nondeterminism have been found and fixed (below) and one remains.
+//
+// WHAT THE REMAINING ONE LOOKS LIKE, which is the useful part for whoever
+// picks this up: every frame alternates between exactly TWO stable hashes.
+// Not drift, not noise, not a spread of values: two states, and a frame lands
+// in one or the other. classic-desk gives 607e3211 or 2ac128b5, viper-desk
+// gives a14b3a31 or 0d412a68, and the pairs are stable across many runs. That
+// is the signature of a race with two outcomes rather than of a clock, which
+// is why fixing four separate clock problems never closed it.
+//
+// The obvious suspect, unverified: the capture navigates twice, so the second
+// load may find the fonts already cached, and document.fonts.ready then
+// resolves either side of the page's own initialisation. Everything the clock
+// gates on hangs off that resolution. Whoever tests this should look there
+// first, and the measurement is to capture twice from ONE unchanged tree and
+// diff, which separates "the tree changed" from "the gate drifted".
 //
 // The failure direction matters and is the safer one. A PASS is a genuine
 // byte-for-byte match of that capture and means what it says. A FAIL may be
@@ -104,6 +117,7 @@ const CAPTURE_AT_FRAME = 500;
 const SHOTS = [
   { name: 'classic-desk', query: '', width: 1512, height: 900, mode: 'classic' },
   { name: 'classic-phone', query: '', width: 390, height: 844, mode: 'classic' },
+  { name: 'survival-desk', query: '', width: 1512, height: 900, mode: 'survival' },
   { name: 'speedrun-desk', query: '', width: 1512, height: 900, mode: 'speedrun' },
   { name: 'viper-desk', query: '?skin=viper', width: 1512, height: 900, mode: 'classic' },
   { name: 'nohat-desk', query: '?hat=off', width: 1512, height: 900, mode: 'classic' },
@@ -116,7 +130,10 @@ const beforeLoad = (mode) => `
     // a fixed epoch so Date.now is reproducible across runs as well as
     // monotonic with the frame clock; the value itself is arbitrary
     const EPOCH = 1_767_225_600_000;
-    let t = 0;
+    // Not zero. The page treats a timestamp of 0 as "unset" (it guards its
+    // first frame with a falsy check), so a clock starting at zero would hand
+    // it two zero-dt frames instead of one. The base is otherwise arbitrary.
+    let t = 1000;
     // The timeline starts when the FONT does, not when the document does:
     // see cause 6. Until then the page is handed the same instant every
     // frame, so its dt is zero and it advances nothing.
@@ -144,7 +161,18 @@ const beforeLoad = (mode) => `
         t += STEP;
         window.__frames++;
       }
-      cb(ts);
+      // cb(t), NOT cb(ts). This was the last cause and the largest: the page's
+      // loop(now) hands its argument straight to frame(now), which computes
+      // dt from (now minus lastTick) and drives the countdown, the accumulator,
+      // sim and every glide and pulse from it. Passing the browser's real
+      // timestamp meant the simulation ran on WALL time no matter how
+      // thoroughly performance.now, Date.now and the font were pinned, so
+      // frame 500 was a different amount of simulated time in every run and
+      // everything interpolating landed slightly differently. performance.now
+      // is only read in that function for the FPS meter, which is off, which
+      // is why stubbing it looked like it should have been enough.
+      // Found by pitch-snake-7e.
+      cb(t);
       if (window.__frames === ${CAPTURE_AT_FRAME} && !window.__shot) {
         const canvas = document.getElementById('game');
         if (canvas) window.__shot = canvas.toDataURL('image/png');

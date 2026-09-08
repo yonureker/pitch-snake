@@ -1,11 +1,15 @@
 {
   "classic-desk": {
-    "hash": "2ac128b544fb8436",
+    "hash": "607e3211ccca0c2a",
     "size": "656x656"
   },
   "classic-phone": {
     "hash": "b0b17dba1d6380a0",
     "size": "322x322"
+  },
+  "survival-desk": {
+    "hash": "9f5ae4dde3fb2a0a",
+    "size": "656x656"
   },
   "speedrun-desk": {
     "hash": "2ac128b544fb8436",
