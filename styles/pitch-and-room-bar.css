@@ -61,12 +61,23 @@
   }
   .build-note[hidden] { display: none; }
   .build-note .btn { padding: 6px 14px; font-size: 12px; box-shadow: 0 3px 0 #b32f1c; }
-  /* the mid-round exit, arming on the first tap so a stray thumb cannot dump
-     you out of a match. margin-left: auto keeps it right even alone. */
+  /* The mid-round exit, arming on the first tap so a stray thumb cannot dump
+     you out of a match.
+     It sits BESIDE the seats, not across the header from them. It used to
+     carry margin-left: auto, which in a flex-start strip threw it to the far
+     edge with nothing between: a button floating in the middle of the header,
+     a hand's width from the scoreboard it belongs to. The header's own LEAVE
+     is grid-placed with justify-self, so it never needed the margin either.
+     And it wears the room's clothing now. A pale border over a dark
+     translucent fill is a dark-theme button; on the cream table the fill
+     composites to flat grey, which is the one colour this game does not own.
+     Same gold border and same tint as the scoreboard pill next to it, so the
+     two read as one object. Armed still goes red, which is the only time it
+     should shout. */
   .mp-quit {
-    flex: none; margin-left: auto;
-    border: 1.5px solid rgba(244,236,216,0.35); border-radius: 999px;
-    background: rgba(20,17,13,0.55); color: #e9e0cd;
+    flex: none;
+    border: 1.5px solid var(--gold); border-radius: 999px;
+    background: rgba(20, 17, 13, 0.6); color: var(--gold-bright);
     font-family: 'Barlow', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
     padding: 7px 13px; cursor: pointer; -webkit-tap-highlight-color: transparent;
     backdrop-filter: blur(2px);
@@ -150,6 +161,15 @@
   /* my name already wears the gold; on a struck seat the bar underneath it
      just read as a rendering fault */
   .mp-hud .pl.dead.me::after { display: none; }
+  /* The exit dressed as the scoreboard's twin: same height, same radius, same
+     dark green, same gold edge. It sits immediately beside the seats now, so
+     anything other than a match reads as two unrelated controls that happen to
+     be adjacent. The dark stays dark in both themes for the reason the pill's
+     comment gives: these colours were picked against the pitch. */
+  .wrap .mp-quit {
+    height: 34px; padding: 0 14px; border-radius: 17px;
+    background: #24321b; border-color: var(--gold); color: var(--gold-bright);
+  }
   .wrap .mp-notes {
     height: 34px; padding: 0 14px; font-size: 11px; letter-spacing: 1.5px;
     border: 1.5px solid rgba(194,162,90,0.55); border-radius: 17px; background: #24321b;

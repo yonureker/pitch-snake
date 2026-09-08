@@ -27,8 +27,8 @@
  * @module
  */
 import { mustGetElement, mustGetElementOfKind } from './dom.js';
-import { hatFor, skinFor } from './pitch-art.js';
-import type { SkinArt } from './pitch-art.js';
+import { buildLutFor, drawCrest, hatFor, roundRectOn, skinFor, SNAKE_SHADES } from './pitch-art.js';
+import type { HatArt, SkinArt } from './pitch-art.js';
 import { supabaseConfigured, supabaseRpc } from './supabase-client.js';
 
 /**
@@ -239,62 +239,127 @@ export function purseIsKnown(): boolean {
   return purseKnown;
 }
 
-// one channel of the head-to-tail ramp, at t along it
-function rampChannel(skin: SkinArt, channel: number, t: number): number {
-  const head = skin.head[channel] ?? 0;
-  const tail = skin.tail[channel] ?? 0;
-  return Math.trunc(head + (tail - head) * t);
+// The preview is a real snake, not a drawing of one.
+//
+// It used to be a flat circle with the hat floating over it, on a canvas sized
+// in CSS pixels only, so on any screen with a device pixel ratio above one the
+// browser upscaled it and every preview looked soft. Both halves of that are
+// fixed here: the canvas is sized in DEVICE pixels, and what it draws is the
+// pitch's own body cell, ramp, outline, crest, eyes and hat.
+//
+// Two segments rather than one, because a snake is a body and a head and a
+// single square reads as a token. The head is the right-hand square, facing
+// right, which is the direction a round opens in.
+
+// The box is taller than the old 64x28 because a hat is worn ABOVE the head:
+// the wide-brim classic reaches about a cell above the crown, and at the old
+// height its brim was cut off by the top edge. The snake sits low in the box
+// and the space above it is the hat's.
+/** The cell size the preview's two squares are drawn at. */
+const PREVIEW_CELL = 20;
+const PREVIEW_WIDTH = 72;
+const PREVIEW_HEIGHT = 44;
+
+/** How many device pixels there are per CSS pixel, clamped to something sane. */
+function pixelRatio(): number {
+  return Math.min(4, Math.max(1, window.devicePixelRatio || 1));
 }
 
-// Previews are drawn with the very ramps and hat art the pitch uses, so a
-// preview cannot lie about what the money buys.
-function paintSkinPreview(canvas: HTMLCanvasElement, id: string): void {
-  const skin = skinFor(id);
+/**
+ * Size a canvas for the screen it is on rather than for CSS, and hand back a
+ * context already scaled so callers keep drawing in CSS pixels.
+ *
+ * This is the whole of the blurriness fix: a 64x28 canvas on a 2x screen was
+ * being stretched to 128x56 by the browser.
+ *
+ * @param canvas - the canvas to resize; its style keeps the CSS size.
+ * @param width - the CSS width to present.
+ * @param height - the CSS height to present.
+ */
+function crispContext(
+  canvas: HTMLCanvasElement, width: number, height: number,
+): CanvasRenderingContext2D | null {
+  const ratio = pixelRatio();
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
   const context = canvas.getContext('2d');
+  if (context === null) return null;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  return context;
+}
+
+/**
+ * Draw the snake the way the pitch draws it: two body cells, head on the right.
+ *
+ * @param canvas - the preview canvas; it is resized to suit the screen.
+ * @param skin - the skin to wear, which decides the ramp, the outline and the
+ *   crest.
+ * @param hat - the hat to wear, or null for a bare head.
+ */
+function paintSnakePreview(canvas: HTMLCanvasElement, skin: SkinArt, hat: HatArt | null): void {
+  const context = crispContext(canvas, PREVIEW_WIDTH, PREVIEW_HEIGHT);
   if (context === null) return;
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  const count = 5;
-  const radius = 9;
-  const y = canvas.height / 2;
-  context.lineWidth = 1.5;
+
+  const cell = PREVIEW_CELL;
+  // the pitch's own proportions: half-width 0.42 of a cell, corner radius 0.32
+  const half = cell * 0.42;
+  const radius = cell * 0.32;
+  const ramp = buildLutFor(skin);
+  // low in the box, so everything above the head belongs to the hat
+  const centreY = PREVIEW_HEIGHT - cell * 0.62;
+  // the pair centred, rather than shoved against the right edge
+  const headX = PREVIEW_WIDTH / 2 + cell * 0.46;
+  const bodyX = headX - cell * 0.92;
+
+  context.lineWidth = Math.max(1, cell * 0.05);
   context.strokeStyle = skin.line;
-  for (let i = count - 1; i >= 0; i--) {
-    // tail first, the head over it
-    const t = i / (count - 1);
-    const cx = canvas.width - 11 - i * 10.5;
-    context.fillStyle =
-      `rgb(${rampChannel(skin, 0, t)}, ${rampChannel(skin, 1, t)}, ${rampChannel(skin, 2, t)})`;
-    context.beginPath();
-    context.arc(cx, y, radius, 0, Math.PI * 2);
+  // tail first, so the head sits over it exactly as it does on the pitch
+  const cells: [number, number][] = [[bodyX, SNAKE_SHADES - 1], [headX, 0]];
+  for (const [x, shade] of cells) {
+    context.fillStyle = ramp[shade] ?? '#f4ecd8';
+    roundRectOn(context, x - half, centreY - half, half * 2, half * 2, radius);
     context.fill();
     context.stroke();
   }
-}
 
-function paintHatPreview(canvas: HTMLCanvasElement, id: string): void {
-  const hat = hatFor(id);
-  const context = canvas.getContext('2d');
-  if (context === null) return;
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  const cellPixels = 17;
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2 + 5;
-  context.fillStyle = 'rgb(244,236,216)';
-  context.strokeStyle = 'rgba(194,162,90,0.65)';
-  context.lineWidth = 1.5;
+  // the crest belongs to the SKIN, so one without a crest draws nothing
+  context.save();
+  context.translate(headX - half, centreY - half);
+  drawCrest(context, half * 2, half * 2, skin);
+  context.restore();
+
+  // Eyes side by side and low on the head, which is how the pitch draws them
+  // whenever the snake is heading up or down. Facing RIGHT the pitch stacks
+  // them vertically instead, and every hat here sits low enough to cover the
+  // upper one, so a faithful right-facing head previewed as one-eyed. The hat
+  // is what the money buys and it has not moved; this only picks the heading
+  // that leaves a face under it.
+  const eye = cell * 0.16;
+  context.fillStyle = '#211e1a';
   context.beginPath();
-  context.arc(cx, cy, 8.5, 0, Math.PI * 2);
+  context.arc(headX - eye * 0.72, centreY + eye * 0.66, cell * 0.08, 0, Math.PI * 2);
+  context.arc(headX + eye * 0.72, centreY + eye * 0.66, cell * 0.08, 0, Math.PI * 2);
   context.fill();
-  context.stroke();
-  const width = Math.ceil(cellPixels * hat.wf);
-  const height = Math.ceil(cellPixels * hat.hf);
+
+  if (hat === null) return;
+  // baked and blitted the way the pitch bakes and blits it, so a preview and a
+  // round go through the same draw call and cannot disagree
+  const hatWidth = Math.ceil(cell * hat.wf);
+  const hatHeight = Math.ceil(cell * hat.hf);
   const scratch = document.createElement('canvas');
-  scratch.width = width;
-  scratch.height = height;
+  const ratio = pixelRatio();
+  scratch.width = Math.round(hatWidth * ratio);
+  scratch.height = Math.round(hatHeight * ratio);
   const scratchContext = scratch.getContext('2d');
   if (scratchContext === null) return;
-  hat.draw(scratchContext, width, height);
-  context.drawImage(scratch, Math.round(cx - width / 2), Math.round(cy + hat.dy(cellPixels, height)));
+  scratchContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+  hat.draw(scratchContext, hatWidth, hatHeight);
+  context.drawImage(
+    scratch, headX - hatWidth / 2, centreY + hat.dy(cell, hatHeight), hatWidth, hatHeight,
+  );
 }
 
 function renderShop(): void {
@@ -344,10 +409,11 @@ function renderShop(): void {
     const row = document.createElement('li');
     const preview = document.createElement('canvas');
     preview.className = 'shop-prev';
-    preview.width = 64;
-    preview.height = 28;
-    if (item.kind === 'skin') paintSkinPreview(preview, item.id);
-    else paintHatPreview(preview, item.id);   // every other kind previews on the head for now
+    // The item is previewed ON the snake, wearing whatever else you already
+    // own: a hat over your skin, a skin under your hat. That is what the money
+    // actually buys, and it is why the preview takes both.
+    if (item.kind === 'skin') paintSnakePreview(preview, skinFor(item.id), hatFor(wallet?.hat));
+    else paintSnakePreview(preview, skinFor(wallet?.skin), hatFor(item.id));
     const text = document.createElement('span');
     text.className = 'shop-txt';
     const name = document.createElement('span');

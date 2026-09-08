@@ -93,7 +93,10 @@
     background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
   }
   .shop-list li.worn { background: rgba(194,162,90,0.16); border-color: rgba(194,162,90,0.5); }
-  .shop-prev { flex: 0 0 64px; width: 64px; height: 28px; }
+  /* 72x44, not 64x28: a hat is worn above the head and the wide brim was
+     being cut off by the top edge. The canvas sizes its own backing store
+     to the screen's pixel ratio, so this is the CSS box only. */
+  .shop-prev { flex: 0 0 72px; width: 72px; height: 44px; }
   .shop-txt { flex: 1; min-width: 0; text-align: left; }
   .shop-txt .nm { display: block; font-weight: 700; font-size: 12px; letter-spacing: 1px; color: var(--sheet-ink); }
   .shop-txt .st { display: block; font-size: 11px; color: var(--sheet-muted); margin-top: 1px; }
