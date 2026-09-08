@@ -149,14 +149,27 @@
       width: min(34px, max(25px, 3.78vw)); height: min(34px, max(25px, 3.78vw));
       font-size: min(15px, max(11px, 1.67vw));
     }
+    /* WIDTH, not just padding. The rule above sets a square width on every
+       .gear in the cluster, and `html.touchless .hdr-cluster .gear` carries
+       one element selector more than the `.hdr-cluster .gear.who` that gives
+       the nameplate `width: auto`, so it won. Below 900px the nameplate
+       collapsed to a 34px square with the name still inside it, and the name
+       spilled out across the tray: the pill's border cut through its own
+       text. It looked like a broken border and was a specificity accident. */
     html.touchless .hdr-cluster .gear.who {
+      width: auto;
       padding: 0 min(14px, max(7px, 1.55vw));
       font-size: min(12px, max(9px, 1.33vw));
       letter-spacing: min(1.5px, max(0.6px, 0.17vw));
     }
     html.touchless .hdr-tray { height: min(34px, max(25px, 3.78vw)); }
     html.touchless .hdr-tray .gear { width: min(40px, max(26px, 4.44vw)); }
-    html.touchless .hdr-tray .gear.purse { padding: 0 min(12px, max(6px, 1.33vw)); }
+    /* the purse loses the same argument to the same rule, and a coin count
+       squeezed into a 40px square is the other half of what the owner saw */
+    html.touchless .hdr-tray .gear.purse {
+      width: auto;
+      padding: 0 min(12px, max(6px, 1.33vw));
+    }
   }
   /* the purse's coin is drawn, not typed: the emoji rendered as a grey moon */
   .coin-dot {
