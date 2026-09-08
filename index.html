@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=ed5de14cec">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=792a56c77a">
 </head>
 <body>
   <div class="wrap">
@@ -324,39 +324,81 @@
 
     <div class="modal-backdrop" id="profileModal" hidden>
       <div class="modal profile">
-        <div class="modal-title" id="profTitle">Player</div>
+        <div class="modal-title" id="profTitle">Your account</div>
         <p class="lock-hint" id="profLock" hidden></p>
-        <div class="entry wide"><input id="profName" maxlength="5" placeholder="NAME" autocomplete="off" spellcheck="false"></div>
-        <!-- Your rating rides with your NAME, because that is what it belongs
-             to: it is not a mode you pick or a board you browse, it is a fact
-             about you, and it used to need a column of its own on the
-             multiplayer step to say so. Hidden until there is one, since a
-             blank number reads as a bug rather than as "not rated yet". -->
-        <p class="prof-rating" id="profRating" hidden></p>
-        <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag" hidden></span><select id="profCountry"><option value="">NO FLAG</option></select></div>
-        <!-- The kit: the one thing here a player picks rather than buys, which
-             is why it sits with the name and the flag and not in the shop.
-             The preview is the REAL shirt art at real size, painted by the
-             same paintJersey the pitch uses, so what you see on this row is
-             what the snake wears; that is the shop's rule about previews
-             applied to something that costs nothing. -->
-        <div class="entry wide kit-row" id="profKitRow">
-          <canvas id="profKitPreview" class="kit-preview" width="40" height="40"></canvas>
-          <input type="color" id="profKitLeft" class="kit-swatch" aria-label="Shirt colour, left half">
-          <input type="color" id="profKitRight" class="kit-swatch" aria-label="Shirt colour, right half">
-          <input id="profKitNum" class="kit-num" type="number" min="0" max="99" step="1" inputmode="numeric" placeholder="10" aria-label="Shirt number, 0 to 99">
+        <!-- WHO YOU ARE, and it is gated behind a login since 2026-09-08 at the
+             owner's call. The reason is the board: pitch_snake_top_scores only
+             shows a row once there is an account behind it, so a username's
+             only two audiences are a board row a guest cannot have and a room
+             tag. Letting a guest claim one spent a scarce five-character name,
+             unique for ever, on behalf of a browser that will forget them, and
+             the claim flow then promised a board place that got filtered out.
+             The flag and the jersey follow it because they are the same kind of
+             thing: how you appear to other people. -->
+        <div class="prof-me" id="profMe" hidden>
+          <div class="fieldgrp">
+            <div class="flabel">Username</div>
+            <div class="entry wide"><input id="profName" maxlength="5" placeholder="USERNAME" autocomplete="off" spellcheck="false"></div>
+            <!-- Your rating rides with your USERNAME, because that is what it
+                 belongs to: it is not a mode you pick or a board you browse, it
+                 is a fact about you, and it used to need a column of its own on
+                 the multiplayer step to say so. Hidden until there is one, since
+                 a blank number reads as a bug rather than as "not rated yet". -->
+            <p class="prof-rating" id="profRating" hidden></p>
+          </div>
+          <div class="fieldgrp">
+            <div class="flabel">Country</div>
+            <!-- The chip is ALWAYS rendered, showing a globe when no country is
+                 chosen. It used to hide itself, so the row changed width and an
+                 unset country read as a missing feature. A globe is an ordinary
+                 emoji rather than a regional-indicator pair, so it is safe on
+                 the platforms real flag glyphs are not, which is the whole
+                 reason the 250 flags are a sprite. -->
+            <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag"></span><select id="profCountry"><option value="">NO COUNTRY</option></select></div>
+          </div>
+          <div class="fieldgrp">
+            <div class="flabel">Jersey &middot; two colours and a number</div>
+            <!-- The label carries its own explanation, which deletes the
+                 sentence that would otherwise sit under the row at no cost in
+                 height. The preview is the REAL shirt art painted by the same
+                 paintJersey the pitch uses, so what you see here is what the
+                 snake wears: the shop's rule about previews, applied to
+                 something that costs nothing. -->
+            <div class="entry wide kit-row" id="profKitRow">
+              <canvas id="profKitPreview" class="kit-preview" width="40" height="40"></canvas>
+              <input type="color" id="profKitLeft" class="kit-swatch" aria-label="Shirt colour, left half">
+              <input type="color" id="profKitRight" class="kit-swatch" aria-label="Shirt colour, right half">
+              <input id="profKitNum" class="kit-num" type="number" min="0" max="99" step="1" inputmode="numeric" placeholder="10" aria-label="Shirt number, 0 to 99">
+            </div>
+          </div>
+          <button class="btn small" id="profSaveBtn">SAVE</button>
         </div>
-        <button class="btn small" id="profSaveBtn">SAVE</button>
         <div class="prof-auth" id="profAuthAnon" hidden>
-          <p class="vs-hint">Your name, flag and scores will work on any device.</p>
-          <div class="entry wide"><input id="profEmail" class="prof-email" type="email" placeholder="EMAIL" autocomplete="email" autocapitalize="off" spellcheck="false"></div>
+          <!-- Reason before request. This used to be one line UNDER the email
+               field justifying it afterwards, which is the wrong way round on a
+               screen nobody has to be on. Three lines of what a login gets you,
+               then the one field that gets it. Deliberately no lock icon, no
+               dashed border and no restating paragraph: "log in to get X"
+               already says X is behind the login. -->
+          <div class="prof-sell">
+            <div class="sell-hd">Log in to:</div>
+            <ul>
+              <li>Get a custom username</li>
+              <li>Add a jersey to your snake</li>
+              <li>Choose your country</li>
+            </ul>
+          </div>
+          <div class="fieldgrp">
+            <div class="flabel">Email</div>
+            <div class="entry wide"><input id="profEmail" class="prof-email" type="email" placeholder="EMAIL" autocomplete="email" autocapitalize="off" spellcheck="false"></div>
+          </div>
           <div class="entry wide" id="profCodeRow" hidden>
             <input id="profCode" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="CODE" spellcheck="false">
           </div>
           <button class="btn small" id="profSendBtn">EMAIL ME A CODE</button>
         </div>
         <div class="prof-auth" id="profAuthOn" hidden>
-          <p class="vs-hint">Signed in as <b id="profWhoEmail"></b></p>
+          <p class="vs-hint">Logged in as <b id="profWhoEmail"></b></p>
           <button class="btn small ghostbtn" id="profSignOut">SIGN OUT</button>
         </div>
         <p class="save-note" id="profStatus" hidden></p>
@@ -365,7 +407,10 @@
              you are here rather than part of a round. Shows the LOCKED ones
              too: a list of only what you already have says nothing about
              what the game rewards, which is most of why badges exist. -->
-        <button class="btn small" id="profileClose">DONE</button>
+        <!-- DONE only closes the sheet, so it stops wearing the same red as
+             the button that commits a change. Three identical loud buttons
+             made the loudest of them the one that does nothing. -->
+        <button class="btn small ghostbtn" id="profileClose">DONE</button>
       </div>
     </div>
 
@@ -422,17 +467,17 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=ed5de14cec",
-    "./packages/net/net.js": "./packages/net/net.js?v=ed5de14cec",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=ed5de14cec",
-    "./page/build/dom.js": "./page/build/dom.js?v=ed5de14cec",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=ed5de14cec",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=ed5de14cec",
-    "./page/build/kit.js": "./page/build/kit.js?v=ed5de14cec",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=ed5de14cec",
-    "./page/build/shop.js": "./page/build/shop.js?v=ed5de14cec",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=ed5de14cec",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=ed5de14cec"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=792a56c77a",
+    "./packages/net/net.js": "./packages/net/net.js?v=792a56c77a",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=792a56c77a",
+    "./page/build/dom.js": "./page/build/dom.js?v=792a56c77a",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=792a56c77a",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=792a56c77a",
+    "./page/build/kit.js": "./page/build/kit.js?v=792a56c77a",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=792a56c77a",
+    "./page/build/shop.js": "./page/build/shop.js?v=792a56c77a",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=792a56c77a",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=792a56c77a"
   }
 }
 </script>
@@ -2187,7 +2232,7 @@
   function nudgeDue() {
     if (!supabaseConfigured() || !sessionToken() || !sbAnon()) return false;
     if (nudgedThisSession || nudgeRefusals() >= NUDGE_LIMIT) return false;
-    return (savedThisRound && !boardIsLocal) || beatBest;
+    return (savedThisRound && !boardIsLocal) || beatBest || placedAsGuest;
   }
   // A hundred since 2026-09-05, at the owner's call: the board tracks the
   // world top 100, the entry gate is the hundredth row, and the TOP 100
@@ -2207,6 +2252,11 @@
   // thing that reads it on every call; the page keeps the rest
   let sbProfile = null, sbAuth = null, sbUser = null;
   function sbAnon() { return !!(sbUser && sbUser.is_anonymous); }
+  // The one question the gated sheet asks. Deliberately NOT the negation of
+  // sbAnon: before auth resolves sbUser is null, which is neither anonymous
+  // nor logged in, and treating that as logged in would flash the username
+  // field at a guest for a second on every boot.
+  function loggedIn() { return !!(sessionToken() && sbUser && !sbUser.is_anonymous); }
   async function bootAuth() {
     if (!supabaseConfigured()) return;
     try {
@@ -2572,7 +2622,7 @@
   // or a save that lands first can never be overruled by a late board.
   let deathGen = 0;
   let nudgeGen = -1;   // the death that owns a shown account nudge
-  function retireEntry() { deathGen++; entryWanted = false; claimWanted = false; }
+  function retireEntry() { deathGen++; entryWanted = false; claimWanted = false; placedAsGuest = false; }
   async function askIfItPlaces(gen, sc) {
     const list = await renderStandings();
     if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
@@ -2583,11 +2633,21 @@
     if (placesOnBoard(list, sc)) {
       // the round placed: the board earns its screen space, with your row
       boardWanted = true;
-      // a known name is never asked for again: the profile answered it, so
-      // the round goes straight to the board under it
+      // A GUEST IS NEVER ASKED FOR A USERNAME HERE (2026-09-08). Their row is
+      // filtered out of the world board by top_scores until there is an
+      // account behind it, so the old path promised a board place, spent one
+      // of the scarce five-character unique names on a browser that will
+      // forget it, and then showed nothing. Store and pay the round instead,
+      // exactly as a near miss does, and let the account offer make the only
+      // argument that helps. Nothing is lost by waiting: the user_id does not
+      // change when an email is linked, so this row appears the moment they
+      // log in.
+      if (!loggedIn()) { placedAsGuest = true; void submitSilently(); refreshModeUI(); return; }
+      // a known username is never asked for again: the profile answered it,
+      // so the round goes straight to the board under it
       if (sbProfile && sbProfile.name) { autoSubmit(gen); return; }
-      // no name yet: offer the claim, which opens the profile sheet (name
-      // and account in one place) instead of a bare name field
+      // no username yet: offer the claim, which opens the profile sheet
+      // (username and account in one place) instead of a bare name field
       claimWanted = true;
       refreshModeUI();
       return;
@@ -2728,6 +2788,9 @@
   // by the sheet's own SAVE, and the round submits itself the moment a name
   // exists, exactly like autoSubmit always did.
   let claimWanted = false;
+  // a guest's round placed on score but cannot be shown: what the account
+  // offer reads to make the true argument rather than the flattering one
+  let placedAsGuest = false;
   let boardWanted = false;   // the board shows on death only when this round placed on it
 
   function persistModeState() {
@@ -2916,7 +2979,7 @@
       // trying to convert. What is true is better bait anyway, because the
       // score already exists and linking an email reveals it rather than
       // creating it.
-      acctLine.textContent = (savedThisRound && !boardIsLocal)
+      acctLine.textContent = (placedAsGuest || (savedThisRound && !boardIsLocal))
         ? 'That score belongs on the world board. An account puts it there.'
         : 'New best. An account keeps it, on any device.';
     }
@@ -4508,6 +4571,19 @@
   const profCountryRow = document.getElementById('profCountryRow');
   const profCountry = document.getElementById('profCountry');
   const profFlag = document.getElementById('profFlag');
+  const profMe = document.getElementById('profMe');
+  // The sheet's chip never disappears. paintFlag hides an unknown code, which
+  // is right for a board row (it should collapse into the name) and wrong
+  // here: the row changed width as you picked, and an unset country read as a
+  // missing feature rather than a choice. A globe holds the place, and it is
+  // an ordinary emoji rather than a regional-indicator pair, so it renders on
+  // the platforms real flag glyphs never have.
+  function paintCountryChip(code) {
+    paintFlag(profFlag, code);
+    const none = !code;
+    profFlag.classList.toggle('globe', none);
+    if (none) profFlag.hidden = false;
+  }
   const profSaveBtn = document.getElementById('profSaveBtn');
   const kitPreview = document.getElementById('profKitPreview');
   const kitLeftInput = document.getElementById('profKitLeft');
@@ -4596,7 +4672,7 @@
     try { localName = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {}
     profName.value = (sbProfile && sbProfile.name) || localName;
     profCountry.value = (sbProfile && sbProfile.country) || '';
-    paintFlag(profFlag, cc(profCountry.value));
+    paintCountryChip(cc(profCountry.value));
     // The kit comes off the worn state rather than straight off sbProfile, so
     // the sheet shows what the snake is actually wearing on an offline day too
     // (localStorage is the fallback, exactly as it is for the skin). A colour
@@ -4607,7 +4683,10 @@
     kitRightInput.value = showing.right || JERSEY_RIGHT_DEFAULT;
     kitNumInput.value = showing.num === null ? '' : String(showing.num);
     paintKitPreview();
-    profCountryRow.style.display = sessionToken() ? '' : 'none';
+    // The gate. A guest sees the login and nothing else; the identity block
+    // arrives whole the moment there is an account behind it. The country row
+    // no longer hides itself, because the block it lives in does.
+    profMe.hidden = !loggedIn();
     profAuthAnon.hidden = !(sessionToken() && sbAnon());
     profAuthOn.hidden = !(sessionToken() && sbUser && !sbUser.is_anonymous);
     if (!profAuthOn.hidden) profWhoEmail.textContent = sbUser.email || '';
@@ -4620,7 +4699,10 @@
     // exactly why Supabase withholds it. So the sheet stays neutral until the
     // send comes back, and profDoorIs() names it then, one round trip later
     // and still before the code is typed.
-    profTitle.textContent = profAuthAnon.hidden ? 'Player' : 'Save your progress';
+    // One title for one subject. It used to read 'Save your progress' to a
+    // guest and 'Player' to everybody else, which described the email half to
+    // one and the identity half to the other; the sheet is the account.
+    profTitle.textContent = 'Your account';
     fillProfileRating();
     if (reset) {
       profCodeRow.hidden = true;
@@ -4859,7 +4941,7 @@
   });
 
   // the preview answers the moment you change the choice, not on save
-  profCountry.addEventListener('change', () => { paintFlag(profFlag, cc(profCountry.value)); });
+  profCountry.addEventListener('change', () => { paintCountryChip(cc(profCountry.value)); });
 
   // Find a free name close to the one the player wanted.
   //
@@ -4901,7 +4983,7 @@
 
   profSaveBtn.addEventListener('click', async () => {
     const name = (profName.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
-    if (!name) { profSay('Pick a name first.'); return; }
+    if (!name) { profSay('Pick a username first.'); return; }
     profName.value = name;
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
     vsNameInput.value = name;
@@ -4939,7 +5021,7 @@
         // else is the network having a day
         const words = String((e && e.message) || '');
         if (words.toLowerCase().includes('taken')) {
-          profSay('That name is taken. Looking for a free one…', true);
+          profSay('That username is taken. Looking for a free one…', true);
           const free = await freeNameNear(name);
           if (free) {
             // Put it in the field rather than saving it: a name is the one
@@ -4948,10 +5030,10 @@
             profName.value = free;
             profSay(name + ' is taken. ' + free + ' is free, or type your own.');
           } else {
-            profSay('That name is taken, and so is everything near it. Try another.');
+            profSay('That username is taken, and so is everything near it. Try another.');
           }
         } else {
-          profSay('Could not reach your account. The name is kept on this device.');
+          profSay('Could not reach your account. The username is kept on this device.');
         }
       }
       profSaveBtn.disabled = false;

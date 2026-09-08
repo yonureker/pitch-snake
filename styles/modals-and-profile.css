@@ -77,6 +77,15 @@
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     width: 100%; border-top: 1px solid rgba(194,162,90,0.35); padding-top: 12px;
   }
+  /* A rule separates two things, so it needs something above it. Since the
+     identity block became login-gated the guest sheet has nothing there, and
+     the border drew a line under the title with empty space above it, which
+     read as a stray divider rather than a division. The adjacent-sibling form
+     asks exactly the right question, "is the block above me hidden", and it
+     answers itself from the DOM: no JS has to remember to toggle a class.
+     (:first-of-type looked right and matches nothing here, because the title
+     is the first div in the sheet.) */
+  .prof-me[hidden] + .prof-auth { border-top: none; padding-top: 0; }
   .prof-auth[hidden] { display: none; }
   .prof-auth .vs-hint { text-align: center; margin: 0; }
   /* the ghost button was dressed for the dark overlay; on a sheet it wears

@@ -113,12 +113,55 @@
     align-self: center;
   }
   .flag[hidden] { display: none; }
+  /* The profile sheet's chip when no country is chosen. Not a sprite cell:
+     the sheet asks for a country and 250 flags do not include "anywhere", so
+     this is the one place a glyph beats the artwork. Safe as a glyph too,
+     because a globe is an ordinary emoji and not the regional-indicator pair
+     that Windows has never shipped a flag for. */
+  .flag.globe {
+    background-image: none;
+    font-size: 15px; line-height: 15px; text-align: center;
+  }
+  .flag.globe::after { content: '\1F30D'; }
   /* on the chip the flag sits inline with the name rather than in a column */
   .chip-flag { flex: 0 0 20px; }
   /* the option list is text (an <option> can hold nothing else), so the
      chosen flag is shown for real right beside the control */
   .country-row { display: flex; align-items: center; gap: 9px; }
   .country-row select { flex: 1 1 auto; min-width: 0; }
+  /* A field and the label that names it are ONE thing, so they group at 5px
+     inside the sheet's own 11px rhythm. The group takes the same width as
+     .entry.wide (the sheet centres its children, so a bare label would sit
+     centred over a 300px field and belong to nothing). */
+  .fieldgrp {
+    width: min(300px, 84%);
+    display: flex; flex-direction: column; align-items: stretch; gap: 5px;
+  }
+  .fieldgrp .entry.wide { width: 100%; }
+  .flabel {
+    font-family: 'Anton', sans-serif; font-size: 10px; letter-spacing: 2.6px;
+    text-transform: uppercase; color: var(--sheet-muted); text-align: left;
+  }
+  /* The login pitch: what an account gets you, above the field that gets it.
+     Three lines and a heading, and nothing else on purpose. */
+  .prof-sell { width: min(300px, 84%); display: flex; flex-direction: column; gap: 7px; }
+  .sell-hd {
+    font-family: 'Anton', sans-serif; font-size: 15px; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--sheet-ink); text-align: left;
+  }
+  .prof-sell ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .prof-sell li {
+    display: grid; grid-template-columns: 14px 1fr; gap: 8px; align-items: baseline;
+    font-family: 'Barlow', sans-serif; font-size: 13.5px; color: var(--sheet-ink);
+    text-align: left;
+  }
+  .prof-sell li::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--sheet-gold); margin-top: 6px;
+  }
+  /* the identity block, hidden whole for a guest */
+  .prof-me { display: flex; flex-direction: column; align-items: center; gap: 11px; width: 100%; }
+  .prof-me[hidden] { display: none; }
   /* The kit row: the live shirt, two colour wells and the number. It sits with
      the flag because both are identity a player sets on this sheet.
 
