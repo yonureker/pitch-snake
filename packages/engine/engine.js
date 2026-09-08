@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 24;  // 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 25;  // 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -613,7 +613,7 @@ export function createGame(cfg = {}) {
       buildWalls();                 // shape appears and flashes before it bites
       S.wallState = 'warning';
       S.wallPhaseEnd = S.clockMs + WARN_MS;
-      // never leave food or a TNT buried under a fresh wall
+      // never leave food, a TNT or the bolt buried under a fresh wall
       if (S.food && S.wallLookup.has(K(S.food.x, S.food.y))) placeFood();
       for (let i = S.bombs.length - 1; i >= 0; i--) {
         const b = S.bombs[i];
@@ -621,6 +621,20 @@ export function createGame(cfg = {}) {
         const c = spawnCell(MIN_SPAWN_DIST);
         if (c) { b.x = c.x; b.y = c.y; }
         else S.bombs.splice(i, 1);   // nowhere safe: drop it rather than bury it in a wall
+      }
+      // A bolt under a shape is worse than a buried TNT, because it is the
+      // one thing on the board that is pure relief: both renderers draw it
+      // from state, on TOP of the wall layer, so it sits there looking
+      // takeable while the only route to it is a fatal cell. It moves like a
+      // TNT rather than dying, but keeps bornAt: the wall may not lengthen
+      // the eight seconds a bolt waits, or one re-covered each wall cycle
+      // would stand on the pitch for ever. Nowhere to put it is the TNT's
+      // answer too, dropped rather than buried, and the mark stays spent
+      // exactly as an expiry spends it (v25).
+      if (S.bolt !== null && S.wallLookup.has(K(S.bolt.x, S.bolt.y))) {
+        const c = spawnCell(MIN_SPAWN_DIST);
+        if (c) { S.bolt.x = c.x; S.bolt.y = c.y; emit({ t: 'bolt', gone: false, x: c.x, y: c.y }); }
+        else { emit({ t: 'bolt', gone: true, x: S.bolt.x, y: S.bolt.y }); S.bolt = null; }
       }
       // A ghost the shape lands on is NOT moved: relocating it teleported it,
       // sometimes straight into a player's path. It keeps its feet and walks

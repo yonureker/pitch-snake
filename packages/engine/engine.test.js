@@ -938,6 +938,45 @@ test('a bolt expires unclaimed, and spends its mark doing so', () => {
   assert.ok(g.bolt, 'as it does');
 });
 
+test('a wall forming over the bolt moves it clear rather than bury it (v25)', () => {
+  // find a seed whose first wall pattern covers (0,0) - the frame patterns do
+  let seed = 0;
+  for (let s = 1; s < 60 && !seed; s++) {
+    const t = createGame({ seed: s });
+    t.clockMs = 100; t.wallPhaseEnd = 0;
+    t._updateWalls();
+    if (t.wallLookup.has(K(0, 0))) seed = s;
+  }
+  assert.ok(seed, 'found a seed whose first pattern covers the corner');
+
+  const g = createGame({ seed });
+  g.clockMs = 100; g.wallPhaseEnd = 0;
+  g.bolt = { x: 0, y: 0, bornAt: 40 };
+  g.boltsSpawned = 1;
+  g.drainEvents();
+  g._updateWalls();
+  assert.ok(g.wallLookup.has(K(0, 0)), 'the shape landed on the bolt');
+  assert.ok(g.bolt, 'which does not bury it: relief under a wall is only a taunt');
+  assert.ok(!g.wallLookup.has(K(g.bolt.x, g.bolt.y)), 'it stands on open ground now');
+  assert.equal(g.bolt.bornAt, 40, 'on the life it already had, never a fresh eight seconds');
+  assert.equal(g.boltsSpawned, 1, 'and the mark it spent stays spent');
+  const moved = g.drainEvents().find(e => e.t === 'bolt' && !e.gone);
+  assert.ok(moved && moved.x === g.bolt.x && moved.y === g.bolt.y, 'the shells hear where it went');
+
+  // nowhere to put it is the TNT's answer: dropped rather than buried
+  const t = createGame({ seed });
+  t.clockMs = 100; t.wallPhaseEnd = 0;
+  t.bolt = { x: 0, y: 0, bornAt: 40 };
+  t.boltsSpawned = 1;
+  for (let x = 0; x < GRID; x++)
+    for (let y = 0; y < GRID; y++) if (!t.cellOccupied(x, y)) t.bombs.push({ x, y });
+  t.drainEvents();
+  t._updateWalls();
+  assert.equal(t.bolt, null, 'a full board drops it');
+  assert.ok(t.drainEvents().some(e => e.t === 'bolt' && e.gone), 'and the shells hear it go');
+  assert.equal(t.boltsSpawned, 1, 'the mark is spent exactly as an expiry spends it');
+});
+
 test('nothing else spawns on a bolt, and a round with one replays exactly', () => {
   const g = quietGame();
   g.bolt = { x: 7, y: 7, bornAt: 0 };

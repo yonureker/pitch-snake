@@ -25,8 +25,9 @@
      parse error. scripts/check-stylesheets.mjs now refuses that shape. */
   /* Wider than the other sheets. It carries a hundred rows of rank, flag,
      name and score, and since the ladder joined it as a fourth chip the row
-     of chips needed 342px in a 272px box, so LADDER dropped to a line of its
-     own. The board is the one sheet that earns the width. */
+     of chips needed 342px in a 272px box, so the rating chip (LADDER then,
+     ELO since) dropped to a line of its own. The board is the one sheet
+     that earns the width. */
   .modal.boards { max-height: 86vh; width: min(390px, 92vw); }
   .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
   /* the header row the SHOP still wears; it outlived the achievement shelf

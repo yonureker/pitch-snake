@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=75450e79ee">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=75450e79ee">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=4d73328a76">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=4d73328a76">
 </head>
 <body>
   <div class="wrap">
@@ -373,12 +373,19 @@
              answers the same question the other three do, "who is best", and
              it was costing the multiplayer step a whole second column to say
              so: a rating card, a top five and a door, all to reach a list
-             that belongs here beside the boards it sits next to. -->
+             that belongs here beside the boards it sits next to.
+
+             It wears ELO to the player and stays the ladder in the code: ELO
+             is the word anyone who has played a rated game already knows, and
+             the number in the row IS an Elo, while "ladder" is the machinery
+             behind it (rating.sql, RATING_RULES.md, pitch_snake_top_rated).
+             Renaming the internals to match the chip would only move the
+             mismatch somewhere the docs cannot see it. -->
         <div class="board-chips" id="boardChips">
           <button data-bmode="classic" class="active">CLASSIC</button>
           <button data-bmode="speedrun">SPEED RUN</button>
           <button data-bmode="survival">SURVIVAL</button>
-          <button data-bmode="ladder">LADDER</button>
+          <button data-bmode="ladder">ELO</button>
         </div>
         <ol class="boards-list" id="boardsList"></ol>
         <p class="save-note soft" id="boardsNote" hidden></p>
@@ -403,16 +410,16 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=75450e79ee",
-    "./packages/net/net.js": "./packages/net/net.js?v=75450e79ee",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=75450e79ee",
-    "./page/build/dom.js": "./page/build/dom.js?v=75450e79ee",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=75450e79ee",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=75450e79ee",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=75450e79ee",
-    "./page/build/shop.js": "./page/build/shop.js?v=75450e79ee",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=75450e79ee",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=75450e79ee"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=4d73328a76",
+    "./packages/net/net.js": "./packages/net/net.js?v=4d73328a76",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=4d73328a76",
+    "./page/build/dom.js": "./page/build/dom.js?v=4d73328a76",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=4d73328a76",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=4d73328a76",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=4d73328a76",
+    "./page/build/shop.js": "./page/build/shop.js?v=4d73328a76",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=4d73328a76",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=4d73328a76"
   }
 }
 </script>
@@ -4571,7 +4578,7 @@
     if (!rows.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = board ? 'No rated rounds yet' : 'Ladder unavailable';
+      li.textContent = board ? 'No rated rounds yet' : 'Elo unavailable';
       boardsList.appendChild(li);
     }
     rows.forEach((r, i) => { boardsList.appendChild(ladderRow(r, i)); });
@@ -4591,7 +4598,7 @@
       b.classList.toggle('active', b.dataset.bmode === boardsMode);
     }
     // a rating board is not a score board, and the title should not claim it is
-    boardsTitle.textContent = boardsMode === 'ladder' ? 'LADDER \u00b7 TOP 100' : 'TOP 100 WORLDWIDE';
+    boardsTitle.textContent = boardsMode === 'ladder' ? 'ELO \u00b7 TOP 100' : 'TOP 100 WORLDWIDE';
     if (boardsMode === 'ladder') { await renderLadder(); return; }
     const rm = boardsMode;
     boardsNote.hidden = true;
