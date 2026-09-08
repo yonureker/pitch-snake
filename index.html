@@ -2586,6 +2586,13 @@
     try {
       const key = await saveScore(name, g.score);
       lastSaveKey = key;   // the sheet scrolls to this row when the door is taken
+      // The board this row just joined is stale in the sheet's cache, and the
+      // sheet reads that cache before it reads the network. So the TOP 100
+      // opened from the sticker showed the list as it was BEFORE the round:
+      // no new row, and therefore nothing for the highlight to match either,
+      // which is one bug wearing two faces. Drop the mode's entry and the
+      // next open refetches.
+      delete railTops[ruleMode()];
       showRoundPay(lastCoins);
       boardWanted = true;   // a saved row is a row worth showing
       await renderStandings(key);
