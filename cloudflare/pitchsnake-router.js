@@ -114,12 +114,17 @@ const LOCATION_HINTS = new Set(['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', '
 // worse than none, while eeur was correctly much worse still, so hints are
 // honoured and placement simply is not following the request on this account).
 //
-// While this is false the room path falls through to the page proxy and 404s,
-// the client's socket refuses cleanly, and every room plays on Broadcast
-// exactly as it did before any of this existed. Turn it back on only with a
-// number that beats `node scripts/wire-latency.mjs` on the same machine in the
-// same minute, not with a theory about why it should.
-const RELAY_ENABLED = false;
+// While it is off the room path falls through to the page proxy and 404s, the
+// client's socket refuses cleanly, and every room plays on Broadcast exactly as
+// it did before any of this existed. Turn it back on only with a number that
+// beats `node scripts/wire-latency.mjs` on the same machine in the same minute,
+// not with a theory about why it should.
+//
+// It is a VARIABLE rather than a constant so the local checks can still drive a
+// real relay (`wrangler dev --var RELAY_ENABLED:true`) while production, which
+// sets nothing, stays off. Re-enabling in production means adding it to
+// wrangler.toml on purpose, which is the deliberate act it should be.
+const relayEnabled = (env) => env.RELAY_ENABLED === 'true';
 
 /**
  * Is this a room socket, and if so which room?
@@ -149,7 +154,7 @@ export default {
     // Every room code reaches the same object from anywhere in the world
     // because the id comes from the code by name; the object is created in the
     // data centre nearest whoever opens the room first. See room-wire.js.
-    const code = RELAY_ENABLED ? roomCode(url) : null;
+    const code = relayEnabled(env) ? roomCode(url) : null;
     if (code !== null) {
       const id = env.ROOM_WIRE.idFromName(code);
       const hint = LOCATION_HINTS.has(url.searchParams.get('loc') ?? '')

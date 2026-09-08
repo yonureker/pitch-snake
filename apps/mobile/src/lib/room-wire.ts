@@ -53,6 +53,17 @@ const RELAY_ORIGIN = 'wss://pitchsnake.com';
 const RETRY_MIN_MS = 400;
 /** The longest this will ever wait between attempts. */
 const RETRY_MAX_MS = 5000;
+/**
+ * How many times to knock before deciding nobody is home.
+ *
+ * Only counted while the socket has NEVER opened here. A relay that is not
+ * deployed, is switched off, or is blocked by this network is not going to
+ * answer the ninetieth attempt either, and a room that has already fallen back
+ * to Broadcast pays nothing for giving up: it plays exactly as it always did.
+ * A socket that DID open and then dropped keeps retrying for ever, because
+ * that is an ordinary blip and the room wants it back.
+ */
+const RETRY_GIVE_UP = 4;
 
 /**
  * Open this room's socket and keep it open.
@@ -74,6 +85,12 @@ export function openRoomSocket(code: string, origin: string = RELAY_ORIGIN): Net
   let socket: WebSocket | null = null;
   let cb: ((m: unknown) => void) | null = null;
   let closed = false;
+  // A record rather than two locals, because both are written inside socket
+  // callbacks: the compiler cannot see that ordering and narrows a plain `let`
+  // to the literal it was initialised with, which turns the give-up test below
+  // into "always truthy" and a lint error that is right about the types and
+  // wrong about the program.
+  const tries = { everOpened: false, failures: 0 };
   let retryMs = RETRY_MIN_MS;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -112,6 +129,10 @@ export function openRoomSocket(code: string, origin: string = RELAY_ORIGIN): Net
 
   const schedule = (): void => {
     if (closed || retryTimer !== null) return;
+    if (!tries.everOpened && ++tries.failures > RETRY_GIVE_UP) {
+      closed = true; // nobody is home; stop knocking for this room
+      return;
+    }
     retryTimer = setTimeout(() => {
       retryTimer = null;
       retryMs = Math.min(RETRY_MAX_MS, retryMs * 2);
