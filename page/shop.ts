@@ -251,12 +251,20 @@ export function purseIsKnown(): boolean {
 // single square reads as a token. The head is the right-hand square, facing
 // right, which is the direction a round opens in.
 
-// The box is taller than the old 64x28 because a hat is worn ABOVE the head:
-// the wide-brim classic reaches about a cell above the crown, and at the old
-// height its brim was cut off by the top edge. The snake sits low in the box
-// and the space above it is the hat's.
-/** The cell size the preview's two squares are drawn at. */
-const PREVIEW_CELL = 20;
+// THREE squares, centred in the box. Two read as a fragment and one reads as
+// a token; three is the shortest run that says "snake".
+//
+// The CELL shrank rather than the box growing, which is the part worth
+// knowing. Widening the box to 88px to fit a third square at the old size
+// took 24px straight out of the row, and the shop row is three things across
+// a 320px sheet: the label lost it. SWEATBAND clipped and FLAT CAP wrapped to
+// two lines. A smaller cell keeps the trio inside the width the row already
+// had. The height still pays for a hat, which reaches about a cell above the
+// crown, and the snake is centred rather than pushed to the floor.
+/** How many body cells a preview draws. */
+const PREVIEW_CELLS = 3;
+/** The cell size those squares are drawn at. */
+const PREVIEW_CELL = 17;
 const PREVIEW_WIDTH = 72;
 const PREVIEW_HEIGHT = 44;
 
@@ -308,18 +316,20 @@ function paintSnakePreview(canvas: HTMLCanvasElement, skin: SkinArt, hat: HatArt
   const half = cell * 0.42;
   const radius = cell * 0.32;
   const ramp = buildLutFor(skin);
-  // low in the box, so everything above the head belongs to the hat
-  const centreY = PREVIEW_HEIGHT - cell * 0.62;
-  // the pair centred, rather than shoved against the right edge
-  const headX = PREVIEW_WIDTH / 2 + cell * 0.46;
-  const bodyX = headX - cell * 0.92;
+  // Centred, both ways. The run of cells is centred on the box's middle, and
+  // the head is the rightmost, so the trio reads left to right into its face.
+  const step = cell * 0.92;
+  const centreY = PREVIEW_HEIGHT / 2;
+  const headX = PREVIEW_WIDTH / 2 + (step * (PREVIEW_CELLS - 1)) / 2;
 
   context.lineWidth = Math.max(1, cell * 0.05);
   context.strokeStyle = skin.line;
-  // tail first, so the head sits over it exactly as it does on the pitch
-  const cells: [number, number][] = [[bodyX, SNAKE_SHADES - 1], [headX, 0]];
-  for (const [x, shade] of cells) {
+  // Tail first, so each cell sits over the one behind it exactly as on the
+  // pitch, and the shade walks the ramp the same way the body does.
+  for (let i = PREVIEW_CELLS - 1; i >= 0; i--) {
+    const shade = Math.round((i / (PREVIEW_CELLS - 1)) * (SNAKE_SHADES - 1));
     context.fillStyle = ramp[shade] ?? '#f4ecd8';
+    const x = headX - step * i;
     roundRectOn(context, x - half, centreY - half, half * 2, half * 2, radius);
     context.fill();
     context.stroke();
