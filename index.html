@@ -237,9 +237,9 @@
         <div class="badges" id="payNote" hidden></div>
         <button class="btn small" id="claimBtn" hidden>SAVE YOUR HIGHSCORE</button>
         <div class="acct" id="authNudge" hidden>
-          <p class="acct-line" id="acctLine">Create an account to save your scores.</p>
+          <p class="acct-line" id="acctLine">Keep your scores on any device.</p>
           <div class="acct-row">
-            <button class="btn small modes" id="acctGo">CREATE ACCOUNT</button>
+            <button class="btn small modes" id="acctGo">KEEP MY SCORES</button>
             <button class="acct-later" id="acctLater">Not now</button>
           </div>
         </div>
@@ -341,7 +341,7 @@
           <div class="entry wide" id="profCodeRow" hidden>
             <input id="profCode" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="CODE" spellcheck="false">
           </div>
-          <button class="btn small" id="profSendBtn">CREATE ACCOUNT</button>
+          <button class="btn small" id="profSendBtn">EMAIL ME A CODE</button>
         </div>
         <div class="prof-auth" id="profAuthOn" hidden>
           <p class="vs-hint">Signed in as <b id="profWhoEmail"></b></p>
@@ -4464,9 +4464,16 @@
     profAuthAnon.hidden = !(sessionToken() && sbAnon());
     profAuthOn.hidden = !(sessionToken() && sbUser && !sbUser.is_anonymous);
     if (!profAuthOn.hidden) profWhoEmail.textContent = sbUser.email || '';
-    // the sheet names what it is for: an offer while a guest, a settings
-    // panel once there is an account behind it
-    profTitle.textContent = profAuthAnon.hidden ? 'Player' : 'Create account';
+    // WHICH DOOR IS THIS. The sheet used to answer before it could know,
+    // titling itself "Create account" at a guest who may well have an account
+    // already, and putting CREATE ACCOUNT on a button that half the time signs
+    // you in. Whether an address has an account is a question only the server
+    // can answer, and it deliberately will not answer it early: an endpoint
+    // that says whether a person exists is an enumeration oracle, which is
+    // exactly why Supabase withholds it. So the sheet stays neutral until the
+    // send comes back, and profDoorIs() names it then, one round trip later
+    // and still before the code is typed.
+    profTitle.textContent = profAuthAnon.hidden ? 'Player' : 'Save your progress';
     fillProfileRating();
     if (reset) {
       profCodeRow.hidden = true;
@@ -4476,7 +4483,7 @@
       autoVerified = false;
       if (resendTimer) { clearInterval(resendTimer); resendTimer = null; }
       profSendBtn.disabled = false;
-      profSendBtn.textContent = 'CREATE ACCOUNT';
+      profSendBtn.textContent = 'EMAIL ME A CODE';
       profSay('');
     }
   }
@@ -4828,9 +4835,13 @@
       if (r.error && (r.error.code === 'email_exists' || r.error.status === 422)) {
         otpKind = 'signin';
         r = await sbAuth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-        if (!r.error) profSay('That email already has an account. This code signs you in.', true);
+        if (!r.error) {
+          profDoorIs('signin');
+          profSay('That email already has an account. This code signs you in.', true);
+        }
       } else if (!r.error) {
         otpKind = 'link';
+        profDoorIs('link');
         profSay('Code sent. Check your inbox.', true);
       }
       if (r.error) throw r.error;
@@ -4843,8 +4854,18 @@
     } catch (e) {
       profSay(authWords(e));
       profSendBtn.disabled = false;
-      profSendBtn.textContent = otpEmail ? 'RESEND CODE' : 'CREATE ACCOUNT';
+      profSendBtn.textContent = otpEmail ? 'RESEND CODE' : 'EMAIL ME A CODE';
     }
+  }
+
+  /**
+   * Say which door the player is actually walking through, once the server has
+   * settled it. 'link' keeps this device's user_id and everything on it;
+   * 'signin' switches to an account that already exists, which is a different
+   * promise and has to read as one.
+   */
+  function profDoorIs(kind) {
+    profTitle.textContent = kind === 'signin' ? 'Sign in' : 'Create account';
   }
 
   async function profVerify() {
