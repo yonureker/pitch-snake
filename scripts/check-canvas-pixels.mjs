@@ -1,14 +1,38 @@
 // A pixel gate for the renderer.
 //
+// STATUS: NOT YET RELIABLE. Do not put this in CI and do not treat a failure
+// as proof of a regression until it has been reproduced. Measured over four
+// consecutive runs against an unchanged tree, one run failed: the frames
+// mostly settle and then one of them does not. Six causes of nondeterminism
+// have been found and fixed (below) and at least one remains.
+//
+// The failure direction matters and is the safer one. A PASS is a genuine
+// byte-for-byte match of that capture and means what it says. A FAIL may be
+// the remaining flake rather than a real change, so the procedure is: run it
+// again, and only believe a failure that repeats. That asymmetry is why this
+// is still worth having and still not worth blocking a commit on.
+//
 // WHY THIS EXISTS. Every other check in this repo measures DOM boxes, text,
 // classes and status codes. All of them are blind to what the game actually
 // DRAWS, so a change to the arena, the jersey, the crest, a hat or a ghost
 // sprite passes them all. This hashes the canvas.
 //
 // WHAT IT COVERS. Only frames that do not depend on a seed, which means the
-// board before kickoff. That is not a small target: survival stands all 31
-// segments on the pitch from the first frame, so the body, the colour ramp,
-// the outline, the crest and the hat are all on screen, over the arena.
+// board before kickoff, in classic and speed run, with the viper skin and
+// with no hat: the body, the colour ramp, the outline, the crest, the hat and
+// the arena.
+//
+// WHAT IT DELIBERATELY DOES NOT COVER: survival. It was the best frame here,
+// standing all 31 segments and five ghosts on the pitch at once, and it is
+// the ONE frame that will not settle. Captured three times from an unchanged
+// tree it gave two results, and the two differ by 2633 pixels of 430,336
+// spread across a 456x656 box covering most of the board, at a magnitude that
+// reads as a phase difference rather than a moved object. Fixes 1 to 6 below
+// each removed a cause and none removed this one. Rather than keep a frame
+// that fails at random, it is out: a gate that cries wolf gets ignored, and
+// then the five that DO hold get ignored with it. Winning it back is worth
+// doing, and the place to start is what survival has that the others do not,
+// which is five ghosts and nine bombs on the board before anything steps.
 //
 // CALIBRATION, so the gate is trustable rather than merely present. Changing
 // the classic skin's head colour by ONE unit in the red channel fails five of
@@ -46,6 +70,15 @@
 //      differed from ITSELF by 48 pixels of 430,336, the same 48 that
 //      separated it from the baseline. Both clocks are stubbed now, and they
 //      advance together off the same counter.
+//   6. THE FONT. index.html rebuilds the TNT sprite when Barlow finishes
+//      loading, and that arrival is a network event no clock stub reaches.
+//      SURVIVAL is the only frame with TNT on the board at kickoff (nine
+//      bombs from the first frame), which is why it alone kept alternating
+//      between exactly two hashes long after the others settled: the capture
+//      landed before or after the font depending on the run. So the virtual
+//      clock does not start until document.fonts.ready resolves. The page
+//      sees dt = 0 until then, advances nothing, and every run begins its
+//      timeline from the same event.
 //
 // The mode comes from localStorage before load, never from clicking the
 // chooser, because a click fires newRound() at an arbitrary frame and puts
@@ -71,7 +104,6 @@ const CAPTURE_AT_FRAME = 500;
 const SHOTS = [
   { name: 'classic-desk', query: '', width: 1512, height: 900, mode: 'classic' },
   { name: 'classic-phone', query: '', width: 390, height: 844, mode: 'classic' },
-  { name: 'survival-desk', query: '', width: 1512, height: 900, mode: 'survival' },
   { name: 'speedrun-desk', query: '', width: 1512, height: 900, mode: 'speedrun' },
   { name: 'viper-desk', query: '?skin=viper', width: 1512, height: 900, mode: 'classic' },
   { name: 'nohat-desk', query: '?hat=off', width: 1512, height: 900, mode: 'classic' },
@@ -85,6 +117,13 @@ const beforeLoad = (mode) => `
     // monotonic with the frame clock; the value itself is arbitrary
     const EPOCH = 1_767_225_600_000;
     let t = 0;
+    // The timeline starts when the FONT does, not when the document does:
+    // see cause 6. Until then the page is handed the same instant every
+    // frame, so its dt is zero and it advances nothing.
+    let started = false;
+    try {
+      document.fonts.ready.then(() => { started = true; });
+    } catch (e) { started = true; }
     window.__frames = 0;
     const realRaf = window.requestAnimationFrame.bind(window);
     performance.now = () => t;
@@ -101,8 +140,10 @@ const beforeLoad = (mode) => `
       static now() { return EPOCH + t; }
     };
     window.requestAnimationFrame = (cb) => realRaf((ts) => {
-      t += STEP;
-      window.__frames++;
+      if (started) {
+        t += STEP;
+        window.__frames++;
+      }
       cb(ts);
       if (window.__frames === ${CAPTURE_AT_FRAME} && !window.__shot) {
         const canvas = document.getElementById('game');
@@ -169,5 +210,10 @@ for (const shot of SHOTS) {
 if (bless || !before) {
   fs.writeFileSync(BASELINE, JSON.stringify(now, null, 2) + '\n');
   lines.push(`baseline written: ${path.relative(path.join(HERE, '..'), BASELINE)}`);
+}
+if (lines.some((line) => line.startsWith('FAIL'))) {
+  lines.push('');
+  lines.push('NOTE: this gate is not yet reliable (see the header). About one run in');
+  lines.push('four fails against an unchanged tree. Run it again before believing this.');
 }
 report(lines);
