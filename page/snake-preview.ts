@@ -37,22 +37,39 @@ import {
 // single square reads as a token. The head is the right-hand square, facing
 // right, which is the direction a round opens in.
 
-// THREE squares, centred in the box. Two read as a fragment and one reads as
-// a token; three is the shortest run that says "snake".
+// HOW BIG A PREVIEW IS, and why there are two answers.
 //
-// The CELL shrank rather than the box growing, which is the part worth
-// knowing. Widening the box to 88px to fit a third square at the old size
-// took 24px straight out of the row, and the shop row is three things across
-// a 320px sheet: the label lost it. SWEATBAND clipped and FLAT CAP wrapped to
-// two lines. A smaller cell keeps the trio inside the width the row already
-// had. The height still pays for a hat, which reaches about a cell above the
-// crown, and the snake is centred rather than pushed to the floor.
-/** How many body cells a preview draws. */
-const PREVIEW_CELLS = 3;
-/** The cell size those squares are drawn at. */
-const PREVIEW_CELL = 17;
-const PREVIEW_WIDTH = 72;
-const PREVIEW_HEIGHT = 44;
+// The shop's row is three things across a 320px sheet, so its preview is
+// squeezed: widening the box to fit a third square at the old cell size took
+// 24px straight out of the row and the LABEL lost it, clipping SWEATBAND and
+// wrapping FLAT CAP onto two lines. The cell shrank instead. The account
+// sheet's jersey row is two colour wells and a short number field, which
+// leaves far more room, so its snake is longer and drawn bigger: four squares
+// at 20px against the shop's three at 17.
+//
+// THE WIDTH IS NOT FREE TO CHOOSE. The head sits `1.38 * cell` right of
+// centre (half the run of steps) and the widest hat reaches `0.75 * cell`
+// past it, so a box narrower than `4.26 * cell` clips the brim, silently and
+// only for the hats that have one. Both sizes below satisfy it; a new one
+// must too. The height pays for the same hat, which reaches about `1.06 *
+// cell` above the centre line, and the snake is centred rather than floored.
+/** The geometry of one preview: how many cells, how big, in what box. */
+export interface PreviewSize {
+  /** How many body cells to draw. Two read as a fragment, one as a token. */
+  readonly cells: number;
+  /** The cell size those squares are drawn at, in CSS pixels. */
+  readonly cell: number;
+  /** The box's CSS width. Must be at least `4.26 * cell` (see above). */
+  readonly width: number;
+  /** The box's CSS height. */
+  readonly height: number;
+}
+
+/** The shop's shelf: three squares in the width a priced row can spare. */
+export const SHOP_PREVIEW: PreviewSize = { cells: 3, cell: 17, width: 72, height: 44 };
+
+/** The account sheet's jersey row: a longer snake, drawn bigger. */
+export const SHEET_PREVIEW: PreviewSize = { cells: 4, cell: 20, width: 88, height: 50 };
 
 /** How many device pixels there are per CSS pixel, clamped to something sane. */
 function pixelRatio(): number {
@@ -86,7 +103,7 @@ function crispContext(
 }
 
 /**
- * Draw the snake the way the pitch draws it: three body cells, head on the
+ * Draw the snake the way the pitch draws it: a run of body cells, head on the
  * right, wearing a skin, a hat and a jersey.
  *
  * @param canvas - the preview canvas; it is resized to suit the screen.
@@ -95,33 +112,37 @@ function crispContext(
  * @param hat - the hat to wear, or null for a bare head.
  * @param kit - the jersey to wear, or null for no shirt at all. Its colours
  *   must already be washed by page/kit.ts.
+ * @param size - how long and how big, defaulting to the shop's squeezed box.
+ *   The caller's CSS must give the canvas exactly this box, flex-basis
+ *   included, or the browser scales the image it was handed.
  */
 export function paintSnakePreview(
   canvas: HTMLCanvasElement,
   skin: SkinArt,
   hat: HatArt | null,
   kit: Kit | null = null,
+  size: PreviewSize = SHOP_PREVIEW,
 ): void {
-  const context = crispContext(canvas, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+  const { cells, cell, width, height } = size;
+  const context = crispContext(canvas, width, height);
   if (context === null) return;
 
-  const cell = PREVIEW_CELL;
   // the pitch's own proportions: half-width 0.42 of a cell, corner radius 0.32
   const half = cell * 0.42;
   const radius = cell * 0.32;
   const ramp = buildLutFor(skin);
   // Centred, both ways. The run of cells is centred on the box's middle, and
-  // the head is the rightmost, so the trio reads left to right into its face.
+  // the head is the rightmost, so the run reads left to right into its face.
   const step = cell * 0.92;
-  const centreY = PREVIEW_HEIGHT / 2;
-  const headX = PREVIEW_WIDTH / 2 + (step * (PREVIEW_CELLS - 1)) / 2;
+  const centreY = height / 2;
+  const headX = width / 2 + (step * (cells - 1)) / 2;
 
   context.lineWidth = Math.max(1, cell * 0.05);
   context.strokeStyle = skin.line;
   // Tail first, so each cell sits over the one behind it exactly as on the
   // pitch, and the shade walks the ramp the same way the body does.
-  for (let i = PREVIEW_CELLS - 1; i >= 0; i--) {
-    const shade = Math.round((i / (PREVIEW_CELLS - 1)) * (SNAKE_SHADES - 1));
+  for (let i = cells - 1; i >= 0; i--) {
+    const shade = Math.round((i / (cells - 1)) * (SNAKE_SHADES - 1));
     context.fillStyle = ramp[shade] ?? '#f4ecd8';
     const x = headX - step * i;
     roundRectOn(context, x - half, centreY - half, half * 2, half * 2, radius);

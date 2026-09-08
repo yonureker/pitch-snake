@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=979c346e24">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=979c346e24">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=823c2e8799">
 </head>
 <body>
   <div class="wrap">
@@ -324,6 +324,14 @@
 
     <div class="modal-backdrop" id="profileModal" hidden>
       <div class="modal profile">
+        <!-- The way out is a corner, not a row. DONE sat at the very bottom of
+             the sheet from the start, which put the exit behind everything
+             else and, once the login pitch arrived, behind a whole second
+             screen's worth of it. An X in the corner is where a person looks
+             to close a sheet and costs no height at all. It keeps the id the
+             DONE button had, so every wiring that already pointed at "the
+             thing that closes this" still does. -->
+        <button class="modal-x" id="profileClose" type="button" aria-label="Close" title="Close">&times;</button>
         <div class="modal-title" id="profTitle">Your account</div>
         <p class="lock-hint" id="profLock" hidden></p>
         <!-- WHO YOU ARE, and it is gated behind a login since 2026-09-08 at the
@@ -409,18 +417,13 @@
           <p class="vs-hint">Logged in as <b id="profWhoEmail"></b></p>
         </div>
         <p class="save-note" id="profStatus" hidden></p>
-        <!-- The two ways out, side by side, because they are the same kind of
-             thing: neither changes what the sheet is showing. Stacked, they
-             read as a sequence, and SIGN OUT sitting directly above DONE at
-             the same size and colour is a mis-tap that logs you out. SIGN OUT
-             lives here rather than in the block above it for that reason
-             alone, and hides itself with the same test that hides the block.
-             DONE only closes the sheet, so neither wears the red the SAVE
-             button spends: three identical loud buttons made the loudest of
-             them the one that does nothing. -->
+        <!-- SIGN OUT stands alone down here now that closing is a corner. It
+             lives outside the block that names the account so that it is never
+             the button directly under DONE, and hides itself with that same
+             block's test. It stays quiet rather than red: the sheet has one
+             loud button and it is the one that commits a change. -->
         <div class="prof-actions">
           <button class="btn small ghostbtn" id="profSignOut" hidden>SIGN OUT</button>
-          <button class="btn small ghostbtn" id="profileClose">DONE</button>
         </div>
       </div>
     </div>
@@ -478,18 +481,18 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=979c346e24",
-    "./packages/net/net.js": "./packages/net/net.js?v=979c346e24",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=979c346e24",
-    "./page/build/dom.js": "./page/build/dom.js?v=979c346e24",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=979c346e24",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=979c346e24",
-    "./page/build/kit.js": "./page/build/kit.js?v=979c346e24",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=979c346e24",
-    "./page/build/shop.js": "./page/build/shop.js?v=979c346e24",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=979c346e24",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=979c346e24",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=979c346e24"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=823c2e8799",
+    "./packages/net/net.js": "./packages/net/net.js?v=823c2e8799",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=823c2e8799",
+    "./page/build/dom.js": "./page/build/dom.js?v=823c2e8799",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=823c2e8799",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=823c2e8799",
+    "./page/build/kit.js": "./page/build/kit.js?v=823c2e8799",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=823c2e8799",
+    "./page/build/shop.js": "./page/build/shop.js?v=823c2e8799",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=823c2e8799",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=823c2e8799",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=823c2e8799"
   }
 }
 </script>
@@ -789,7 +792,7 @@
   import { applyWallet, creditPurse, initShop, purseIsKnown } from './page/build/shop.js';
   // The same picture the shop shows, so the jersey a player is choosing and the
   // skin they bought are previewed by one painter. See page/snake-preview.ts.
-  import { paintSnakePreview } from './page/build/snake-preview.js';
+  import { paintSnakePreview, SHEET_PREVIEW } from './page/build/snake-preview.js';
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
@@ -4610,7 +4613,7 @@
   // previews a hat with, so the two can never drift. The shirt lands on the
   // cell behind the head because that is segment 1, where the pitch draws it.
   function paintKitPreview() {
-    paintSnakePreview(kitPreview, SKIN, hatOn ? HAT : null, kitFromSheet());
+    paintSnakePreview(kitPreview, SKIN, hatOn ? HAT : null, kitFromSheet(), SHEET_PREVIEW);
   }
   /** What the three controls currently say, washed the way the wire washes it. */
   function kitFromSheet() {
@@ -5012,6 +5015,15 @@
           claimWanted = false;
           profileModal.hidden = true;    // step aside: the board is the payoff
           void autoSubmit(deathGen);
+        } else {
+          // A save that worked closes the sheet, because the sheet was open to
+          // make exactly this change and there is nothing left to read: the
+          // chip in the corner is already wearing the new name and flag, which
+          // is a better confirmation than a line of text on a sheet the player
+          // then has to dismiss. A save that FAILED keeps it open, because the
+          // failure has something to say and sometimes a name to accept.
+          profileModal.hidden = true;
+          rehomeFocus();
         }
       } catch (e) {
         // Three different things, and this told the player one story for all

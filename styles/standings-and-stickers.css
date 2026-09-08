@@ -173,18 +173,22 @@
      width here is qualified with `.entry.wide`. This is the same accident that
      collapsed the nameplate to a 34px square below 900px; it is cheap to
      re-make and invisible until someone opens the sheet. */
-  .kit-row { display: flex; align-items: center; gap: 9px; }
-  /* The preview is the SHOP's box, to the pixel: 72x44, painted by the same
-     page/snake-preview.ts, because it is now the same picture of the same
-     snake and two sizes would be two answers to one question.
+  /* 6px, not 9: every pixel taken out from between the controls is a pixel the
+     snake gets, and the two wells and the number field are one group anyway. */
+  .kit-row { display: flex; align-items: center; gap: 6px; }
+  /* SHEET_PREVIEW's box, to the pixel: 88x50, four squares at a 20px cell,
+     against the shop's squeezed 72x44 at 17. The numbers live in
+     page/snake-preview.ts and are repeated here because they must AGREE: the
+     canvas is handed a backing store for exactly this box, so a flex-basis
+     that disagrees hands the browser an image to scale, which is the blurry
+     lie the module exists to prevent. Change one, change both.
 
-     It wears no border, which is not an oversight. Everything on this page is
-     border-box, so a 1px border would squeeze the canvas's 72x44 backing
-     store into a 70x42 content box and stretch it, undoing the device-pixel
-     sizing the module exists for. It sat in a 40px gold-bordered tile until
-     2026-09-08; gold is what the three CONTROLS in this row wear, and the
-     preview is the one thing here nobody can press. */
-  .entry.wide .kit-preview { flex: 0 0 72px; width: 72px; height: 44px; }
+     It wears no border, which is not an oversight either. Everything on this
+     page is border-box, so a 1px border would squeeze that backing store into
+     an 86x48 content box and stretch it just the same. It sat in a 40px
+     gold-bordered tile until 2026-09-08; gold is what the three CONTROLS in
+     this row wear, and the preview is the one thing here nobody can press. */
+  .entry.wide .kit-preview { flex: 0 0 88px; width: 88px; height: 50px; }
   /* A colour well is a button in every browser and needs its native chrome
      taken off in three places, or it renders as a grey pill with a swatch
      rattling around inside it. */
@@ -210,7 +214,11 @@
      Measured on the built page, not eyeballed. */
   .entry.wide .kit-num {
     flex: 1 1 auto; min-width: 0; width: auto;
-    height: 40px; padding: 0 10px; font-size: 18px;
+    /* 6px of side padding, not 10: the field takes what the row's fixed parts
+       leave, and once the preview grew to 88 that was 42px, where 20px of
+       padding left too little for two digits at this size. Measured against
+       the field's own scrollWidth rather than guessed. */
+    height: 40px; padding: 0 6px; font-size: 18px;
     letter-spacing: 2px; -moz-appearance: textfield; appearance: textfield;
   }
   .kit-num::-webkit-outer-spin-button,
