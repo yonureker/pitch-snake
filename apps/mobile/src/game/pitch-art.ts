@@ -189,19 +189,82 @@ export function hatArt(id: string | null): (typeof HAT_ART)[keyof typeof HAT_ART
 }
 
 /**
- * The number ten in yellow and red halves, worn on the square behind the
- * head: the web page's test balloon, mirrored. 3x5 pixel-grid digits drawn
- * as blocks, 8-bit on purpose and immune to font differences.
+ * The eight offsets the number's dark trim is drawn at, so a digit is outlined
+ * on every side rather than shadowed on one. See the note in `paintJersey`.
  */
-export function paintJersey(c: SkCanvas, size: number): void {
+const JERSEY_TRIM = [
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+  [-1, 0],
+  [1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1],
+] as const;
+
+/** The classic shirt's left half, worn when a player has chosen no colour. */
+export const JERSEY_LEFT_DEFAULT = '#f2c114';
+
+/** The classic shirt's right half, worn when a player has chosen no colour. */
+export const JERSEY_RIGHT_DEFAULT = '#d8231f';
+
+/**
+ * 3x5 pixel glyphs, 0-9, so a shirt can wear any number.
+ *
+ * Blocks rather than text on purpose: 8-bit at this size, and immune to which
+ * fonts a device happens to ship, which is the same reason the flags are a
+ * sprite. This carried only the 1 and the 0 while the number was always ten;
+ * the full set arrived with player-chosen numbers on 2026-09-07 and is a
+ * character-for-character copy of page/pitch-art.ts's, because the two clients
+ * must put the same shirt on the same player.
+ */
+const JERSEY_GLYPH: Record<string, readonly string[]> = {
+  '0': ['111', '101', '101', '101', '111'],
+  '1': ['010', '110', '010', '010', '111'],
+  '2': ['111', '001', '111', '100', '111'],
+  '3': ['111', '001', '111', '001', '111'],
+  '4': ['101', '101', '111', '001', '001'],
+  '5': ['111', '100', '111', '001', '111'],
+  '6': ['111', '100', '111', '101', '111'],
+  '7': ['111', '001', '010', '010', '010'],
+  '8': ['111', '101', '111', '101', '111'],
+  '9': ['111', '101', '111', '001', '111'],
+};
+
+/**
+ * Paint one shirt: two colour halves, a rounded edge, a centred number.
+ *
+ * Worn on the square behind the head, mirroring page/pitch-art.ts. Both halves
+ * and the number are the player's own since 2026-09-07; the defaults are the
+ * classic yellow and red this shipped as. Colours arrive already washed by
+ * lib/kit.ts, so a caller that skips that wash is the bug, not a bad hex here.
+ *
+ * The dark outline stroke is load-bearing rather than decorative now that the
+ * halves are free-form: it keeps a kit chosen close to the pitch's own green
+ * readable as a shape instead of a hole.
+ *
+ * @param c - the canvas to paint into.
+ * @param size - the shirt's size in pixels; it is square.
+ * @param num - the number on the back, 0..99.
+ * @param left - the left half as `#rrggbb`; the classic yellow when null.
+ * @param right - the right half as `#rrggbb`; the classic red when null.
+ */
+export function paintJersey(
+  c: SkCanvas,
+  size: number,
+  num = 10,
+  left: string | null = null,
+  right: string | null = null,
+): void {
   const rad = size * 0.3;
   const paint = Skia.Paint();
   c.save();
   const shirt = Skia.RRectXY(Skia.XYWHRect(0, 0, size, size), rad, rad);
   c.clipRRect(shirt, 1, true);
-  paint.setColor(Skia.Color('#f2c114'));
+  paint.setColor(Skia.Color(left ?? JERSEY_LEFT_DEFAULT));
   c.drawRect(Skia.XYWHRect(0, 0, size / 2, size), paint);
-  paint.setColor(Skia.Color('#d8231f'));
+  paint.setColor(Skia.Color(right ?? JERSEY_RIGHT_DEFAULT));
   c.drawRect(Skia.XYWHRect(size / 2, 0, size / 2, size), paint);
   c.restore();
   const line = Skia.Paint();
@@ -209,26 +272,31 @@ export function paintJersey(c: SkCanvas, size: number): void {
   line.setStrokeWidth(Math.max(1, size * 0.05));
   line.setColor(Skia.Color('rgba(33,30,26,0.55)'));
   c.drawRRect(shirt, line);
-  const DIGITS = [
-    ['010', '110', '010', '010', '111'],
-    ['111', '101', '101', '101', '111'],
-  ];
+  const digits = String(num).split('');
   const px = Math.max(1, Math.round(size * 0.11));
-  const x0 = Math.round((size - px * 7) / 2);
+  // 3px per glyph plus a 1px gap, less the trailing gap
+  const w = digits.length * 4 - 1;
+  const x0 = Math.round((size - px * w) / 2);
   const y0 = Math.round((size - px * 5) / 2);
   const ink = (color: string, dx: number, dy: number): void => {
     paint.setColor(Skia.Color(color));
-    for (let d = 0; d < 2; d++) {
+    for (let d = 0; d < digits.length; d++) {
+      const glyph = JERSEY_GLYPH[digits[d] ?? ''];
+      if (glyph === undefined) continue;
       for (let r = 0; r < 5; r++) {
         for (let k = 0; k < 3; k++) {
-          if (DIGITS[d]?.[r]?.[k] === '1') {
+          if (glyph[r]?.[k] === '1') {
             c.drawRect(Skia.XYWHRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px), paint);
           }
         }
       }
     }
   };
-  ink('rgba(33,30,26,0.8)', 1, 1);
+  // A TRIM, not a drop shadow: white digits over a one-sided shadow vanish on
+  // a white kit, which is one of the commonest shirts there is. Every
+  // direction instead, the way a real shirt number is trimmed, so it holds on
+  // any two colours a player picks. Eight passes at BAKE time, never per frame.
+  for (const [dx, dy] of JERSEY_TRIM) ink('rgba(33,30,26,0.85)', dx, dy);
   ink('#ffffff', 0, 0);
 }
 

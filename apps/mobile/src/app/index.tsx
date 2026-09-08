@@ -206,6 +206,7 @@ export default function Index() {
   const tapTimes = useRef<number[]>([]);
   const loopSetMode = loop.setMode;
   const loopSetWorn = loop.setWorn;
+  const loopSetKit = loop.setKit;
   const wallet = useWallet();
   const crowd = useCrowd(loop.phase);
   // conceding arms on the first tap, like the page's exit: giving up a round
@@ -260,6 +261,16 @@ export default function Index() {
     loopSetWorn(walletSkin, walletHat);
     void saveWorn(walletSkin, walletHat);
   }, [walletReady, walletSkin, walletHat, loopSetWorn]);
+  // The kit rides the PROFILE, not the wallet: it is chosen rather than
+  // bought, so it lands on its own beat and through its own door. Keyed on the
+  // three values rather than the object, which the query hands back fresh on
+  // every refetch and would otherwise rebake the shirt for nothing.
+  const kitLeft = profile.data?.kit.left ?? null;
+  const kitRight = profile.data?.kit.right ?? null;
+  const kitNum = profile.data?.kit.num ?? null;
+  useEffect(() => {
+    loopSetKit({ left: kitLeft, right: kitRight, num: kitNum });
+  }, [kitLeft, kitRight, kitNum, loopSetKit]);
 
   // restore the saved mode and tournament once; the loop follows the choice
   useEffect(() => {
@@ -1034,7 +1045,7 @@ export default function Index() {
                 // keyed by what loaded: the sheet seeds its fields once at
                 // mount, so a profile that arrives late must re-seed them
                 // rather than leave a blank name that would clear the flag
-                key={`${profile.data?.name ?? ''}-${profile.data?.country ?? ''}`}
+                key={`${profile.data?.name ?? ''}-${profile.data?.country ?? ''}-${kitLeft ?? ''}-${kitRight ?? ''}-${kitNum ?? ''}`}
                 profile={profile.data ?? null}
                 locked={identityLocked}
                 onSaved={(p) => {

@@ -41,6 +41,7 @@ import {
   type Player,
 } from '@pitch-snake/engine';
 
+import { type Kit, KIT_NONE, kitKey } from '../lib/kit';
 import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
 import { GameColors, GhostColors, SNAKE_SHADES, skinRamp, snakeShadeFor } from './theme';
 
@@ -55,7 +56,7 @@ export interface RenderContext {
   /** True while the round is simulating (affects glide progress). */
   playing: boolean;
   /** What the snake wears; unknown or null ids dress classic. */
-  worn: { skin: string | null; hat: string | null };
+  worn: { skin: string | null; hat: string | null; kit: Kit };
   /** A room's round: my seat, and each seat's name and outfit. */
   vs?: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] };
 }
@@ -269,6 +270,10 @@ let jerseySprite: Baked | null = null;
 let hatDy = 0;
 let bakedSkin: string | null = null;
 let bakedHatId: string | null = null;
+// The kit is three values rather than an id, so its rebake key is the string
+// kitKey makes of them: it changes exactly when the painted shirt would.
+let bakedKit: Kit = KIT_NONE;
+let bakedKitKey = kitKey(KIT_NONE);
 let portalSpriteA: Baked | null = null;
 let portalSpriteB: Baked | null = null;
 let wallSprite: Baked | null = null;
@@ -314,7 +319,7 @@ function bakeSnakeCells(cell: number, skin: string | null): void {
   }
 }
 
-function bakeOutfit(cell: number, hatId: string | null): void {
+function bakeOutfit(cell: number, hatId: string | null, kit: Kit): void {
   const art = hatArt(hatId);
   const w = Math.ceil(cell * art.wf);
   const h = Math.ceil(cell * art.hf);
@@ -326,7 +331,7 @@ function bakeOutfit(cell: number, hatId: string | null): void {
   const js = Math.ceil(cell * 0.84);
   jerseySprite?.image.dispose();
   jerseySprite = bake(js, js, (c) => {
-    paintJersey(c, js);
+    paintJersey(c, js, kit.num ?? 10, kit.left, kit.right);
   });
 }
 
@@ -485,6 +490,8 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
   const cell = boardPx / GRID;
   const skin = worn?.skin ?? bakedSkin;
   const hatId = worn?.hat ?? bakedHatId;
+  const kit = worn?.kit ?? bakedKit;
+  const wantKitKey = kitKey(kit);
   if (boardPx !== bakedBoard) {
     bakedBoard = boardPx;
     arenaSprite?.image.dispose();
@@ -496,16 +503,20 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
     bakedSkin = skin;
     bakeSnakeCells(cell, skin);
   }
-  if (cell === bakedCell && hatId !== bakedHatId) {
+  if (cell === bakedCell && (hatId !== bakedHatId || wantKitKey !== bakedKitKey)) {
     bakedHatId = hatId;
-    bakeOutfit(cell, hatId);
+    bakedKit = kit;
+    bakedKitKey = wantKitKey;
+    bakeOutfit(cell, hatId, kit);
   }
   if (cell !== bakedCell) {
     bakedCell = cell;
     bakedSkin = skin;
     bakedHatId = hatId;
+    bakedKit = kit;
+    bakedKitKey = wantKitKey;
     bakeSnakeCells(cell, skin);
-    bakeOutfit(cell, hatId);
+    bakeOutfit(cell, hatId, kit);
     bakeGhosts(cell);
     bakeTnt(cell);
     boltSprite?.image.dispose();

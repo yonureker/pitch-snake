@@ -19,8 +19,10 @@ import flagSheet from '@/assets/flags.png';
 import { authWho, sendEmailCode, signOutToAnon, verifyEmailCode } from '@/lib/auth';
 import { FLAG_CODES, FLAG_COLS, flagIndex } from '@/lib/leaderboard';
 import { useSaveProfile } from '@/hooks/queries/use-save-profile';
+import { kitColor, kitOf } from '@/lib/kit';
 import type { Profile } from '@/lib/profile';
 import { GameColors } from '@/game/theme';
+import { JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT } from '@/game/pitch-art';
 
 const BARLOW = 'Barlow_600SemiBold';
 const BARLOW_BOLD = 'Barlow_700Bold';
@@ -74,6 +76,15 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
   const [say, setSay] = useState('');
   const [busy, setBusy] = useState(false);
   const [pickFlag, setPickFlag] = useState(false);
+  // The kit is held as TYPED TEXT, not as a washed Kit: a half-typed '#f2c1'
+  // has to stay in the field while the preview falls back to the classic
+  // colour, and washing on every keystroke would delete the character the
+  // player is in the middle of typing.
+  const [kitLeft, setKitLeft] = useState(profile?.kit.left ?? '');
+  const [kitRight, setKitRight] = useState(profile?.kit.right ?? '');
+  const [kitNum, setKitNum] = useState(
+    profile?.kit.num === undefined || profile.kit.num === null ? '' : String(profile.kit.num),
+  );
   const [email, setEmail] = useState('');
   const [codeMode, setCodeMode] = useState<'off' | 'link' | 'switch'>('off');
   const [code, setCode] = useState('');
@@ -92,11 +103,12 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
     void (async () => {
       // '' rather than null for the flag: null KEEPS whatever is stored, and
       // a player who picked NONE means to clear it (set_profile's contract)
-      const res = await saver.mutateAsync({ name: clean, country: country ?? '' });
+      const kit = kitOf({ left: kitLeft, right: kitRight, num: kitNum });
+      const res = await saver.mutateAsync({ name: clean, country: country ?? '', kit });
       setBusy(false);
       if (res === 'saved') {
         setSay('Saved.');
-        onSaved({ name: clean, country });
+        onSaved({ name: clean, country, kit });
       } else if (res === 'taken') {
         setSay('That name is taken. Pick another.');
       } else {
@@ -229,6 +241,61 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
         >
           <Text style={styles.saveText}>SAVE</Text>
         </Pressable>
+      </View>
+
+      {/* The kit: the one thing on this sheet a player picks rather than buys,
+          which is why it sits with the name and the flag and not in the shop.
+          The preview is the shirt itself, so what you see here is what the
+          snake wears. There is no colour well on this platform, so the halves
+          are typed as hex; a half-finished one simply shows its classic
+          colour until it becomes a colour. */}
+      <View style={styles.kitRow}>
+        <View style={styles.kitShirt}>
+          <View style={[styles.kitHalf, { backgroundColor: kitColor(kitLeft) ?? JERSEY_LEFT_DEFAULT }]} />
+          <View style={[styles.kitHalf, { backgroundColor: kitColor(kitRight) ?? JERSEY_RIGHT_DEFAULT }]} />
+          <Text style={styles.kitShirtNum}>{kitNum === '' ? '10' : kitNum}</Text>
+        </View>
+        <TextInput
+          style={styles.kitHex}
+          value={kitLeft}
+          editable={!locked}
+          onChangeText={(t) => {
+            setKitLeft(t.replace(/[^#0-9a-f]/gi, '').slice(0, 7));
+          }}
+          placeholder={JERSEY_LEFT_DEFAULT}
+          placeholderTextColor="#9a917c"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={7}
+          accessibilityLabel="Shirt colour, left half"
+        />
+        <TextInput
+          style={styles.kitHex}
+          value={kitRight}
+          editable={!locked}
+          onChangeText={(t) => {
+            setKitRight(t.replace(/[^#0-9a-f]/gi, '').slice(0, 7));
+          }}
+          placeholder={JERSEY_RIGHT_DEFAULT}
+          placeholderTextColor="#9a917c"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={7}
+          accessibilityLabel="Shirt colour, right half"
+        />
+        <TextInput
+          style={styles.kitNum}
+          value={kitNum}
+          editable={!locked}
+          onChangeText={(t) => {
+            setKitNum(t.replace(/\D/g, '').slice(0, 2));
+          }}
+          placeholder="10"
+          placeholderTextColor="#9a917c"
+          keyboardType="number-pad"
+          maxLength={2}
+          accessibilityLabel="Shirt number, 0 to 99"
+        />
       </View>
 
       <View style={styles.rule} />
@@ -372,6 +439,54 @@ const styles = StyleSheet.create({
   },
   saveText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: '#ffffff' },
   dim: { opacity: 0.5 },
+  kitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // the shirt itself: two halves under a clipped rounded box, the number
+  // centred over both, which is the same silhouette paintJersey bakes
+  kitShirt: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+  },
+  kitHalf: { position: 'absolute', top: 0, bottom: 0, width: '50%' },
+  kitShirtNum: {
+    fontFamily: ANTON,
+    fontSize: 15,
+    color: '#ffffff',
+    textShadowColor: 'rgba(33,30,26,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
+  },
+  kitHex: {
+    flex: 1,
+    minWidth: 0,
+    height: 38,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+    fontFamily: BARLOW,
+    fontSize: 11,
+    color: GameColors.ink,
+    textAlign: 'center',
+  },
+  kitNum: {
+    width: 46,
+    height: 38,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+    fontFamily: ANTON,
+    fontSize: 16,
+    color: GameColors.ink,
+    textAlign: 'center',
+  },
   rule: { height: 1, backgroundColor: 'rgba(33,30,26,0.18)' },
   blurb: { fontFamily: BARLOW, fontSize: 12, lineHeight: 17, color: GameColors.muted },
   say: { fontFamily: BARLOW, fontSize: 12, color: GameColors.ink, textAlign: 'center' },

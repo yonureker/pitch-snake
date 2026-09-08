@@ -119,6 +119,53 @@
      chosen flag is shown for real right beside the control */
   .country-row { display: flex; align-items: center; gap: 9px; }
   .country-row select { flex: 1 1 auto; min-width: 0; }
+  /* The kit row: the live shirt, two colour wells and the number. It sits with
+     the flag because both are identity a player sets on this sheet.
+
+     THE WIDTHS ARE A SPECIFICITY FIGHT and are written to win it. This row is
+     an `.entry.wide`, and `.entry.wide input { width: 100% }` in
+     buttons-and-inputs.css is (0,2,1); a plain `.kit-row .kit-swatch` is
+     (0,2,0) and LOSES, which stacks the three controls one per line at full
+     width. Two classes plus an element is beaten by three classes, so every
+     width here is qualified with `.entry.wide`. This is the same accident that
+     collapsed the nameplate to a 34px square below 900px; it is cheap to
+     re-make and invisible until someone opens the sheet. */
+  .kit-row { display: flex; align-items: center; gap: 9px; }
+  .entry.wide .kit-preview {
+    flex: 0 0 auto; width: 40px; height: 40px;
+    border-radius: 8px; background: var(--sheet-field);
+    border: 2px solid var(--gold);
+  }
+  /* A colour well is a button in every browser and needs its native chrome
+     taken off in three places, or it renders as a grey pill with a swatch
+     rattling around inside it. */
+  .entry.wide .kit-swatch {
+    flex: 0 0 auto; width: 40px; height: 40px;
+    padding: 2px; border: 2px solid var(--gold); border-radius: 8px;
+    background: var(--sheet-field); cursor: pointer; outline: none;
+    -webkit-appearance: none; appearance: none;
+  }
+  .kit-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .kit-swatch::-webkit-color-swatch { border: none; border-radius: 5px; }
+  /* There is deliberately no ::-moz-color-swatch twin. Chrome discards a rule
+     whose pseudo-element it does not know, and check-stylesheets.mjs counts
+     blocks against the browser's own CSSOM, so a Firefox-only selector reads
+     to that gate exactly like the parse error it was written to catch. The
+     gate is worth more than the hairline border Firefox draws inside its own
+     swatch; do not re-add it without teaching the gate the difference. */
+  /* The number takes the rest of the row, and loses the spinner: a two-digit
+     field with arrows on it is a smaller tap target for no gain on a phone.
+     The HEIGHT is stated rather than left to the padding: `.entry input` sets
+     10px of it against a 20px font, which made this field 55px tall beside
+     three 40px controls, so it sat 7px proud of them and stretched the row.
+     Measured on the built page, not eyeballed. */
+  .entry.wide .kit-num {
+    flex: 1 1 auto; min-width: 0; width: auto;
+    height: 40px; padding: 0 10px; font-size: 18px;
+    letter-spacing: 2px; -moz-appearance: textfield; appearance: textfield;
+  }
+  .kit-num::-webkit-outer-spin-button,
+  .kit-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   /* a row with no flag still lines its names up with the rows that have one */
   .standings .fl-gap { width: 20px; flex: 0 0 20px; }
   .standings li {

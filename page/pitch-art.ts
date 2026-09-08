@@ -309,9 +309,14 @@ export function drawCrest(
 }
 
 /**
- * The shirt number each room seat wears, so a five-a-side never fields five
- * number tens. Solo keeps the classic ten; in a room every seat (mine too)
- * wears its own.
+ * The number DEALT to each room seat, which is what a player who has chosen no
+ * shirt number wears, and the fallback when two players chose the same one.
+ * Solo keeps the classic ten.
+ *
+ * It stopped being the whole story on 2026-09-07, when numbers became a player
+ * choice, but it did not stop mattering: it is still what keeps a five-a-side
+ * from fielding five number tens. `kitNumbersFor` in page/kit.ts is where the
+ * two meet.
  */
 export const VS_NUMS = [10, 7, 9, 4, 8] as const;
 
@@ -331,23 +336,52 @@ const JERSEY_GLYPH: Record<string, readonly string[]> = {
 };
 
 /**
- * Paint one shirt: red and yellow halves, a rounded edge, a centred number.
+ * The eight offsets the number's dark trim is drawn at, so a digit is outlined
+ * on every side rather than shadowed on one. See the note in `paintJersey`.
+ */
+const JERSEY_TRIM = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+] as const;
+
+/** The classic shirt's left half, worn when a player has chosen no colour. */
+export const JERSEY_LEFT_DEFAULT = '#f2c114';
+
+/** The classic shirt's right half, worn when a player has chosen no colour. */
+export const JERSEY_RIGHT_DEFAULT = '#d8231f';
+
+/**
+ * Paint one shirt: two colour halves, a rounded edge, a centred number.
  *
- * Worn on the square behind the head. A test balloon for outfits beyond hats,
- * baked art rather than a shop item so it can be looked at in play before
- * anything is priced.
+ * Worn on the square behind the head. Both halves and the number are the
+ * player's own since 2026-09-07; the defaults are the classic yellow and red
+ * this shipped as. The colours arrive already washed by page/kit.ts, so a
+ * caller that skips that wash is the bug, not a bad hex here.
+ *
+ * The dark outline stroke is load-bearing rather than decorative now that the
+ * halves are free-form: it is what keeps a kit chosen close to the pitch's own
+ * green readable as a shape instead of a hole.
  *
  * @param c The context to paint into.
  * @param s The shirt's size in pixels; it is square.
  * @param num The number on the back.
+ * @param left The left half as `#rrggbb`; the classic yellow when omitted.
+ * @param right The right half as `#rrggbb`; the classic red when omitted.
  */
-export function paintJersey(c: CanvasRenderingContext2D, s: number, num: number): void {
+export function paintJersey(
+  c: CanvasRenderingContext2D,
+  s: number,
+  num: number,
+  left: string | null = null,
+  right: string | null = null,
+): void {
   c.clearRect(0, 0, s, s);
   c.save();
   roundRectOn(c, 0, 0, s, s, s * 0.3);
   c.clip();
-  c.fillStyle = '#f2c114'; c.fillRect(0, 0, s / 2, s);
-  c.fillStyle = '#d8231f'; c.fillRect(s / 2, 0, s / 2, s);
+  c.fillStyle = left ?? JERSEY_LEFT_DEFAULT; c.fillRect(0, 0, s / 2, s);
+  c.fillStyle = right ?? JERSEY_RIGHT_DEFAULT; c.fillRect(s / 2, 0, s / 2, s);
   c.restore();
   roundRectOn(c, 0.5, 0.5, s - 1, s - 1, s * 0.3);
   c.strokeStyle = 'rgba(33,30,26,0.55)';
@@ -368,6 +402,14 @@ export function paintJersey(c: CanvasRenderingContext2D, s: number, num: number)
           if (glyph[r]?.[k] === '1') c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
     }
   };
-  ink('rgba(33,30,26,0.8)', 1, 1);   // the drop shadow keeps white legible on yellow
+  // A TRIM, not a drop shadow, and this is the one place free-form colours
+  // forced a change to the art. White digits over a one-sided shadow read
+  // perfectly on the classic yellow-and-red, and vanish on a white kit, which
+  // is one of the commonest shirts there is: only the shadow's edge survived,
+  // so the number became an outline of itself. Every direction instead, which
+  // is how a real shirt number is trimmed, and it holds on any two colours a
+  // player picks without the art overriding either of them. Eight passes at
+  // BAKE time, so it costs a frame nothing (performance rule 7).
+  for (const [dx, dy] of JERSEY_TRIM) ink('rgba(33,30,26,0.85)', dx, dy);
   ink('#ffffff', 0, 0);
 }

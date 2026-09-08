@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=f515e31c1f">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=f515e31c1f">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=ed5de14cec">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=ed5de14cec">
 </head>
 <body>
   <div class="wrap">
@@ -334,6 +334,18 @@
              blank number reads as a bug rather than as "not rated yet". -->
         <p class="prof-rating" id="profRating" hidden></p>
         <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag" hidden></span><select id="profCountry"><option value="">NO FLAG</option></select></div>
+        <!-- The kit: the one thing here a player picks rather than buys, which
+             is why it sits with the name and the flag and not in the shop.
+             The preview is the REAL shirt art at real size, painted by the
+             same paintJersey the pitch uses, so what you see on this row is
+             what the snake wears; that is the shop's rule about previews
+             applied to something that costs nothing. -->
+        <div class="entry wide kit-row" id="profKitRow">
+          <canvas id="profKitPreview" class="kit-preview" width="40" height="40"></canvas>
+          <input type="color" id="profKitLeft" class="kit-swatch" aria-label="Shirt colour, left half">
+          <input type="color" id="profKitRight" class="kit-swatch" aria-label="Shirt colour, right half">
+          <input id="profKitNum" class="kit-num" type="number" min="0" max="99" step="1" inputmode="numeric" placeholder="10" aria-label="Shirt number, 0 to 99">
+        </div>
         <button class="btn small" id="profSaveBtn">SAVE</button>
         <div class="prof-auth" id="profAuthAnon" hidden>
           <p class="vs-hint">Your name, flag and scores will work on any device.</p>
@@ -410,16 +422,17 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=f515e31c1f",
-    "./packages/net/net.js": "./packages/net/net.js?v=f515e31c1f",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=f515e31c1f",
-    "./page/build/dom.js": "./page/build/dom.js?v=f515e31c1f",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=f515e31c1f",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=f515e31c1f",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=f515e31c1f",
-    "./page/build/shop.js": "./page/build/shop.js?v=f515e31c1f",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=f515e31c1f",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=f515e31c1f"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=ed5de14cec",
+    "./packages/net/net.js": "./packages/net/net.js?v=ed5de14cec",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=ed5de14cec",
+    "./page/build/dom.js": "./page/build/dom.js?v=ed5de14cec",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=ed5de14cec",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=ed5de14cec",
+    "./page/build/kit.js": "./page/build/kit.js?v=ed5de14cec",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=ed5de14cec",
+    "./page/build/shop.js": "./page/build/shop.js?v=ed5de14cec",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=ed5de14cec",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=ed5de14cec"
   }
 }
 </script>
@@ -705,9 +718,13 @@
   // The shop draws its previews from the same module, which is what stops a
   // preview drifting from the snake. See page/pitch-art.ts.
   import {
-    buildLutFor, drawCrest, hatFor, paintJersey, roundRectOn, SKINS, skinFor,
-    SNAKE_SHADES, VS_NUMS,
+    buildLutFor, drawCrest, hatFor, JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT,
+    paintJersey, roundRectOn, SKINS, skinFor, SNAKE_SHADES, VS_NUMS,
   } from './page/build/pitch-art.js';
+  // What a kit IS, as opposed to what it looks like: the wash that keeps a
+  // typed or peer-sent value out of a fillStyle, and the lane-order rule that
+  // stops a room fielding two number sevens. See page/kit.ts.
+  import { kitNumbersFor, kitNumber, kitOf } from './page/build/kit.js';
   // The spend side: the shop sheet, the purse, and the wallet every reader
   // repaints from. It draws its previews from page/pitch-art.ts, the same art
   // this file wears, so a preview cannot lie. See page/shop.ts.
@@ -1094,22 +1111,49 @@
   }
 
   // ---- the jersey ----
-  // Number 10 in yellow and red halves, worn on the square behind the head.
-  // A test balloon for outfits beyond hats: baked art on the local snake
-  // only for now, not yet a shop item, so future plans can look at it in
-  // play before anything is priced. The digits are 3x5 pixel grids drawn as
+  // Two colours and a number, worn on the square behind the head. It was a
+  // baked number ten until 2026-09-07; it is now the one thing a player picks
+  // freely rather than buys, and it lives on the profile beside the name and
+  // the flag for exactly that reason. The digits are 3x5 pixel grids drawn as
   // blocks, 8-bit on purpose and immune to font differences.
+  //
+  // Baked, never per frame: five seat canvases plus my own, rebuilt on resize,
+  // when my kit changes, and when a rival's arrives in presence. Performance
+  // rule 7, and the same treatment the hats already get.
+  const KIT_SOLO_NUM = 10;
   const jerseyCanvas = document.createElement('canvas');
   const jerseyCtx = jerseyCanvas.getContext('2d');
   let jerseyS = 0;
   const jerseySeat = Array.from({ length: 5 }, () => document.createElement('canvas'));
+  const KIT_NONE = { left: null, right: null, num: null };
+  function myKit() { return worn.kit || KIT_NONE; }
+  // What one lane wears. Mine is the profile's; a rival's crosses in PRESENCE
+  // for the same reason a skin does (room_start's roster is washed down to ref
+  // and name, and the round of record does not launder clothing).
+  function seatKit(lane) {
+    if (!vs || !vs.roster) return KIT_NONE;
+    if (lane === vs.myIdx) return myKit();
+    const seat = vs.roster[lane];
+    if (!seat) return KIT_NONE;
+    const src = (vs.present || []).find(x => x.ref === seat.ref) || seat;
+    return kitOf(src.kit);
+  }
   function buildJerseySprite() {
+    if (!(cell > 0)) return;
     jerseyS = Math.ceil(cell * 0.84);
     jerseyCanvas.width = jerseyS; jerseyCanvas.height = jerseyS;
-    paintJersey(jerseyCtx, jerseyS, 10);           // solo / the classic ten
-    for (let i = 0; i < 5; i++) {                   // one per room seat
+    const mine = myKit();
+    paintJersey(jerseyCtx, jerseyS, mine.num ?? KIT_SOLO_NUM, mine.left, mine.right);
+    // One per room seat, mine included: in a room every snake including this
+    // one is drawn from jerseySeat, so my own choice has to be baked here too.
+    // Numbers go through kitNumbersFor rather than straight onto the shirt,
+    // because two players may well have picked the same one.
+    const kits = [];
+    for (let i = 0; i < 5; i++) kits.push(seatKit(i));
+    const nums = kitNumbersFor(kits.map(k => k.num), VS_NUMS);
+    for (let i = 0; i < 5; i++) {
       jerseySeat[i].width = jerseyS; jerseySeat[i].height = jerseyS;
-      paintJersey(jerseySeat[i].getContext('2d'), jerseyS, VS_NUMS[i]);
+      paintJersey(jerseySeat[i].getContext('2d'), jerseyS, nums[i], kits[i].left, kits[i].right);
     }
   }
   function drawJersey(pl, lane, prog) {
@@ -1827,6 +1871,10 @@
   const vsFits = new Array(5).fill(null);
   function vsRefit() {
     vsFits.fill(null);
+    // The shirts are refitted on the same beats as the skins and hats, and
+    // BEFORE the early return: leaving a room has to put the seats back to
+    // their dealt numbers just as surely as joining one changes them.
+    buildJerseySprite();
     if (!vs || !vs.roster || !(cell > 0)) return;
     for (let i = 0; i < vs.roster.length && i < 5; i++) {
       if (i === vs.myIdx) continue;
@@ -1852,15 +1900,29 @@
   // applyWorn is the ONE door: it swaps the palettes and rebuilds the baked
   // art, always at menu time (boot, a wallet response, an equip), never from
   // the frame loop. URL params stay senior, as the dev doors they are.
-  let worn = { skin: null, hat: null };
+  let worn = { skin: null, hat: null, kit: null };
   try { worn = { ...worn, ...JSON.parse(localStorage.getItem('snakeWorn') || '{}') }; } catch (e) {}
+  worn.kit = worn.kit ? kitOf(worn.kit) : null;   // a stored kit is still peer-shaped data
   function applyWorn(skinId, hatId) {
-    worn = { skin: skinId || null, hat: hatId || null };
+    // Spread rather than replace: the kit rides in the same object and an
+    // equip must not undress the shirt. This wiped it once.
+    worn = { ...worn, skin: skinId || null, hat: hatId || null };
     try { localStorage.setItem('snakeWorn', JSON.stringify(worn)); } catch (e) {}
     if (!(skinParam && SKINS[skinParam])) SKIN = skinFor(worn.skin);
     HAT = hatFor(worn.hat);
     SNAKE_LUT = buildLutFor(SKIN);
     if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
+  }
+  // The kit's own door, the shape applyWorn has for the wardrobe. Separate
+  // because a kit is not bought and does not come from the shop: it arrives
+  // from the profile sheet, from the profile row at boot, or from
+  // localStorage on an offline day, and all three land here.
+  function applyKit(kit) {
+    const clean = kitOf(kit);
+    worn = { ...worn, kit: (clean.left || clean.right || clean.num !== null) ? clean : null };
+    try { localStorage.setItem('snakeWorn', JSON.stringify(worn)); } catch (e) {}
+    buildJerseySprite();
+    if (kitPreview) paintKitPreview();
   }
 
   // The shop draws its previews from the same art module the pitch does, so a
@@ -2257,6 +2319,10 @@
       const prof = await supabaseRpc('pitch_snake_get_profile', {});
       if (prof && prof.name) {
         sbProfile = prof;
+        // The kit follows the account the way the outfit follows the wallet:
+        // the profile row is the truth, localStorage is only the offline copy,
+        // so a player who set a shirt on their phone sees it on their laptop.
+        applyKit({ left: prof.kit_left, right: prof.kit_right, num: prof.kit_num });
         if (takeTheirs || !vsNameInput.value) {
           vsNameInput.value = prof.name;
           vsEditingName = false;
@@ -3323,7 +3389,7 @@
           room.lastTrackAt = Date.now();
           room.trackDirty = false;
           void channel.track({ name: room.name, cc: vsCountry(), ts: room.joinedTs, host: room.host, ready: room.ready,
-                               skin: worn.skin, hat: worn.hat });
+                               skin: worn.skin, hat: worn.hat, kit: worn.kit });
           if (vs === room) { vsSetNote(''); vsRefreshPanel(); }
         } else {
           room.up = false;
@@ -3490,7 +3556,11 @@
       // they are shape-checked here and existence-checked in vsRefit
       const wornId = v => typeof v === 'string' && v.length <= 32 ? v : null;
       list.push({ ref: key, name: String(m.name || 'YOU'), country: cc(m.cc), ts: m.ts || 0, host: !!m.host, ready,
-                  skin: wornId(m.skin), hat: wornId(m.hat) });
+                  // a kit is two colours and a number rather than an id, so it
+                  // is washed by shape here and not by length; kitOf never
+                  // throws and never returns null, so a peer sending nonsense
+                  // wears the classic shirt instead of breaking the refit
+                  skin: wornId(m.skin), hat: wornId(m.hat), kit: kitOf(m.kit) });
       if (key !== vs.ref && !vs.knownRefs.has(key)) { vs.knownRefs.add(key); fresh = true; }
     }
     // A newcomer reads readiness out of presence, which can be up to a pacing
@@ -3554,7 +3624,7 @@
     vs.lastTrackAt = Date.now();
     vs.trackDirty = false;
     void vs.channel.track({ name: vs.name, cc: vsCountry(), ts: vs.joinedTs, host: vs.host, ready: vs.ready, rseq: vs.rseq,
-                            skin: worn.skin, hat: worn.hat });
+                            skin: worn.skin, hat: worn.hat, kit: worn.kit });
   }
   function vsTrackSoon() {
     if (Date.now() - vs.lastTrackAt >= VS_TRACK_GAP_MS) vsTrack();
@@ -4439,6 +4509,30 @@
   const profCountry = document.getElementById('profCountry');
   const profFlag = document.getElementById('profFlag');
   const profSaveBtn = document.getElementById('profSaveBtn');
+  const kitPreview = document.getElementById('profKitPreview');
+  const kitLeftInput = document.getElementById('profKitLeft');
+  const kitRightInput = document.getElementById('profKitRight');
+  const kitNumInput = document.getElementById('profKitNum');
+  const kitPreviewCtx = kitPreview.getContext('2d');
+  // The preview is the real art at device resolution: the shop learned the
+  // same lesson (a preview drawn at CSS pixels on a 3x phone is a blurry lie
+  // about what you are choosing), so the backing store is sized by ratio and
+  // the context scaled once.
+  function paintKitPreview() {
+    const size = 40, ratio = Math.min(3, window.devicePixelRatio || 1);
+    if (kitPreview.width !== Math.round(size * ratio)) {
+      kitPreview.width = Math.round(size * ratio);
+      kitPreview.height = Math.round(size * ratio);
+    }
+    kitPreviewCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    kitPreviewCtx.clearRect(0, 0, size, size);
+    paintJersey(kitPreviewCtx, size, kitFromSheet().num ?? KIT_SOLO_NUM,
+                kitLeftInput.value, kitRightInput.value);
+  }
+  /** What the three controls currently say, washed the way the wire washes it. */
+  function kitFromSheet() {
+    return kitOf({ left: kitLeftInput.value, right: kitRightInput.value, num: kitNumInput.value });
+  }
   const profAuthAnon = document.getElementById('profAuthAnon');
   const profAuthOn = document.getElementById('profAuthOn');
   const profEmail = document.getElementById('profEmail');
@@ -4503,6 +4597,16 @@
     profName.value = (sbProfile && sbProfile.name) || localName;
     profCountry.value = (sbProfile && sbProfile.country) || '';
     paintFlag(profFlag, cc(profCountry.value));
+    // The kit comes off the worn state rather than straight off sbProfile, so
+    // the sheet shows what the snake is actually wearing on an offline day too
+    // (localStorage is the fallback, exactly as it is for the skin). A colour
+    // well has no empty state, so an unchosen half shows the classic colour it
+    // is already being painted with.
+    const showing = myKit();
+    kitLeftInput.value = showing.left || JERSEY_LEFT_DEFAULT;
+    kitRightInput.value = showing.right || JERSEY_RIGHT_DEFAULT;
+    kitNumInput.value = showing.num === null ? '' : String(showing.num);
+    paintKitPreview();
     profCountryRow.style.display = sessionToken() ? '' : 'none';
     profAuthAnon.hidden = !(sessionToken() && sbAnon());
     profAuthOn.hidden = !(sessionToken() && sbUser && !sbUser.is_anonymous);
@@ -4802,12 +4906,28 @@
     try { localStorage.setItem('snakeVsName', name); } catch (e) {}
     vsNameInput.value = name;
     vsEditingName = false;
+    // The kit lands on the snake BEFORE the round trip and whether or not
+    // there is a session at all: nothing here may gate on auth, and a player
+    // who picked a shirt wants to see it on the pitch, not after a login.
+    const chosenKit = kitFromSheet();
+    applyKit(chosenKit);
     if (sessionToken()) {
       profSaveBtn.disabled = true;
       profSay('Saving…', true);
       try {
-        // '' is the NO FLAG choice and clears the flag; a code sets it
-        sbProfile = await supabaseRpc('pitch_snake_set_profile', { p_name: name, p_country: profCountry.value });
+        // '' is the NO FLAG choice and clears the flag; a code sets it.
+        // The kit sends all three fields every time, because the sheet always
+        // has all three on screen: null is the "not talking about it" value
+        // that the plain name commits elsewhere rely on. An empty number
+        // field clears the choice, and -1 is how the contract spells that,
+        // since 0 is a real shirt number and cannot be the empty one.
+        sbProfile = await supabaseRpc('pitch_snake_set_profile', {
+          p_name: name,
+          p_country: profCountry.value,
+          p_kit_left: chosenKit.left,
+          p_kit_right: chosenKit.right,
+          p_kit_num: chosenKit.num === null ? -1 : chosenKit.num,
+        });
         profSay('Saved.', true);
         if (claimWanted && sbProfile && sbProfile.name && state === 'dead' && !savedThisRound) {
           claimWanted = false;
@@ -4978,6 +5098,19 @@
   profSendBtn.addEventListener('click', profSend);
   profEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); profSend(); } });
   profName.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); profSaveBtn.click(); } });
+  // The shirt repaints as the wells and the field move. That is the whole
+  // reason the preview is real art and not a pair of swatches: a player is
+  // choosing what the snake wears, so they should be watching it change.
+  kitLeftInput.addEventListener('input', paintKitPreview);
+  kitRightInput.addEventListener('input', paintKitPreview);
+  kitNumInput.addEventListener('input', () => {
+    // a number field will happily accept 999 and a paste of anything; the
+    // shirt has room for two digits and the column is a smallint
+    const digits = (kitNumInput.value || '').replace(/[^0-9]/g, '').slice(0, 2);
+    if (digits !== kitNumInput.value) kitNumInput.value = digits;
+    paintKitPreview();
+  });
+  kitNumInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); profSaveBtn.click(); } });
 
   profSignOut.addEventListener('click', async () => {
     profSignOut.disabled = true;

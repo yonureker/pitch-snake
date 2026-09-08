@@ -62,6 +62,28 @@ create table if not exists public.pitch_snake_profiles (
 -- that has never run this file those readers are created first.
 alter table public.pitch_snake_profiles add column if not exists levels text[];
 
+-- The kit: two shirt colours and a number, chosen rather than bought (the
+-- owner's call on 2026-09-07). It sits HERE beside the name and the flag
+-- rather than with skin and hat in economy.sql, because it is free-form
+-- identity and not a catalogue: two hexes and a number 0..99 are 25,600-odd
+-- kits, which is nothing an items table can hold, and nothing to own. Null in
+-- any column means "no choice", which every client paints as the classic
+-- yellow-and-red ten.
+alter table public.pitch_snake_profiles add column if not exists kit_left  text;
+alter table public.pitch_snake_profiles add column if not exists kit_right text;
+alter table public.pitch_snake_profiles add column if not exists kit_num   smallint;
+
+-- Belt to the client's braces. Every client washes a kit before sending it,
+-- and none of that binds a caller holding the publishable key: these are the
+-- constraints that actually keep a fillStyle out of the database.
+alter table public.pitch_snake_profiles drop constraint if exists pitch_snake_profiles_kit_left_hex;
+alter table public.pitch_snake_profiles drop constraint if exists pitch_snake_profiles_kit_right_hex;
+alter table public.pitch_snake_profiles drop constraint if exists pitch_snake_profiles_kit_num_range;
+alter table public.pitch_snake_profiles
+  add constraint pitch_snake_profiles_kit_left_hex  check (kit_left  is null or kit_left  ~ '^#[0-9a-f]{6}$'),
+  add constraint pitch_snake_profiles_kit_right_hex check (kit_right is null or kit_right ~ '^#[0-9a-f]{6}$'),
+  add constraint pitch_snake_profiles_kit_num_range check (kit_num   is null or kit_num between 0 and 99);
+
 alter table public.pitch_snake_profiles enable row level security;
 -- Rule 1 of leaderboard.sql has TWO halves, and this table was only carrying
 -- one: RLS on with no policies, but the default grants left in place, so it
@@ -84,7 +106,8 @@ security definer
 set search_path = ''
 as $$
   select to_json(p) from (
-    select name, country, coalesce(levels, '{}') as levels
+    select name, country, coalesce(levels, '{}') as levels,
+           kit_left, kit_right, kit_num
     from public.pitch_snake_profiles
     where user_id = auth.uid()
   ) p;
@@ -96,18 +119,34 @@ $$;
 -- score name could not be. Country: null keeps whatever flag is already
 -- chosen (every plain name commit passes null and must not strip one), an
 -- empty string clears it (the sheet's NO FLAG choice), a code sets it.
+-- The kit follows the country contract exactly, field by field: null keeps
+-- what is worn (every plain name commit passes nulls and must not undress
+-- anybody), and anything else is a decision. There is no '' for a number, so
+-- the way to clear one is to send something outside 0..99, which washes to
+-- null like a bad country code does. Adding the three parameters with
+-- defaults keeps every existing two-argument caller working, but it does mean
+-- the OLD two-argument function has to go: leaving both would make a
+-- two-argument call ambiguous and every save would fail.
 drop function if exists public.pitch_snake_set_profile(text, text);
 
-create or replace function public.pitch_snake_set_profile(p_name text, p_country text default null)
+create or replace function public.pitch_snake_set_profile(
+  p_name      text,
+  p_country   text    default null,
+  p_kit_left  text    default null,
+  p_kit_right text    default null,
+  p_kit_num   integer default null)
 returns json
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  clean_name    text;
-  clean_country text;
-  row_out       json;
+  clean_name      text;
+  clean_country   text;
+  clean_kit_left  text;
+  clean_kit_right text;
+  clean_kit_num   smallint;
+  row_out         json;
 begin
   if auth.uid() is null then
     raise exception 'no session';
@@ -123,6 +162,20 @@ begin
     clean_country := null;
   end if;
 
+  -- Long-form lowercase hex only. The clients wash shorthand and bare hex up
+  -- into this form before sending; anything that still does not match is not
+  -- a colour, and a caller holding the publishable key is exactly who this is
+  -- written for.
+  clean_kit_left := lower(trim(coalesce(p_kit_left, '')));
+  if clean_kit_left !~ '^#[0-9a-f]{6}$' then
+    clean_kit_left := null;
+  end if;
+  clean_kit_right := lower(trim(coalesce(p_kit_right, '')));
+  if clean_kit_right !~ '^#[0-9a-f]{6}$' then
+    clean_kit_right := null;
+  end if;
+  clean_kit_num := case when p_kit_num between 0 and 99 then p_kit_num::smallint end;
+
   -- Names are unique since 2026-09-06, at the owner's call, except the
   -- un-name YOU that every unnamed player shares (equip and set_levels
   -- upsert rows under it, so it can never be scarce). Case-insensitive,
@@ -136,8 +189,8 @@ begin
     raise exception 'That name is taken.';
   end if;
 
-  insert into public.pitch_snake_profiles (user_id, name, country)
-  values (auth.uid(), clean_name, clean_country)
+  insert into public.pitch_snake_profiles (user_id, name, country, kit_left, kit_right, kit_num)
+  values (auth.uid(), clean_name, clean_country, clean_kit_left, clean_kit_right, clean_kit_num)
   on conflict (user_id) do update
     set name       = excluded.name,
         -- null means the caller was not talking about the flag: keep it.
@@ -145,10 +198,20 @@ begin
         country    = case when p_country is null
                           then public.pitch_snake_profiles.country
                           else excluded.country end,
+        kit_left   = case when p_kit_left is null
+                          then public.pitch_snake_profiles.kit_left
+                          else excluded.kit_left end,
+        kit_right  = case when p_kit_right is null
+                          then public.pitch_snake_profiles.kit_right
+                          else excluded.kit_right end,
+        kit_num    = case when p_kit_num is null
+                          then public.pitch_snake_profiles.kit_num
+                          else excluded.kit_num end,
         updated_at = now();
 
   select to_json(p) into row_out from (
-    select name, country, coalesce(levels, '{}') as levels
+    select name, country, coalesce(levels, '{}') as levels,
+           kit_left, kit_right, kit_num
     from public.pitch_snake_profiles
     where user_id = auth.uid()
   ) p;
@@ -285,9 +348,9 @@ $$;
 revoke all on function public.pitch_snake_name_taken(text)         from public;
 grant execute on function public.pitch_snake_name_taken(text)      to anon, authenticated;
 
-revoke all on function public.pitch_snake_set_profile(text, text)      from public;
+revoke all on function public.pitch_snake_set_profile(text, text, text, text, integer) from public;
 revoke all on function public.pitch_snake_my_bests()                   from public;
 
 grant execute on function public.pitch_snake_get_profile()             to anon, authenticated;
-grant execute on function public.pitch_snake_set_profile(text, text)   to anon, authenticated;
+grant execute on function public.pitch_snake_set_profile(text, text, text, text, integer) to anon, authenticated;
 grant execute on function public.pitch_snake_my_bests()                to anon, authenticated;

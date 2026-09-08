@@ -26,6 +26,7 @@ import {
 } from '@pitch-snake/engine';
 import type { NetSession } from '@pitch-snake/net';
 
+import { type Kit, KIT_NONE } from '@/lib/kit';
 import type { RuleMode } from '@/lib/modes';
 
 import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';
@@ -54,8 +55,11 @@ export interface GameLoop {
   phase: RoundPhase;
   score: number;
   best: number;
-  /** Dress the snake (skin id, hat id); null wears classic. Menu-time only. */
+  /** Dress the snake (skin id, hat id); null wears classic. Menu-time only.
+   *  Leaves the kit alone: that is chosen, not bought, and has its own door. */
   setWorn: (skin: string | null, hat: string | null) => void;
+  /** Put the shirt on: two colours and a number, all optional. Menu-time only. */
+  setKit: (kit: Kit) => void;
   /** Hand over a room round: shared game, its session, my seat, kickoff lag. */
   startVersus: (
     g: Game,
@@ -150,7 +154,7 @@ interface LoopBox {
   atlas: SkImage | null;
   boardPx: number;
   /** What the snake wears; swapped at menu time by setWorn, read per frame. */
-  worn: { skin: string | null; hat: string | null };
+  worn: { skin: string | null; hat: string | null; kit: Kit };
   /** A room's round: the session drives the sim and myIdx is my seat. */
   session: NetSession | null;
   vsIdx: number;
@@ -195,7 +199,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     lastFrameTs: 0,
     atlas: null,
     boardPx: 1,
-    worn: { skin: null, hat: null },
+    worn: { skin: null, hat: null, kit: KIT_NONE },
     session: null,
     forfeited: false,
     lastMineAlive: true,
@@ -530,7 +534,17 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // the outfit: an equip or a wallet answer dresses the snake; the renderer
   // rebakes its sprites on the new key at the next frame (the web's applyWorn)
   const setWorn = (skin: string | null, hat: string | null): void => {
-    boxRef.current.worn = { skin, hat };
+    // Merge, never replace: the kit rides in the same object and comes from
+    // the PROFILE rather than the wallet, so a wallet answer landing after a
+    // kit would otherwise undress the shirt. The web's applyWorn carries the
+    // identical guard for the identical reason.
+    boxRef.current.worn = { ...boxRef.current.worn, skin, hat };
+  };
+
+  // the kit's own door, since it is chosen rather than bought and arrives on
+  // its own beat (the profile query, not the wallet)
+  const setKit = (kit: Kit): void => {
+    boxRef.current.worn = { ...boxRef.current.worn, kit };
   };
 
   // ---- a room's round (the session drives, this loop renders) ----
@@ -639,6 +653,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     picture,
     phase,
     setWorn,
+    setKit,
     startVersus,
     endVersus,
     forfeit,

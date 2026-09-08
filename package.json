@@ -6,7 +6,7 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "node --test packages/engine/engine.test.js packages/net/net.test.js",
+    "test": "node --test packages/engine/engine.test.js packages/net/net.test.js page/kit.test.js",
     "mobile": "npm --workspace apps/mobile run start",
     "install-hooks": "sh scripts/install-hooks.sh",
     "lint": "npm --workspace apps/mobile run lint",

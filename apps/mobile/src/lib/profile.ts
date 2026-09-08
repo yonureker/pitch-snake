@@ -13,19 +13,28 @@
  *
  * @module
  */
+import { type Kit, kitOf } from './kit';
 import { rpc } from './leaderboard';
 
 /** What the shell shows and edits. */
 export interface Profile {
   name: string;
   country: string | null;
+  /** The shirt: two colours and a number, all three optional. */
+  kit: Kit;
 }
 
 function asProfile(v: unknown): Profile | null {
   if (typeof v !== 'object' || v === null) return null;
   const r: Record<string, unknown> = { ...v };
   if (typeof r.name !== 'string') return null;
-  return { name: r.name, country: typeof r.country === 'string' ? r.country : null };
+  return {
+    name: r.name,
+    country: typeof r.country === 'string' ? r.country : null,
+    // the row spells the kit across three columns; the app carries it as one
+    // thing, because it is one thing to a player
+    kit: kitOf({ left: r.kit_left, right: r.kit_right, num: r.kit_num }),
+  };
 }
 
 /**
@@ -65,13 +74,25 @@ export type SaveResult = 'saved' | 'taken' | 'error';
 /**
  * Write the profile.
  *
+ * The kit follows the country contract field by field: leave it out and the
+ * shirt is untouched, which is what every plain name commit wants. Passing one
+ * sends all three, and an unchosen NUMBER travels as -1 rather than null,
+ * because null means "not talking about it" and 0 is a real shirt number.
+ *
  * @param name - five characters, washed server-side anyway.
  * @param country - null keeps the current flag, '' clears it, a code sets it.
+ * @param kit - the shirt to write, or undefined to leave it alone.
  * @returns whether it landed, and why not when it did not.
  */
-export async function saveProfile(name: string, country: string | null): Promise<SaveResult> {
+export async function saveProfile(name: string, country: string | null, kit?: Kit): Promise<SaveResult> {
   try {
-    await rpc('pitch_snake_set_profile', { p_name: name, p_country: country });
+    await rpc('pitch_snake_set_profile', {
+      p_name: name,
+      p_country: country,
+      ...(kit === undefined ?
+        {}
+      : { p_kit_left: kit.left, p_kit_right: kit.right, p_kit_num: kit.num ?? -1 }),
+    });
     return 'saved';
   } catch (e) {
     const msg = e instanceof Error ? e.message.toLowerCase() : '';

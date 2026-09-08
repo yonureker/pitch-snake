@@ -6,15 +6,16 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import type { Kit } from '@/lib/kit';
 import { nameTaken, saveProfile, type SaveResult } from '@/lib/profile';
 
 /** Save name and flag; invalidates the profile so the chip refetches. */
 export function useSaveProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (args: { name: string; country: string | null }): Promise<SaveResult> => {
+    mutationFn: async (args: { name: string; country: string | null; kit?: Kit }): Promise<SaveResult> => {
       if (await nameTaken(args.name)) return 'taken';
-      return saveProfile(args.name, args.country);
+      return saveProfile(args.name, args.country, args.kit);
     },
     onSuccess: (res) => {
       if (res === 'saved') void qc.invalidateQueries({ queryKey: ['profile'] });
