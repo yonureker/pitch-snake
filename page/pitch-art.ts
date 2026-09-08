@@ -345,6 +345,13 @@ const JERSEY_TRIM = [
   [-1, 1], [0, 1], [1, 1],
 ] as const;
 
+/**
+ * The number a snake wears when its player has chosen none: the classic ten.
+ * A room deals from `VS_NUMS` instead, so this is the solo answer and the one
+ * every preview shows.
+ */
+export const JERSEY_SOLO_NUM = 10;
+
 /** The classic shirt's left half, worn when a player has chosen no colour. */
 export const JERSEY_LEFT_DEFAULT = '#f2c114';
 

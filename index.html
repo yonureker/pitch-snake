@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=792a56c77a">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=792a56c77a">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=50231fed93">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=50231fed93">
 </head>
 <body>
   <div class="wrap">
@@ -338,13 +338,13 @@
         <div class="prof-me" id="profMe" hidden>
           <div class="fieldgrp">
             <div class="flabel">Username</div>
+            <!-- No rating under the name. It sat here from 2026-09-07 until
+                 2026-09-08, and this sheet is where a player CHANGES things:
+                 a number they cannot edit, on the one line they came here to
+                 type in, is the settings-echo the whole sheet is written
+                 against. The ELO chip in the boards sheet answers it, beside
+                 the three boards that answer the same kind of question. -->
             <div class="entry wide"><input id="profName" maxlength="5" placeholder="USERNAME" autocomplete="off" spellcheck="false"></div>
-            <!-- Your rating rides with your USERNAME, because that is what it
-                 belongs to: it is not a mode you pick or a board you browse, it
-                 is a fact about you, and it used to need a column of its own on
-                 the multiplayer step to say so. Hidden until there is one, since
-                 a blank number reads as a bug rather than as "not rated yet". -->
-            <p class="prof-rating" id="profRating" hidden></p>
           </div>
           <div class="fieldgrp">
             <div class="flabel">Country</div>
@@ -357,18 +357,26 @@
             <div class="entry wide country-row" id="profCountryRow"><span class="flag" id="profFlag"></span><select id="profCountry"><option value="">NO COUNTRY</option></select></div>
           </div>
           <div class="fieldgrp">
-            <div class="flabel">Jersey &middot; two colours and a number</div>
-            <!-- The label carries its own explanation, which deletes the
-                 sentence that would otherwise sit under the row at no cost in
-                 height. The preview is the REAL shirt art painted by the same
-                 paintJersey the pitch uses, so what you see here is what the
-                 snake wears: the shop's rule about previews, applied to
-                 something that costs nothing. -->
+            <div class="flabel">Snake's jersey</div>
+            <!-- The label names the thing and stops there. It read "JERSEY ·
+                 TWO COLOURS AND A NUMBER" until 2026-09-08, which described
+                 the controls to somebody already looking at them; the row is
+                 two colour wells and a number field, so it says that itself.
+                 What it could NOT say is whose shirt this is, which is the
+                 word the label now spends itself on.
+
+                 The preview is a whole SNAKE rather than a floating shirt,
+                 drawn by the shop's own painter with the skin and hat this
+                 player owns, and the shirt rides the cell behind the head
+                 because that is where the pitch puts it. It reads left to
+                 right: the three things you set, then the thing they dress.
+                 The preview LED the row until 2026-09-08 and answered a
+                 question nobody had asked yet. -->
             <div class="entry wide kit-row" id="profKitRow">
-              <canvas id="profKitPreview" class="kit-preview" width="40" height="40"></canvas>
               <input type="color" id="profKitLeft" class="kit-swatch" aria-label="Shirt colour, left half">
               <input type="color" id="profKitRight" class="kit-swatch" aria-label="Shirt colour, right half">
               <input id="profKitNum" class="kit-num" type="number" min="0" max="99" step="1" inputmode="numeric" placeholder="10" aria-label="Shirt number, 0 to 99">
+              <canvas id="profKitPreview" class="kit-preview"></canvas>
             </div>
           </div>
           <button class="btn small" id="profSaveBtn">SAVE</button>
@@ -399,18 +407,21 @@
         </div>
         <div class="prof-auth" id="profAuthOn" hidden>
           <p class="vs-hint">Logged in as <b id="profWhoEmail"></b></p>
-          <button class="btn small ghostbtn" id="profSignOut">SIGN OUT</button>
         </div>
         <p class="save-note" id="profStatus" hidden></p>
-        <!-- The shelf. Behind the player chip because that is where a player
-             looks for their own things, and because a badge is part of who
-             you are here rather than part of a round. Shows the LOCKED ones
-             too: a list of only what you already have says nothing about
-             what the game rewards, which is most of why badges exist. -->
-        <!-- DONE only closes the sheet, so it stops wearing the same red as
-             the button that commits a change. Three identical loud buttons
-             made the loudest of them the one that does nothing. -->
-        <button class="btn small ghostbtn" id="profileClose">DONE</button>
+        <!-- The two ways out, side by side, because they are the same kind of
+             thing: neither changes what the sheet is showing. Stacked, they
+             read as a sequence, and SIGN OUT sitting directly above DONE at
+             the same size and colour is a mis-tap that logs you out. SIGN OUT
+             lives here rather than in the block above it for that reason
+             alone, and hides itself with the same test that hides the block.
+             DONE only closes the sheet, so neither wears the red the SAVE
+             button spends: three identical loud buttons made the loudest of
+             them the one that does nothing. -->
+        <div class="prof-actions">
+          <button class="btn small ghostbtn" id="profSignOut" hidden>SIGN OUT</button>
+          <button class="btn small ghostbtn" id="profileClose">DONE</button>
+        </div>
       </div>
     </div>
 
@@ -467,17 +478,18 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=792a56c77a",
-    "./packages/net/net.js": "./packages/net/net.js?v=792a56c77a",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=792a56c77a",
-    "./page/build/dom.js": "./page/build/dom.js?v=792a56c77a",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=792a56c77a",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=792a56c77a",
-    "./page/build/kit.js": "./page/build/kit.js?v=792a56c77a",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=792a56c77a",
-    "./page/build/shop.js": "./page/build/shop.js?v=792a56c77a",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=792a56c77a",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=792a56c77a"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=50231fed93",
+    "./packages/net/net.js": "./packages/net/net.js?v=50231fed93",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=50231fed93",
+    "./page/build/dom.js": "./page/build/dom.js?v=50231fed93",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=50231fed93",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=50231fed93",
+    "./page/build/kit.js": "./page/build/kit.js?v=50231fed93",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=50231fed93",
+    "./page/build/shop.js": "./page/build/shop.js?v=50231fed93",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=50231fed93",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=50231fed93",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=50231fed93"
   }
 }
 </script>
@@ -764,7 +776,8 @@
   // preview drifting from the snake. See page/pitch-art.ts.
   import {
     buildLutFor, drawCrest, hatFor, JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT,
-    paintJersey, roundRectOn, SKINS, skinFor, SNAKE_SHADES, VS_NUMS,
+    JERSEY_SOLO_NUM, paintJersey, roundRectOn, SKINS, skinFor, SNAKE_SHADES,
+    VS_NUMS,
   } from './page/build/pitch-art.js';
   // What a kit IS, as opposed to what it looks like: the wash that keeps a
   // typed or peer-sent value out of a fillStyle, and the lane-order rule that
@@ -774,6 +787,9 @@
   // repaints from. It draws its previews from page/pitch-art.ts, the same art
   // this file wears, so a preview cannot lie. See page/shop.ts.
   import { applyWallet, creditPurse, initShop, purseIsKnown } from './page/build/shop.js';
+  // The same picture the shop shows, so the jersey a player is choosing and the
+  // skin they bought are previewed by one painter. See page/snake-preview.ts.
+  import { paintSnakePreview } from './page/build/snake-preview.js';
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
@@ -1165,7 +1181,6 @@
   // Baked, never per frame: five seat canvases plus my own, rebuilt on resize,
   // when my kit changes, and when a rival's arrives in presence. Performance
   // rule 7, and the same treatment the hats already get.
-  const KIT_SOLO_NUM = 10;
   const jerseyCanvas = document.createElement('canvas');
   const jerseyCtx = jerseyCanvas.getContext('2d');
   let jerseyS = 0;
@@ -1188,7 +1203,7 @@
     jerseyS = Math.ceil(cell * 0.84);
     jerseyCanvas.width = jerseyS; jerseyCanvas.height = jerseyS;
     const mine = myKit();
-    paintJersey(jerseyCtx, jerseyS, mine.num ?? KIT_SOLO_NUM, mine.left, mine.right);
+    paintJersey(jerseyCtx, jerseyS, mine.num ?? JERSEY_SOLO_NUM, mine.left, mine.right);
     // One per room seat, mine included: in a room every snake including this
     // one is drawn from jerseySeat, so my own choice has to be baked here too.
     // Numbers go through kitNumbersFor rather than straight onto the shirt,
@@ -4589,21 +4604,13 @@
   const kitLeftInput = document.getElementById('profKitLeft');
   const kitRightInput = document.getElementById('profKitRight');
   const kitNumInput = document.getElementById('profKitNum');
-  const kitPreviewCtx = kitPreview.getContext('2d');
-  // The preview is the real art at device resolution: the shop learned the
-  // same lesson (a preview drawn at CSS pixels on a 3x phone is a blurry lie
-  // about what you are choosing), so the backing store is sized by ratio and
-  // the context scaled once.
+  // A REAL SNAKE, not a floating shirt. It was a 40px jersey tile until
+  // 2026-09-08; three cells wearing the skin, the hat and the shirt is what a
+  // player actually sees on the pitch, and it is the same painter the shop
+  // previews a hat with, so the two can never drift. The shirt lands on the
+  // cell behind the head because that is segment 1, where the pitch draws it.
   function paintKitPreview() {
-    const size = 40, ratio = Math.min(3, window.devicePixelRatio || 1);
-    if (kitPreview.width !== Math.round(size * ratio)) {
-      kitPreview.width = Math.round(size * ratio);
-      kitPreview.height = Math.round(size * ratio);
-    }
-    kitPreviewCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    kitPreviewCtx.clearRect(0, 0, size, size);
-    paintJersey(kitPreviewCtx, size, kitFromSheet().num ?? KIT_SOLO_NUM,
-                kitLeftInput.value, kitRightInput.value);
+    paintSnakePreview(kitPreview, SKIN, hatOn ? HAT : null, kitFromSheet());
   }
   /** What the three controls currently say, washed the way the wire washes it. */
   function kitFromSheet() {
@@ -4618,8 +4625,6 @@
   const profWhoEmail = document.getElementById('profWhoEmail');
   const profSignOut = document.getElementById('profSignOut');
   const profStatus = document.getElementById('profStatus');
-  const profRating = document.getElementById('profRating');
-  let profRatingGen = 0;   // a reply must not paint a sheet that has closed
 
 
   // the chip states who you are wherever a name is known; the silhouette
@@ -4650,23 +4655,6 @@
   // the current anonymous user, 'signin' switches to the account owning it
   let otpKind = '', otpEmail = '', resendTimer = null, autoVerified = false;
 
-  // The rating shown beside the name. Read once per sheet opening and only
-  // when signed in: it is a bonus tier like everything else identity gives,
-  // so a failure leaves the line hidden and nothing else changes.
-  function fillProfileRating() {
-    profRating.hidden = true;
-    if (!supabaseConfigured() || !sessionToken()) return;
-    const gen = ++profRatingGen;
-    supabaseRpc('pitch_snake_my_rating', {}).then((mine) => {
-      if (gen !== profRatingGen || profileModal.hidden) return;
-      const own = mine && mine[ROOM_RULES];
-      if (!own) return;
-      profRating.textContent = 'RATED ' + own.rating + (own.provisional ? ' P' : '')
-        + ' \u00b7 ' + own.rounds + (own.rounds === 1 ? ' ROUND' : ' ROUNDS');
-      profRating.hidden = false;
-    }).catch(() => { /* no rating today; the line simply stays away */ });
-  }
-
   function refreshProfileSheet(reset) {
     let localName = '';
     try { localName = (localStorage.getItem('snakeVsName') || '').trim(); } catch (e) {}
@@ -4689,6 +4677,10 @@
     profMe.hidden = !loggedIn();
     profAuthAnon.hidden = !(sessionToken() && sbAnon());
     profAuthOn.hidden = !(sessionToken() && sbUser && !sbUser.is_anonymous);
+    // SIGN OUT sits in the footer beside DONE rather than in the block that
+    // names the account, so it is hidden by that block's own test rather than
+    // by living inside it. One condition, two places on the sheet.
+    profSignOut.hidden = profAuthOn.hidden;
     if (!profAuthOn.hidden) profWhoEmail.textContent = sbUser.email || '';
     // WHICH DOOR IS THIS. The sheet used to answer before it could know,
     // titling itself "Create account" at a guest who may well have an account
@@ -4703,7 +4695,6 @@
     // guest and 'Player' to everybody else, which described the email half to
     // one and the identity half to the other; the sheet is the account.
     profTitle.textContent = 'Your account';
-    fillProfileRating();
     if (reset) {
       profCodeRow.hidden = true;
       profCode.value = '';
@@ -4912,7 +4903,13 @@
         ? 'Leave the room to change your name.'
         : 'Finish the round to change your profile.';
     }
-    for (const el of profileModal.querySelectorAll('input, select, .btn')) el.disabled = locked;
+    // The lock freezes everything that CHANGES something, and DONE changes
+    // nothing: it closes the sheet. Locking it too left a player who opened
+    // the sheet mid-round with no button that worked, only a backdrop click
+    // nobody is told about.
+    for (const el of profileModal.querySelectorAll('input, select, .btn')) {
+      el.disabled = locked && el !== profileClose;
+    }
     return locked;
   }
 

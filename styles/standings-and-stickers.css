@@ -174,11 +174,17 @@
      collapsed the nameplate to a 34px square below 900px; it is cheap to
      re-make and invisible until someone opens the sheet. */
   .kit-row { display: flex; align-items: center; gap: 9px; }
-  .entry.wide .kit-preview {
-    flex: 0 0 auto; width: 40px; height: 40px;
-    border-radius: 8px; background: var(--sheet-field);
-    border: 2px solid var(--gold);
-  }
+  /* The preview is the SHOP's box, to the pixel: 72x44, painted by the same
+     page/snake-preview.ts, because it is now the same picture of the same
+     snake and two sizes would be two answers to one question.
+
+     It wears no border, which is not an oversight. Everything on this page is
+     border-box, so a 1px border would squeeze the canvas's 72x44 backing
+     store into a 70x42 content box and stretch it, undoing the device-pixel
+     sizing the module exists for. It sat in a 40px gold-bordered tile until
+     2026-09-08; gold is what the three CONTROLS in this row wear, and the
+     preview is the one thing here nobody can press. */
+  .entry.wide .kit-preview { flex: 0 0 72px; width: 72px; height: 44px; }
   /* A colour well is a button in every browser and needs its native chrome
      taken off in three places, or it renders as a grey pill with a swatch
      rattling around inside it. */

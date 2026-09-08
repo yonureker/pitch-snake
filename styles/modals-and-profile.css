@@ -63,16 +63,15 @@
     font-family: 'Barlow', sans-serif; font-size: 15px; font-weight: 600;
     letter-spacing: 0.5px; text-transform: none; width: 100%;
   }
-  /* The rating, sitting under the name it belongs to. Quiet on purpose: it
-     is a fact about you, not a call to action, and it is the only place the
-     number lives now that the multiplayer step has stopped keeping a column
-     for it. */
-  .prof-rating {
-    font-family: 'Barlow', sans-serif; font-weight: 700;
-    font-size: 11px; letter-spacing: 2px;
-    color: var(--gold); margin: -2px 0 2px; text-align: center;
+  /* The way out, as one row. Both buttons leave the sheet alone, so they are
+     one group; stacked they read as a sequence, and an identical-looking SIGN
+     OUT directly above DONE is a mis-tap that logs you out. It wraps rather
+     than overflowing, because a very narrow sheet stacking them is a worse
+     look than a row that does not fit is a bug. */
+  .prof-actions {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    align-items: center; gap: 8px; width: 100%;
   }
-  .prof-rating[hidden] { display: none; }
   .prof-auth {
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     width: 100%; border-top: 1px solid rgba(194,162,90,0.35); padding-top: 12px;
