@@ -1,0 +1,52 @@
+# The pitchsnake.com worker: the proxy that serves the game, and the room wire.
+#
+# This file is why the worker is no longer pasted into the dashboard editor. A
+# Durable Object needs a class binding and a migration, and neither can be
+# pasted; `npx wrangler deploy` from this directory does both. Everything else
+# about the deployment is unchanged, routes included.
+#
+# First deploy, in order:
+#   1. npx wrangler login                     (once, per machine)
+#   2. npx wrangler deploy                    (creates the object and its migration)
+#   3. check the routes below are attached in the dashboard, since a worker that
+#      deploys without them serves nothing and looks fine
+#
+# Local, and the flag is not optional if a BROWSER is driving it:
+#
+#   npx wrangler dev --var DEV_ORIGINS:loopback
+#
+# The relay checks the Origin header, and the browser harness serves the page
+# from a loopback port it picks at run time, so without that flag every socket
+# from a local page is refused with a 403 and the room quietly falls back to
+# Broadcast, which looks exactly like the change not working. node clients send
+# no Origin at all and need nothing.
+#
+#   node scripts/check-room-wire.mjs                       # a real round, real relay
+#   node scripts/wire-latency.mjs --wire=do --origin=http://127.0.0.1:8787
+
+name = "pitchsnake-router"
+main = "pitchsnake-router.js"
+# Pinned to a date the runtime here actually supports, not to today: a
+# compatibility date is a promise about behaviour that has been TESTED, and
+# wrangler refuses to boot a date newer than its own binary knows.
+compatibility_date = "2026-04-28"
+
+# The apex and www both route here. www is folded into the apex by the worker
+# itself for pages, and answered directly for room sockets, because a WebSocket
+# does not follow a redirect.
+routes = [
+  { pattern = "pitchsnake.com/*", zone_name = "pitchsnake.com" },
+  { pattern = "www.pitchsnake.com/*", zone_name = "pitchsnake.com" },
+]
+
+[[durable_objects.bindings]]
+name = "ROOM_WIRE"
+class_name = "RoomWire"
+
+# SQLite-backed, which is what puts Durable Objects on the free plan at all.
+# The object stores nothing (see room-wire.js: storing anything would give a
+# game with one source of truth a second one), so the storage backend is a
+# formality here rather than a design decision.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomWire"]

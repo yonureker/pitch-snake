@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=823c2e8799">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=823c2e8799">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=cea9306286">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=cea9306286">
 </head>
 <body>
   <div class="wrap">
@@ -481,18 +481,19 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=823c2e8799",
-    "./packages/net/net.js": "./packages/net/net.js?v=823c2e8799",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=823c2e8799",
-    "./page/build/dom.js": "./page/build/dom.js?v=823c2e8799",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=823c2e8799",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=823c2e8799",
-    "./page/build/kit.js": "./page/build/kit.js?v=823c2e8799",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=823c2e8799",
-    "./page/build/shop.js": "./page/build/shop.js?v=823c2e8799",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=823c2e8799",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=823c2e8799",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=823c2e8799"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=cea9306286",
+    "./packages/net/net.js": "./packages/net/net.js?v=cea9306286",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=cea9306286",
+    "./page/build/dom.js": "./page/build/dom.js?v=cea9306286",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=cea9306286",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=cea9306286",
+    "./page/build/kit.js": "./page/build/kit.js?v=cea9306286",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=cea9306286",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=cea9306286",
+    "./page/build/shop.js": "./page/build/shop.js?v=cea9306286",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=cea9306286",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=cea9306286",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=cea9306286"
   }
 }
 </script>
@@ -510,7 +511,7 @@
   // versus rides the same deterministic engine: every client simulates the
   // whole room and only quantum-stamped turns cross the wire (rollback
   // netcode); the session logic is shared, transport-agnostic code
-  import { createSession, channelTransport } from './packages/net/net.js';
+  import { createSession, channelTransport, dualTransport } from './packages/net/net.js';
   import { ENGINE_VERSION } from './packages/engine/engine.js';
 
   // ---- the move to pitchsnake.com ----
@@ -793,6 +794,10 @@
   // The same picture the shop shows, so the jersey a player is choosing and the
   // skin they bought are previewed by one painter. See page/snake-preview.ts.
   import { paintSnakePreview, SHEET_PREVIEW } from './page/build/snake-preview.js';
+  // The room's own relay, near the room rather than near the project. It is
+  // never the only wire: dualTransport keeps Broadcast alongside it until every
+  // seat has been heard here. See page/room-wire.ts.
+  import { openRoomSocket } from './page/build/room-wire.js';
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
@@ -3423,6 +3428,10 @@
       const room = {
         code, host, ref, name, channel,
         transport: channelTransport(channel),
+        // Opened at JOIN, not at kickoff, so it is warm and proven by the time
+        // a round starts. A room that cannot reach it simply plays on
+        // Broadcast, which is why nothing here is allowed to fail loudly.
+        socket: openRoomSocket(code),
         present: [], joinedTs: Date.now(), startN: 0,
         game: null, session: null, roster: null, myIdx: -1,
         over: false, spectating: false, stalled: false, up: false,
@@ -3557,6 +3566,8 @@
     const wasVsGame = vsView();          // read BEFORE vs drops: this g was the room's round
     clearInterval(vs.touchTimer);
     try { vs.channel.unsubscribe(); } catch (e) {}
+    // the socket reconnects for as long as it is open, so leaving has to say so
+    try { vs.socket.close(); } catch (e) {}
     vs = null;
     syncMpHud();
     if (wasLive || wasVsGame) {
@@ -3856,8 +3867,14 @@
       players: m.roster.length,
     });
     vs.game = g;
+    // BOTH WIRES, every round, with no negotiation anywhere. The fast one is
+    // this room's own relay and the slow one is Broadcast; dualTransport sends
+    // on both until every seat has been HEARD on the fast one, and the session
+    // dedupes by sequence number, so a room can never half-migrate. Rebuilt per
+    // round because the proof is per round: a new roster has proved nothing yet.
+    vs.wire = dualTransport(vs.socket, vs.transport, { seats: m.roster.length, myIdx: idx });
     vs.session = createSession({
-      game: g, myIdx: idx, transport: vs.transport,
+      game: g, myIdx: idx, transport: vs.wire,
       // the round number every peer agreed on (server counter, or the host's
       // broadcast n): tags the wire so a straggler from the last round on this
       // reused channel cannot drag this one

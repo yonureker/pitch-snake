@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, MODES, SIM_DT } from '../engine/engine.js';
-import { createSession, loopbackBus, foldHash, SNAP_HORIZON_Q, FRESH_MS, STALL_AT, LAG_GIVEUP_MS, STALL_GIVEUP_MS } from './net.js';
+import { createSession, loopbackBus, dualTransport, foldHash, NET_PROTO, BEAT_MS, SNAP_HORIZON_Q, FRESH_MS, STALL_AT, LAG_GIVEUP_MS, STALL_GIVEUP_MS } from './net.js';
 
 const QUIET = { seed: 90210, tickMs: 100, wallsEnabled: false };
 
@@ -524,4 +524,153 @@ test('foldHash is stable and spreads', () => {
   assert.equal(foldHash('pitch'), foldHash('pitch'));
   assert.notEqual(foldHash('pitch'), foldHash('snake'));
   assert.notEqual(foldHash('a'), foldHash('b'));
+});
+
+// ---- two wires, no negotiation ----------------------------------------
+//
+// The migration hazard this closes: a room where one peer talks on the new
+// wire and another on the old shows both players in the lobby and delivers not
+// one input. dualTransport refuses to depend on agreement, so these tests are
+// about what happens when the two ends DISAGREE.
+
+/** A wire that is permanently down: the peer who cannot reach the relay. */
+function deadWire() {
+  return {
+    send() { /* nowhere to go */ },
+    onMessage() { /* nothing ever arrives */ },
+    setOpen() { /* stays down */ },
+    isOpen() { return false; },
+    close() { /* already */ },
+  };
+}
+
+/** Count what each seat sends and receives, per wire, without a session. */
+function twoWireRoom(n, { deadFastFor = [] } = {}) {
+  const fast = loopbackBus(n, {});
+  const slow = loopbackBus(n, {});
+  const seen = Array.from({ length: n }, () => []);
+  const sent = Array.from({ length: n }, () => ({ fast: 0, slow: 0 }));
+  const wires = [];
+  const fastEnds = [];
+  /** Wrap an endpoint so the test can see which wire carried what. */
+  const counted = (end, i, which) => ({
+    send(obj) { sent[i][which]++; end.send(obj); },
+    onMessage(f) { end.onMessage(f); },
+    setOpen(v) { end.setOpen(v); },
+    isOpen() { return end.isOpen(); },
+    close() { end.close(); },
+  });
+  for (let i = 0; i < n; i++) {
+    // A dead socket neither sends nor receives, which a bus endpoint with
+    // sending switched off does not model: the queue would still deliver.
+    const live = fast.endpoints[i];
+    const gate = { down: deadFastFor.includes(i) };
+    const fastEnd = {
+      send(obj) { if (!gate.down) live.send(obj); },
+      onMessage(f) { live.onMessage((m) => { if (!gate.down) f(m); }); },
+      setOpen(v) { live.setOpen(v); },
+      isOpen() { return !gate.down && live.isOpen(); },
+      close() { gate.down = true; live.close(); },
+    };
+    fastEnds.push({ gate });
+    const wire = dualTransport(counted(fastEnd, i, 'fast'), counted(slow.endpoints[i], i, 'slow'), {
+      seats: n, myIdx: i, now: () => fast.now,
+    });
+    wire.onMessage((m) => { seen[i].push(m); });
+    wires.push(wire);
+  }
+  const pump = (to) => { fast.pump(to); slow.pump(to); };
+  return { fast, slow, wires, seen, sent, fastEnds, pump };
+}
+
+test('two wires: a message is doubled until every seat is proven on the fast one', () => {
+  const room = twoWireRoom(2);
+  // nobody has been heard on the fast wire yet, so this rides both
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 1, s: 1 });
+  room.pump(10);
+  assert.equal(room.seen[1].length, 2, 'unproven: one copy per wire');
+
+  // seat 1 speaks on the fast wire, which is the only proof that counts
+  room.wires[1].send({ t: 'b', v: NET_PROTO, p: 1, q: 1, s: 1 });
+  room.pump(20);
+  room.seen[0].length = 0;
+  room.seen[1].length = 0;
+
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 2, s: 2 });
+  room.pump(30);
+  assert.equal(room.seen[1].length, 1, 'proven: the fast wire alone');
+});
+
+test('two wires: a peer who cannot reach the relay still hears everything, for ever', () => {
+  const room = twoWireRoom(2, { deadFastFor: [1] });
+  for (let k = 1; k <= 5; k++) {
+    room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: k, s: k });
+    room.wires[1].send({ t: 'b', v: NET_PROTO, p: 1, q: k, s: k });
+    room.pump(k * 10);
+  }
+  // seat 1 is never heard on the fast wire, so seat 0 never stops paying for
+  // the slow one: five sends, five arrivals, no silent half-migration
+  assert.equal(room.seen[1].length, 5, 'the stranded peer heard every message');
+  assert.equal(room.seen[0].length, 5, 'and was heard by everyone else');
+});
+
+test('two wires: a fast wire that dies mid-round is noticed within two beats', () => {
+  const room = twoWireRoom(2);
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 1, s: 1 });
+  room.wires[1].send({ t: 'b', v: NET_PROTO, p: 1, q: 1, s: 1 });
+  room.pump(10);
+  room.sent[0].slow = 0;
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 2, s: 2 });
+  room.pump(20);
+  assert.equal(room.sent[0].slow, 0, 'settled onto the fast wire alone');
+
+  // seat 1's socket dies. Nobody announces it; the proof simply goes stale.
+  room.fastEnds[1].gate.down = true;
+  room.seen[1].length = 0;
+  const later = 20 + BEAT_MS * 2 + 1;
+  room.fast.now = later;
+  room.slow.now = later;
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 3, s: 3 });
+  room.pump(later);
+  assert.equal(room.sent[0].slow, 1, 'the slow wire was paid for again');
+  assert.equal(room.seen[1].length, 1, 'and the stranded peer heard it');
+});
+
+test('two wires: a full room ends identically with one peer stranded on the slow wire', () => {
+  // The whole point, stated as the suite already states it elsewhere: the
+  // timeline is what must survive, not the plumbing.
+  const n = 3;
+  const fast = loopbackBus(n, { latency: 40, jitter: 20, seed: 7 });
+  const slow = loopbackBus(n, { latency: 140, jitter: 40, drop: 0.05, seed: 11 });
+  const games = [];
+  const sessions = [];
+  for (let i = 0; i < n; i++) {
+    const game = createGame({ ...QUIET, players: n });
+    // seat 2 never reaches the relay at all
+    const fastEnd = i === 2 ? deadWire() : fast.endpoints[i];
+    const wire = dualTransport(fastEnd, slow.endpoints[i], {
+      seats: n, myIdx: i, now: () => fast.now,
+    });
+    games.push(game);
+    sessions.push(createSession({ game, myIdx: i, transport: wire }));
+  }
+  const taps = Array.from({ length: n }, (_, p) => denseTaps(p, 9000));
+  const fed = new Array(n).fill(0);
+  for (let t = 0; t <= 9000; t += 16) {
+    fast.pump(t); slow.pump(t);
+    for (let i = 0; i < n; i++) {
+      while (fed[i] < taps[i].length && taps[i][fed[i]][0] <= t) {
+        const [, dx, dy] = taps[i][fed[i]++];
+        sessions[i].localDir(dx, dy);
+      }
+      sessions[i].frame(t);
+    }
+  }
+  for (let t = 9000; t <= 12000; t += 16) {
+    fast.pump(t); slow.pump(t);
+    for (let i = 0; i < n; i++) sessions[i].frame(t);
+  }
+  const heads = games.map((g) => g.players.map((p) => `${p.snake[0].x},${p.snake[0].y},${p.score}`).join('|'));
+  assert.equal(heads[1], heads[0], 'seat 1 matched seat 0');
+  assert.equal(heads[2], heads[0], 'the stranded seat matched the room');
 });

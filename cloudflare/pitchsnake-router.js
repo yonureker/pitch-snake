@@ -55,7 +55,12 @@ const CSP = [
   // by design, so the report would simply never arrive and nothing would say
   // so. Check this line on the day a DSN is pasted into page/error-reporting.ts
   // rather than trying to guess the shape now.
-  `connect-src 'self' ${SUPABASE_ORIGIN} wss://vyqlwoqvsnxyziutmgqz.supabase.co https://*.ingest.sentry.io https://*.ingest.de.sentry.io`,
+  // wss://pitchsnake.com is spelled out rather than left to 'self'. CSP3 says
+  // 'self' covers a ws/wss connection to the same host and Chrome and Firefox
+  // agree, but Safari has not always, and this whole header fails silently by
+  // design: the room socket would simply never open, on one browser, with
+  // nothing logged. The cost of naming it is a line.
+  `connect-src 'self' wss://pitchsnake.com ${SUPABASE_ORIGIN} wss://vyqlwoqvsnxyziutmgqz.supabase.co https://*.ingest.sentry.io https://*.ingest.de.sentry.io`,
   // Nothing here is ever framed, and the migration importer is the reason to
   // say so out loud: it writes localStorage on arrival, so an attacker who
   // cannot navigate a victim would otherwise embed this page and drive it.
@@ -77,9 +82,41 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), interest-cohort=()',
 };
 
+export { RoomWire } from './room-wire.js';
+
+/**
+ * Is this a room socket, and if so which room?
+ *
+ * `/room/<CODE>`, five characters of the room alphabet. Anything else is a
+ * page request and goes to the proxy, so a typo cannot open a socket into an
+ * object named after it and quietly bill for the privilege.
+ *
+ * @param {URL} url - the request URL.
+ * @returns {string | null} the room code, or null if this is not a room path.
+ */
+function roomCode(url) {
+  // The PATH is matched as it arrived and only the code is folded up. Matching
+  // an upper-cased path against a lower-case literal is how this first shipped,
+  // and every room request quietly fell through to the page proxy and 404ed.
+  const m = /^\/room\/([A-Za-z0-9]{5})$/.exec(url.pathname);
+  return m ? m[1].toUpperCase() : null;
+}
+
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
+    // THE ROOM SOCKET COMES FIRST, ahead of both the www fold and the proxy,
+    // and it has to. A WebSocket does not follow a 301, so the redirect below
+    // would end an upgrade on www; and the proxy builds a fresh Response from
+    // the Pages origin, which cannot carry a 101 even if Pages would speak it.
+    // Every room code reaches the same object from anywhere in the world
+    // because the id comes from the code by name; the object is created in the
+    // data centre nearest whoever opens the room first. See room-wire.js.
+    const code = roomCode(url);
+    if (code !== null) {
+      const id = env.ROOM_WIRE.idFromName(code);
+      return env.ROOM_WIRE.get(id).fetch(request);
+    }
     // one canonical host: www folds into the apex before anything serves
     if (url.hostname.startsWith('www.')) {
       url.hostname = url.hostname.slice(4);

@@ -643,7 +643,92 @@ export function channelTransport(channel, { event = 'm' } = {}) {
     },
     onMessage(f) { cb = f; },
     setOpen(v) { open = !!v; },
+    // dualTransport asks a wire whether it is up rather than tracking it from
+    // outside, so every transport answers the same question the same way.
+    isOpen() { return open; },
     close() { cb = null; open = false; },
+  };
+}
+
+/**
+ * How long a seat may go unheard on the fast wire before the room stops
+ * trusting it. Two beats: a peer whose socket died is still beating on the
+ * slow one, so this is how quickly everyone else notices and starts talking
+ * to them again.
+ */
+const FAST_FRESH_MS = BEAT_MS * 2;
+
+/**
+ * Two wires, no negotiation.
+ *
+ * THE PROBLEM THIS AVOIDS. A room that half-migrates is the worst bug this
+ * change could ship: if one peer talks on the new wire and another on the old,
+ * presence shows both players, the lobby looks perfect, and not one input ever
+ * crosses. Agreeing on a wire up front is the obvious fix and a bad one, since
+ * every version gate, every kickoff field and every stale presence view is
+ * another way to disagree, and the failure is silent.
+ *
+ * SO NOTHING AGREES ON ANYTHING. Send on the fast wire when it is open, and
+ * ALSO on the slow one until every seat has been heard from on the fast wire.
+ * The session already dedupes by sequence number (see the duplicate check in
+ * the 'i' branch) and its contract says delivery may drop, duplicate or
+ * reorder, so a doubled message costs a few bytes and nothing else. A room
+ * where everyone can reach the object goes fast-only within a beat or two of
+ * kickoff and stays there; a room with one peer who cannot simply keeps paying
+ * for the old wire, correctly, for ever.
+ *
+ * Being heard is PROOF rather than a claim: a peer only sends on the fast wire
+ * when its own socket is open, so a message arriving there is the only evidence
+ * worth having. `lastFastAt` also expires that proof, because a socket can die
+ * mid-round: the peer itself starts double-sending the moment it notices, and
+ * everyone else follows within two beats.
+ *
+ * Nothing here can change a round. It decides which road a byte travels, never
+ * what the byte says, so the wall clock it reads is not simulation state.
+ *
+ * @param {object} fast - the preferred transport (the room object).
+ * @param {object} slow - the transport that always works (Supabase Broadcast).
+ * @param {object} opts
+ * @param {number} opts.seats - how many snakes are in this round.
+ * @param {number} opts.myIdx - this client's seat, which needs no proof.
+ * @param {() => number} [opts.now] - the clock, injectable for tests.
+ * @returns {object} one transport, in the same four-method shape as the others.
+ */
+export function dualTransport(fast, slow, { seats, myIdx, now = () => Date.now() }) {
+  let cb = null;
+  const lastFastAt = new Array(seats).fill(-1e15);
+  lastFastAt[myIdx] = Infinity;          // my own seat is never waiting on itself
+
+  /** Has every seat been heard on the fast wire recently enough to trust it? */
+  const fastOnly = () => {
+    if (!fast.isOpen()) return false;
+    const cutoff = now() - FAST_FRESH_MS;
+    for (let p = 0; p < seats; p++) if (lastFastAt[p] < cutoff) return false;
+    return true;
+  };
+
+  fast.onMessage((m) => {
+    if (m && typeof m.p === 'number' && m.p >= 0 && m.p < seats) lastFastAt[m.p] = now();
+    if (cb) cb(m);
+  });
+  // A message on the slow wire is NOT evidence either way: a peer on the fast
+  // wire is still double-sending until the room settles, so hearing them here
+  // proves nothing. Only silence on the fast wire demotes a seat.
+  slow.onMessage((m) => { if (cb) cb(m); });
+
+  return {
+    // No open flag of its own: each wire already knows whether it is up, and a
+    // third opinion is a third thing to get wrong. Both sends are safe when
+    // shut, so this asks rather than remembers.
+    send(obj) {
+      const onlyFast = fastOnly();
+      if (fast.isOpen()) fast.send(obj);
+      if (!onlyFast) slow.send(obj);
+    },
+    onMessage(f) { cb = f; },
+    setOpen(v) { slow.setOpen(v); },
+    isOpen() { return fast.isOpen() || slow.isOpen(); },
+    close() { cb = null; fast.close(); slow.close(); },
   };
 }
 
@@ -662,10 +747,12 @@ export function loopbackBus(n, { latency = 0, jitter = 0, drop = 0, seed = 1 } =
   };
   const queues = Array.from({ length: n }, () => []);
   const cbs = new Array(n).fill(null);
+  const openAt = new Array(n).fill(true);
   const bus = {
     now: 0,
     endpoints: Array.from({ length: n }, (_, i) => ({
       send(obj) {
+        if (!openAt[i]) return;
         const wire = JSON.stringify(obj);
         for (let j = 0; j < n; j++) {
           if (j === i) continue;
@@ -674,7 +761,12 @@ export function loopbackBus(n, { latency = 0, jitter = 0, drop = 0, seed = 1 } =
         }
       },
       onMessage(f) { cbs[i] = f; },
-      close() { cbs[i] = null; },
+      // Endpoints start OPEN, so every test written before this existed keeps
+      // its meaning. setOpen is here because a bus endpoint is a transport like
+      // any other, and dualTransport asks a wire whether it is up.
+      setOpen(v) { openAt[i] = !!v; },
+      isOpen() { return openAt[i]; },
+      close() { cbs[i] = null; openAt[i] = false; },
     })),
     pump(to) {
       bus.now = to;

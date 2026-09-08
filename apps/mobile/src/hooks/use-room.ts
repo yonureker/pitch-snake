@@ -15,10 +15,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/realtime-js';
 
 import { ENGINE_VERSION, SPEEDS, createGame } from '@pitch-snake/engine';
-import { channelTransport, createSession, type NetSession, type NetTransport } from '@pitch-snake/net';
+import {
+  channelTransport,
+  createSession,
+  dualTransport,
+  type NetSession,
+  type NetTransport,
+} from '@pitch-snake/net';
 
 import type { GameLoop } from '@/game/use-game-loop';
 import { prepareVersusSprites } from '@/game/renderer';
+import { openRoomSocket } from '@/lib/room-wire';
 import {
   VS_MAX,
   VS_MIN,
@@ -68,6 +75,8 @@ interface RoomBox {
   name: string;
   channel: RealtimeChannel | null;
   transport: NetTransport | null;
+  /** This room's own relay, near the room rather than near the project. */
+  socket: NetTransport | null;
   session: NetSession | null;
   up: boolean;
   startN: number;
@@ -148,6 +157,9 @@ export function useRoom(
       const r = box.current;
       if (r === null) return;
       if (r.touchTimer !== null) clearInterval(r.touchTimer);
+      // the room socket retries for as long as it is open, so both ways out of
+      // a room have to say so, or a closed screen keeps a wire alive
+      r.socket?.close();
       try {
         void r.channel?.unsubscribe();
       } catch {
@@ -357,11 +369,18 @@ export function useRoom(
       wallsEnabled: true,
       players: roster.length,
     });
-    if (r.transport === null) return;
+    if (r.transport === null || r.socket === null) return;
+    // BOTH WIRES, every round, with nothing agreed anywhere: the fast one is
+    // this room's own relay and the slow one is Broadcast. dualTransport keeps
+    // paying for the slow wire until every seat has been HEARD on the fast one,
+    // and the session dedupes by sequence number, so a room can never
+    // half-migrate onto a wire only some of its players can reach. Rebuilt per
+    // round, because a new roster has proved nothing yet.
+    const wire = dualTransport(r.socket, r.transport, { seats: roster.length, myIdx: idx });
     const session = createSession({
       game: g,
       myIdx: idx,
-      transport: r.transport,
+      transport: wire,
       round: r.startN,
       onEnd: () => {
         onRoundEnd(r);
@@ -423,6 +442,9 @@ export function useRoom(
       name,
       channel,
       transport: channelTransport(channel),
+      // Opened at JOIN so it is warm by kickoff. A room that cannot reach it
+      // plays on Broadcast: see dualTransport below, which needs no agreement.
+      socket: openRoomSocket(code),
       session: null,
       up: false,
       startN: 0,
@@ -576,6 +598,7 @@ export function useRoom(
     const r = box.current;
     if (r === null) return;
     if (r.touchTimer !== null) clearInterval(r.touchTimer);
+    r.socket?.close();
     try {
       void r.channel?.unsubscribe();
     } catch {

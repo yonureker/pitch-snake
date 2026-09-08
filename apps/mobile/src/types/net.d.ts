@@ -5,6 +5,8 @@ declare module '@pitch-snake/net' {
 
   /** The wire the session speaks through; channelTransport builds one. */
   export interface NetTransport {
+    /** Whether this wire can carry a message right now. */
+    isOpen(): boolean;
     send(obj: unknown): void;
     onMessage(f: (m: unknown) => void): void;
     setOpen(v: boolean): void;
@@ -44,4 +46,16 @@ declare module '@pitch-snake/net' {
 
   /** Wrap a realtime channel (or anything shaped like one) as a transport. */
   export function channelTransport(channel: unknown, opts?: { event?: string }): NetTransport;
+
+  /**
+   * Two wires with no negotiation: send on `fast` when it is open, and on
+   * `slow` as well until every seat has been HEARD on the fast one. The
+   * session dedupes, so a doubled message is free and a room can never
+   * half-migrate onto a wire only some of its players can reach.
+   */
+  export function dualTransport(
+    fast: NetTransport,
+    slow: NetTransport,
+    opts: { seats: number; myIdx: number; now?: () => number },
+  ): NetTransport;
 }

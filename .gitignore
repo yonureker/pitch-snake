@@ -17,3 +17,7 @@ dist/
 .agents/
 .claude/skills/game-ui-design
 skills-lock.json
+
+# wrangler local state, and the local secrets file it reads
+cloudflare/.wrangler/
+cloudflare/.dev.vars
