@@ -81,6 +81,45 @@ const SHOP_ERRORS: Record<string, string> = {
 // how long an armed BUY waits for its SURE? before disarming itself
 const ARM_MS = 3500;
 
+/**
+ * What each kind is called on its pill.
+ *
+ * A map rather than a column, for the same reason the ART is not a column: the
+ * server sells ids, prices and kinds, and the words belong to whoever draws the
+ * screen. An unlisted kind falls back to its own id with an S, so a category
+ * added by SQL alone appears here rather than being invisible until someone
+ * ships a page.
+ */
+const KIND_LABELS: Record<string, string> = {
+  hat: 'Hats',
+  skin: 'Skins',
+  pitch: 'Pitches',
+  jersey: 'Jerseys',
+  ball: 'Balls',
+};
+
+/** The shelf order: the known kinds first, in this order, then any newcomer. */
+const KIND_ORDER = ['hat', 'skin', 'pitch', 'jersey', 'ball'];
+
+/**
+ * The kinds the catalogue actually contains, in shelf order.
+ *
+ * Derived rather than stored: an empty category cannot appear, and a category
+ * the server stops selling disappears without a page change.
+ *
+ * @param rows - the catalogue as the server sent it.
+ * @returns each kind once, known kinds first in KIND_ORDER, then newcomers.
+ */
+function kindsInCatalogue(rows: ShopItem[]): string[] {
+  const present = new Set(rows.map(item => item.kind));
+  // Known kinds in their shelf order, then anything the server has invented
+  // since this file was written, in the order the catalogue lists it.
+  return [
+    ...KIND_ORDER.filter(kind => present.has(kind)),
+    ...[...present].filter(kind => !KIND_ORDER.includes(kind)),
+  ];
+}
+
 let ports: ShopPorts | null = null;
 
 let shopModal: HTMLElement | null = null;
@@ -94,6 +133,13 @@ let catalog: ShopItem[] | null = null; // the server's word, once a session
 let wallet: Wallet | null = null; // the last wallet the server handed back
 let busy = false;
 let armedBuy: string | null = null; // the item whose BUY waits for its SURE?
+let shopPills: HTMLElement | null = null;
+/**
+ * Which shelf is open. Hats first because it is the cheapest thing to want and
+ * the easiest to see on your own snake, so it is the shelf most likely to turn
+ * a browser into a buyer.
+ */
+let activeKind = 'hat';
 let armTimer = 0;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -264,14 +310,44 @@ function renderShop(): void {
     return;
   }
   const owned = new Set(wallet?.items);
-  for (const item of rows) {
+
+  // The pills. Rebuilt with the list because ownership changes what each shelf
+  // is worth looking at, and the count is the cheapest way to say so.
+  const kinds = kindsInCatalogue(rows);
+  if (!kinds.includes(activeKind)) activeKind = kinds[0] ?? activeKind;
+  if (shopPills !== null) {
+    shopPills.innerHTML = '';
+    for (const kind of kinds) {
+      const pill = document.createElement('button');
+      pill.className = 'pill';
+      pill.type = 'button';
+      pill.setAttribute('role', 'tab');
+      pill.setAttribute('aria-selected', String(kind === activeKind));
+      pill.textContent = KIND_LABELS[kind] ?? kind.toUpperCase() + 'S';
+      const count = document.createElement('span');
+      count.className = 'n';
+      const mine = rows.filter(r => r.kind === kind && owned.has(r.id)).length;
+      const all = rows.filter(r => r.kind === kind).length;
+      count.textContent = `${mine}/${all}`;
+      pill.append(count);
+      pill.addEventListener('click', () => {
+        if (kind === activeKind) return;
+        activeKind = kind;
+        armedBuy = null;              // an armed BUY does not survive leaving its shelf
+        renderShop();
+      });
+      shopPills.append(pill);
+    }
+  }
+
+  for (const item of rows.filter(r => r.kind === activeKind)) {
     const row = document.createElement('li');
     const preview = document.createElement('canvas');
     preview.className = 'shop-prev';
     preview.width = 64;
     preview.height = 28;
     if (item.kind === 'skin') paintSkinPreview(preview, item.id);
-    else paintHatPreview(preview, item.id);
+    else paintHatPreview(preview, item.id);   // every other kind previews on the head for now
     const text = document.createElement('span');
     text.className = 'shop-txt';
     const name = document.createElement('span');
@@ -397,6 +473,7 @@ export function initShop(shellPorts: ShopPorts): void {
   shopCoins = mustGetElement('shopCoins');
   shopNote = mustGetElement('shopNote');
   purseCoins = mustGetElement('purseCoins');
+  shopPills = mustGetElement('shopPills');
   const purseButton = mustGetElementOfKind('purseBtn', HTMLButtonElement);
   const closeButton = mustGetElementOfKind('shopClose', HTMLButtonElement);
   purseButton.addEventListener('click', () => {
