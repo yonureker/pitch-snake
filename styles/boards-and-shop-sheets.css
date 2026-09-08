@@ -67,6 +67,23 @@
 
   /* ---- the shop ---- */
   .modal.shop .shelf-head { width: 100%; }
+  /* The shelf is one row per KIND rather than one long list of everything.
+     The kinds come from pitch_snake_items.kind, so a category the server
+     invents appears here without a page change, which is the same rule the
+     art follows: the server sells, the client draws. Wraps rather than
+     scrolls sideways, because a hidden pill is a category nobody finds. */
+  .shop-pills { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin: 2px 0 8px; }
+  .shop-pills .pill {
+    flex: 1 1 auto; padding: 7px 12px; border-radius: 999px;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+    color: var(--sheet-muted); font-family: 'Anton', sans-serif; font-size: 12.5px;
+    letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
+  }
+  .shop-pills .pill[aria-selected="true"] {
+    background: rgba(194,162,90,0.16); border-color: var(--gold);
+    color: var(--sheet-gold);
+  }
+  .shop-pills .pill .n { opacity: 0.65; font-size: 11px; margin-left: 4px; }
   /* No inner scroller, the shelf's own touch-trap rule: the modal scrolls */
   .shop-list { list-style: none; display: flex; flex-direction: column; gap: 6px; width: 100%; }
   .shop-list li {

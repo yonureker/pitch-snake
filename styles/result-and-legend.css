@@ -162,12 +162,17 @@
     /* the panel wrapper is content-sized everywhere else; the grid needs
        the full body or its right column runs off the edge */
     .overlay.vs-open #vsPanel { width: 100%; max-width: 900px; }
-    /* ONE column. This was two, with a rating rail down the right: a rating
-       card, a ladder top five and a door to a ladder screen. All three said
-       "who is best", which is the question the boards sheet exists to answer,
-       so the ladder became a chip there and the rating moved to the profile,
-       beside the name it belongs to. The panel is narrower for it: three
-       doors and nothing else. */
+    /* ONE column, at the SAME width as the kickoff legend. This was two, with
+       a rating rail down the right: a rating card, a ladder top five and a
+       door to a ladder screen. All three said "who is best", which is the
+       question the boards sheet exists to answer, so the ladder became a chip
+       there and the rating moved to the profile, beside the name it belongs
+       to.
+       The width is 360px because that is what the legend next door already
+       uses, and two screens in the same overlay disagreeing about how wide a
+       column is reads as untidiness rather than as design. Left to itself the
+       column took 560px and the cards stretched a QUICK MATCH button and a
+       five-character code field across the whole panel. */
     .overlay.vs-open .vs-setup {
       display: grid;
       /* minmax(0, ...) because the code input's intrinsic width otherwise
@@ -176,7 +181,7 @@
       align-items: start;
       align-content: center;
       width: 100%;
-      max-width: 560px;
+      max-width: 360px;
       text-align: left;
     }
     .overlay.vs-open .vs-setup > #vsNameRow { grid-column: 1; width: auto; max-width: none; }
