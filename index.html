@@ -2807,9 +2807,15 @@
     if (askNow && nudgeGen !== deathGen) {
       nudgeGen = deathGen;
       nudgedThisSession = true;
+      // Truthful since the board began requiring an account: a guest's round
+      // is validated, paid and stored, and simply not SHOWN, so "you made the
+      // world board" would now be a lie told to exactly the people it is
+      // trying to convert. What is true is better bait anyway, because the
+      // score already exists and linking an email reveals it rather than
+      // creating it.
       acctLine.textContent = (savedThisRound && !boardIsLocal)
-        ? 'You made the world board. Create an account to save your scores.'
-        : 'New best. Create an account to save your scores.';
+        ? 'That score belongs on the world board. An account puts it there.'
+        : 'New best. An account keeps it, on any device.';
     }
     authNudge.hidden = !askNow;
     // the caption carries only what the START button cannot: which

@@ -144,6 +144,31 @@ revoke all on table public.pitch_snake_tournament_scores from anon, authenticate
 drop function if exists public.pitch_snake_top_scores(integer);
 drop function if exists public.pitch_snake_top_scores(integer, text);
 
+-- THE BOARD IS FOR PLAYERS WHO CAN BE FOUND AGAIN (2026-09-08, owner's call).
+-- An anonymous score belongs to a browser rather than a person: it cannot be
+-- defended, cannot be claimed, and evaporates with the localStorage that owns
+-- it. So a round only enters the world board once there is an account behind
+-- it.
+--
+-- THE GATE IS HERE AND NOT IN THE VALIDATOR, deliberately, and the difference
+-- matters more than it looks. The round is still validated, still keeps its
+-- seed, its log and its timing evidence, and still PAYS ITS COINS: nothing
+-- about playing changes for a signed-out player, which is the rule this
+-- project does not break. Only what the board shows is filtered.
+--
+-- The payoff for filtering at read time rather than refusing the write: the
+-- day an anonymous player links an email, the user_id does not change, so
+-- every score they have already set appears on the board at once. Gating at
+-- write time would have thrown those rows away and there would be nothing to
+-- appear. "Create an account and your 209 goes up" is a better argument than
+-- any wording could be.
+--
+-- The cutoff grandfathers what was already earned. The rule is about the act
+-- of saving from here on, not a purge: without this line the three boards
+-- would have lost 62, 53 and 54 of their rows the moment it shipped, which is
+-- punishing people retroactively for a rule that did not exist when they
+-- played. Rows older than the cutoff include the pre-identity ones, which have
+-- no user_id at all and are grandfathered by the same clause.
 create or replace function public.pitch_snake_top_scores(limit_count integer default 10, p_mode text default 'classic')
 returns table (id bigint, name text, score integer, country text, created_at timestamptz)
 language sql
@@ -154,7 +179,10 @@ as $$
   select s.id, s.name, s.score, p.country, s.created_at
   from public.pitch_snake_scores s
   left join public.pitch_snake_profiles p on p.user_id = s.user_id
+  left join auth.users u on u.id = s.user_id
   where s.mode = coalesce(p_mode, 'classic')
+    and (s.created_at < timestamptz '2026-09-08 01:00:00+00'
+         or (u.id is not null and u.is_anonymous is false))
   order by s.score desc, s.created_at asc
   limit least(greatest(coalesce(limit_count, 10), 1), 100);
 $$;
