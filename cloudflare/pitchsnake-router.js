@@ -10,12 +10,18 @@
 // page's exporter (see "the move to pitchsnake.com" in index.html) then
 // carries each returning player's keys across exactly once.
 //
-// Deploy: Cloudflare dashboard -> Workers -> create "pitchsnake-router",
-// paste this file, add routes pitchsnake.com/* and www.pitchsnake.com/*
-// (the zone must be on Cloudflare nameservers first). Nothing here caches
-// beyond what the edge does by default, and nothing rewrites content: the
-// page's own references are all relative, so it serves at the new root
-// untouched.
+// DEPLOY: `npx wrangler deploy` from cloudflare/, and no longer a paste into
+// the dashboard editor. That changed on 2026-09-08 and not by preference: this
+// worker now answers the room socket as well as the page, a Durable Object
+// needs a class binding and a migration, and neither of those can be pasted.
+// The routes moved into wrangler.toml with it, so read `--dry-run` first and
+// check both routes are still attached afterwards; a worker that deploys
+// without its routes serves nothing and looks perfectly healthy doing it. The
+// zone must be on Cloudflare nameservers, as before.
+//
+// Nothing here caches beyond what the edge does by default, and nothing
+// rewrites content: the page's own references are all relative, so it serves
+// at the new root untouched.
 const UPSTREAM = 'https://yonureker.github.io/pitch-snake';
 
 // The security headers, and the reason this worker is where they live: GitHub
