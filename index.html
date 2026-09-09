@@ -2130,6 +2130,7 @@
     if (dt > MAX_DT) dt = MAX_DT;
     else if (dt < 0) dt = 0;
     pollGamepads(now);          // before the sim, so a pad press lands on this frame
+    vsAutoStartTick(now);       // a quick room counts itself down; see the note there
     if (state === 'countdown') {
       countClock += dt;
       if (countClock >= COUNT_TOTAL) state = 'playing';   // kick off
@@ -3390,7 +3391,7 @@
   }
 
   // ---- room lifecycle ----
-  async function vsEnter(code, host) {
+  async function vsEnter(code, host, quick) {
     // the second moment staleness matters: a stale tab cannot play a room, so
     // find out BEFORE a code is minted and a lobby is joined, not at kickoff
     if (await checkBuild()) {
@@ -3426,7 +3427,11 @@
         config: { broadcast: { self: false, ack: false }, presence: { key: ref } },
       });
       const room = {
-        code, host, ref, name, channel,
+        code, host, quick: !!quick, ref, name, channel,
+        // when the lobby countdown is due to fire, on the loop clock; 0 is
+        // "not armed", and the second last painted, so the line is written
+        // once a second rather than once a frame (performance rule 8)
+        startAt: 0, startShown: -1,
         transport: channelTransport(channel),
         // Opened at JOIN, not at kickoff, so it is warm and proven by the time
         // a round starts. A room that cannot reach it simply plays on
@@ -3765,6 +3770,52 @@
     refreshModeUI();
   }
   function vsMyReady(p) { return p.ref === vs.ref ? vs.ready : p.ready; }
+  // HOW LONG A QUICK ROOM WAITS once everyone has said they are ready.
+  //
+  // Three seconds, and not zero. Starting on the instant the last player taps
+  // READY throws that player straight into a round with their thumb still on
+  // the button, and it strands anyone whose JOIN lands in the same moment. The
+  // count is also the only thing on screen that says WHY the round is about to
+  // begin when nobody pressed anything.
+  const VS_LOBBY_COUNT_MS = 3000;
+
+  // A quick room has no host worth waiting for.
+  //
+  // In a room you did not choose, one stranger holding the whistle is a single
+  // point of failure: they tab away and four people wait on a button nobody
+  // else can press. So a quick room counts itself down and any client may call
+  // the kickoff; the server's row lock decides which one, exactly as it already
+  // does for two people racing REMATCH. A CODE room keeps its host, because
+  // there the host may be holding the room for a friend who has not arrived,
+  // and only a person can know that.
+  //
+  // The count is cancelled by anyone unreadying, leaving, or joining. A joiner
+  // needs no special case: they arrive not-ready, so `all` goes false by
+  // itself.
+  //
+  // On the loop clock rather than a timer, per rule 15: a backgrounded tab
+  // throttles setTimeout to once a minute, and a lobby that fires its whistle
+  // a minute late is worse than one that does not fire at all.
+  function vsAutoStartTick(now) {
+    if (!vs || !vs.quick) return;
+    const armed = vs.startAt > 0;
+    if (!vs.up || vsInRound() || vs.over || vs.starting) {
+      if (armed) { vs.startAt = 0; vs.startShown = -1; vsRefreshPanel(); }
+      return;
+    }
+    if (!vsReadyStats().all) {
+      if (armed) { vs.startAt = 0; vs.startShown = -1; vsRefreshPanel(); }
+      return;
+    }
+    if (!armed) { vs.startAt = now + VS_LOBBY_COUNT_MS; vs.startShown = -1; }
+    const left = Math.max(0, Math.ceil((vs.startAt - now) / 1000));
+    if (left !== vs.startShown) { vs.startShown = left; vsRefreshPanel(); }
+    if (now >= vs.startAt) {
+      vs.startAt = 0; vs.startShown = -1;
+      void vsStart();
+    }
+  }
+
   function vsReadyStats() {
     const seatList = vs.present.slice(0, VS_MAX);
     let ready = 0;
@@ -3819,7 +3870,10 @@
   // itself. Any other refusal means someone else's kickoff is already in
   // flight, and it is about to arrive on the channel.
   async function vsStart() {
-    if (!vs || !vsHostNow() || !vs.up || vs.starting) return;
+    // A quick room has no host to wait for: any member may whistle and the
+    // server's row lock picks one. A code room's host keeps the call.
+    if (!vs || !vs.up || vs.starting) return;
+    if (!vs.quick && !vsHostNow()) return;
     if (vsInRound() || !vsReadyStats().all) return;    // the whole room says ready first
     const room = vs;
     const roster = room.present.slice(0, VS_MAX).map(p => ({ ref: p.ref, name: p.name }));
@@ -3829,7 +3883,11 @@
     try {
       await supabaseRpc('pitch_snake_room_start', { p_code: room.code, p_roster: roster, p_ev: ENGINE_VERSION });
     } catch (e) {
-      if (vs === room && !vsInRound() && String(e && e.message).includes(': 404')) {
+      // ...and only the host may whistle for itself. Without the rooms tier
+      // there is no row to serialize anybody, so five quick-room clients would
+      // broadcast five different seeds and fork the room five ways.
+      if (vs === room && !vsInRound() && vsHostNow()
+          && String(e && e.message).includes(': 404')) {
         const m = {
           t: 'start', n: room.startN + 1, ev: ENGINE_VERSION,
           seed: crypto.getRandomValues(new Uint32Array(1))[0],
@@ -4185,6 +4243,10 @@
       : vsInRound() ? 'ROUND IN PROGRESS'
       : !hosting && n <= 1 ? 'ONLY YOU HERE · CHECK THE CODE OR WAIT'
       : n < VS_MIN ? `WAITING FOR PLAYERS · ${n}/${VS_MAX}`
+      // A quick room says what is about to happen and who to; a code room says
+      // whose call it is. Nobody is ever left reading "ALL READY" with no idea
+      // what happens next.
+      : rs.all && vs.quick ? (vs.startShown > 0 ? `ALL READY · STARTING IN ${vs.startShown}` : 'ALL READY · KICKING OFF')
       : rs.all ? ('ALL READY' + (hosting ? ' · KICK OFF' : ' · THE HOST KICKS OFF'))
       : `READY ${rs.ready}/${rs.seats}`;
     vsRosterEl.innerHTML = '';
@@ -4208,7 +4270,7 @@
     vsReadyBtn.hidden = vsInRound();
     vsReadyBtn.disabled = !vs.up;
     vsReadyBtn.textContent = vs.ready ? 'UNREADY' : 'READY UP';
-    vsStartBtn.hidden = !(hosting && !vsInRound());
+    vsStartBtn.hidden = !(hosting && !vsInRound()) || vs.quick;
     vsStartBtn.disabled = !(vs.up && rs.all) || vs.starting;
   }
 
@@ -4247,7 +4309,7 @@
     try {
       const rows = await supabaseRpc('pitch_snake_room_quickmatch', { p_region: vsRegion() });
       const r = Array.isArray(rows) ? rows[0] : null;
-      if (r && typeof r.code === 'string') { void vsEnter(r.code, !!r.created); return; }
+      if (r && typeof r.code === 'string') { void vsEnter(r.code, !!r.created, true); return; }
     } catch (e) {}
     vsSetNote('Quick match needs the rooms service. CREATE a room and share its code instead.');
   });

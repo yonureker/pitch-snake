@@ -78,6 +78,12 @@ interface RoomBox {
   transport: NetTransport | null;
   /** This room's own relay, near the room rather than near the project. */
   socket: NetTransport | null;
+  /** Entered through QUICK MATCH, so there is no host worth waiting for. */
+  quick: boolean;
+  /** When the lobby countdown fires, or 0 when it is not armed. */
+  startAt: number;
+  /** The last count painted, so the line is written once a second. */
+  startShown: number | null;
   session: NetSession | null;
   up: boolean;
   startN: number;
@@ -105,6 +111,12 @@ const wornId = (v: unknown): string | null =>
   typeof v === 'string' && v.length <= 32 && v !== '' ? v : null;
 
 const TRACK_GAP_MS = 6100;
+/** How often the room's one ticker runs; the countdown is its finest job. */
+const TICK_MS = 250;
+/** How often the acting host warms the row so quick match can see the room. */
+const TOUCH_EVERY_MS = 10000;
+/** How long a quick room waits, once everyone is ready, before it whistles. */
+const LOBBY_COUNT_MS = 3000;
 
 /** What the screen reads and calls; null room means the entry form. */
 export interface UseRoom {
@@ -117,6 +129,8 @@ export interface UseRoom {
   myReady: boolean;
   isHost: boolean;
   readyStats: { seats: number; ready: number; all: boolean };
+  /** Seconds left before a quick room starts itself, or null when not counting. */
+  startsIn: number | null;
   over: boolean;
   standings: StandingRow[];
   quick: (name: string) => void;
@@ -137,6 +151,8 @@ export function useRoom(
   const box = useRef<RoomBox | null>(null);
   const [status, setStatus] = useState<UseRoom['status']>('idle');
   const [note, setNote] = useState('');
+  /** Seconds left on a quick room's lobby countdown, or null when not counting. */
+  const [startsIn, setStartsIn] = useState<number | null>(null);
   const [present, setPresent] = useState<Presence[]>([]);
   const [myReady, setMyReady] = useState(false);
   const [over, setOver] = useState(false);
@@ -418,7 +434,94 @@ export function useRoom(
     boardPxRef.current = boardPx;
   }, [boardPx]);
 
-  const enter = async (code: string, host: boolean, name: string): Promise<void> => {
+  /**
+   * Is a quick room's lobby countdown finished, and should the round begin?
+   *
+   * Three seconds, and not zero: starting the instant the last player taps
+   * READY throws that player into a round with a thumb still on the button,
+   * and strands anyone whose JOIN lands in the same moment. Anyone unreadying,
+   * leaving or joining cancels it, and a joiner needs no special case because
+   * they arrive not-ready.
+   *
+   * It answers a question and touches no state, which is not tidiness: this
+   * file is compiled by the React Compiler, and BOTH of these made its purity
+   * pass give up and report every `Date.now()` in the hook as a call during
+   * render. A forward reference to `start()` was one; taking the state setter
+   * as an argument was the other. So it reads the room, returns a number, and
+   * the ticker does the acting.
+   *
+   * @param r - the room to consider.
+   * @returns seconds left on the count, 0 when the round should start now, or
+   *   null when no count is running.
+   */
+  const autoStartLeft = (r: RoomBox): number | null => {
+    if (!r.quick || r.session !== null || r.over || r.starting) {
+      r.startAt = 0;
+      return null;
+    }
+    const seatList = r.present.slice(0, VS_MAX);
+    const readyNow = seatList.filter((p) => (p.ref === r.ref ? r.ready : p.ready)).length;
+    if (seatList.length < VS_MIN || readyNow !== seatList.length) {
+      r.startAt = 0;
+      return null;
+    }
+    const now = Date.now();
+    if (r.startAt === 0) r.startAt = now + LOBBY_COUNT_MS;
+    if (now >= r.startAt) {
+      r.startAt = 0;
+      return 0;
+    }
+    return Math.ceil((r.startAt - now) / 1000);
+  };
+
+  /**
+   * Whistle: the room asks the server to mint a seed and start the round.
+   *
+   * It sits ABOVE `enter` because the room ticker created there calls it, and
+   * a forward reference in this file is not a style question: the React
+   * Compiler follows it, gives up on its purity analysis, and then reports
+   * every `Date.now()` in the whole hook as a call during render.
+   */
+  const start = (): void => {
+    const r = box.current;
+    if (r === null || r.starting) return;
+    const seatList = r.present.slice(0, VS_MAX);
+    // A quick room has no host worth waiting for: one stranger holding the
+    // whistle is a single point of failure, so any member may call the kickoff
+    // and the server's row lock decides which one. A CODE room keeps its host,
+    // who may be holding the room for a friend who has not arrived.
+    if (!r.quick && seatList[0]?.ref !== r.ref) return;
+    // Every seat says ready first, on both clients. The web page has always
+    // gated here; this one only gated in its UI, which is a gate a second
+    // caller walks straight past.
+    const readyNow = seatList.filter((p) => (p.ref === r.ref ? r.ready : p.ready)).length;
+    if (seatList.length < VS_MIN || readyNow !== seatList.length) return;
+    const roster = seatList.map((p) => ({ ref: p.ref, name: p.name }));
+    if (roster.length < VS_MIN) return;
+    r.starting = true;
+    void roomStart(r.code, roster, ENGINE_VERSION).then((served) => {
+      if (box.current !== r) return;
+      r.starting = false;
+      if (served || r.session !== null) return;
+      // no rooms tier: this device whistles itself. The seed only has to be
+      // SHARED, not unpredictable, so the clock serves and no random is
+      // needed (app code bans Math.random near gameplay for good reason).
+      const m = {
+        t: 'start',
+        n: r.startN + 1,
+        ev: ENGINE_VERSION,
+        seed: (Date.now() ^ (performance.now() * 1000)) >>> 0,
+        roster,
+        wins: r.wins,
+        at: Date.now(),
+      };
+      void r.channel?.send({ type: 'broadcast', event: 'lobby', payload: m });
+      r.startN = m.n;
+      begin(r, m);
+    });
+  };
+
+  const enter = async (code: string, host: boolean, name: string, quick: boolean): Promise<void> => {
     const client = realtimeClient();
     if (client === null) {
       setNote('Rooms need the online service.');
@@ -448,6 +551,9 @@ export function useRoom(
       ref,
       name,
       channel,
+      quick,
+      startAt: 0,
+      startShown: null,
       transport: channelTransport(channel),
       // Opened at JOIN so it is warm by kickoff. A room that cannot reach it
       // plays on Broadcast: see dualTransport below, which needs no agreement.
@@ -525,15 +631,28 @@ export function useRoom(
         r.transport?.setOpen(false);
       }
     });
-    // the ticker: paced presence flushes, and the host keeps the row warm
-    // so quick match can seat strangers into a room that is really there
+    // The ticker: paced presence flushes, the lobby countdown, and the host
+    // keeping the row warm so quick match can seat strangers into a room that
+    // is really there. One timer at a quarter second doing three jobs at their
+    // own cadences, rather than three timers to start, clear and leak.
+    let sinceTouch = 0;
     r.touchTimer = setInterval(() => {
       if (box.current !== r || !r.up) return;
       if (r.trackDirty && Date.now() - r.lastTrackAt >= TRACK_GAP_MS) track(r);
+      // the count, painted only when the second changes, then the whistle
+      const left = autoStartLeft(r);
+      if (left !== r.startShown) {
+        r.startShown = left;
+        setStartsIn(left === 0 ? null : left);
+      }
+      if (left === 0) start();
+      sinceTouch += TICK_MS;
+      if (sinceTouch < TOUCH_EVERY_MS) return;
+      sinceTouch = 0;
       if (r.host && r.session === null) {
         roomTouch(r.code, Math.min(r.present.length || 1, VS_MAX));
       }
-    }, 10000);
+    }, TICK_MS);
   };
 
   const quick = (rawName: string): void => {
@@ -544,7 +663,7 @@ export function useRoom(
         setNote('Quick match needs the rooms service. CREATE a room and share its code instead.');
         return;
       }
-      void enter(r.code, r.created, name);
+      void enter(r.code, r.created, name, true);
     });
   };
 
@@ -552,13 +671,13 @@ export function useRoom(
     if (box.current !== null) return;
     const name = cleanName(rawName);
     void roomCreate().then((code) => {
-      void enter(code ?? makeLocalCode(), true, name);
+      void enter(code ?? makeLocalCode(), true, name, false);
     });
   };
 
   const join = (rawName: string, code: string): void => {
     if (box.current !== null || code.length !== 5) return;
-    void enter(code, false, cleanName(rawName));
+    void enter(code, false, cleanName(rawName), false);
   };
 
   const toggleReady = (): void => {
@@ -571,35 +690,17 @@ export function useRoom(
     trackSoon(r);
   };
 
-  const start = (): void => {
-    const r = box.current;
-    if (r === null || r.starting) return;
-    const seatList = r.present.slice(0, VS_MAX);
-    if (seatList[0]?.ref !== r.ref) return;
-    const roster = seatList.map((p) => ({ ref: p.ref, name: p.name }));
-    if (roster.length < VS_MIN) return;
-    r.starting = true;
-    void roomStart(r.code, roster, ENGINE_VERSION).then((served) => {
-      if (box.current !== r) return;
-      r.starting = false;
-      if (served || r.session !== null) return;
-      // no rooms tier: this device whistles itself. The seed only has to be
-      // SHARED, not unpredictable, so the clock serves and no random is
-      // needed (app code bans Math.random near gameplay for good reason).
-      const m = {
-        t: 'start',
-        n: r.startN + 1,
-        ev: ENGINE_VERSION,
-        seed: (Date.now() ^ (performance.now() * 1000)) >>> 0,
-        roster,
-        wins: r.wins,
-        at: Date.now(),
-      };
-      void r.channel?.send({ type: 'broadcast', event: 'lobby', payload: m });
-      r.startN = m.n;
-      begin(r, m);
-    });
-  };
+  /**
+   * A quick room counts itself down and then whistles.
+   *
+   * Three seconds, and not zero: starting the instant the last player taps
+   * READY throws that player into a round with their thumb still on the
+   * button, and strands anyone whose JOIN lands in the same moment. The count
+   * is cancelled by anyone unreadying, leaving or joining, and a joiner needs
+   * no special case because they arrive not-ready.
+   *
+   * @param r - the room to consider.
+   */
 
   const leave = (): void => {
     const r = box.current;
@@ -645,6 +746,7 @@ export function useRoom(
     myReady,
     isHost: myRef !== '' && seatList[0]?.ref === myRef,
     readyStats,
+    startsIn,
     over,
     standings,
     quick,
