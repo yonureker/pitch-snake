@@ -125,6 +125,10 @@ as $$
 $$;
 
 -- ------------------------------------------------------------ quick match ----
+-- The rules this implements are written out in supabase/ROOM_RULES.md: which
+-- pool a room belongs to, when a second room opens, when an existing one takes
+-- new players, and why no rating is read here. This file is what RUNS, so a
+-- disagreement between them is a bug in the doc.
 -- The fullest waiting room with a live host and a free seat, neighbors
 -- first, else a fresh one stamped with the searcher's region. Same-region
 -- rooms outrank everything (coalesce, because DESC would put the unknowns
