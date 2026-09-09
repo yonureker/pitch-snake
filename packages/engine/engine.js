@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 25;  // 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 26;  // 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -81,7 +81,14 @@ export const GHOST_MAX = 20;
 // scales). Rooms only, and never a solo round, whose boards would otherwise
 // stop being comparable with every score already on them. Both a multiple of
 // SIM_DT, like every timing constant here.
-export const CLINCH_GRACE_MS = 10_000;   // room to start chasing before it tightens
+//
+// The breather was ten seconds until v26 and is fifteen at the owner's call.
+// It is the one number here a player actually feels: it is the gap between
+// being left alone on the pitch and the board starting to close in, and ten
+// seconds landed the first extra ghost while the survivor was still working
+// out that everyone else had gone. Fifteen leaves room to take stock and read
+// as a decision rather than a punishment. The ladder past it is untouched.
+export const CLINCH_GRACE_MS = 15_000;   // room to start chasing before it tightens
 export const CLINCH_GHOST_MS = 5000;     // then one more ghost every five seconds
 export const BOMB_MAX = 15;
 
