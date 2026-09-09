@@ -457,6 +457,23 @@ $$;
 -- at full time and never send. Ninety seconds is far longer than the round
 -- needs to report and short enough that a rating means something while the
 -- room is still together.
+--
+-- BUT NINETY SECONDS FROM WHAT. It was ninety from `started_at`, which is the
+-- start of the round and not the end of it, so the sweep could rule on a round
+-- that was still being PLAYED: a classic room has no clock, and past ninety
+-- seconds the players were racing the sweeper for their own rating. Whoever
+-- lost that race reported into a sealed round, `record_round` answered
+-- 'round already sealed', and the round was unrated with nobody told. Measured
+-- on 2026-09-08 before the fix: 86 rated quick rounds sealed between 11 and
+-- 149 seconds after their start, so the race was already being run and simply
+-- had not been lost yet, because every round so far had been short.
+--
+-- The delay is a straggler window, and a straggler is only a straggler once
+-- somebody has arrived. So the ninety seconds now apply from the moment the
+-- room STARTS REPORTING, and a round nobody has reported at all is left alone
+-- until the abandonment horizon, because it may still be in play. A complete
+-- room is unaffected either way: record_round seals it the instant the last
+-- seat reports, and that is the path almost every round takes.
 drop function if exists public.pitch_snake_seal_due();
 
 create or replace function public.pitch_snake_seal_due()
@@ -470,9 +487,19 @@ declare
   done integer := 0;
 begin
   for due in
-    select id from public.pitch_snake_rounds
-    where sealed_at is null and started_at < now() - interval '90 seconds'
-    order by started_at
+    select r.id from public.pitch_snake_rounds r
+    where r.sealed_at is null
+      and (
+        -- the room has begun reporting: wait out the stragglers, then rule
+        (r.started_at < now() - interval '90 seconds'
+         and exists (select 1 from public.pitch_snake_seats s
+                     where s.round_id = r.id and s.log_hash is not null))
+        -- nobody has said anything, so this may be a long round still being
+        -- played. Fifteen minutes is what room_start already treats as an
+        -- abandoned room; twenty leaves that judgment to the room itself.
+        or r.started_at < now() - interval '20 minutes'
+      )
+    order by r.started_at
     limit 500
   loop
     perform public.pitch_snake_seal_round(due.id);

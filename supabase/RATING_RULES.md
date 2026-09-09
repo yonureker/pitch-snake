@@ -64,6 +64,15 @@ takes no user id as a parameter, so it can seat nobody but its caller.
 A round seals on a **90-second delay** rather than on the last submission,
 because there is no way to know a submission is the last one.
 
+The delay runs from the moment the room **starts reporting**, not from the
+kickoff. It used to run from the kickoff, which meant the sweep could rule on a
+round still being played: a classic room has no clock, so past ninety seconds
+the players were racing the sweeper, and whoever lost reported into a sealed
+round and went unrated with nobody told. A round nobody has reported at all is
+now left alone until the abandonment horizon, twenty minutes, because silence
+that early means the round is probably still in progress rather than over. A
+room where every seat reports never waits at all: it seals on the last one.
+
 Every peer holds a byte-identical copy of a deterministic round, so
 corroboration is free to ask for, and it closes the one hole a single
 submission cannot: **a fabricated log against a real seed replays perfectly
