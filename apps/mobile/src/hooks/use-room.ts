@@ -30,6 +30,7 @@ import {
   VS_MAX,
   VS_MIN,
   cleanName,
+  closeRealtime,
   makeLocalCode,
   realtimeClient,
   reportRoomRound,
@@ -165,10 +166,16 @@ export function useRoom(
       } catch {
         // the socket may already be gone
       }
+      closeRealtime();
       box.current = null;
     };
   }, []);
 
+  // TEN KEYS IS THE CEILING. Supabase caps a presence object at 10 keys on
+  // every plan; this payload is at seven, and the page's twin is at nine
+  // because it also sends the country and the kit. Past ten a track fails
+  // silently and that seat loses its name, its readiness and its outfit on
+  // every other screen.
   const track = (r: RoomBox): void => {
     r.lastTrackAt = Date.now();
     r.trackDirty = false;
@@ -604,6 +611,7 @@ export function useRoom(
     } catch {
       // already down
     }
+    closeRealtime();
     box.current = null;
     setStatus('idle');
     setMyRef('');

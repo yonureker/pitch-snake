@@ -3568,6 +3568,15 @@
     try { vs.channel.unsubscribe(); } catch (e) {}
     // the socket reconnects for as long as it is open, so leaving has to say so
     try { vs.socket.close(); } catch (e) {}
+    // AND THE REALTIME SOCKET GOES WITH IT. Unsubscribing a channel leaves the
+    // connection open, and a connection is the scarcest thing Supabase gives
+    // away: 200 concurrent on the free tier, 500 on Pro. Held for the life of
+    // the tab, every player who ever opened multiplayer would keep one whether
+    // they were in a room or not, so the cap would count curiosity rather than
+    // players. Reconnecting costs about 760ms, measured, and it is paid on the
+    // lobby screen where nothing is moving.
+    try { vsClient?.disconnect(); } catch (e) {}
+    vsClient = null;
     vs = null;
     syncMpHud();
     if (wasLive || wasVsGame) {
@@ -3712,6 +3721,13 @@
   // rather than a second lookup per seat: it is one more field on a write the
   // room already makes, so a roster of five costs nothing extra on the wire.
   function vsCountry() { return (sbProfile && cc(sbProfile.country)) || null; }
+  // TEN KEYS IS THE CEILING, and this payload is at nine. Supabase caps a
+  // presence object at 10 keys on every plan, so the next field added here is
+  // the last one that fits, and the one after that fails a track silently: no
+  // flag, no shirt, no ready state for that seat, on everyone else's screen.
+  // If a tenth is ever needed, pack skin/hat/kit into one `worn` object first,
+  // which is three keys back for the cost of one wire-format change agreed
+  // between both clients.
   function vsTrack() {
     vs.lastTrackAt = Date.now();
     vs.trackDirty = false;

@@ -79,6 +79,26 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 let client: RealtimeClient | null = null;
 
+/**
+ * Drop the realtime connection.
+ *
+ * Unsubscribing a channel leaves the socket open, and a connection is the
+ * scarcest thing Supabase gives away: 200 concurrent on the free tier, 500 on
+ * Pro. Held for the life of the app, every player who ever opened multiplayer
+ * would keep one whether they were in a room or not, so the cap would count
+ * curiosity rather than players. The next room builds a fresh one.
+ */
+export function closeRealtime(): void {
+  try {
+    // disconnect() returns a promise in realtime-js; nothing waits on a
+    // socket going away, and a rejection here means it was already gone
+    void client?.disconnect();
+  } catch {
+    // already down; the next realtimeClient() call builds another
+  }
+  client = null;
+}
+
 /** The shared realtime client, built on first use. */
 export function realtimeClient(): RealtimeClient | null {
   if (!SUPABASE_CONFIGURED) return null;
