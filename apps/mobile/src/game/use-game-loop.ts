@@ -42,6 +42,7 @@ import {
   spawnFloat,
   stepParticles,
 } from './renderer';
+import { resetVsSmoothing } from './vs-smoothing';
 
 /** The page-side round phases, mirroring the web version. */
 export type RoundPhase = 'ready' | 'countdown' | 'playing' | 'paused' | 'dead';
@@ -402,7 +403,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         pulseMs: box.pulseMs,
         playing: box.phase === 'playing',
         worn: box.worn,
-        vs: box.vsRc ?? undefined,
+        // the rollback count rides along so the paint can absorb a corrected
+        // past rather than teleport through it; see game/vs-smoothing.ts
+        vs: box.vsRc === null ? undefined : { ...box.vsRc, rollbacks: box.session?.stats.rollbacks ?? 0 },
       });
       // Dispose pictures deterministically, two frames late: the newest
       // retired one may still be mid-replay on the render thread, and leaving
@@ -561,6 +564,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     const box = boxRef.current;
     game.current = g;
     g.drainEvents();
+    // a fresh round shares nothing with the last one, and a leftover paint
+    // offset would draw its first frame crooked
+    resetVsSmoothing();
     box.session = session;
     box.vsIdx = myIdx;
     box.forfeited = false; // a new round is a new chance to play it

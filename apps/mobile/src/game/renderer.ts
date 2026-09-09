@@ -43,6 +43,7 @@ import {
 
 import { type Kit, KIT_NONE, kitKey } from '../lib/kit';
 import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
+import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from './vs-smoothing';
 import { GameColors, GhostColors, SNAKE_SHADES, skinRamp, snakeShadeFor } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
@@ -57,8 +58,17 @@ export interface RenderContext {
   playing: boolean;
   /** What the snake wears; unknown or null ids dress classic. */
   worn: { skin: string | null; hat: string | null; kit: Kit };
-  /** A room's round: my seat, and each seat's name and outfit. */
-  vs?: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] };
+  /**
+   * A room's round: my seat, each seat's name and outfit, and the session's
+   * rollback count. The count is here so the paint can absorb a corrected past
+   * instead of teleporting through it; see vs-smoothing.ts.
+   */
+  vs?: {
+    myIdx: number;
+    names: string[];
+    fits: { skin: string | null; hat: string | null }[];
+    rollbacks: number;
+  };
 }
 
 /** Rival seat colours, the web's VS_COLORS: identity for tags, not clothing. */
@@ -852,6 +862,10 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   // snake, the web's drawRivals in Skia. Solo keeps the classic path below.
   if (rc.vs !== undefined) {
     const myIdx = rc.vs.myIdx;
+    // One pass over every snake before anything is drawn: a rollback moved the
+    // past, and this turns that jump into an offset that fades over ~90ms
+    // rather than a teleport. Rivals and my own snake both read it back below.
+    updateVsSmoothing(game, rc.vs.rollbacks, rc.pulseMs, rc.playing, segRenderPos);
     for (let pi = 0; pi < game.players.length; pi++) {
       if (pi === myIdx) continue;
       const pl = game.players[pi];
@@ -865,12 +879,24 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
         const shade = ((i * (SNAKE_SHADES - 1)) / rDenom) | 0;
         const sprite = sprites[shade];
         if (sprite === null || sprite === undefined) continue;
-        const rp = segRenderPos(pl, i, prog);
-        drawSegmentSprite(canvas, sprite, rp.cx, rp.cy, cell);
+        // the smoothed position was resolved for this frame already; only
+        // segments past the smoothed depth fall back to the raw glide
+        let cx: number;
+        let cy: number;
+        if (i < smoothDepth(pi)) {
+          cx = smoothX(pi, i);
+          cy = smoothY(pi, i);
+        } else {
+          const rp = segRenderPos(pl, i, prog);
+          cx = rp.cx;
+          cy = rp.cy;
+        }
+        drawSegmentSprite(canvas, sprite, cx, cy, cell);
       }
-      const rp0 = segRenderPos(pl, 0, prog);
-      const hx = wrapf(rp0.cx) * cell + cell / 2;
-      const hy = wrapf(rp0.cy) * cell + cell / 2;
+      const headX = smoothDepth(pi) > 0 ? smoothX(pi, 0) : segRenderPos(pl, 0, prog).cx;
+      const headY = smoothDepth(pi) > 0 ? smoothY(pi, 0) : segRenderPos(pl, 0, prog).cy;
+      const hx = wrapf(headX) * cell + cell / 2;
+      const hy = wrapf(headY) * cell + cell / 2;
       const hat = rivalHatSprites.get(fit?.hat ?? 'classic');
       if (hat?.sprite != null) {
         drawBaked(canvas, hat.sprite, Math.round(hx - hat.sprite.w / 2), Math.round(hy + hat.dy));
@@ -889,27 +915,46 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   const denom = Math.max(1, me.snake.length - 1);
   // per snake: a rival dragged by a bolt is on a longer step than you are
   const p = rc.playing ? game.renderProg(rc.vs?.myIdx ?? 0) : 1;
+  // My own snake is smoothed too, and it needs to be: a rollback can move it
+  // even though my inputs are never late, because a rival's earlier turn can
+  // change what the board did (who reached the food first, where a wall went).
+  // Solo has no session and no corrections, so mySeat is -1 and this is inert.
+  const mySeat = rc.vs?.myIdx ?? -1;
+  const myDepth = mySeat < 0 ? 0 : smoothDepth(mySeat);
   for (let i = me.snake.length - 1; i >= 0; i--) {
     const shade = ((i * (SNAKE_SHADES - 1)) / denom) | 0;
     const sprite = snakeSprites[shade];
     if (sprite === null || sprite === undefined) continue;
-    const rp = segRenderPos(me, i, p);
-    drawSegmentSprite(canvas, sprite, rp.cx, rp.cy, cell);
+    let cx: number;
+    let cy: number;
+    if (i < myDepth) {
+      cx = smoothX(mySeat, i);
+      cy = smoothY(mySeat, i);
+    } else {
+      const rp = segRenderPos(me, i, p);
+      cx = rp.cx;
+      cy = rp.cy;
+    }
+    drawSegmentSprite(canvas, sprite, cx, cy, cell);
   }
 
   // the shirt on the square behind the head, upright like the hat
   if (jerseySprite !== null && me.snake.length > 1) {
     const rp1 = segRenderPos(me, 1, p);
-    const jx = wrapf(rp1.cx) * cell + cell / 2;
-    const jy = wrapf(rp1.cy) * cell + cell / 2;
+    const j1x = myDepth > 1 ? smoothX(mySeat, 1) : rp1.cx;
+    const j1y = myDepth > 1 ? smoothY(mySeat, 1) : rp1.cy;
+    const jx = wrapf(j1x) * cell + cell / 2;
+    const jy = wrapf(j1y) * cell + cell / 2;
     drawBaked(canvas, jerseySprite, Math.round(jx - jerseySprite.w / 2), Math.round(jy - jerseySprite.h / 2));
   }
 
   // eyes on the head, at its interpolated position
   if (me.snake.length > 0) {
     const rp = segRenderPos(me, 0, p);
-    const hx = wrapf(rp.cx) * cell + cell / 2;
-    const hy = wrapf(rp.cy) * cell + cell / 2;
+    const h0x = myDepth > 0 ? smoothX(mySeat, 0) : rp.cx;
+    const h0y = myDepth > 0 ? smoothY(mySeat, 0) : rp.cy;
+    const hx = wrapf(h0x) * cell + cell / 2;
+    const hy = wrapf(h0y) * cell + cell / 2;
     const off = cell * 0.16;
     const ex = me.dir.x;
     const ey = me.dir.y;
