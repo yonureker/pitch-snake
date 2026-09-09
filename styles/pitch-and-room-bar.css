@@ -219,6 +219,43 @@
     text-shadow: 5px 5px 0 var(--food);
   }
 
+  /* THE LAST CALL: the closing seconds of a timed round, over the pitch and
+     deliberately almost not there.
+     The kickoff countdown above can afford to own the screen, because nothing
+     is moving yet. This one arrives while somebody is threading a snake past
+     a ghost at full speed, so it takes the same face and the same place and
+     gives up everything else: no scrim, no drop shadow, a quarter of the ink,
+     and z-index BELOW the kickoff scrim so the two can never argue. A player
+     who never looks at it loses nothing; a player glancing up gets the number
+     without moving their eyes to the header. */
+  .last-call {
+    position: absolute;
+    inset: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .last-call[hidden] { display: none; }
+  .last-call .count-num {
+    text-shadow: none;
+    opacity: 0.26;
+  }
+  /* Two classes alternating, rather than one restarted in JS: restarting a CSS
+     animation from script means writing the style and then READING a layout
+     property to force a reflow, and rule 8 forbids a layout read inside the
+     frame loop. Swapping which class is on the element restarts it for free. */
+  .last-call .count-num.tick-a { animation: last-call 900ms ease-out; }
+  .last-call .count-num.tick-b { animation: last-call 900ms ease-out; }
+  @keyframes last-call {
+    from { opacity: 0.5; transform: scale(1.16); }
+    to { opacity: 0.26; transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .last-call .count-num.tick-a, .last-call .count-num.tick-b { animation: none; }
+  }
+
   /* The overlay is a fixed head over a centred body: the title and its line
      sit in the same place on every screen, and only what is underneath
      changes when a panel opens. */

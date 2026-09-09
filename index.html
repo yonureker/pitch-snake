@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=cb1439b295">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=cb1439b295">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=d5cfd4a6d0">
 </head>
 <body>
   <div class="wrap">
@@ -92,6 +92,10 @@
     <div class="board-frame">
       <canvas id="game"></canvas>
       <div class="countdown" id="countdown" aria-hidden="true" hidden><span class="count-num" id="countNum">3</span></div>
+      <!-- The closing seconds of a timed round. aria-hidden like the kickoff
+           count: the clock in the header is the accessible one, and this is a
+           second voice saying the same number. -->
+      <div class="last-call" id="lastCall" aria-hidden="true" hidden><span class="count-num" id="lastCallNum">5</span></div>
       <!-- U+FE0E pins the cog to TEXT presentation: without it iOS serves
            the grey emoji cog, which ignores the gold the CSS asks for -->
       <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;&#xFE0E;</button>
@@ -481,19 +485,19 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=cb1439b295",
-    "./packages/net/net.js": "./packages/net/net.js?v=cb1439b295",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=cb1439b295",
-    "./page/build/dom.js": "./page/build/dom.js?v=cb1439b295",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=cb1439b295",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=cb1439b295",
-    "./page/build/kit.js": "./page/build/kit.js?v=cb1439b295",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=cb1439b295",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=cb1439b295",
-    "./page/build/shop.js": "./page/build/shop.js?v=cb1439b295",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=cb1439b295",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=cb1439b295",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=cb1439b295"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=d5cfd4a6d0",
+    "./packages/net/net.js": "./packages/net/net.js?v=d5cfd4a6d0",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=d5cfd4a6d0",
+    "./page/build/dom.js": "./page/build/dom.js?v=d5cfd4a6d0",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=d5cfd4a6d0",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=d5cfd4a6d0",
+    "./page/build/kit.js": "./page/build/kit.js?v=d5cfd4a6d0",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=d5cfd4a6d0",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=d5cfd4a6d0",
+    "./page/build/shop.js": "./page/build/shop.js?v=d5cfd4a6d0",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=d5cfd4a6d0",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=d5cfd4a6d0",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=d5cfd4a6d0"
   }
 }
 </script>
@@ -745,14 +749,37 @@
 
   // the speed-run clock: DOM only when the printed second changes (rule 8)
   const clockEl = document.getElementById('clock');
+  const lastCallEl = document.getElementById('lastCall');
+  const lastCallNum = document.getElementById('lastCallNum');
+  // How many closing seconds get counted onto the pitch itself. Five, because
+  // that is the point at which "how long is left" stops being information and
+  // starts being the thing you are playing; above it the header clock is
+  // plenty and a number over the board would just be in the way.
+  const LAST_CALL_FROM = 5;
   let lastClockSec = -1;                 // gate on the integer, not the string:
-  function syncClockDom() {              // building m:ss every frame is allocation
+  let lastCallShown = 0;                 // building m:ss every frame is allocation
+  function syncClockDom() {
     if (!g || !g.durationMs) {
       if (lastClockSec !== -1) { lastClockSec = -1; clockEl.hidden = true; }
+      if (lastCallShown !== 0) { lastCallShown = 0; lastCallEl.hidden = true; }
       return;
     }
     const left = Math.max(0, g.durationMs - g.clockMs);
     const sec = Math.ceil(left / 1000);
+    // THE LAST CALL. Decided every frame and WRITTEN only when it changes, so
+    // this costs two integer compares in the frame loop and five DOM touches
+    // in a round. Only while the round is actually running: a paused or dead
+    // board must not sit there counting at a snake that has stopped.
+    const call = state === 'playing' && sec >= 1 && sec <= LAST_CALL_FROM ? sec : 0;
+    if (call !== lastCallShown) {
+      lastCallShown = call;
+      lastCallEl.hidden = call === 0;
+      if (call !== 0) {
+        lastCallNum.textContent = call;
+        // alternate the class so the animation restarts without a layout read
+        lastCallNum.className = 'count-num ' + (call % 2 ? 'tick-a' : 'tick-b');
+      }
+    }
     if (sec === lastClockSec) return;
     lastClockSec = sec;
     clockEl.hidden = false;
