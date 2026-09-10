@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=3d2bbfef76">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=3d2bbfef76">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=c74c595bbe">
 </head>
 <body>
   <div class="wrap">
@@ -300,11 +300,6 @@
           <button data-speed="130" class="active">NORMAL</button>
           <button data-speed="100">FAST</button>
         </div>
-        <div class="speed-row" id="padRow">
-          <span>PAD</span>
-          <button data-pad="wedge" class="active">WEDGES</button>
-          <button data-pad="split">SPLIT</button>
-        </div>
         <div class="speed-row" id="themeRow">
           <span>THEME</span>
           <button data-theme="auto" class="active">AUTO</button>
@@ -490,19 +485,19 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=3d2bbfef76",
-    "./packages/net/net.js": "./packages/net/net.js?v=3d2bbfef76",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=3d2bbfef76",
-    "./page/build/dom.js": "./page/build/dom.js?v=3d2bbfef76",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=3d2bbfef76",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=3d2bbfef76",
-    "./page/build/kit.js": "./page/build/kit.js?v=3d2bbfef76",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=3d2bbfef76",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=3d2bbfef76",
-    "./page/build/shop.js": "./page/build/shop.js?v=3d2bbfef76",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=3d2bbfef76",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=3d2bbfef76",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=3d2bbfef76"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=c74c595bbe",
+    "./packages/net/net.js": "./packages/net/net.js?v=c74c595bbe",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=c74c595bbe",
+    "./page/build/dom.js": "./page/build/dom.js?v=c74c595bbe",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=c74c595bbe",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=c74c595bbe",
+    "./page/build/kit.js": "./page/build/kit.js?v=c74c595bbe",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=c74c595bbe",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=c74c595bbe",
+    "./page/build/shop.js": "./page/build/shop.js?v=c74c595bbe",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=c74c595bbe",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=c74c595bbe",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=c74c595bbe"
   }
 }
 </script>
@@ -4636,40 +4631,9 @@
   // it clearly lands in. Keyboard has no such noise, which is why it felt
   // cleaner. PAD_DEAD_R2 / PAD_SEAM are in pad-fraction units, tune for feel.
   const PAD_DEAD_R2 = 0.13 * 0.13, PAD_SEAM = 0.05;
-  // The pad's LAYOUT (PAD in settings). 'wedge' is the classic four
-  // triangles on one square. 'split' gives each hand its own half: the left
-  // half is only up/down, the right half only left/right, split at the 75%
-  // line. It exists because a snake's turns always alternate axes, so a
-  // fast double is always one press per hand there, and the two thumbs
-  // never share the same patch of glass: nothing to misread, nothing for
-  // the phone to merge. Free to change mid-round; it simulates nothing.
-  let padLayout = 'wedge';
-  try { if (localStorage.getItem('snakePadLayout') === 'split') padLayout = 'split'; } catch (e) {}
-  dpad.classList.toggle('split', padLayout === 'split');
-  document.querySelectorAll('[data-pad]').forEach(b => {
-    b.classList.toggle('active', b.dataset.pad === padLayout);
-    b.addEventListener('click', () => {
-      padLayout = b.dataset.pad === 'split' ? 'split' : 'wedge';
-      document.querySelectorAll('[data-pad]').forEach(x =>
-        x.classList.toggle('active', x.dataset.pad === padLayout));
-      dpad.classList.toggle('split', padLayout === 'split');
-      try { localStorage.setItem('snakePadLayout', padLayout); } catch (e) {}
-    });
-  });
   function padZone(e, moving) {
     const u = (e.clientX - padRect.left) / padRect.width - 0.5;
     const v = (e.clientY - padRect.top) / padRect.height - 0.5;
-    if (padLayout === 'split') {
-      // live seams: the halves at u=0, the pair at u=0.25, and the left
-      // half's horizon at v=0; a slide holds through each (rule 13's
-      // hysteresis, same as the wedge seams)
-      if (moving && (Math.abs(u) < PAD_SEAM || Math.abs(u - 0.25) < PAD_SEAM)) return null;
-      if (u < 0) {
-        if (moving && Math.abs(v) < PAD_SEAM) return null;
-        return v > 0 ? padBtn.down : padBtn.up;
-      }
-      return u > 0.25 ? padBtn.right : padBtn.left;
-    }
     if (moving) {
       if (u * u + v * v < PAD_DEAD_R2) return null;                     // dead centre: hold
       if (Math.abs(Math.abs(u) - Math.abs(v)) < PAD_SEAM) return null;  // near a diagonal seam: hold
@@ -4715,7 +4679,6 @@
   const PAD_ASSIST_PX = 24;   // half a thumb pad, the one dial
   function padResolve(e) {
     const primary = padZone(e, false);
-    if (padLayout !== 'wedge') return { btn: primary, assisted: false };
     const h = padHeading();
     if (!h) return { btn: primary, assisted: false };
     const d = padDirOf.get(primary);
