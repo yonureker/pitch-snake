@@ -2130,6 +2130,24 @@
     keysTrail.push('|');
     if (keysTrail.length > 12) keysTrail.shift();
     keysLine = keysTrail.join(' ');
+    keysDirX = 0; keysDirY = 0;
+  }
+  // The other half of the truth: when a turn actually PLAYS. A press is
+  // accepted into a queue and executes at the next cell boundary, so the
+  // trail pairs each pOK with the >> marker of the turn happening. A pOK
+  // that never grows its >> is an engine-level drop; a >> that comes late is
+  // the grid's own cadence, one turn per cell. Watched from the frame loop,
+  // costs two compares unless the flag is up.
+  let keysDirX = 0, keysDirY = 0;
+  function tracePlayed() {
+    if (!showKeys || state !== 'playing') return;
+    const pl = g.players[vsView() ? vs.myIdx : 0];
+    if (!pl || !pl.alive) return;
+    if (pl.dir.x === keysDirX && pl.dir.y === keysDirY) return;
+    keysDirX = pl.dir.x; keysDirY = pl.dir.y;
+    keysTrail.push('\u00bb' + keyArrow(keysDirX, keysDirY));
+    if (keysTrail.length > 12) keysTrail.shift();
+    keysLine = keysTrail.join(' ');
   }
   let fpsFont = '', fpsFontCell = 0;
   let fpsCount = 0, fpsSince = 0, fpsValue = 0, fpsWork = 0, workMs = 0;
@@ -2258,6 +2276,7 @@
       }
     }
     syncClockDom();
+    if (showKeys) tracePlayed();
     if (reveal || purseAnim) revealTick(dt);
     draw(dt);
     if (showFps) {
