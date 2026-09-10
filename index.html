@@ -727,14 +727,15 @@
   // the last press before kickoff means anything (it is where you want to
   // open), so the count holds exactly that one and kickoff feeds it in.
   let preAim = null;
-  function dirInput(x, y) {
-    if (state !== 'playing' && state !== 'countdown') return;
-    if (state === 'countdown') { preAim = { x, y }; return; }
+  function dirInput(x, y, src) {
+    if (state !== 'playing' && state !== 'countdown') { traceKey(src, x, y, '.'); return; }
+    if (state === 'countdown') { preAim = { x, y }; traceKey(src, x, y, '~'); return; }
     // the press's own clock rides along so the session can advance to the
     // true instant before stamping (rule 12, netcode edition)
     if (vsInRound()) {
       if (vs.forfeited) return;     // given up: the seat sends nothing more
       vs.session.localDir(x, y, performance.now());
+      traceKey(src, x, y, '>');
       return;
     }
     // Rule 12, shell side: advance the sim to the press instant so the turn
@@ -754,7 +755,9 @@
         syncScoreDom();
       }
     }
+    const taken = g.log.inputs.length;
     g.setDir(x, y);
+    traceKey(src, x, y, g.log.inputs.length > taken ? 'OK' : 'X');
   }
 
   function syncScoreDom() {
@@ -1741,15 +1744,21 @@
 
     syncCountdown();
 
-    if (showFps) {
+    if (showFps || (showKeys && keysLine)) {
       // a perf probe must not perturb what it measures: cache the font
       // string so the meter itself adds no per-frame string building
       if (fpsFontCell !== cell) { fpsFontCell = cell; fpsFont = Math.max(11, (cell * 0.5) | 0) + 'px monospace'; }
-      ctx.fillStyle = '#7CFC00';
       ctx.font = fpsFont;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(fpsValue + ' fps · ' + workMs.toFixed(1) + 'ms', 6, 6);
+      if (showFps) {
+        ctx.fillStyle = '#7CFC00';
+        ctx.fillText(fpsValue + ' fps · ' + workMs.toFixed(1) + 'ms', 6, 6);
+      }
+      if (showKeys && keysLine) {
+        ctx.fillStyle = '#FFD700';
+        ctx.fillText(keysLine, 6, showFps ? 6 + cell : 6);
+      }
     }
   }
 
@@ -2088,6 +2097,25 @@
   // optional on-screen FPS meter: ?fps=1
   const fpsFlag = new URLSearchParams(location.search).get('fps');
   const showFps = fpsFlag !== null && fpsFlag !== '0';
+  // ?keys=1: the input trace, for debugging a phone's controls in the field.
+  // Every press that reaches dirInput leaves a mark: its source (k keyboard,
+  // p pad, s swipe, g gamepad, a countdown aim), its arrow, and its fate
+  // (OK taken, X filtered by the engine, ~ held as the countdown aim,
+  // > sent to the room, . ignored by round state). One glance separates
+  // "the tap never arrived", "the pad read the wrong wedge" and "the engine
+  // refused it". Costs nothing unless the flag is up; the line is rebuilt on
+  // the press, never in the frame loop.
+  const keysFlagValue = new URLSearchParams(location.search).get('keys');
+  const showKeys = keysFlagValue !== null && keysFlagValue !== '0';
+  const keysTrail = [];
+  let keysLine = '';
+  function traceKey(src, x, y, fate) {
+    if (!showKeys) return;
+    const arrow = x === 1 ? '\u2192' : x === -1 ? '\u2190' : y === 1 ? '\u2193' : '\u2191';
+    keysTrail.push(src + arrow + fate);
+    if (keysTrail.length > 9) keysTrail.shift();
+    keysLine = keysTrail.join(' ');
+  }
   let fpsFont = '', fpsFontCell = 0;
   let fpsCount = 0, fpsSince = 0, fpsValue = 0, fpsWork = 0, workMs = 0;
 
@@ -2193,6 +2221,7 @@
         if (preAim) {
           if (vsInRound()) { if (!vs.forfeited) vs.session.localDir(preAim.x, preAim.y, now); }
           else g.setDir(preAim.x, preAim.y);
+          traceKey('a', preAim.x, preAim.y, 'OK');
           preAim = null;
         }
       }
@@ -4509,10 +4538,10 @@
     // excluded (no click behavior), so Space there still pauses
     if (k === ' ' && e.target && e.target.tagName === 'BUTTON' && !e.target.dataset.dir) return;
     e.preventDefault();
-    if (k === 'arrowup' || k === 'w') dirInput(0, -1);
-    else if (k === 'arrowdown' || k === 's') dirInput(0, 1);
-    else if (k === 'arrowleft' || k === 'a') dirInput(-1, 0);
-    else if (k === 'arrowright' || k === 'd') dirInput(1, 0);
+    if (k === 'arrowup' || k === 'w') dirInput(0, -1, 'k');
+    else if (k === 'arrowdown' || k === 's') dirInput(0, 1, 'k');
+    else if (k === 'arrowleft' || k === 'a') dirInput(-1, 0, 'k');
+    else if (k === 'arrowright' || k === 'd') dirInput(1, 0, 'k');
     else if (k === 'm') setSound(!isPageSoundOn());
     else togglePause();
   });
@@ -4526,8 +4555,8 @@
     const dx = e.touches[0].clientX - touchStart.x;
     const dy = e.touches[0].clientY - touchStart.y;
     if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
-    if (Math.abs(dx) > Math.abs(dy)) dirInput(dx > 0 ? 1 : -1, 0);
-    else dirInput(0, dy > 0 ? 1 : -1);
+    if (Math.abs(dx) > Math.abs(dy)) dirInput(dx > 0 ? 1 : -1, 0, 's');
+    else dirInput(0, dy > 0 ? 1 : -1, 's');
     touchStart = null;
     e.preventDefault();
   }, {passive: false});
@@ -4583,7 +4612,7 @@
     padPointers.set(id, btn);
     paintPad();
     const d = padDirOf.get(btn);
-    dirInput(d.x, d.y);
+    dirInput(d.x, d.y, 'p');
   }
   function padEnd(e) {
     if (!padPointers.delete(e.pointerId)) return;
@@ -4699,7 +4728,7 @@
   // shell's own doors, which is what keeps it one input rather than a second
   // set of rules.
   initGamepads({
-    steer: dirInput,
+    steer: (x, y) => dirInput(x, y, 'g'),
     phase: () => state,
     togglePause,
     requestResize: () => { resizeQueued = true; },
