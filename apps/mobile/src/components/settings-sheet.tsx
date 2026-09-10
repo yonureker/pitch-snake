@@ -1,12 +1,11 @@
 /**
- * The settings sheet: speed, theme and the crowd, behind the header's gear.
+ * The settings sheet: theme and the crowd, behind the header's gear.
  *
  * The page's twin (its gear modal), and the reason these chips left the
  * kick-off card: the card sells the round (the legend, START, MODES), and
  * the web moved every knob behind the gear long ago, so the two clients now
  * agree on where a setting lives. The gear only shows on menu screens, so
- * nothing here can change under a live round: speed applies to the next
- * kickoff exactly as it always did.
+ * nothing here can change under a live round.
  *
  * Theming pattern, used by every sheet: the light StyleSheet is the base and
  * a second sheet carries only the colors the dark table swaps, applied as
@@ -17,18 +16,11 @@
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { SPEEDS } from '@pitch-snake/engine';
 import { DarkShell, GameColors } from '@/game/theme';
 import type { ThemePref } from '@/lib/theme-prefs';
 
 const BARLOW_BOLD = 'Barlow_700Bold';
 const ANTON = 'Anton_400Regular';
-
-const SPEED_LABELS = [
-  { label: 'SLOW', ms: SPEEDS.slow },
-  { label: 'NORMAL', ms: SPEEDS.normal },
-  { label: 'FAST', ms: SPEEDS.fast },
-] as const;
 
 const THEME_LABELS: { label: string; pref: ThemePref }[] = [
   { label: 'AUTO', pref: 'auto' },
@@ -36,10 +28,8 @@ const THEME_LABELS: { label: string; pref: ThemePref }[] = [
   { label: 'DARK', pref: 'dark' },
 ];
 
-/** Props: the three knobs, whether the dark table is on, and the way out. */
+/** Props: the two knobs, whether the dark table is on, and the way out. */
 export interface SettingsSheetProps {
-  tickMs: number;
-  onTickMs: (ms: number) => void;
   themePref: ThemePref;
   onThemePref: (pref: ThemePref) => void;
   crowdOn: boolean;
@@ -50,8 +40,6 @@ export interface SettingsSheetProps {
 
 /** The sheet. */
 export function SettingsSheet({
-  tickMs,
-  onTickMs,
   themePref,
   onThemePref,
   crowdOn,
@@ -64,21 +52,6 @@ export function SettingsSheet({
   return (
     <View style={[styles.sheet, dark && darkStyles.sheet]}>
       <Text style={[styles.title, dark && darkStyles.title]}>SETTINGS</Text>
-      <View style={styles.row}>
-        <Text style={[styles.label, dark && darkStyles.label]}>SPEED</Text>
-        {SPEED_LABELS.map((s) => (
-          <Pressable
-            accessibilityRole="button"
-            key={s.label}
-            onPress={() => {
-              onTickMs(s.ms);
-            }}
-            style={chip(tickMs === s.ms)}
-          >
-            <Text style={chipText(tickMs === s.ms)}>{s.label}</Text>
-          </Pressable>
-        ))}
-      </View>
       <View style={styles.row}>
         <Text style={[styles.label, dark && darkStyles.label]}>THEME</Text>
         {THEME_LABELS.map((t) => (

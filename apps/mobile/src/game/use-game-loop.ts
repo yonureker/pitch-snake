@@ -83,9 +83,6 @@ export interface GameLoop {
   countText: string;
   /** Why the last round ended, for the FULL TIME line. */
   deadReason: string;
-  /** Selected speed in ms per cell (applies to the next round). */
-  tickMs: number;
-  setTickMs: (ms: number) => void;
   /** The ruleset the next round runs under; refused mid-round. */
   mode: RuleMode;
   setMode: (m: RuleMode) => void;
@@ -151,7 +148,6 @@ interface LoopBox {
   frameWorst: number;
   frameWindowStart: number;
   phase: RoundPhase;
-  tickMs: number;
   mode: RuleMode;
   /** the last clock text pushed to state, so the DOM-ish update happens once a second */
   lastClock: string;
@@ -210,7 +206,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     frameWorst: 0,
     frameWindowStart: 0,
     phase: 'ready',
-    tickMs: SPEEDS.normal,
     mode: 'classic',
     lastClock: '',
     countClock: 0,
@@ -243,7 +238,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [best, setBest] = useState(0);
   const [countText, setCountText] = useState('');
   const [deadReason, setDeadReason] = useState('');
-  const [tickMs, setTickMsState] = useState<number>(SPEEDS.normal);
   const [mode, setModeState] = useState<RuleMode>('classic');
   const [clockText, setClockText] = useState('');
   const [lastCallText, setLastCallText] = useState('');
@@ -478,7 +472,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         pocket.current ??= next;
       });
       setCanSubmit(roundTicket.current !== null);
-      game.current = createGame({ seed, tickMs: box.tickMs, ...MODES[box.mode] });
+      // one pace for everyone (the SPEED setting retired 2026-09-10, with
+      // the web's): every solo score competes at the same tick, as rooms
+      // always have. SPEEDS keeps its values in the engine for old logs.
+      game.current = createGame({ seed, tickMs: SPEEDS.normal, ...MODES[box.mode] });
       game.current.drainEvents();
       box.lastClock = game.current.durationMs > 0 ? fmtClock(game.current.durationMs) : '';
       setClockText(box.lastClock);
@@ -572,11 +569,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     }
     g.dir = { x: 0, y: 1 };
     g.dirQueue.length = 0;
-  };
-
-  const setTickMs = (ms: number): void => {
-    boxRef.current.tickMs = ms;
-    setTickMsState(ms);
   };
 
   // the outfit: an equip or a wallet answer dresses the snake; the renderer
@@ -720,8 +712,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     best,
     countText,
     deadReason,
-    tickMs,
-    setTickMs,
     mode,
     setMode,
     clockText,

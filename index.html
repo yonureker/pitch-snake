@@ -294,12 +294,6 @@
     <div class="modal-backdrop" id="settingsModal" hidden>
       <div class="modal">
         <div class="modal-title">Settings</div>
-        <div class="speed-row">
-          <span>SPEED</span>
-          <button data-speed="200">SLOW</button>
-          <button data-speed="130" class="active">NORMAL</button>
-          <button data-speed="100">FAST</button>
-        </div>
         <div class="speed-row" id="themeRow">
           <span>THEME</span>
           <button data-theme="auto" class="active">AUTO</button>
@@ -627,7 +621,6 @@
   // input log the engine keeps is what makes a round replayable server-side.
   let g = null;
   let state = 'ready';           // ready | countdown | playing | paused | dead
-  let pageTickMs = SPEEDS.normal;
   let pageWalls = true;
   let lastShownScore = null;
   let best = 0;
@@ -710,7 +703,11 @@
     } else {
       seed = crypto.getRandomValues(new Uint32Array(1))[0];
     }
-    g = createGame({ seed, tickMs: pageTickMs, wallsEnabled: pageWalls, ...MODES[ruleMode()] });
+    // One pace for everyone (the SPEED setting retired 2026-09-10, owner's
+    // call): every solo score now competes at the same tick, exactly as
+    // rooms always have. SPEEDS keeps its three values in the engine because
+    // old logs carry theirs and must replay.
+    g = createGame({ seed, tickMs: SPEEDS.normal, wallsEnabled: pageWalls, ...MODES[ruleMode()] });
     lastShownScore = null;
     handleEvents(g.drainEvents());   // the constructor placed the first food
     syncScoreDom();
@@ -4790,18 +4787,8 @@
   }, { capture: true });
 
 
-  // speed and walls apply to the NEXT round; the controls are locked in-round,
-  // so from the player's view nothing ever changes mid-game
-  // [data-speed], not every .speed-row button: the THEME chips wear the
-  // same clothes and must not set the tick to NaN
-  document.querySelectorAll('[data-speed]').forEach(b => {
-    b.addEventListener('click', () => {
-      document.querySelectorAll('[data-speed]').forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      pageTickMs = parseInt(b.dataset.speed, 10);
-    });
-  });
-
+  // walls apply to the NEXT round; the control is locked in-round, so from
+  // the player's view nothing ever changes mid-game
   const wallToggle = document.getElementById('wallToggle');
   const wallStatus = document.getElementById('wallStatus');
   wallToggle.addEventListener('click', () => {
@@ -4906,9 +4893,9 @@
       gearBtn.style.display = (state === 'playing' || state === 'countdown') ? 'none' : 'flex';
       whoBtn.style.display = gearBtn.style.display;
     }
-    // only what the engine simulates locks mid-round: speed and walls.
-    // THEME shares the chips' clothes but stays free, like sound.
-    settingsModal.querySelectorAll('[data-speed], #wallToggle').forEach(el => { el.disabled = inRound; });
+    // only what the engine simulates locks mid-round: walls. THEME shares
+    // the chips' clothes but stays free, like sound.
+    settingsModal.querySelectorAll('#wallToggle').forEach(el => { el.disabled = inRound; });
     lockHint.style.display = inRound ? 'block' : 'none';
     syncMpQuit();
   }

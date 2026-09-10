@@ -1061,8 +1061,6 @@ export default function Index() {
           {settingsOpen && (
             <View style={styles.sheetWrap}>
               <SettingsSheet
-                tickMs={loop.tickMs}
-                onTickMs={loop.setTickMs}
                 themePref={themePref}
                 onThemePref={(pref) => {
                   setThemePref(pref);
