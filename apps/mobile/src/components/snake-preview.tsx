@@ -22,30 +22,43 @@ import { kitColor } from '@/lib/kit';
 
 const CELL = 24;
 
-/** Props: the worn skin and the kit fields exactly as typed. */
+/** Props: the skin to wear, the kit fields exactly as typed, and the cut. */
 export interface SnakePreviewProps {
   skin: string | null;
-  left: string;
-  right: string;
-  num: string;
+  left?: string;
+  right?: string;
+  num?: string;
+  /** three cells for a shop row, four for the account sheet (the default) */
+  cells?: 3 | 4;
+  /** false leaves the shirt off: a shop row previews a SKIN, not your kit */
+  dressed?: boolean;
 }
 
-/** The dressed snake, head to the right, shirt on the cell behind it. */
-export function SnakePreview({ skin, left, right, num }: SnakePreviewProps) {
+/** The snake, head to the right, shirt on the cell behind it when dressed. */
+export function SnakePreview({
+  skin,
+  left = '',
+  right = '',
+  num = '',
+  cells = 4,
+  dressed = true,
+}: SnakePreviewProps) {
   const head = skinRamp(skin).head;
   const shirtLeft = kitColor(left) ?? JERSEY_LEFT_DEFAULT;
   const shirtRight = kitColor(right) ?? JERSEY_RIGHT_DEFAULT;
   return (
     <View style={styles.row} pointerEvents="none">
-      {/* tail to head: two plain segments, the dressed one, then the head */}
-      <View style={[styles.cell, { backgroundColor: snakeShadeFor(skin, 4) }]} />
+      {/* tail to head: plain segments, the dressed one, then the head */}
+      {cells === 4 && <View style={[styles.cell, { backgroundColor: snakeShadeFor(skin, 4) }]} />}
       <View style={[styles.cell, { backgroundColor: snakeShadeFor(skin, 2) }]} />
       <View style={[styles.cell, { backgroundColor: snakeShadeFor(skin, 1) }]}>
-        <View style={styles.shirt}>
-          <View style={[styles.shirtHalf, { backgroundColor: shirtLeft }]} />
-          <View style={[styles.shirtHalf, { backgroundColor: shirtRight }]} />
-          <Text style={styles.shirtNum}>{num === '' ? '10' : num}</Text>
-        </View>
+        {dressed && (
+          <View style={styles.shirt}>
+            <View style={[styles.shirtHalf, { backgroundColor: shirtLeft }]} />
+            <View style={[styles.shirtHalf, { backgroundColor: shirtRight }]} />
+            <Text style={styles.shirtNum}>{num === '' ? '10' : num}</Text>
+          </View>
+        )}
       </View>
       <View
         style={[

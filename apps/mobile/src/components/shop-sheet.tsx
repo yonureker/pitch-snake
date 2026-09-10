@@ -10,7 +10,8 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { GameColors, skinRamp } from '@/game/theme';
+import { GameColors } from '@/game/theme';
+import { SnakePreview } from '@/components/snake-preview';
 import { useBuyItem } from '@/hooks/queries/use-buy-item';
 import { useEquip } from '@/hooks/queries/use-equip';
 import { useShop } from '@/hooks/queries/use-shop';
@@ -76,7 +77,6 @@ export function ShopSheet({ open, onClose, onWorn }: ShopSheetProps) {
         {(shop.data ?? []).map((item) => {
           const isOwned = owned.has(item.id);
           const worn = item.id === wornSkin || item.id === wornHat;
-          const swatch = item.kind === 'skin' ? `rgb(${skinRamp(item.id).head.join(',')})` : null;
           return (
             <Pressable
               accessibilityRole="button"
@@ -87,9 +87,13 @@ export function ShopSheet({ open, onClose, onWorn }: ShopSheetProps) {
               }}
               style={[styles.row, worn && styles.rowWorn]}
             >
-              {swatch !== null ?
-                // dynamic by nature: the swatch IS the skin's own colour
-                <View style={[styles.swatch, { backgroundColor: swatch }]} />
+              {item.kind === 'skin' ?
+                // the web shop's preview, ported: the snake itself in this
+                // skin, three cells like the page rows. Undressed, because a
+                // shop row sells a skin and not your kit; the hat stays a
+                // mark, since its art lives in the Skia layer and a Views
+                // preview cannot borrow it.
+                <SnakePreview skin={item.id} cells={3} dressed={false} />
               : <Text style={styles.hatMark}>{'▲'}</Text>}
               <Text style={styles.name}>{item.name}</Text>
               <Text style={[styles.price, isOwned && styles.priceOwned]}>
@@ -145,7 +149,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   rowWorn: { borderColor: GameColors.goldBright, backgroundColor: 'rgba(194,162,90,0.12)' },
-  swatch: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: 'rgba(0,0,0,0.35)' },
   hatMark: { width: 18, textAlign: 'center', color: GameColors.goldBright, fontFamily: BARLOW_BOLD },
   name: { flex: 1, fontFamily: BARLOW, fontSize: 13, color: '#e9e0cd', letterSpacing: 0.5 },
   price: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.goldBright, letterSpacing: 0.5 },
