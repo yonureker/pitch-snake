@@ -4646,12 +4646,53 @@
     for (const b of dirButtons) b.classList.toggle('pressed', held.has(b));
   }
   // a finger entering a wedge is a turn request; holding inside one fires once
-  function firePad(id, btn) {
+  function firePad(id, btn, src) {
     if (!btn || padPointers.get(id) === btn) return;
     padPointers.set(id, btn);
     paintPad();
     const d = padDirOf.get(btn);
-    dirInput(d.x, d.y, 'p');
+    dirInput(d.x, d.y, src || 'p');
+  }
+
+  // What the snake will be doing when this press lands: the queue's tail if
+  // turns are waiting, else the live heading. Null when no round is taking
+  // input, which switches the assist off and keeps the geometry literal.
+  function padHeading() {
+    if (state !== 'playing') return null;
+    const pl = g.players[vsView() ? vs.myIdx : 0];
+    if (!pl || !pl.alive) return null;
+    const q = pl.dirQueue;
+    return q.length ? q[q.length - 1] : pl.dir;
+  }
+
+  // The boundary assist, ported from the app's pad (dpad.tsx), which proved
+  // the failure with a field trace: a thumb drilling a fast double strikes
+  // near the diagonal between two wedges, and when the tap resolves to the
+  // axis the snake is already moving on the request is DEAD on arrival (the
+  // engine filters a repeat and refuses a reversal), so the press does
+  // nothing and the wedge the player meant never lights. Within a thumb's
+  // width of the diagonal that literal reading is never what the finger
+  // meant: the neighbor wedge across the boundary is a live perpendicular
+  // turn, so fire that instead. A clean press far from any boundary, or one
+  // already perpendicular to the heading, is untouched. Downs only; a finger
+  // sliding wedge to wedge is deliberate and keeps the literal geometry.
+  const PAD_ASSIST_PX = 24;   // half a thumb pad, the one dial
+  function padResolve(e) {
+    const primary = padZone(e, false);
+    const h = padHeading();
+    if (!h) return { btn: primary, assisted: false };
+    const d = padDirOf.get(primary);
+    if (d.x * h.x + d.y * h.y === 0) return { btn: primary, assisted: false };
+    const f = padRect;
+    const px = e.clientX - f.left - f.width / 2;
+    const py = e.clientY - f.top - f.height / 2;
+    // perpendicular distance in px to the nearest drawn diagonal
+    const offDiagonal = Math.min(Math.abs(f.height * px - f.width * py),
+                                 Math.abs(f.height * px + f.width * py)) / Math.hypot(f.width, f.height);
+    if (offDiagonal >= PAD_ASSIST_PX) return { btn: primary, assisted: false };
+    const btn = d.x !== 0 ? (py > 0 ? padBtn.down : padBtn.up)
+                          : (px > 0 ? padBtn.right : padBtn.left);
+    return { btn, assisted: true };
   }
   function padEnd(e) {
     if (!padPointers.delete(e.pointerId)) return;
@@ -4667,7 +4708,8 @@
     padRecent.push({ x: e.clientX, y: e.clientY, t: performance.now() });
     if (padRecent.length > 8) padRecent.shift();
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
-    firePad(e.pointerId, padZone(e, false));   // a press always picks a wedge
+    const r = padResolve(e);                   // a press always picks a wedge
+    firePad(e.pointerId, r.btn, r.assisted ? 'A' : 'p');
   });
   dpad.addEventListener('pointermove', (e) => {
     if (!padPointers.has(e.pointerId)) return;
@@ -4710,7 +4752,8 @@
     for (const t of e.changedTouches) {
       if (padPointerCame(t)) continue;
       traceMark('tB');        // the backstop caught one the pointer pipeline ate
-      firePad('T' + t.identifier, padZone(t, false));
+      const r = padResolve(t);
+      firePad('T' + t.identifier, r.btn, r.assisted ? 'A' : 'p');
     }
   }, { passive: false });
   dpad.addEventListener('touchmove', (e) => {
