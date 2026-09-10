@@ -67,6 +67,12 @@
   .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--sheet-gold); font-weight: 700; }
 
   /* ---- the shop ---- */
+  /* The boards sheet's own remedy, inherited the day the world tour pushed
+     the shelf to twenty-nine hats: the sheet caps below the screen and the
+     LIST scrolls inside it, so the chips, the coin count and DONE stay
+     put while the shelf runs as long as the catalogue likes. */
+  .modal.shop { max-height: 86vh; }
+  .modal.shop .shop-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
   .modal.shop .shelf-head { width: 100%; }
   /* The shelf is one row per KIND rather than one long list of everything.
      The kinds come from pitch_snake_items.kind, so a category the server
