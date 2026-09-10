@@ -566,6 +566,14 @@ export default function Index() {
               </Text>
             </View>
           )}
+          {/* the closing seconds of a timed round, counted onto the pitch
+              itself but far more transparent than the kickoff count, so the
+              number never gets in the way of the play it is hurrying */}
+          {loop.lastCallText !== '' && loop.countText === '' && (
+            <View style={[styles.countWrap, styles.lastCallWrap]} pointerEvents="none">
+              <Text style={styles.lastCallText}>{loop.lastCallText}</Text>
+            </View>
+          )}
           {showOverlay && (
             <View style={styles.overlay}>
               {showModes && menuPhase ?
@@ -1237,6 +1245,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 0,
   },
   countGo: { fontSize: 52, color: GameColors.panel, textShadowColor: GameColors.food },
+  // no dim behind the closing count: the board stays fully playable under it
+  lastCallWrap: { backgroundColor: 'transparent' },
+  lastCallText: { fontFamily: ANTON, fontSize: 110, color: GameColors.panel, opacity: 0.26 },
   overlay: {
     position: 'absolute',
     top: 4,

@@ -19,9 +19,11 @@ import flagSheet from '@/assets/flags.png';
 import { authWho, sendEmailCode, signOutToAnon, verifyEmailCode } from '@/lib/auth';
 import { FLAG_CODES, FLAG_COLS, flagIndex } from '@/lib/leaderboard';
 import { useSaveProfile } from '@/hooks/queries/use-save-profile';
-import { kitColor, kitOf } from '@/lib/kit';
+import { kitOf } from '@/lib/kit';
 import type { Profile } from '@/lib/profile';
 import { GameColors } from '@/game/theme';
+import { SnakePreview } from '@/components/snake-preview';
+import { useWallet } from '@/hooks/queries/use-wallet';
 import { JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT } from '@/game/pitch-art';
 
 const BARLOW = 'Barlow_600SemiBold';
@@ -71,6 +73,9 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
   const who = authWho();
   // server writes go through the query layer, never straight from a component
   const saver = useSaveProfile();
+  // the preview dresses the skin the player actually wears
+  const wallet = useWallet();
+  const wornSkin = wallet.data?.skin ?? null;
   const [name, setName] = useState(profile?.name === 'YOU' ? '' : (profile?.name ?? ''));
   const [country, setCountry] = useState<string | null>(profile?.country ?? null);
   const [say, setSay] = useState('');
@@ -107,8 +112,8 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
       const res = await saver.mutateAsync({ name: clean, country: country ?? '', kit });
       setBusy(false);
       if (res === 'saved') {
-        setSay('Saved.');
         onSaved({ name: clean, country, kit });
+        onClose(); // a save is the sheet's job done (web parity)
       } else if (res === 'taken') {
         setSay('That name is taken. Pick another.');
       } else {
@@ -201,111 +206,34 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
 
   return (
     <View style={styles.sheet}>
-      <Text style={styles.title}>PLAYER</Text>
+      {/* The way out is a corner, not a row (the web sheet's call, ported):
+          DONE sat at the very bottom, behind a whole screen of login pitch,
+          and an X in the corner is where a person looks to close a sheet. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        onPress={onClose}
+        style={styles.closeX}
+        hitSlop={10}
+      >
+        <Text style={styles.closeXText}>×</Text>
+      </Pressable>
+      <Text style={styles.title}>YOUR ACCOUNT</Text>
       {locked && <Text style={styles.lock}>{'Finish the round to change your profile.'}</Text>}
-
-      <View style={styles.row}>
-        <Pressable
-          accessibilityRole="button"
-          disabled={locked}
-          onPress={() => {
-            setPickFlag(true);
-          }}
-          style={styles.flagBtn}
-        >
-          <Flag code={country} />
-        </Pressable>
-        <TextInput
-          style={styles.nameInput}
-          value={name}
-          editable={!locked}
-          onChangeText={(t) => {
-            setName(
-              t
-                .replace(/[^a-z0-9]/gi, '')
-                .toUpperCase()
-                .slice(0, 5),
-            );
-          }}
-          placeholder="NAME"
-          placeholderTextColor="#9a917c"
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={5}
-        />
-        <Pressable
-          accessibilityRole="button"
-          disabled={locked || busy}
-          onPress={save}
-          style={[styles.save, (locked || busy) && styles.dim]}
-        >
-          <Text style={styles.saveText}>SAVE</Text>
-        </Pressable>
-      </View>
-
-      {/* The kit: the one thing on this sheet a player picks rather than buys,
-          which is why it sits with the name and the flag and not in the shop.
-          The preview is the shirt itself, so what you see here is what the
-          snake wears. There is no colour well on this platform, so the halves
-          are typed as hex; a half-finished one simply shows its classic
-          colour until it becomes a colour. */}
-      <View style={styles.kitRow}>
-        <View style={styles.kitShirt}>
-          <View style={[styles.kitHalf, { backgroundColor: kitColor(kitLeft) ?? JERSEY_LEFT_DEFAULT }]} />
-          <View style={[styles.kitHalf, { backgroundColor: kitColor(kitRight) ?? JERSEY_RIGHT_DEFAULT }]} />
-          <Text style={styles.kitShirtNum}>{kitNum === '' ? '10' : kitNum}</Text>
-        </View>
-        <TextInput
-          style={styles.kitHex}
-          value={kitLeft}
-          editable={!locked}
-          onChangeText={(t) => {
-            setKitLeft(t.replace(/[^#0-9a-f]/gi, '').slice(0, 7));
-          }}
-          placeholder={JERSEY_LEFT_DEFAULT}
-          placeholderTextColor="#9a917c"
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={7}
-          accessibilityLabel="Shirt colour, left half"
-        />
-        <TextInput
-          style={styles.kitHex}
-          value={kitRight}
-          editable={!locked}
-          onChangeText={(t) => {
-            setKitRight(t.replace(/[^#0-9a-f]/gi, '').slice(0, 7));
-          }}
-          placeholder={JERSEY_RIGHT_DEFAULT}
-          placeholderTextColor="#9a917c"
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={7}
-          accessibilityLabel="Shirt colour, right half"
-        />
-        <TextInput
-          style={styles.kitNum}
-          value={kitNum}
-          editable={!locked}
-          onChangeText={(t) => {
-            setKitNum(t.replace(/\D/g, '').slice(0, 2));
-          }}
-          placeholder="10"
-          placeholderTextColor="#9a917c"
-          keyboardType="number-pad"
-          maxLength={2}
-          accessibilityLabel="Shirt number, 0 to 99"
-        />
-      </View>
-
-      <View style={styles.rule} />
 
       {who.anonymous ?
         <>
-          <Text style={styles.blurb}>
-            Add an address and this name, your coins, badges and rating survive a lost phone. Nothing you have
-            already earned moves.
-          </Text>
+          {/* WHO YOU ARE is gated behind a login (2026-09-08, the owner's
+              call, ported from the web sheet): the boards only show a row
+              once an account stands behind it, so letting a guest claim a
+              name spent a scarce, forever-unique five-character name on a
+              device that will forget them. Reason before request: three
+              lines of what a login gets you, then the one field that gets
+              it. */}
+          <Text style={styles.sellHead}>Log in to:</Text>
+          <Text style={styles.sellItem}>{'\u00b7  Get a custom username'}</Text>
+          <Text style={styles.sellItem}>{'\u00b7  Add a jersey to your snake'}</Text>
+          <Text style={styles.sellItem}>{'\u00b7  Choose your country'}</Text>
           <View style={styles.row}>
             <TextInput
               style={styles.emailInput}
@@ -355,7 +283,101 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
           )}
         </>
       : <>
-          <Text style={styles.blurb}>Signed in as {who.email ?? 'your account'}.</Text>
+          <View style={styles.row}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={locked}
+              onPress={() => {
+                setPickFlag(true);
+              }}
+              style={styles.flagBtn}
+            >
+              <Flag code={country} />
+            </Pressable>
+            <TextInput
+              style={styles.nameInput}
+              value={name}
+              editable={!locked}
+              onChangeText={(t) => {
+                setName(
+                  t
+                    .replace(/[^a-z0-9]/gi, '')
+                    .toUpperCase()
+                    .slice(0, 5),
+                );
+              }}
+              placeholder="NAME"
+              placeholderTextColor="#9a917c"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={5}
+            />
+            <Pressable
+              accessibilityRole="button"
+              disabled={locked || busy}
+              onPress={save}
+              style={[styles.save, (locked || busy) && styles.dim]}
+            >
+              <Text style={styles.saveText}>SAVE</Text>
+            </Pressable>
+          </View>
+
+          {/* The kit: the one thing on this sheet a player picks rather than
+              buys, which is why it sits with the name and the flag and not in
+              the shop. The label names WHOSE shirt this is and stops there,
+              and the row reads left to right: the three things you set, then
+              the snake they dress (the web sheet's order, ported). The halves
+              are typed as hex because this platform has no colour well; a
+              half-finished one shows its classic colour until it becomes a
+              colour. */}
+          <Text style={styles.kitLabel}>{"SNAKE'S JERSEY"}</Text>
+          <View style={styles.kitRow}>
+            <TextInput
+              style={styles.kitHex}
+              value={kitLeft}
+              editable={!locked}
+              onChangeText={(t) => {
+                setKitLeft(t.replace(/[^#0-9a-f]/gi, '').slice(0, 7));
+              }}
+              placeholder={JERSEY_LEFT_DEFAULT}
+              placeholderTextColor="#9a917c"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={7}
+              accessibilityLabel="Shirt colour, left half"
+            />
+            <TextInput
+              style={styles.kitHex}
+              value={kitRight}
+              editable={!locked}
+              onChangeText={(t) => {
+                setKitRight(t.replace(/[^#0-9a-f]/gi, '').slice(0, 7));
+              }}
+              placeholder={JERSEY_RIGHT_DEFAULT}
+              placeholderTextColor="#9a917c"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={7}
+              accessibilityLabel="Shirt colour, right half"
+            />
+            <TextInput
+              style={styles.kitNum}
+              value={kitNum}
+              editable={!locked}
+              onChangeText={(t) => {
+                setKitNum(t.replace(/\D/g, '').slice(0, 2));
+              }}
+              placeholder="10"
+              placeholderTextColor="#9a917c"
+              keyboardType="number-pad"
+              maxLength={2}
+              accessibilityLabel="Shirt number, 0 to 99"
+            />
+            <SnakePreview skin={wornSkin} left={kitLeft} right={kitRight} num={kitNum} />
+          </View>
+
+          <View style={styles.rule} />
+          <Text style={styles.blurb}>Logged in as {who.email ?? 'your account'}.</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -370,9 +392,6 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
       }
 
       {say !== '' && <Text style={styles.say}>{say}</Text>}
-      <Pressable accessibilityRole="button" onPress={onClose} style={styles.done}>
-        <Text style={styles.doneText}>DONE</Text>
-      </Pressable>
     </View>
   );
 }
@@ -440,27 +459,12 @@ const styles = StyleSheet.create({
   saveText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: '#ffffff' },
   dim: { opacity: 0.5 },
   kitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // the shirt itself: two halves under a clipped rounded box, the number
-  // centred over both, which is the same silhouette paintJersey bakes
-  kitShirt: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: GameColors.gold,
-  },
-  kitHalf: { position: 'absolute', top: 0, bottom: 0, width: '50%' },
-  kitShirtNum: {
-    fontFamily: ANTON,
-    fontSize: 15,
-    color: '#ffffff',
-    textShadowColor: 'rgba(33,30,26,0.8)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 0,
+  kitLabel: {
+    fontFamily: BARLOW_BOLD,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: GameColors.muted,
+    marginTop: 2,
   },
   kitHex: {
     flex: 1,
@@ -499,14 +503,19 @@ const styles = StyleSheet.create({
     borderColor: GameColors.gold,
   },
   ghostText: { fontFamily: ANTON, fontSize: 14, letterSpacing: 1.2, color: GameColors.gold },
-  done: {
-    alignSelf: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: GameColors.food,
+  closeX: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    zIndex: 2,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  doneText: { fontFamily: ANTON, fontSize: 15, letterSpacing: 1.2, color: '#ffffff' },
+  closeXText: { fontFamily: BARLOW_BOLD, fontSize: 24, lineHeight: 26, color: GameColors.muted },
+  sellHead: { fontFamily: BARLOW_BOLD, fontSize: 13, color: GameColors.ink },
+  sellItem: { fontFamily: BARLOW, fontSize: 12.5, lineHeight: 18, color: GameColors.muted },
   flag: { width: FLAG_W, height: FLAG_H, overflow: 'hidden', borderRadius: 2, alignSelf: 'center' },
   flagSheet: { width: FLAG_W * FLAG_COLS, height: FLAG_H * 16 },
   flagList: { maxHeight: 320 },

@@ -91,6 +91,8 @@ export interface GameLoop {
   setMode: (m: RuleMode) => void;
   /** M:SS remaining in a timed round, '' in an endless one. */
   clockText: string;
+  /** 5..1 over the pitch in a timed round's closing seconds, '' otherwise. */
+  lastCallText: string;
   /** Start a round from ready/dead, or resume from pause. */
   start: () => void;
   /** DEV-only: end the current round immediately (drives the FULL TIME UI). */
@@ -120,6 +122,11 @@ const COUNT_BEAT = 650;
 const COUNT_GO = 450;
 const COUNT_TOTAL = COUNT_BEAT * 3 + COUNT_GO;
 const MAX_DT = 100;
+// How many closing seconds of a timed round get counted onto the pitch
+// itself (the web's LAST_CALL_FROM, ported). Five, because that is the point
+// at which "how long is left" stops being information and starts being the
+// thing you are playing; above it the clock line is plenty.
+const LAST_CALL_FROM = 5;
 
 // module scope: the compiler's purity rule refuses impure calls in component
 // bodies; event handlers reach the clock through this instead
@@ -165,6 +172,17 @@ interface LoopBox {
   vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] } | null;
   lastScore: number;
   lastCount: string;
+  /** the last closing-seconds number pushed to state ('' outside them) */
+  lastCall: string;
+  /**
+   * The one press the countdown keeps (the web's pre-aim, ported). Presses
+   * during the 3-2-1 used to flow into the engine's three-deep queue and
+   * replay over the opening steps: taps from five seconds before the whistle
+   * steering the round. Only the last press before kickoff means anything
+   * (it is where you want to open), so the count holds exactly that one and
+   * kickoff feeds it in.
+   */
+  preAim: { x: number; y: number } | null;
 }
 
 function makeEmptyPicture(): SkPicture {
@@ -208,6 +226,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     vsRc: null,
     lastScore: -1,
     lastCount: '',
+    lastCall: '',
+    preAim: null,
   });
   const picture = useSharedValue<SkPicture>(makeEmptyPicture());
 
@@ -226,6 +246,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [tickMs, setTickMsState] = useState<number>(SPEEDS.normal);
   const [mode, setModeState] = useState<RuleMode>('classic');
   const [clockText, setClockText] = useState('');
+  const [lastCallText, setLastCallText] = useState('');
   const [perfText, setPerfText] = useState('');
 
   // mirror render props into the loop's box after render, never during it
@@ -309,6 +330,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             setDeadReason(e.reason);
             box.phase = 'dead';
             setPhase('dead');
+            box.lastCall = '';
+            setLastCallText('');
             const finalScore = game.current?.score ?? 0;
             setBest((current) => {
               if (finalScore > current) {
@@ -353,6 +376,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           setCountText('');
           box.phase = 'playing';
           setPhase('playing');
+          // the one press the countdown held opens the round on its first step
+          if (box.preAim !== null) {
+            const aim = box.preAim;
+            box.preAim = null;
+            if (box.session !== null) {
+              if (!box.forfeited) box.session.localDir(aim.x, aim.y, now);
+            } else g.setDir(aim.x, aim.y);
+          }
         }
       }
       if (box.phase === 'playing') {
@@ -380,6 +411,12 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         if (clock !== box.lastClock) {
           box.lastClock = clock;
           setClockText(clock);
+        }
+        const leftMs = g.durationMs > 0 ? g.durationMs - g.clockMs : 0;
+        const call = leftMs > 0 && leftMs <= LAST_CALL_FROM * 1000 ? String(Math.ceil(leftMs / 1000)) : '';
+        if (call !== box.lastCall) {
+          box.lastCall = call;
+          setLastCallText(call);
         }
       }
       stepParticles(dt);
@@ -455,6 +492,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     box.countClock = 0;
     box.lastCount = '3';
     setCountText('3');
+    box.lastCall = '';
+    setLastCallText('');
+    box.preAim = null; // a press from the menus is not an aim
     box.phase = 'countdown';
     setPhase('countdown');
   };
@@ -470,6 +510,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const steer = (x: number, y: number): void => {
     const box = boxRef.current;
     if (box.phase !== 'playing' && box.phase !== 'countdown') return;
+    if (box.phase === 'countdown') {
+      box.preAim = { x, y };
+      return;
+    }
     const g = game.current;
     if (g === null) return;
     if (box.session !== null) {
@@ -488,7 +532,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     // a cell boundary that falls between frames. advance() quantizes, so this
     // is deterministic; events raised here queue for the frame loop's drain,
     // and the loop's own dt shrinks by the same amount (shared lastFrameTs).
-    if (box.phase === 'playing' && box.lastFrameTs > 0) {
+    // past the countdown hold above, the phase here is always 'playing'
+    if (box.lastFrameTs > 0) {
       const now = nowMs();
       let dt = now - box.lastFrameTs;
       if (dt > MAX_DT) dt = MAX_DT;
@@ -583,6 +628,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setDeadReason('');
     box.lastClock = '';
     setClockText('');
+    box.lastCall = '';
+    setLastCallText('');
+    box.preAim = null; // a press from the lobby is not an aim
     box.countClock = Math.min(1200, Math.max(0, preElapsedMs));
     box.lastCount = '';
     box.phase = 'countdown';
@@ -605,6 +653,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     if (box.vsIdx < 0) return;
     box.phase = 'dead';
     setPhase('dead');
+    box.lastCall = '';
+    setLastCallText('');
   };
 
   // walking out of the room: back to a solo ready screen with a preview game
@@ -675,6 +725,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     mode,
     setMode,
     clockText,
+    lastCallText,
     start,
     pause,
     steer,
