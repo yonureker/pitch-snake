@@ -169,6 +169,182 @@ export const HAT_ART = {
       c.drawCircle(w * 0.5, h * 0.1, w * 0.05, paint);
     },
   },
+  // The world tour, 2026-09-10, ported stroke for stroke from the page's
+  // HATS: six more silhouettes that read at 20px. Same rule as ever: art is
+  // keyed by item id, and an id this build has not heard of wears classic.
+  'hat-sombrero': {
+    wf: 1.6,
+    hf: 0.85,
+    dy: (cellPx: number, h: number) => -cellPx * 0.4 - h * 0.55,
+    draw(c: SkCanvas, w: number, h: number) {
+      const midX = w / 2;
+      const brimY = h * 0.68;
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color('#e0b45c'));
+      const crown = Skia.Path.Make();
+      crown.moveTo(midX - w * 0.17, brimY);
+      crown.lineTo(midX - w * 0.08, h * 0.08);
+      crown.quadTo(midX, 0, midX + w * 0.08, h * 0.08);
+      crown.lineTo(midX + w * 0.17, brimY);
+      crown.close();
+      c.drawPath(crown, paint);
+      crown.dispose();
+      paint.setColor(Skia.Color('#c23b2a'));
+      c.drawRect(Skia.XYWHRect(midX - w * 0.175, brimY - h * 0.17, w * 0.35, h * 0.15), paint);
+      paint.setColor(Skia.Color('#caa04e'));
+      const brim = Skia.Path.Make();
+      brim.moveTo(midX - w * 0.5, brimY - h * 0.22);
+      brim.quadTo(midX - w * 0.42, brimY + h * 0.16, midX, brimY + h * 0.2);
+      brim.quadTo(midX + w * 0.42, brimY + h * 0.16, midX + w * 0.5, brimY - h * 0.22);
+      brim.quadTo(midX + w * 0.38, brimY + h * 0.02, midX, brimY + h * 0.04);
+      brim.quadTo(midX - w * 0.38, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.22);
+      brim.close();
+      c.drawPath(brim, paint);
+      brim.dispose();
+    },
+  },
+  'hat-beret': {
+    wf: 1.2,
+    hf: 0.45,
+    dy: (cellPx: number, h: number) => -cellPx * 0.42 - h * 0.45,
+    draw(c: SkCanvas, w: number, h: number) {
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color('#b03040'));
+      const disc = Skia.Path.Make();
+      disc.moveTo(w * 0.08, h * 0.82);
+      disc.quadTo(w * 0.02, h * 0.3, w * 0.34, h * 0.2);
+      disc.quadTo(w * 0.72, h * 0.04, w * 0.95, h * 0.5);
+      disc.quadTo(w * 0.99, h * 0.78, w * 0.86, h * 0.84);
+      disc.close();
+      c.drawPath(disc, paint);
+      disc.dispose();
+      paint.setColor(Skia.Color('#7c1f2c'));
+      c.drawRect(Skia.XYWHRect(w * 0.47, h * 0.02, w * 0.06, h * 0.22), paint);
+      paint.setColor(Skia.Color('#8e2634'));
+      c.drawRect(Skia.XYWHRect(w * 0.14, h * 0.74, w * 0.68, h * 0.16), paint);
+    },
+  },
+  'hat-topper': {
+    wf: 0.95,
+    hf: 0.95,
+    dy: (cellPx: number, h: number) => -cellPx * 0.38 - h * 0.55,
+    draw(c: SkCanvas, w: number, h: number) {
+      const brimY = h * 0.8;
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color('#26232b'));
+      const pipe = Skia.Path.Make();
+      pipe.moveTo(w * 0.2, brimY);
+      pipe.lineTo(w * 0.17, h * 0.06);
+      pipe.lineTo(w * 0.83, h * 0.06);
+      pipe.lineTo(w * 0.8, brimY);
+      pipe.close();
+      c.drawPath(pipe, paint);
+      pipe.dispose();
+      paint.setColor(Skia.Color('#5a5563'));
+      c.drawRect(Skia.XYWHRect(w * 0.185, brimY - h * 0.16, w * 0.63, h * 0.12), paint);
+      paint.setColor(Skia.Color('#26232b'));
+      const brim = Skia.Path.Make();
+      brim.moveTo(w * 0.02, brimY - h * 0.05);
+      brim.quadTo(w * 0.5, brimY + h * 0.2, w * 0.98, brimY - h * 0.05);
+      brim.quadTo(w * 0.5, brimY + h * 0.02, w * 0.02, brimY - h * 0.05);
+      brim.close();
+      c.drawPath(brim, paint);
+      brim.dispose();
+    },
+  },
+  'hat-fez': {
+    wf: 0.85,
+    hf: 0.72,
+    dy: (cellPx: number, h: number) => -cellPx * 0.4 - h * 0.5,
+    draw(c: SkCanvas, w: number, h: number) {
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color('#b8232e'));
+      const cone = Skia.Path.Make();
+      cone.moveTo(w * 0.12, h * 0.94);
+      cone.lineTo(w * 0.26, h * 0.1);
+      cone.lineTo(w * 0.74, h * 0.1);
+      cone.lineTo(w * 0.88, h * 0.94);
+      cone.close();
+      c.drawPath(cone, paint);
+      cone.dispose();
+      paint.setColor(Skia.Color('#8e1a23'));
+      c.drawRect(Skia.XYWHRect(w * 0.26, h * 0.06, w * 0.48, h * 0.1), paint);
+      const thread = Skia.Paint();
+      thread.setColor(Skia.Color('#26232b'));
+      thread.setStyle(PaintStyle.Stroke);
+      thread.setStrokeWidth(Math.max(1, w * 0.04));
+      const swing = Skia.Path.Make();
+      swing.moveTo(w * 0.5, h * 0.1);
+      swing.quadTo(w * 0.82, h * 0.16, w * 0.9, h * 0.52);
+      c.drawPath(swing, thread);
+      swing.dispose();
+      paint.setColor(Skia.Color('#26232b'));
+      c.drawCircle(w * 0.9, h * 0.6, w * 0.07, paint);
+    },
+  },
+  'hat-nonla': {
+    wf: 1.55,
+    hf: 0.62,
+    dy: (cellPx: number, h: number) => -cellPx * 0.4 - h * 0.5,
+    draw(c: SkCanvas, w: number, h: number) {
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color('#d9b872'));
+      const cone = Skia.Path.Make();
+      cone.moveTo(w * 0.02, h * 0.9);
+      cone.quadTo(w * 0.3, h * 0.42, w * 0.5, h * 0.06);
+      cone.quadTo(w * 0.7, h * 0.42, w * 0.98, h * 0.9);
+      cone.close();
+      c.drawPath(cone, paint);
+      cone.dispose();
+      paint.setColor(Skia.Color('#b3924e'));
+      c.drawRect(Skia.XYWHRect(w * 0.02, h * 0.84, w * 0.96, h * 0.1), paint);
+      const ring = Skia.Paint();
+      ring.setColor(Skia.Color('#b3924e'));
+      ring.setStyle(PaintStyle.Stroke);
+      ring.setStrokeWidth(Math.max(1, h * 0.06));
+      const weave = Skia.Path.Make();
+      weave.moveTo(w * 0.27, h * 0.52);
+      weave.quadTo(w * 0.5, h * 0.38, w * 0.73, h * 0.52);
+      c.drawPath(weave, ring);
+      weave.dispose();
+    },
+  },
+  'hat-chullo': {
+    wf: 1.05,
+    hf: 0.9,
+    dy: (cellPx: number, h: number) => -cellPx * 0.3 - h * 0.42,
+    draw(c: SkCanvas, w: number, h: number) {
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color('#2e7d84'));
+      const dome = Skia.Path.Make();
+      dome.moveTo(w * 0.1, h * 0.62);
+      dome.quadTo(w * 0.12, h * 0.16, w * 0.5, h * 0.14);
+      dome.quadTo(w * 0.88, h * 0.16, w * 0.9, h * 0.62);
+      dome.close();
+      c.drawPath(dome, paint);
+      dome.dispose();
+      paint.setColor(Skia.Color('#d97f2e'));
+      c.drawRect(Skia.XYWHRect(w * 0.09, h * 0.56, w * 0.82, h * 0.14), paint);
+      paint.setColor(Skia.Color('#f4e3c2'));
+      for (let i = 0; i < 4; i++) {
+        c.drawRect(Skia.XYWHRect(w * (0.16 + i * 0.2), h * 0.585, w * 0.07, h * 0.09), paint);
+      }
+      paint.setColor(Skia.Color('#2e7d84'));
+      const flaps = Skia.Path.Make();
+      flaps.moveTo(w * 0.1, h * 0.64);
+      flaps.quadTo(w * 0.1, h * 0.94, w * 0.22, h * 0.96);
+      flaps.lineTo(w * 0.26, h * 0.68);
+      flaps.close();
+      flaps.moveTo(w * 0.9, h * 0.64);
+      flaps.quadTo(w * 0.9, h * 0.94, w * 0.78, h * 0.96);
+      flaps.lineTo(w * 0.74, h * 0.68);
+      flaps.close();
+      c.drawPath(flaps, paint);
+      flaps.dispose();
+      paint.setColor(Skia.Color('#d97f2e'));
+      c.drawCircle(w * 0.5, h * 0.1, w * 0.08, paint);
+    },
+  },
 } as const satisfies Record<
   string,
   {

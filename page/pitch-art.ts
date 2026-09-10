@@ -190,6 +190,178 @@ export const HATS = {
       c.fill();
     },
   },
+  'hat-sombrero': {
+    // wide is the whole point, but capped: any wider and it shades the cell
+    // behind the head on the pitch
+    wf: 1.6, hf: 0.85,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      const midX = w / 2;
+      const brimY = h * 0.68;
+      // the crown: a tall straw cone with a blunt top
+      c.fillStyle = '#e0b45c';
+      c.beginPath();
+      c.moveTo(midX - w * 0.17, brimY);
+      c.lineTo(midX - w * 0.08, h * 0.08);
+      c.quadraticCurveTo(midX, 0, midX + w * 0.08, h * 0.08);
+      c.lineTo(midX + w * 0.17, brimY);
+      c.closePath();
+      c.fill();
+      // the band: a red stripe where crown meets brim
+      c.fillStyle = '#c23b2a';
+      c.fillRect(midX - w * 0.175, brimY - h * 0.17, w * 0.35, h * 0.15);
+      // the brim: very wide, curling up hard at the tips
+      c.fillStyle = '#caa04e';
+      c.beginPath();
+      c.moveTo(midX - w * 0.5, brimY - h * 0.22);
+      c.quadraticCurveTo(midX - w * 0.42, brimY + h * 0.16, midX, brimY + h * 0.2);
+      c.quadraticCurveTo(midX + w * 0.42, brimY + h * 0.16, midX + w * 0.5, brimY - h * 0.22);
+      c.quadraticCurveTo(midX + w * 0.38, brimY + h * 0.02, midX, brimY + h * 0.04);
+      c.quadraticCurveTo(midX - w * 0.38, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.22);
+      c.closePath();
+      c.fill();
+    },
+  },
+  'hat-beret': {
+    wf: 1.2, hf: 0.45,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.45,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      // the soft disc, drooping to the right the way a beret slumps
+      c.fillStyle = '#b03040';
+      c.beginPath();
+      c.moveTo(w * 0.08, h * 0.82);
+      c.quadraticCurveTo(w * 0.02, h * 0.3, w * 0.34, h * 0.2);
+      c.quadraticCurveTo(w * 0.72, h * 0.04, w * 0.95, h * 0.5);
+      c.quadraticCurveTo(w * 0.99, h * 0.78, w * 0.86, h * 0.84);
+      c.closePath();
+      c.fill();
+      // the stalk on top, the one detail that says beret and not pancake
+      c.fillStyle = '#7c1f2c';
+      c.fillRect(w * 0.47, h * 0.02, w * 0.06, h * 0.22);
+      // the snug headband edge
+      c.fillStyle = '#8e2634';
+      c.fillRect(w * 0.14, h * 0.74, w * 0.68, h * 0.16);
+    },
+  },
+  'hat-topper': {
+    // tall and narrow: the silhouette is the height, never the width
+    wf: 0.95, hf: 0.95,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.38 - height * 0.55,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      const brimY = h * 0.8;
+      // the stovepipe, a whisker wider at the top than the band
+      c.fillStyle = '#26232b';
+      c.beginPath();
+      c.moveTo(w * 0.2, brimY);
+      c.lineTo(w * 0.17, h * 0.06);
+      c.lineTo(w * 0.83, h * 0.06);
+      c.lineTo(w * 0.8, brimY);
+      c.closePath();
+      c.fill();
+      // the band, a grey ribbon low on the pipe
+      c.fillStyle = '#5a5563';
+      c.fillRect(w * 0.185, brimY - h * 0.16, w * 0.63, h * 0.12);
+      // the brim: short, flat, a hair of curl at the tips
+      c.fillStyle = '#26232b';
+      c.beginPath();
+      c.moveTo(w * 0.02, brimY - h * 0.05);
+      c.quadraticCurveTo(w * 0.5, brimY + h * 0.2, w * 0.98, brimY - h * 0.05);
+      c.quadraticCurveTo(w * 0.5, brimY + h * 0.02, w * 0.02, brimY - h * 0.05);
+      c.closePath();
+      c.fill();
+    },
+  },
+  'hat-fez': {
+    wf: 0.85, hf: 0.72,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.5,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      // the truncated cone, crimson
+      c.fillStyle = '#b8232e';
+      c.beginPath();
+      c.moveTo(w * 0.12, h * 0.94);
+      c.lineTo(w * 0.26, h * 0.1);
+      c.lineTo(w * 0.74, h * 0.1);
+      c.lineTo(w * 0.88, h * 0.94);
+      c.closePath();
+      c.fill();
+      // the flat top, a shade darker
+      c.fillStyle = '#8e1a23';
+      c.fillRect(w * 0.26, h * 0.06, w * 0.48, h * 0.1);
+      // the tassel: a thread from the crown swinging out to the right
+      c.strokeStyle = '#26232b';
+      c.lineWidth = Math.max(1, w * 0.04);
+      c.beginPath();
+      c.moveTo(w * 0.5, h * 0.1);
+      c.quadraticCurveTo(w * 0.82, h * 0.16, w * 0.9, h * 0.52);
+      c.stroke();
+      c.fillStyle = '#26232b';
+      c.beginPath();
+      c.arc(w * 0.9, h * 0.6, w * 0.07, 0, Math.PI * 2);
+      c.fill();
+    },
+  },
+  'hat-nonla': {
+    wf: 1.55, hf: 0.62,
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.5,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      // one clean straw cone, edge to edge; the shape IS the hat
+      c.fillStyle = '#d9b872';
+      c.beginPath();
+      c.moveTo(w * 0.02, h * 0.9);
+      c.quadraticCurveTo(w * 0.3, h * 0.42, w * 0.5, h * 0.06);
+      c.quadraticCurveTo(w * 0.7, h * 0.42, w * 0.98, h * 0.9);
+      c.closePath();
+      c.fill();
+      // the rim, darker, and one weave ring part way up
+      c.fillStyle = '#b3924e';
+      c.fillRect(w * 0.02, h * 0.84, w * 0.96, h * 0.1);
+      c.strokeStyle = '#b3924e';
+      c.lineWidth = Math.max(1, h * 0.06);
+      c.beginPath();
+      c.moveTo(w * 0.27, h * 0.52);
+      c.quadraticCurveTo(w * 0.5, h * 0.38, w * 0.73, h * 0.52);
+      c.stroke();
+    },
+  },
+  'hat-chullo': {
+    wf: 1.05, hf: 0.9,
+    // worn, not perched: the flaps hold the head's sides
+    dy: (cellPixels: number, height: number) => -cellPixels * 0.3 - height * 0.42,
+    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+      // the knit dome
+      c.fillStyle = '#2e7d84';
+      c.beginPath();
+      c.moveTo(w * 0.1, h * 0.62);
+      c.quadraticCurveTo(w * 0.12, h * 0.16, w * 0.5, h * 0.14);
+      c.quadraticCurveTo(w * 0.88, h * 0.16, w * 0.9, h * 0.62);
+      c.closePath();
+      c.fill();
+      // the patterned band across the brow
+      c.fillStyle = '#d97f2e';
+      c.fillRect(w * 0.09, h * 0.56, w * 0.82, h * 0.14);
+      c.fillStyle = '#f4e3c2';
+      for (let i = 0; i < 4; i++) {
+        c.fillRect(w * (0.16 + i * 0.2), h * 0.585, w * 0.07, h * 0.09);
+      }
+      // the ear flaps, hanging just past the band
+      c.fillStyle = '#2e7d84';
+      c.beginPath();
+      c.moveTo(w * 0.1, h * 0.64);
+      c.quadraticCurveTo(w * 0.1, h * 0.94, w * 0.22, h * 0.96);
+      c.lineTo(w * 0.26, h * 0.68);
+      c.closePath();
+      c.moveTo(w * 0.9, h * 0.64);
+      c.quadraticCurveTo(w * 0.9, h * 0.94, w * 0.78, h * 0.96);
+      c.lineTo(w * 0.74, h * 0.68);
+      c.closePath();
+      c.fill();
+      // the pompom
+      c.fillStyle = '#d97f2e';
+      c.beginPath();
+      c.arc(w * 0.5, h * 0.1, w * 0.08, 0, Math.PI * 2);
+      c.fill();
+    },
+  },
 } as const satisfies Record<string, HatArt>;
 
 // The catalogues are authored as literals so their keys stay literal, and read

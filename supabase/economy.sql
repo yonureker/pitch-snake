@@ -70,7 +70,17 @@ insert into public.pitch_snake_items (id, kind, name, price, sort) values
   ('skin-gilt',  'skin', 'GILDED',      600, 5),
   ('hat-band',   'hat',  'SWEATBAND',   200, 6),
   ('hat-cap',    'hat',  'FLAT CAP',    300, 7),
-  ('hat-crown',  'hat',  'CROWN',       500, 8)
+  ('hat-crown',  'hat',  'CROWN',       500, 8),
+  -- the world tour, 2026-09-10: six more silhouettes that read at 20px,
+  -- picked for maximally different outlines and hues on a small screen.
+  -- Art ships in both clients keyed by these ids; an older build that has
+  -- not heard of one falls back to the classic hat, which is the contract.
+  ('hat-beret',    'hat', 'BERET',      250, 9),
+  ('hat-fez',      'hat', 'FEZ',        300, 10),
+  ('hat-nonla',    'hat', 'STRAW HAT',  350, 11),
+  ('hat-chullo',   'hat', 'WOOLLY HAT', 350, 12),
+  ('hat-sombrero', 'hat', 'SOMBRERO',   400, 13),
+  ('hat-topper',   'hat', 'TOP HAT',    450, 14)
 on conflict (id) do update
   set kind = excluded.kind, name = excluded.name,
       price = excluded.price, sort = excluded.sort;
