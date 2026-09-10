@@ -2124,12 +2124,15 @@
     if (keysTrail.length > 12) keysTrail.shift();
     keysLine = keysTrail.join(' ');
   }
-  // a bar in the trail marks a round starting, so presses never read across
-  function traceRound() {
+  function traceMark(tag) {
     if (!showKeys) return;
-    keysTrail.push('|');
+    keysTrail.push(tag);
     if (keysTrail.length > 12) keysTrail.shift();
     keysLine = keysTrail.join(' ');
+  }
+  // a bar in the trail marks a round starting, so presses never read across
+  function traceRound() {
+    traceMark('|');
     keysDirX = 0; keysDirY = 0;
   }
   // The other half of the truth: when a turn actually PLAYS. A press is
@@ -4661,6 +4664,8 @@
     // actually moves. Reading the rect on EVERY press forced a synchronous
     // layout at the exact moment a fast player needs the frame budget most.
     if (!padRect) padRect = dpad.getBoundingClientRect();
+    padRecent.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+    if (padRecent.length > 8) padRecent.shift();
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
     firePad(e.pointerId, padZone(e, false));   // a press always picks a wedge
   });
@@ -4669,9 +4674,77 @@
     firePad(e.pointerId, padZone(e, true));     // a move holds through the ambiguous zones
   });
   dpad.addEventListener('pointerup', padEnd);
-  dpad.addEventListener('pointercancel', padEnd);
+  dpad.addEventListener('pointercancel', (e) => {
+    // the system taking a touch back mid-press is invisible otherwise, and
+    // it is one of the two ways a phone can eat a tap without a trace
+    traceMark('!can');
+    padEnd(e);
+  });
   dpad.addEventListener('lostpointercapture', padEnd);
   dpad.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // ---- the iOS second-thumb backstop ----
+  // On iOS Safari a second finger landing while the first is still down can
+  // be taken by the system's gesture arbitration: its pointerdown simply
+  // never arrives, the wedge never lights, and a two-thumb combo loses its
+  // second press. Single-thumb play never sees it because there is never a
+  // second concurrent touch to arbitrate. WebKit usually still delivers the
+  // raw touchstart for that finger, so the pad listens to both pipelines and
+  // dedupes: every pointerdown records where it landed (padRecent), and a
+  // touch with no recent pointerdown nearby is a press the pointer pipeline
+  // ate. Backstop-owned touches ride keys prefixed 'T' in padPointers so the
+  // two pipelines can never collide on an id.
+  const padRecent = [];
+  function padPointerCame(t) {
+    const now = performance.now();
+    for (let i = padRecent.length - 1; i >= 0; i--) {
+      const r = padRecent[i];
+      if (now - r.t > 120) break;
+      if (Math.abs(r.x - t.clientX) < 44 && Math.abs(r.y - t.clientY) < 44) return true;
+    }
+    return false;
+  }
+  dpad.addEventListener('touchstart', (e) => {
+    e.preventDefault();       // no gesture may form over the pad
+    if (!padRect) padRect = dpad.getBoundingClientRect();
+    for (const t of e.changedTouches) {
+      if (padPointerCame(t)) continue;
+      traceMark('tB');        // the backstop caught one the pointer pipeline ate
+      firePad('T' + t.identifier, padZone(t, false));
+    }
+  }, { passive: false });
+  dpad.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (!padPointers.has('T' + t.identifier)) continue;
+      firePad('T' + t.identifier, padZone(t, true));
+    }
+  }, { passive: false });
+  const padTouchEnd = (e) => {
+    for (const t of e.changedTouches) {
+      if (padPointers.delete('T' + t.identifier)) paintPad();
+    }
+  };
+  dpad.addEventListener('touchend', padTouchEnd);
+  dpad.addEventListener('touchcancel', padTouchEnd);
+  // Safari's proprietary pinch pipeline runs beside touch-action and can
+  // seize the second finger the moment two are down. While a round is live
+  // the fingers belong to the game. No-op on every other browser.
+  for (const gev of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(gev, (e) => {
+      if (state === 'playing' || state === 'countdown') e.preventDefault();
+    }, { passive: false });
+  }
+  // The other way a tap dies unseen: it lands OUTSIDE the pad. The pad's own
+  // presses trace themselves through dirInput, so anything arriving here
+  // during a round that is not the pad's is a miss worth naming: !pit is the
+  // pitch (the strip above the pad is the classic one), !ui anything else.
+  document.addEventListener('pointerdown', (e) => {
+    if (!showKeys) return;
+    if (state !== 'playing' && state !== 'countdown') return;
+    if (dpad.contains(e.target)) return;
+    traceMark(e.target === canvas ? '!pit' : '!ui');
+  }, { capture: true });
 
 
   // speed and walls apply to the NEXT round; the controls are locked in-round,
