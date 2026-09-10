@@ -44,6 +44,25 @@
   /* a pressed wedge is a gold flash, whose label is dark ink in any theme */
   .dpad .wedge.pressed { background: var(--gold); color: #211e1a; }
 
+  /* ---- the split pad (PAD: SPLIT in settings) ----
+     One hand each: the left half is only up/down, the right half only
+     left/right (split again at the 75% line). A snake's turns always
+     alternate axes, so a fast double is always one press per hand here,
+     and the two thumbs never share the same patch of glass. The geometry
+     lives in padZone; these rules only redraw the same four buttons. */
+  .dpad.split {
+    background:
+      linear-gradient(to bottom, transparent calc(50% - 1px), var(--pad-line) calc(50% - 1px), var(--pad-line) calc(50% + 1px), transparent calc(50% + 1px)) left top / 50% 100% no-repeat,
+      linear-gradient(to right, transparent calc(50% - 1px), var(--pad-line) calc(50% - 1px), var(--pad-line) calc(50% + 1px), transparent calc(50% + 1px)),
+      linear-gradient(to right, transparent calc(75% - 1px), var(--pad-line) calc(75% - 1px), var(--pad-line) calc(75% + 1px), transparent calc(75% + 1px)),
+      radial-gradient(ellipse at 50% 45%, var(--pad-hi), var(--pad-mid) 72%, var(--pad-lo) 100%);
+  }
+  .dpad.split .wedge { clip-path: none; padding: 0; align-items: center; justify-content: center; }
+  .dpad.split .wedge.up    { inset: 0 50% 50% 0; }
+  .dpad.split .wedge.down  { inset: 50% 50% 0 0; }
+  .dpad.split .wedge.left  { inset: 0 25% 0 50%; }
+  .dpad.split .wedge.right { inset: 0 0 0 75%; }
+
   /* ---- settings gear + modal ---- */
   .gear {
     position: absolute; top: 8px; right: 8px; z-index: 6;
