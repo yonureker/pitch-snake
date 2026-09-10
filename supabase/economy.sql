@@ -80,7 +80,28 @@ insert into public.pitch_snake_items (id, kind, name, price, sort) values
   ('hat-nonla',    'hat', 'STRAW HAT',  350, 11),
   ('hat-chullo',   'hat', 'WOOLLY HAT', 350, 12),
   ('hat-sombrero', 'hat', 'SOMBRERO',   400, 13),
-  ('hat-topper',   'hat', 'TOP HAT',    450, 14)
+  ('hat-topper',   'hat', 'TOP HAT',    450, 14),
+  -- the tour's second leg, 2026-09-10, twenty more from the same map
+  ('hat-kepi',     'hat', 'KEPI',        250, 15),
+  ('hat-kufi',     'hat', 'KUFI',        250, 16),
+  ('hat-bowler',   'hat', 'BOWLER',      300, 17),
+  ('hat-boater',   'hat', 'BOATER',      300, 18),
+  ('hat-tam',      'hat', 'TARTAN TAM',  300, 19),
+  ('hat-fisher',   'hat', 'SKIPPER',     300, 20),
+  ('hat-bush',     'hat', 'BUSH HAT',    300, 21),
+  ('hat-tyrol',    'hat', 'ALPINE',      350, 22),
+  ('hat-cordobes', 'hat', 'CORDOBES',    350, 23),
+  ('hat-ushanka',  'hat', 'FUR HAT',     350, 24),
+  ('hat-turban',   'hat', 'TURBAN',      350, 25),
+  ('hat-panama',   'hat', 'PANAMA',      350, 26),
+  ('hat-pith',     'hat', 'PITH HELMET', 400, 27),
+  ('hat-cowboy',   'hat', 'COWBOY',      400, 28),
+  ('hat-mountie',  'hat', 'RANGER',      400, 29),
+  ('hat-vueltiao', 'hat', 'VUELTIAO',    400, 30),
+  ('hat-gat',      'hat', 'GAT',         450, 31),
+  ('hat-bicorne',  'hat', 'BICORNE',     500, 32),
+  ('hat-bearskin', 'hat', 'BEARSKIN',    550, 33),
+  ('hat-cocar',    'hat', 'FEATHERS',    600, 34)
 on conflict (id) do update
   set kind = excluded.kind, name = excluded.name,
       price = excluded.price, sort = excluded.sort;
