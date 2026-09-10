@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SPEEDS } from '@pitch-snake/engine';
-
 import { Image } from 'expo-image';
 
 import atlasSource from '@/assets/food-atlas.png';
@@ -13,6 +11,7 @@ import skullIcon from '@/assets/icon-skull.png';
 import { Dpad } from '@/components/dpad';
 import { RoomPanel } from '@/components/room-panel';
 import { ProfileSheet } from '@/components/profile-sheet';
+import { SettingsSheet } from '@/components/settings-sheet';
 import { ShopSheet } from '@/components/shop-sheet';
 import { GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
@@ -32,12 +31,6 @@ import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
-
-const SPEED_LABELS: { label: string; ms: number }[] = [
-  { label: 'SLOW', ms: SPEEDS.slow },
-  { label: 'NORMAL', ms: SPEEDS.normal },
-  { label: 'FAST', ms: SPEEDS.fast },
-];
 
 const MODE_LABELS: { mode: UiMode; label: string }[] = [
   { mode: 'classic', label: 'CLASSIC' },
@@ -185,6 +178,7 @@ export default function Index() {
   const [tStatus, setTStatus] = useState<TourneyStatus>('none');
   const [tCreating, setTCreating] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [prevBest, setPrevBest] = useState(0);
   const [joinCode, setJoinCode] = useState('');
@@ -467,10 +461,57 @@ export default function Index() {
 
   return (
     <View style={[styles.screen, screenPad]}>
+      {/* ONE compact header band, the web phone header's twin since its
+          2026-09 rework: the logo keeps the left, the score block keeps the
+          right, and the chrome (player chip, purse, gear) rides between
+          them instead of stacking a row each below. The chips sleep off the
+          menus exactly as they did before, so a live round keeps its width. */}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>PITCH</Text>
           <Text style={styles.title}>SNAKE</Text>
+        </View>
+        <View style={styles.hdrChips}>
+          {menuPhase && (
+            <>
+              {/* the player chip, the page's twin: the door to the name, the
+                  flag and the account, and the only place identity is edited */}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setProfileOpen(true);
+                }}
+                style={styles.whoChip}
+              >
+                <Flag code={profile.data?.country ?? null} />
+                <Text style={styles.whoText}>{profileName ?? 'PLAYER'}</Text>
+              </Pressable>
+              {wallet.isSuccess && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setShopOpen(true);
+                  }}
+                  style={styles.purse}
+                >
+                  <View style={styles.purseCoin} />
+                  <Text style={styles.purseText}>
+                    {wallet.data.coins} {'\u00b7'} SHOP
+                  </Text>
+                </Pressable>
+              )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+                onPress={() => {
+                  setSettingsOpen(true);
+                }}
+                style={styles.gearBtn}
+              >
+                <Text style={styles.gearText}>{'\u2699\ufe0e'}</Text>
+              </Pressable>
+            </>
+          )}
         </View>
         <Pressable accessibilityRole="button" onPress={onScoreTap} style={styles.scores}>
           <Text style={styles.scoreLabel}>SCORE</Text>
@@ -481,34 +522,6 @@ export default function Index() {
       </View>
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
-      {/* the player chip, the page's twin: the door to the name, the flag and
-          the account, and the only place identity is edited */}
-      {menuPhase && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setProfileOpen(true);
-          }}
-          style={styles.whoChip}
-        >
-          <Flag code={profile.data?.country ?? null} />
-          <Text style={styles.whoText}>{profileName ?? 'PLAYER'}</Text>
-        </Pressable>
-      )}
-      {menuPhase && wallet.isSuccess && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setShopOpen(true);
-          }}
-          style={styles.purse}
-        >
-          <View style={styles.purseCoin} />
-          <Text style={styles.purseText}>
-            {wallet.data.coins} {'\u00b7'} SHOP
-          </Text>
-        </Pressable>
-      )}
       {/* The room's mid-round actions, on the same rule the page uses: while
           your seat is alive the only way out of a live round is to concede
           it (there is no stray LEAVE to press, because walking out of a round
@@ -984,31 +997,6 @@ export default function Index() {
                       />
                     </View>
                   )}
-                  {loop.phase === 'ready' && uiMode !== 'versus' && (
-                    <View style={styles.speedRow}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => {
-                          setCrowdOn(!crowdOn);
-                        }}
-                        style={[styles.speedBtn, crowdOn && styles.speedBtnOn]}
-                      >
-                        <Text style={styles.speedText}>{crowdOn ? 'CROWD ON' : 'CROWD OFF'}</Text>
-                      </Pressable>
-                      {SPEED_LABELS.map((s) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={s.label}
-                          onPress={() => {
-                            loop.setTickMs(s.ms);
-                          }}
-                          style={[styles.speedBtn, loop.tickMs === s.ms && styles.speedBtnOn]}
-                        >
-                          <Text style={styles.speedText}>{s.label}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
                   {menuPhase && uiMode === 'tourney' && !(dead && tourney !== null) && (
                     <Text style={styles.modeCaption}>{modeCaption}</Text>
                   )}
@@ -1045,6 +1033,19 @@ export default function Index() {
                   </View>
                 </>
               }
+            </View>
+          )}
+          {settingsOpen && (
+            <View style={styles.sheetWrap}>
+              <SettingsSheet
+                tickMs={loop.tickMs}
+                onTickMs={loop.setTickMs}
+                crowdOn={crowdOn}
+                onCrowd={setCrowdOn}
+                onClose={() => {
+                  setSettingsOpen(false);
+                }}
+              />
             </View>
           )}
           {profileOpen && !profile.isLoading && (
@@ -1106,38 +1107,67 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: 4,
   },
   title: {
     fontFamily: ANTON,
-    fontSize: 32,
-    lineHeight: 34,
+    fontSize: 21,
+    lineHeight: 22,
     letterSpacing: 1,
     color: GameColors.ink,
     textShadowColor: GameColors.gold,
-    textShadowOffset: { width: 3, height: 3 },
+    textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 0,
   },
+  // the band between logo and score: chips wrap rather than push the edges
+  hdrChips: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  gearBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gearText: { fontSize: 14, color: GameColors.ink },
   scores: { alignItems: 'flex-end' },
+  // chip clothes shared by the tournament create panel's mode and length rows
+  speedRow: { flexDirection: 'row', gap: 8 },
+  speedBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+  },
+  speedBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
+  speedText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
   scoreLabel: {
     fontFamily: BARLOW,
     fontSize: 10,
     letterSpacing: 2,
     color: GameColors.muted,
   },
-  scoreValue: { fontFamily: ANTON, fontSize: 30, color: GameColors.ink, lineHeight: 32 },
+  scoreValue: { fontFamily: ANTON, fontSize: 24, color: GameColors.ink, lineHeight: 26 },
   bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   boardWrap: { alignItems: 'center' },
   whoChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    alignSelf: 'center',
-    marginBottom: 6,
-    paddingHorizontal: 12,
-    height: 30,
-    borderRadius: 15,
+    gap: 5,
+    paddingHorizontal: 9,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 1.5,
     borderColor: GameColors.gold,
   },
@@ -1307,17 +1337,6 @@ const styles = StyleSheet.create({
   lgPos: { color: GameColors.goldBright },
   lgNeg: { color: GameColors.food },
   lgDie: { color: GameColors.food, fontSize: 12, letterSpacing: 1 },
-  speedRow: { flexDirection: 'row', gap: 8 },
-  speedBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: GameColors.panel,
-    borderWidth: 1.5,
-    borderColor: 'rgba(33,30,26,0.18)',
-  },
-  speedBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
-  speedText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
   startBtn: {
     alignItems: 'center',
     backgroundColor: GameColors.food,
@@ -1473,14 +1492,12 @@ const styles = StyleSheet.create({
   purse: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    marginLeft: 4,
+    gap: 5,
+    height: 26,
     borderWidth: 1,
     borderColor: GameColors.gold,
-    borderRadius: 14,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
+    borderRadius: 13,
+    paddingHorizontal: 9,
   },
   purseCoin: {
     width: 10,
