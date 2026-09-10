@@ -31,6 +31,71 @@ export const GameColors = {
   snakeOutline: 'rgba(194,162,90,0.65)',
 } as const;
 
+/**
+ * The shell's theme, the web's THEME chips ported (styles/theme-colors.css):
+ * what swaps is the table the pitch sits on and the ink written straight
+ * onto it, plus the pad and the sheets. The pitch itself, the overlay card
+ * and everything drawn on the board keep their own colors in both themes,
+ * exactly as the page does. Values are copied from the CSS custom
+ * properties, never eyeballed, so the two clients read as one game.
+ */
+export interface ShellTheme {
+  /** the table: the screen behind the board */
+  bg: string;
+  /** ink written straight onto the table */
+  ink: string;
+  muted: string;
+  gold: string;
+  /** the touch pad's clothes */
+  padBg: string;
+  padRing: string;
+  padInk: string;
+  padLine: string;
+  /** the sheets (settings, profile, shop) */
+  sheet: string;
+  sheetInk: string;
+  sheetMuted: string;
+  sheetGold: string;
+  sheetLine: string;
+  sheetFieldInk: string;
+}
+
+/** The cream table, the default. */
+export const LightShell: ShellTheme = {
+  bg: '#efe6d0',
+  ink: '#211e1a',
+  muted: '#6b6553',
+  gold: '#8a6f33',
+  padBg: '#f6efde',
+  padRing: 'rgba(33,30,26,0.28)',
+  padInk: '#211e1a',
+  padLine: 'rgba(33,30,26,0.18)',
+  sheet: '#f6efde',
+  sheetInk: '#211e1a',
+  sheetMuted: '#6b6553',
+  sheetGold: '#8a6f33',
+  sheetLine: 'rgba(33,30,26,0.18)',
+  sheetFieldInk: '#211e1a',
+};
+
+/** The dark table (html.theme-dark on the web, value for value). */
+export const DarkShell: ShellTheme = {
+  bg: '#12160e',
+  ink: '#f6efde',
+  muted: '#b7ac93',
+  gold: '#d8b35e',
+  padBg: '#232d1f',
+  padRing: 'rgba(194,162,90,0.5)',
+  padInk: '#f6efde',
+  padLine: 'rgba(244,236,216,0.12)',
+  sheet: '#1f2a1d',
+  sheetInk: '#e9e0cd',
+  sheetMuted: '#b7ac93',
+  sheetGold: '#d8b35e',
+  sheetLine: 'rgba(244,236,216,0.22)',
+  sheetFieldInk: '#f6efde',
+};
+
 /** Ghost body/edge colors in spawn order, matching the web sprites. */
 export const GhostColors = [
   { body: '#ec1f27', edge: '#a5121a' },

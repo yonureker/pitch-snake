@@ -27,7 +27,7 @@ import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 
-import { GameColors } from '@/game/theme';
+import { DarkShell, GameColors } from '@/game/theme';
 
 /** A pad direction as unit deltas. */
 export interface PadDirection {
@@ -77,6 +77,8 @@ const nowMs = (): number => performance.now();
 /** Props: the pad reports turn requests, informed by where the snake heads. */
 export interface DpadProps {
   onDir: (x: number, y: number) => void;
+  /** the dark table is on: the pad swaps its clothes, never its geometry */
+  dark?: boolean;
   /**
    * The direction the snake will be moving when this input lands (queue tail
    * or current heading), or null when nothing is accepting input. Used only
@@ -100,7 +102,7 @@ function touchesOf(e: GestureResponderEvent): TouchPoint[] {
 }
 
 /** The four-wedge multi-touch pad. */
-export function Dpad({ onDir, heading }: DpadProps) {
+export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   const padRef = useRef<View>(null);
   const frame = useRef({ x: 0, y: 0, w: 1, h: 1 });
   const fingers = useRef(new Map<number, Zone>());
@@ -316,7 +318,7 @@ export function Dpad({ onDir, heading }: DpadProps) {
   return (
     <View
       ref={padRef}
-      style={styles.pad}
+      style={[styles.pad, dark && darkStyles.pad]}
       onLayout={onLayout}
       onTouchStart={onDownRaw}
       onTouchMove={onTouchMove}
@@ -343,18 +345,30 @@ export function Dpad({ onDir, heading }: DpadProps) {
           />
         </>
       )}
-      <View pointerEvents="none" style={styles.diagA} />
-      <View pointerEvents="none" style={styles.diagB} />
-      <Text pointerEvents="none" style={[styles.arrow, styles.up, lit.has('up') && styles.arrowOn]}>
+      <View pointerEvents="none" style={[styles.diagA, dark && darkStyles.diag]} />
+      <View pointerEvents="none" style={[styles.diagB, dark && darkStyles.diag]} />
+      <Text
+        pointerEvents="none"
+        style={[styles.arrow, dark && darkStyles.arrow, styles.up, lit.has('up') && styles.arrowOn]}
+      >
         ↑
       </Text>
-      <Text pointerEvents="none" style={[styles.arrow, styles.down, lit.has('down') && styles.arrowOn]}>
+      <Text
+        pointerEvents="none"
+        style={[styles.arrow, dark && darkStyles.arrow, styles.down, lit.has('down') && styles.arrowOn]}
+      >
         ↓
       </Text>
-      <Text pointerEvents="none" style={[styles.arrow, styles.left, lit.has('left') && styles.arrowOn]}>
+      <Text
+        pointerEvents="none"
+        style={[styles.arrow, dark && darkStyles.arrow, styles.left, lit.has('left') && styles.arrowOn]}
+      >
         ←
       </Text>
-      <Text pointerEvents="none" style={[styles.arrow, styles.right, lit.has('right') && styles.arrowOn]}>
+      <Text
+        pointerEvents="none"
+        style={[styles.arrow, dark && darkStyles.arrow, styles.right, lit.has('right') && styles.arrowOn]}
+      >
         →
       </Text>
       {__DEV__ && trace !== '' && (
@@ -423,4 +437,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(33,30,26,0.18)',
     transform: [{ rotate: '-37deg' }],
   },
+});
+
+// the dark table's pad: DarkShell's tokens, geometry untouched
+const darkStyles = StyleSheet.create({
+  pad: { backgroundColor: DarkShell.padBg, borderColor: DarkShell.padRing },
+  arrow: { color: DarkShell.padInk },
+  diag: { backgroundColor: DarkShell.padLine },
 });

@@ -1,5 +1,5 @@
 /**
- * The settings sheet: speed and the crowd, behind the header's gear.
+ * The settings sheet: speed, theme and the crowd, behind the header's gear.
  *
  * The page's twin (its gear modal), and the reason these chips left the
  * kick-off card: the card sells the round (the legend, START, MODES), and
@@ -8,12 +8,18 @@
  * nothing here can change under a live round: speed applies to the next
  * kickoff exactly as it always did.
  *
+ * Theming pattern, used by every sheet: the light StyleSheet is the base and
+ * a second sheet carries only the colors the dark table swaps, applied as
+ * `[styles.x, dark && darkStyles.x]`. Two static sheets rather than inline
+ * colors, so the no-inline-styles rule keeps its teeth.
+ *
  * @module
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SPEEDS } from '@pitch-snake/engine';
-import { GameColors } from '@/game/theme';
+import { DarkShell, GameColors } from '@/game/theme';
+import type { ThemePref } from '@/lib/theme-prefs';
 
 const BARLOW_BOLD = 'Barlow_700Bold';
 const ANTON = 'Anton_400Regular';
@@ -24,22 +30,42 @@ const SPEED_LABELS = [
   { label: 'FAST', ms: SPEEDS.fast },
 ] as const;
 
-/** Props: the two knobs, and the way out. */
+const THEME_LABELS: { label: string; pref: ThemePref }[] = [
+  { label: 'AUTO', pref: 'auto' },
+  { label: 'LIGHT', pref: 'light' },
+  { label: 'DARK', pref: 'dark' },
+];
+
+/** Props: the three knobs, whether the dark table is on, and the way out. */
 export interface SettingsSheetProps {
   tickMs: number;
   onTickMs: (ms: number) => void;
+  themePref: ThemePref;
+  onThemePref: (pref: ThemePref) => void;
   crowdOn: boolean;
   onCrowd: (on: boolean) => void;
+  dark: boolean;
   onClose: () => void;
 }
 
 /** The sheet. */
-export function SettingsSheet({ tickMs, onTickMs, crowdOn, onCrowd, onClose }: SettingsSheetProps) {
+export function SettingsSheet({
+  tickMs,
+  onTickMs,
+  themePref,
+  onThemePref,
+  crowdOn,
+  onCrowd,
+  dark,
+  onClose,
+}: SettingsSheetProps) {
+  const chip = (on: boolean) => [styles.chip, dark && darkStyles.chip, on && styles.chipOn];
+  const chipText = (on: boolean) => [styles.chipText, dark && darkStyles.chipText, on && styles.chipTextOn];
   return (
-    <View style={styles.sheet}>
-      <Text style={styles.title}>SETTINGS</Text>
+    <View style={[styles.sheet, dark && darkStyles.sheet]}>
+      <Text style={[styles.title, dark && darkStyles.title]}>SETTINGS</Text>
       <View style={styles.row}>
-        <Text style={styles.label}>SPEED</Text>
+        <Text style={[styles.label, dark && darkStyles.label]}>SPEED</Text>
         {SPEED_LABELS.map((s) => (
           <Pressable
             accessibilityRole="button"
@@ -47,22 +73,37 @@ export function SettingsSheet({ tickMs, onTickMs, crowdOn, onCrowd, onClose }: S
             onPress={() => {
               onTickMs(s.ms);
             }}
-            style={[styles.chip, tickMs === s.ms && styles.chipOn]}
+            style={chip(tickMs === s.ms)}
           >
-            <Text style={styles.chipText}>{s.label}</Text>
+            <Text style={chipText(tickMs === s.ms)}>{s.label}</Text>
           </Pressable>
         ))}
       </View>
       <View style={styles.row}>
-        <Text style={styles.label}>CROWD</Text>
+        <Text style={[styles.label, dark && darkStyles.label]}>THEME</Text>
+        {THEME_LABELS.map((t) => (
+          <Pressable
+            accessibilityRole="button"
+            key={t.pref}
+            onPress={() => {
+              onThemePref(t.pref);
+            }}
+            style={chip(themePref === t.pref)}
+          >
+            <Text style={chipText(themePref === t.pref)}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.row}>
+        <Text style={[styles.label, dark && darkStyles.label]}>CROWD</Text>
         <Pressable
           accessibilityRole="button"
           onPress={() => {
             onCrowd(!crowdOn);
           }}
-          style={[styles.chip, crowdOn && styles.chipOn]}
+          style={chip(crowdOn)}
         >
-          <Text style={styles.chipText}>{crowdOn ? 'ON' : 'OFF'}</Text>
+          <Text style={chipText(crowdOn)}>{crowdOn ? 'ON' : 'OFF'}</Text>
         </Pressable>
       </View>
       <Pressable accessibilityRole="button" onPress={onClose} style={styles.done}>
@@ -108,6 +149,8 @@ const styles = StyleSheet.create({
   },
   chipOn: { backgroundColor: GameColors.gold },
   chipText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
+  // the active chip is gold in both themes, so its label is dark ink in both
+  chipTextOn: { color: GameColors.ink },
   done: {
     alignSelf: 'center',
     marginTop: 4,
@@ -117,4 +160,12 @@ const styles = StyleSheet.create({
     backgroundColor: GameColors.food,
   },
   doneText: { fontFamily: ANTON, fontSize: 15, letterSpacing: 1.2, color: '#ffffff' },
+});
+
+const darkStyles = StyleSheet.create({
+  sheet: { backgroundColor: DarkShell.sheet },
+  title: { color: DarkShell.sheetInk },
+  label: { color: DarkShell.sheetMuted },
+  chip: { borderColor: DarkShell.sheetGold },
+  chipText: { color: DarkShell.sheetInk },
 });

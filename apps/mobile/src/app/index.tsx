@@ -1,9 +1,19 @@
 import { Canvas, Picture, useImage } from '@shopify/react-native-skia';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useColorScheme,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Image } from 'expo-image';
+import { StatusBar } from 'expo-status-bar';
 
 import atlasSource from '@/assets/food-atlas.png';
 import flagSheet from '@/assets/flags.png';
@@ -13,7 +23,7 @@ import { RoomPanel } from '@/components/room-panel';
 import { ProfileSheet } from '@/components/profile-sheet';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { ShopSheet } from '@/components/shop-sheet';
-import { GameColors } from '@/game/theme';
+import { DarkShell, GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
 import { useCrowd } from '@/hooks/use-crowd';
 import { useProfile } from '@/hooks/queries/use-profile';
@@ -29,6 +39,7 @@ import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
 import { BOARD_PLACES, FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
 import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
+import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
@@ -179,6 +190,14 @@ export default function Index() {
   const [tCreating, setTCreating] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The table's theme: AUTO follows the system, the chips can force one
+  // (the web's THEME setting, ported). What swaps is the shell: the screen,
+  // the header ink, the pad and the sheets. The pitch, the overlay card and
+  // everything drawn on the board keep their colors in both themes, exactly
+  // as the page does.
+  const [themePref, setThemePref] = useState<ThemePref>('auto');
+  const systemScheme = useColorScheme();
+  const dark = themePref === 'dark' || (themePref === 'auto' && systemScheme === 'dark');
   const [profileOpen, setProfileOpen] = useState(false);
   const [prevBest, setPrevBest] = useState(0);
   const [joinCode, setJoinCode] = useState('');
@@ -268,6 +287,7 @@ export default function Index() {
 
   // restore the saved mode and tournament once; the loop follows the choice
   useEffect(() => {
+    void loadThemePref().then(setThemePref);
     void loadModePrefs().then((prefs) => {
       setUiMode(prefs.uiMode);
       setTourney(prefs.tourney);
@@ -460,7 +480,8 @@ export default function Index() {
   const canvasSize = { width: boardPx, height: boardPx };
 
   return (
-    <View style={[styles.screen, screenPad]}>
+    <View style={[styles.screen, dark && darkStyles.screen, screenPad]}>
+      <StatusBar style={dark ? 'light' : 'dark'} />
       {/* ONE compact header band, the web phone header's twin since its
           2026-09 rework: the logo keeps the left, the score block keeps the
           right, and the chrome (player chip, purse, gear) rides between
@@ -468,8 +489,8 @@ export default function Index() {
           menus exactly as they did before, so a live round keeps its width. */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>PITCH</Text>
-          <Text style={styles.title}>SNAKE</Text>
+          <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
+          <Text style={[styles.title, dark && darkStyles.title]}>SNAKE</Text>
         </View>
         <View style={styles.hdrChips}>
           {menuPhase && (
@@ -484,7 +505,7 @@ export default function Index() {
                 style={styles.whoChip}
               >
                 <Flag code={profile.data?.country ?? null} />
-                <Text style={styles.whoText}>{profileName ?? 'PLAYER'}</Text>
+                <Text style={[styles.whoText, dark && darkStyles.whoText]}>{profileName ?? 'PLAYER'}</Text>
               </Pressable>
               {wallet.isSuccess && (
                 <Pressable
@@ -495,7 +516,7 @@ export default function Index() {
                   style={styles.purse}
                 >
                   <View style={styles.purseCoin} />
-                  <Text style={styles.purseText}>
+                  <Text style={[styles.purseText, dark && darkStyles.purseText]}>
                     {wallet.data.coins} {'\u00b7'} SHOP
                   </Text>
                 </Pressable>
@@ -508,16 +529,18 @@ export default function Index() {
                 }}
                 style={styles.gearBtn}
               >
-                <Text style={styles.gearText}>{'\u2699\ufe0e'}</Text>
+                <Text style={[styles.gearText, dark && darkStyles.gearText]}>{'\u2699\ufe0e'}</Text>
               </Pressable>
             </>
           )}
         </View>
         <Pressable accessibilityRole="button" onPress={onScoreTap} style={styles.scores}>
-          <Text style={styles.scoreLabel}>SCORE</Text>
-          <Text style={styles.scoreValue}>{loop.score}</Text>
+          <Text style={[styles.scoreLabel, dark && darkStyles.scoreLabel]}>SCORE</Text>
+          <Text style={[styles.scoreValue, dark && darkStyles.scoreValue]}>{loop.score}</Text>
           <Text style={styles.bestValue}>BEST {loop.best}</Text>
-          {loop.clockText !== '' && <Text style={styles.clockText}>{loop.clockText}</Text>}
+          {loop.clockText !== '' && (
+            <Text style={[styles.clockText, dark && darkStyles.clockText]}>{loop.clockText}</Text>
+          )}
         </Pressable>
       </View>
 
@@ -1040,8 +1063,14 @@ export default function Index() {
               <SettingsSheet
                 tickMs={loop.tickMs}
                 onTickMs={loop.setTickMs}
+                themePref={themePref}
+                onThemePref={(pref) => {
+                  setThemePref(pref);
+                  void saveThemePref(pref);
+                }}
                 crowdOn={crowdOn}
                 onCrowd={setCrowdOn}
+                dark={dark}
                 onClose={() => {
                   setSettingsOpen(false);
                 }}
@@ -1057,6 +1086,7 @@ export default function Index() {
                 key={`${profile.data?.name ?? ''}-${profile.data?.country ?? ''}-${kitLeft ?? ''}-${kitRight ?? ''}-${kitNum ?? ''}`}
                 profile={profile.data ?? null}
                 locked={identityLocked}
+                dark={dark}
                 onSaved={(p) => {
                   void profile.refetch();
                   // The claim's payoff, and it SUBMITS rather than leaving a
@@ -1091,7 +1121,7 @@ export default function Index() {
       </View>
 
       <View style={styles.padWrap}>
-        <Dpad onDir={loop.steer} heading={loop.effectiveHeading} />
+        <Dpad onDir={loop.steer} heading={loop.effectiveHeading} dark={dark} />
       </View>
     </View>
   );
@@ -1508,4 +1538,18 @@ const styles = StyleSheet.create({
     borderColor: GameColors.gold,
   },
   purseText: { fontFamily: BARLOW_BOLD, fontSize: 11, color: GameColors.ink, letterSpacing: 1 },
+});
+
+// The dark table: only the colors the theme swaps, layered over the light
+// styles as `[styles.x, dark && darkStyles.x]`. Values are DarkShell's, which
+// are the web's html.theme-dark tokens value for value.
+const darkStyles = StyleSheet.create({
+  screen: { backgroundColor: DarkShell.bg },
+  title: { color: DarkShell.ink, textShadowColor: GameColors.gold },
+  scoreLabel: { color: DarkShell.muted },
+  scoreValue: { color: DarkShell.ink },
+  clockText: { color: DarkShell.ink },
+  whoText: { color: DarkShell.ink },
+  purseText: { color: DarkShell.ink },
+  gearText: { color: DarkShell.ink },
 });

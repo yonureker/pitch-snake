@@ -21,7 +21,7 @@ import { FLAG_CODES, FLAG_COLS, flagIndex } from '@/lib/leaderboard';
 import { useSaveProfile } from '@/hooks/queries/use-save-profile';
 import { kitOf } from '@/lib/kit';
 import type { Profile } from '@/lib/profile';
-import { GameColors } from '@/game/theme';
+import { DarkShell, GameColors } from '@/game/theme';
 import { SnakePreview } from '@/components/snake-preview';
 import { useWallet } from '@/hooks/queries/use-wallet';
 import { JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT } from '@/game/pitch-art';
@@ -64,12 +64,14 @@ export interface ProfileSheetProps {
   profile: Profile | null;
   /** Locked while a round is live or a room seat is held (identity freezes). */
   locked: boolean;
+  /** the dark table is on: the sheet swaps its colors, never its layout */
+  dark?: boolean;
   onSaved: (p: Profile) => void;
   onClose: () => void;
 }
 
 /** The sheet. */
-export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheetProps) {
+export function ProfileSheet({ profile, locked, dark = false, onSaved, onClose }: ProfileSheetProps) {
   const who = authWho();
   // server writes go through the query layer, never straight from a component
   const saver = useSaveProfile();
@@ -163,8 +165,8 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
 
   if (pickFlag) {
     return (
-      <View style={styles.sheet}>
-        <Text style={styles.title}>YOUR FLAG</Text>
+      <View style={[styles.sheet, dark && darkStyles.sheet]}>
+        <Text style={[styles.title, dark && darkStyles.ink]}>YOUR FLAG</Text>
         <ScrollView style={styles.flagList} contentContainerStyle={styles.flagGrid}>
           <Pressable
             accessibilityRole="button"
@@ -174,7 +176,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
             }}
             style={styles.flagCell}
           >
-            <Text style={styles.flagNone}>NONE</Text>
+            <Text style={[styles.flagNone, dark && darkStyles.muted]}>NONE</Text>
           </Pressable>
           {CODE_LIST.map((c) => (
             <Pressable
@@ -187,7 +189,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
               style={[styles.flagCell, country === c && styles.flagCellOn]}
             >
               <Flag code={c} />
-              <Text style={styles.flagCode}>{c}</Text>
+              <Text style={[styles.flagCode, dark && darkStyles.muted]}>{c}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -205,7 +207,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
   }
 
   return (
-    <View style={styles.sheet}>
+    <View style={[styles.sheet, dark && darkStyles.sheet]}>
       {/* The way out is a corner, not a row (the web sheet's call, ported):
           DONE sat at the very bottom, behind a whole screen of login pitch,
           and an X in the corner is where a person looks to close a sheet. */}
@@ -216,9 +218,9 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
         style={styles.closeX}
         hitSlop={10}
       >
-        <Text style={styles.closeXText}>×</Text>
+        <Text style={[styles.closeXText, dark && darkStyles.muted]}>×</Text>
       </Pressable>
-      <Text style={styles.title}>YOUR ACCOUNT</Text>
+      <Text style={[styles.title, dark && darkStyles.ink]}>YOUR ACCOUNT</Text>
       {locked && <Text style={styles.lock}>{'Finish the round to change your profile.'}</Text>}
 
       {who.anonymous ?
@@ -230,13 +232,15 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
               device that will forget them. Reason before request: three
               lines of what a login gets you, then the one field that gets
               it. */}
-          <Text style={styles.sellHead}>Log in to:</Text>
-          <Text style={styles.sellItem}>{'\u00b7  Get a custom username'}</Text>
-          <Text style={styles.sellItem}>{'\u00b7  Add a jersey to your snake'}</Text>
-          <Text style={styles.sellItem}>{'\u00b7  Choose your country'}</Text>
+          <Text style={[styles.sellHead, dark && darkStyles.ink]}>Log in to:</Text>
+          <Text style={[styles.sellItem, dark && darkStyles.muted]}>{'\u00b7  Get a custom username'}</Text>
+          <Text style={[styles.sellItem, dark && darkStyles.muted]}>
+            {'\u00b7  Add a jersey to your snake'}
+          </Text>
+          <Text style={[styles.sellItem, dark && darkStyles.muted]}>{'\u00b7  Choose your country'}</Text>
           <View style={styles.row}>
             <TextInput
-              style={styles.emailInput}
+              style={[styles.emailInput, dark && darkStyles.field]}
               value={email}
               editable={!locked}
               onChangeText={setEmail}
@@ -258,7 +262,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
           {codeMode !== 'off' && (
             <View style={styles.row}>
               <TextInput
-                style={styles.emailInput}
+                style={[styles.emailInput, dark && darkStyles.field]}
                 value={code}
                 onChangeText={(t) => {
                   // Six to ten, because the code's length is a Supabase project
@@ -295,7 +299,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
               <Flag code={country} />
             </Pressable>
             <TextInput
-              style={styles.nameInput}
+              style={[styles.nameInput, dark && darkStyles.field]}
               value={name}
               editable={!locked}
               onChangeText={(t) => {
@@ -330,10 +334,10 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
               are typed as hex because this platform has no colour well; a
               half-finished one shows its classic colour until it becomes a
               colour. */}
-          <Text style={styles.kitLabel}>{"SNAKE'S JERSEY"}</Text>
+          <Text style={[styles.kitLabel, dark && darkStyles.muted]}>{"SNAKE'S JERSEY"}</Text>
           <View style={styles.kitRow}>
             <TextInput
-              style={styles.kitHex}
+              style={[styles.kitHex, dark && darkStyles.field]}
               value={kitLeft}
               editable={!locked}
               onChangeText={(t) => {
@@ -347,7 +351,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
               accessibilityLabel="Shirt colour, left half"
             />
             <TextInput
-              style={styles.kitHex}
+              style={[styles.kitHex, dark && darkStyles.field]}
               value={kitRight}
               editable={!locked}
               onChangeText={(t) => {
@@ -361,7 +365,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
               accessibilityLabel="Shirt colour, right half"
             />
             <TextInput
-              style={styles.kitNum}
+              style={[styles.kitNum, dark && darkStyles.field]}
               value={kitNum}
               editable={!locked}
               onChangeText={(t) => {
@@ -376,8 +380,10 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
             <SnakePreview skin={wornSkin} left={kitLeft} right={kitRight} num={kitNum} />
           </View>
 
-          <View style={styles.rule} />
-          <Text style={styles.blurb}>Logged in as {who.email ?? 'your account'}.</Text>
+          <View style={[styles.rule, dark && darkStyles.rule]} />
+          <Text style={[styles.blurb, dark && darkStyles.muted]}>
+            Logged in as {who.email ?? 'your account'}.
+          </Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -391,7 +397,7 @@ export function ProfileSheet({ profile, locked, onSaved, onClose }: ProfileSheet
         </>
       }
 
-      {say !== '' && <Text style={styles.say}>{say}</Text>}
+      {say !== '' && <Text style={[styles.say, dark && darkStyles.ink]}>{say}</Text>}
     </View>
   );
 }
@@ -532,4 +538,14 @@ const styles = StyleSheet.create({
   flagCellOn: { borderColor: GameColors.gold, backgroundColor: 'rgba(194,162,90,0.16)' },
   flagCode: { fontFamily: BARLOW_BOLD, fontSize: 9, color: GameColors.muted },
   flagNone: { fontFamily: BARLOW_BOLD, fontSize: 10, color: GameColors.muted, paddingVertical: 6 },
+});
+
+// The dark table's sheet: only the colors the theme swaps, layered over the
+// light styles. Values are DarkShell's, the web's html.theme-dark tokens.
+const darkStyles = StyleSheet.create({
+  sheet: { backgroundColor: DarkShell.sheet },
+  ink: { color: DarkShell.sheetInk },
+  muted: { color: DarkShell.sheetMuted },
+  field: { color: DarkShell.sheetFieldInk },
+  rule: { backgroundColor: DarkShell.sheetLine },
 });
