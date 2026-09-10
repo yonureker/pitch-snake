@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=d5cfd4a6d0">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=d5cfd4a6d0">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=c74c595bbe">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=c74c595bbe">
 </head>
 <body>
   <div class="wrap">
@@ -485,19 +485,19 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=d5cfd4a6d0",
-    "./packages/net/net.js": "./packages/net/net.js?v=d5cfd4a6d0",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=d5cfd4a6d0",
-    "./page/build/dom.js": "./page/build/dom.js?v=d5cfd4a6d0",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=d5cfd4a6d0",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=d5cfd4a6d0",
-    "./page/build/kit.js": "./page/build/kit.js?v=d5cfd4a6d0",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=d5cfd4a6d0",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=d5cfd4a6d0",
-    "./page/build/shop.js": "./page/build/shop.js?v=d5cfd4a6d0",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=d5cfd4a6d0",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=d5cfd4a6d0",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=d5cfd4a6d0"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=c74c595bbe",
+    "./packages/net/net.js": "./packages/net/net.js?v=c74c595bbe",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=c74c595bbe",
+    "./page/build/dom.js": "./page/build/dom.js?v=c74c595bbe",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=c74c595bbe",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=c74c595bbe",
+    "./page/build/kit.js": "./page/build/kit.js?v=c74c595bbe",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=c74c595bbe",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=c74c595bbe",
+    "./page/build/shop.js": "./page/build/shop.js?v=c74c595bbe",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=c74c595bbe",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=c74c595bbe",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=c74c595bbe"
   }
 }
 </script>
@@ -716,19 +716,45 @@
     syncScoreDom();
   }
 
-  // every input source funnels here; the page owns the round-state gate
-  // (buffering during the countdown is allowed and lands on the first step).
+  // every input source funnels here; the page owns the round-state gate.
   // In a versus round the turn goes through the session, which stamps it,
   // broadcasts it, and feeds it to the engine on the shared timeline.
+  //
+  // The countdown keeps ONE press, not a queue. Presses during the count used
+  // to flow straight into the engine, whose three-deep queue then replayed
+  // them over the opening steps: taps from five seconds before the whistle
+  // steering the round, which read as the pad having a mind of its own. Only
+  // the last press before kickoff means anything (it is where you want to
+  // open), so the count holds exactly that one and kickoff feeds it in.
+  let preAim = null;
   function dirInput(x, y) {
     if (state !== 'playing' && state !== 'countdown') return;
+    if (state === 'countdown') { preAim = { x, y }; return; }
     // the press's own clock rides along so the session can advance to the
     // true instant before stamping (rule 12, netcode edition)
     if (vsInRound()) {
       if (vs.forfeited) return;     // given up: the seat sends nothing more
       vs.session.localDir(x, y, performance.now());
+      return;
     }
-    else g.setDir(x, y);
+    // Rule 12, shell side: advance the sim to the press instant so the turn
+    // can catch a cell boundary that falls between frames, instead of waiting
+    // out the rest of the rAF interval (a full frame of latency at best, and
+    // worse on a phone that just dropped one). advance() quantizes, so the
+    // log stamps the true press time with no determinism risk; the mobile
+    // loop has always done this, and the versus path above always pumped.
+    if (lastTick > 0) {
+      const pressNow = performance.now();
+      let pressDt = pressNow - lastTick;
+      if (pressDt > MAX_DT) pressDt = MAX_DT;
+      if (pressDt > 0) {
+        lastTick = pressNow;
+        g.advance(pressDt);
+        handleEvents(g.drainEvents());
+        syncScoreDom();
+      }
+    }
+    g.setDir(x, y);
   }
 
   function syncScoreDom() {
@@ -1037,6 +1063,7 @@
   // document.fonts.ready path rather than through here. Same size, same art.
   let lastW = -1, lastH = -1, lastDpr = -1;
   function resize() {
+    padRect = null;      // the d-pad measures itself again on the next press
     const rect = canvas.getBoundingClientRect();
     DPR = window.devicePixelRatio || 1;
     const w = rect.width * DPR, h = rect.height * DPR;
@@ -2160,7 +2187,15 @@
     vsAutoStartTick(now);       // a quick room counts itself down; see the note there
     if (state === 'countdown') {
       countClock += dt;
-      if (countClock >= COUNT_TOTAL) state = 'playing';   // kick off
+      if (countClock >= COUNT_TOTAL) {
+        state = 'playing';   // kick off
+        // the one press the countdown held opens the round on its first step
+        if (preAim) {
+          if (vsInRound()) { if (!vs.forfeited) vs.session.localDir(preAim.x, preAim.y, now); }
+          else g.setDir(preAim.x, preAim.y);
+          preAim = null;
+        }
+      }
     }
     if (state === 'playing') {
       if (vsInRound()) {
@@ -3999,6 +4034,7 @@
     // wild device clock can only trim the count, never eat it; whatever
     // skew remains is the session's pacing to close, as before.
     state = 'countdown';
+    preAim = null;                // a press from a previous screen is not an aim
     const skew = typeof m.at === 'number' ? Date.now() - m.at : 0;
     countClock = Math.min(1200, Math.max(0, skew));
     countBeat = -1;
@@ -4434,6 +4470,7 @@
     if (state === 'dead' || state === 'ready') { lastRunKey = runKey(); newRound(true); }
     else g.clearQueue();          // a turn queued before the pause must not fire on resume
     state = 'countdown';          // the round opens on 3, 2, 1, START!
+    preAim = null;                // a press from the menus is not an aim
     countClock = 0; countBeat = -1;
     lastTick = 0;
     overlayTitle.className = '';
@@ -4555,7 +4592,10 @@
 
   dpad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    padRect = dpad.getBoundingClientRect();   // re-read per press: layout may have changed
+    // Measured lazily: resize() and placeChrome() drop the cache when layout
+    // actually moves. Reading the rect on EVERY press forced a synchronous
+    // layout at the exact moment a fast player needs the frame budget most.
+    if (!padRect) padRect = dpad.getBoundingClientRect();
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
     firePad(e.pointerId, padZone(e, false));   // a press always picks a wedge
   });

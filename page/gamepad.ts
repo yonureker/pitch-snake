@@ -70,6 +70,15 @@ let repeatAt = 0;
 let held = { x: 0, y: 0 };
 let menuWasUp = false;
 
+// Whether a pad has ever announced itself this page-load. Until one does, the
+// frame loop's poll returns immediately: navigator.getGamepads() builds its
+// array on EVERY call (see the module note above), which on a phone that will
+// never see a pad was a per-frame allocation feeding the GC for nothing.
+// Browsers refuse to surface a pad before it announces anyway (Chrome holds
+// the event until a button is pressed), so the skip costs no press. Once seen,
+// always polled: a disconnect that lapses is cheaper than a reconnect missed.
+let padEverSeen = false;
+
 function inRound(): boolean {
   const phase = ports?.phase();
   return phase === 'playing' || phase === 'countdown';
@@ -225,6 +234,7 @@ function start(): void {
  * @param now - the loop's clock, in milliseconds, for the menu repeat.
  */
 export function pollGamepads(now: number): void {
+  if (!padEverSeen) return;
   // A screen arriving with nothing focused strands a pad: no direction can
   // move off <body>. Rather than chase every place that shows the overlay,
   // watch the transition here. Both reads are properties, not layout, so the
@@ -342,6 +352,7 @@ export function initGamepads(shellPorts: GamepadPorts): void {
   primaries = ['modeGoBtn', 'vsCreateBtn', 'settingsClose', 'startBtn'].map((id) => mustGetElement(id));
   backButtons = ['modeBackBtn', 'vsBackBtn', 'tBackBtn'].map((id) => mustGetElement(id));
   window.addEventListener('gamepadconnected', () => {
+    padEverSeen = true;
     announce(true);
   });
   window.addEventListener('gamepaddisconnected', () => {
