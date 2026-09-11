@@ -31,8 +31,12 @@ create table if not exists public.pitch_snake_net_events (
   rollbacks   integer,
   resends     integer,
   client      text,                    -- coarse class only: 'web-desktop' | 'web-mobile' | 'app'
+  fast_share  smallint,                -- 0..100: how much of the round ran on the peer wire alone
   created_at  timestamptz not null default now()
 );
+-- added with the peer wire (2026-09-11): existing rows keep null, which reads
+-- as "before the mesh", exactly right
+alter table public.pitch_snake_net_events add column if not exists fast_share smallint;
 
 -- the two questions this table exists to answer: what happened lately, and
 -- does one room or one client account for it
@@ -56,8 +60,9 @@ revoke all on table public.pitch_snake_net_events from anon, authenticated;
 -- Rate limited per user, because the failure being measured is exactly the
 -- one that could loop: a client desyncing over and over must not be able to
 -- write a thousand rows about it.
+-- the peer wire added p_fast_share (2026-09-11): a new trailing param is a
+-- new SIGNATURE, so the old 11-arg overload is dropped or a call is ambiguous
 drop function if exists public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text);
-
 create or replace function public.pitch_snake_log_net_event(
   p_kind       text,
   p_code       text default null,
@@ -69,7 +74,8 @@ create or replace function public.pitch_snake_log_net_event(
   p_giveups    integer default null,
   p_rollbacks  integer default null,
   p_resends    integer default null,
-  p_client     text default null
+  p_client     text default null,
+  p_fast_share integer default null
 )
 returns void
 language plpgsql
@@ -95,7 +101,7 @@ begin
 
   insert into public.pitch_snake_net_events (
     user_id, kind, code, reason, peers, quanta,
-    stalled_ms, longest_ms, giveups, rollbacks, resends, client
+    stalled_ms, longest_ms, giveups, rollbacks, resends, client, fast_share
   ) values (
     auth.uid(),
     p_kind,
@@ -115,13 +121,14 @@ begin
     least(greatest(coalesce(p_giveups, 0), 0), 8),
     least(greatest(coalesce(p_rollbacks, 0), 0), 1000000),
     least(greatest(coalesce(p_resends, 0), 0), 1000000),
-    case when p_client in ('web-desktop', 'web-mobile', 'app') then p_client else null end
+    case when p_client in ('web-desktop', 'web-mobile', 'app') then p_client else null end,
+    case when p_fast_share is null then null else least(greatest(p_fast_share, 0), 100) end
   );
 end;
 $$;
 
-revoke all on function public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text) from public;
-grant execute on function public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text) to anon, authenticated;
+revoke all on function public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text, integer) from public;
+grant execute on function public.pitch_snake_log_net_event(text, text, text, integer, integer, integer, integer, integer, integer, integer, text, integer) to anon, authenticated;
 
 -- ---------------------------------------------------------- housekeeping ----
 -- These rows answer "what is happening lately"; they are not a record worth

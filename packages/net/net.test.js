@@ -601,6 +601,20 @@ test('two wires: a message is doubled until every seat is proven on the fast one
   assert.equal(room.seen[1].length, 1, 'proven: the fast wire alone');
 });
 
+test('two wires: fastPct reports how much of the round was proven fast', () => {
+  const room = twoWireRoom(2);
+  // unproven half: sends at t=0 and t=50 ride both wires
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 1, s: 1 });
+  room.pump(50);
+  // proof lands, and the second half of the life runs fast-only
+  room.wires[1].send({ t: 'b', v: NET_PROTO, p: 1, q: 1, s: 1 });
+  room.pump(100);
+  room.wires[0].send({ t: 'b', v: NET_PROTO, p: 0, q: 2, s: 2 });
+  room.pump(200);
+  const pct = room.wires[0].fastPct();
+  assert.ok(pct > 30 && pct < 90, 'roughly the proven half, got ' + pct);
+});
+
 test('two wires: a peer who cannot reach the relay still hears everything, for ever', () => {
   const room = twoWireRoom(2, { deadFastFor: [1] });
   for (let k = 1; k <= 5; k++) {

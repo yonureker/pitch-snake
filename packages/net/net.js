@@ -699,6 +699,18 @@ export function dualTransport(fast, slow, { seats, myIdx, now = () => Date.now()
   const lastFastAt = new Array(seats).fill(-1e15);
   lastFastAt[myIdx] = Infinity;          // my own seat is never waiting on itself
 
+  // How much of this wire's life ran fast-only, for the telemetry row: the
+  // peer wire is judged by numbers, the same way the relay was retired by
+  // them. Sampled at each send, which the beat clock makes regular enough.
+  const bornAt = now();
+  let fastMs = 0, lastSampleAt = bornAt, wasFastOnly = false;
+  const sample = (isFastOnly) => {
+    const t = now();
+    if (wasFastOnly) fastMs += t - lastSampleAt;
+    lastSampleAt = t;
+    wasFastOnly = isFastOnly;
+  };
+
   /** Has every seat been heard on the fast wire recently enough to trust it? */
   const fastOnly = () => {
     if (!fast.isOpen()) return false;
@@ -722,12 +734,19 @@ export function dualTransport(fast, slow, { seats, myIdx, now = () => Date.now()
     // shut, so this asks rather than remembers.
     send(obj) {
       const onlyFast = fastOnly();
+      sample(onlyFast);
       if (fast.isOpen()) fast.send(obj);
       if (!onlyFast) slow.send(obj);
     },
     onMessage(f) { cb = f; },
     setOpen(v) { slow.setOpen(v); },
     isOpen() { return fast.isOpen() || slow.isOpen(); },
+    /** 0..100: how much of this wire's life every seat was proven fast. */
+    fastPct() {
+      sample(fastOnly());
+      const total = now() - bornAt;
+      return total > 0 ? Math.round((100 * fastMs) / total) : 0;
+    },
     close() { cb = null; fast.close(); slow.close(); },
   };
 }
