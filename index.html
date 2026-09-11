@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=beef1e0639">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=beef1e0639">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=d317b68b92">
 </head>
 <body>
   <div class="wrap">
@@ -98,7 +98,22 @@
       <div class="last-call" id="lastCall" aria-hidden="true" hidden><span class="count-num" id="lastCallNum">5</span></div>
       <!-- U+FE0E pins the cog to TEXT presentation: without it iOS serves
            the grey emoji cog, which ignores the gold the CSS asks for -->
-      <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">&#9881;&#xFE0E;</button>
+      <!-- The gear is DRAWN rather than typed. U+2699 is a font's opinion:
+           it arrived as a hairline on some platforms and a filled blob on
+           others, never matched the weight of the chips beside it, and could
+           not be made bigger without dragging the button's line box with it.
+           A solid body with eight tapered teeth and a punched hub, filled
+           with currentColor so it inherits the theme and scales to whatever
+           .gear-ico says. The outline is computed (tip radius 10.6, root 7.9,
+           hub 4.2, teeth narrowing 26 degrees to 19) rather than eyeballed:
+           the first cut drew a thin ring with round-capped spokes and read
+           as a sun. -->
+      <button class="gear" id="gearBtn" aria-label="Settings" title="Settings">
+        <svg class="gear-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill="currentColor" fill-rule="evenodd"
+                d="M19.70 10.22L22.45 10.25L22.45 13.75L19.70 13.78A7.9 7.9 0 0 1 18.70 16.19L20.63 18.16L18.16 20.63L16.19 18.70A7.9 7.9 0 0 1 13.78 19.70L13.75 22.45L10.25 22.45L10.22 19.70A7.9 7.9 0 0 1 7.81 18.70L5.84 20.63L3.37 18.16L5.30 16.19A7.9 7.9 0 0 1 4.30 13.78L1.55 13.75L1.55 10.25L4.30 10.22A7.9 7.9 0 0 1 5.30 7.81L3.37 5.84L5.84 3.37L7.81 5.30A7.9 7.9 0 0 1 10.22 4.30L10.25 1.55L13.75 1.55L13.78 4.30A7.9 7.9 0 0 1 16.19 5.30L18.16 3.37L20.63 5.84L18.70 7.81A7.9 7.9 0 0 1 19.70 10.22ZM16.20 12.00A4.2 4.2 0 1 0 7.80 12.00A4.2 4.2 0 1 0 16.20 12.00Z"/>
+        </svg>
+      </button>
       <!-- The boards live behind the trophy now: the death screen shows the
            top 100 only when your round places on it, so browsing the boards
            needed its own door, one that works on every screen and width. -->
@@ -475,24 +490,24 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=beef1e0639",
-    "./packages/net/net.js": "./packages/net/net.js?v=beef1e0639",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=beef1e0639",
-    "./page/build/dom.js": "./page/build/dom.js?v=beef1e0639",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=beef1e0639",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=beef1e0639",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=beef1e0639",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=beef1e0639",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=beef1e0639",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=beef1e0639",
-    "./page/build/kit.js": "./page/build/kit.js?v=beef1e0639",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=beef1e0639",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=beef1e0639",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=beef1e0639",
-    "./page/build/shop.js": "./page/build/shop.js?v=beef1e0639",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=beef1e0639",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=beef1e0639",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=beef1e0639"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=d317b68b92",
+    "./packages/net/net.js": "./packages/net/net.js?v=d317b68b92",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=d317b68b92",
+    "./page/build/dom.js": "./page/build/dom.js?v=d317b68b92",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=d317b68b92",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=d317b68b92",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=d317b68b92",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=d317b68b92",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=d317b68b92",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=d317b68b92",
+    "./page/build/kit.js": "./page/build/kit.js?v=d317b68b92",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=d317b68b92",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=d317b68b92",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=d317b68b92",
+    "./page/build/shop.js": "./page/build/shop.js?v=d317b68b92",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=d317b68b92",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=d317b68b92",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=d317b68b92"
   }
 }
 </script>

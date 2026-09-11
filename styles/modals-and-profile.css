@@ -64,9 +64,13 @@
   }
   .chip-row .gear { position: static; }
   .gear.purse { font-size: 14px; }
+  /* A SHELL token, not the flat gold: the count sits on the table, and
+     --gold-bright is the dark table's gold, which on cream washed out to
+     nearly the background. --shell-gold is deep gold in light and bright in
+     dark, which is the same rule the gear beside it already follows. */
   .gear.purse #purseCoins {
     font-family: 'Anton', sans-serif; font-weight: 400;
-    font-size: 14px; letter-spacing: 0.5px; color: var(--gold-bright);
+    font-size: 14px; letter-spacing: 0.5px; color: var(--shell-gold);
   }
   .modal.profile .entry.wide { width: 100%; }
   .modal.profile select {
