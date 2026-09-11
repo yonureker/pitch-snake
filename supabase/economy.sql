@@ -101,7 +101,15 @@ insert into public.pitch_snake_items (id, kind, name, price, sort) values
   ('hat-gat',      'hat', 'GAT',         450, 31),
   ('hat-bicorne',  'hat', 'BICORNE',     500, 32),
   ('hat-bearskin', 'hat', 'BEARSKIN',    550, 33),
-  ('hat-cocar',    'hat', 'FEATHERS',    600, 34)
+  ('hat-cocar',    'hat', 'FEATHERS',    600, 34),
+  -- the colour drop, 2026-09-10: seven more ramps beside the founding five
+  ('skin-ocean',   'skin', 'DEEP SEA',    300, 35),
+  ('skin-copper',  'skin', 'COPPER',      300, 36),
+  ('skin-frost',   'skin', 'FROSTBITE',   300, 37),
+  ('skin-cherry',  'skin', 'CHERRY',      350, 38),
+  ('skin-violet',  'skin', 'ULTRAVIOLET', 350, 39),
+  ('skin-royal',   'skin', 'ROYAL',       400, 40),
+  ('skin-inferno', 'skin', 'INFERNO',     400, 41)
 on conflict (id) do update
   set kind = excluded.kind, name = excluded.name,
       price = excluded.price, sort = excluded.sort;

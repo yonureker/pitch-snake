@@ -123,6 +123,14 @@ export const SKIN_RAMPS = {
   'skin-rosa': { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)' },
   'skin-night': { head: [226, 231, 241], tail: [36, 42, 56], line: 'rgba(122,132,160,0.55)' },
   'skin-gilt': { head: [252, 232, 152], tail: [194, 150, 56], line: 'rgba(140,100,30,0.7)' },
+  // the colour drop, 2026-09-10, value for value with the page's SKINS
+  'skin-ocean': { head: [111, 215, 232], tail: [20, 82, 110], line: 'rgba(90,190,210,0.6)' },
+  'skin-copper': { head: [232, 160, 106], tail: [124, 74, 34], line: 'rgba(150,92,44,0.65)' },
+  'skin-frost': { head: [223, 244, 255], tail: [122, 168, 204], line: 'rgba(150,200,235,0.6)' },
+  'skin-cherry': { head: [255, 122, 112], tail: [142, 18, 38], line: 'rgba(200,60,70,0.6)' },
+  'skin-violet': { head: [201, 162, 255], tail: [91, 42, 168], line: 'rgba(160,110,240,0.6)' },
+  'skin-royal': { head: [125, 162, 255], tail: [29, 63, 168], line: 'rgba(120,150,240,0.65)' },
+  'skin-inferno': { head: [255, 138, 60], tail: [179, 32, 19], line: 'rgba(230,120,50,0.6)' },
 } as const satisfies Record<string, { head: number[]; tail: number[]; line: string }>;
 
 function isSkinId(v: string): v is keyof typeof SKIN_RAMPS {

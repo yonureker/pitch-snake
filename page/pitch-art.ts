@@ -74,6 +74,24 @@ export const SKINS = {
                   spikes: null, spikesAlt: null },
   'skin-gilt':  { head: [252, 232, 152], tail: [194, 150, 56],  line: 'rgba(140,100,30,0.7)',
                   spikes: null, spikesAlt: null },
+  // The colour drop, 2026-09-10: seven more ramps, each picked so the HEAD
+  // stays bright against the pitch green and no two heads read alike at a
+  // glance. Crestless on purpose: the app does not draw the viper's spikes,
+  // and a skin that looks different per platform would lie in a room.
+  'skin-ocean':   { head: [111, 215, 232], tail: [ 20,  82, 110], line: 'rgba(90,190,210,0.6)',
+                    spikes: null, spikesAlt: null },
+  'skin-copper':  { head: [232, 160, 106], tail: [124,  74,  34], line: 'rgba(150,92,44,0.65)',
+                    spikes: null, spikesAlt: null },
+  'skin-frost':   { head: [223, 244, 255], tail: [122, 168, 204], line: 'rgba(150,200,235,0.6)',
+                    spikes: null, spikesAlt: null },
+  'skin-cherry':  { head: [255, 122, 112], tail: [142,  18,  38], line: 'rgba(200,60,70,0.6)',
+                    spikes: null, spikesAlt: null },
+  'skin-violet':  { head: [201, 162, 255], tail: [ 91,  42, 168], line: 'rgba(160,110,240,0.6)',
+                    spikes: null, spikesAlt: null },
+  'skin-royal':   { head: [125, 162, 255], tail: [ 29,  63, 168], line: 'rgba(120,150,240,0.65)',
+                    spikes: null, spikesAlt: null },
+  'skin-inferno': { head: [255, 138,  60], tail: [179,  32,  19], line: 'rgba(230,120,50,0.6)',
+                    spikes: null, spikesAlt: null },
 } as const satisfies Record<string, SkinArt>;
 
 
