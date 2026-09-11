@@ -61,6 +61,10 @@
      line box around; currentColor means it follows whatever the theme gave
      the button, on the table and in the tray alike. */
   .gear-ico { width: 22px; height: 22px; display: block; flex: none; }
+  /* The series cup, drawn beside the gear and on the same terms. In a
+     standings row it sits with the tally, so it takes its size from the text
+     and rides the baseline rather than floating above it. */
+  .cup-ico { width: 22px; height: 22px; display: block; flex: none; }
   /* ---- the scoreboard row (wide screens): option C ----
      Identity stands alone as a nameplate; the three utilities share one
      bordered tray. Chips never pop in and out up here: while competition
@@ -126,7 +130,8 @@
   .hdr-tray .gear {
     width: 40px; height: 100%; border: none; border-radius: 0; background: transparent;
   }
-  .hdr-tray .gear .gear-ico { width: 21px; height: 21px; }
+  .hdr-tray .gear .gear-ico,
+  .hdr-tray .gear .cup-ico { width: 21px; height: 21px; }
   .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
   .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
   .sleeping { opacity: 0.42; pointer-events: none; }

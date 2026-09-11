@@ -203,7 +203,13 @@
   .standings li .rk { color: var(--gold); width: 20px; text-align: right; }
   .standings li .nm { flex: 1; text-align: left; }
   .standings li .sc { font-family: 'Anton', sans-serif; }
-  .standings li .vw { color: var(--gold-bright); font-size: 12px; font-weight: 700; min-width: 32px; text-align: right; }
+  .standings li .vw {
+    color: var(--gold-bright); font-size: 12px; font-weight: 700;
+    min-width: 32px; text-align: right;
+    display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px;
+  }
+  /* the drawn cup in a tally: sized to the row's text, not to the header's */
+  .standings li .vw .cup-ico { width: 13px; height: 13px; }
   /* ---- the wide result screen ----
      The overlay is always SQUARE, because it covers the square arena: 656px
      on a laptop, 836 at 1080p, 1196 at 1440p, 323 on a phone. So the question

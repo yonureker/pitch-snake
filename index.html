@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=d317b68b92">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=d317b68b92">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=093617dfc9">
 </head>
 <body>
   <div class="wrap">
@@ -117,7 +117,9 @@
       <!-- The boards live behind the trophy now: the death screen shows the
            top 100 only when your round places on it, so browsing the boards
            needed its own door, one that works on every screen and width. -->
-      <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">&#127942;</button>
+      <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">
+        <svg class="cup-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.3 2.8L17.7 2.8L17.15 9.4C16.75 13.2 14.6 15.3 12 15.3C9.4 15.3 7.25 13.2 6.85 9.4Z"/><path fill="currentColor" d="M10.5 15.0L13.5 15.0L13.5 18.0L10.5 18.0Z"/><path fill="currentColor" d="M7.6 17.8L16.4 17.8L17.6 21.3L6.4 21.3Z"/><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" d="M6.5 4.4C3.7 4.5 2.5 6.0 2.9 7.9C3.3 9.8 4.9 10.8 7.25 11.1M17.5 4.4C20.3 4.5 21.5 6.0 21.1 7.9C20.7 9.8 19.1 10.8 16.75 11.1"/></svg>
+      </button>
       <!-- The chip row: the player chip and the purse side by side, one
            flex row so the purse rides the chip's width whatever the name.
            Coins stopped being a section buried in the profile sheet because
@@ -490,24 +492,24 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=d317b68b92",
-    "./packages/net/net.js": "./packages/net/net.js?v=d317b68b92",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=d317b68b92",
-    "./page/build/dom.js": "./page/build/dom.js?v=d317b68b92",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=d317b68b92",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=d317b68b92",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=d317b68b92",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=d317b68b92",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=d317b68b92",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=d317b68b92",
-    "./page/build/kit.js": "./page/build/kit.js?v=d317b68b92",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=d317b68b92",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=d317b68b92",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=d317b68b92",
-    "./page/build/shop.js": "./page/build/shop.js?v=d317b68b92",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=d317b68b92",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=d317b68b92",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=d317b68b92"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=093617dfc9",
+    "./packages/net/net.js": "./packages/net/net.js?v=093617dfc9",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=093617dfc9",
+    "./page/build/dom.js": "./page/build/dom.js?v=093617dfc9",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=093617dfc9",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=093617dfc9",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=093617dfc9",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=093617dfc9",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=093617dfc9",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=093617dfc9",
+    "./page/build/kit.js": "./page/build/kit.js?v=093617dfc9",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=093617dfc9",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=093617dfc9",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=093617dfc9",
+    "./page/build/shop.js": "./page/build/shop.js?v=093617dfc9",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=093617dfc9",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=093617dfc9",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=093617dfc9"
   }
 }
 </script>
@@ -4188,6 +4190,17 @@
   // the nine stays last because giving up is not a promotion for the others.
   // The validator sorts identically, so the ladder can never disagree with
   // the screen the room just read.
+  // The series cup, drawn rather than typed, for the same reasons the gear
+  // is (see the header): an emoji is a different picture on every platform,
+  // carries its own colour so it ignores the theme, and cannot be weighted
+  // to sit with the text beside it. One source here, cloned per row.
+  const CUP_SVG = '<svg class="cup-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.3 2.8L17.7 2.8L17.15 9.4C16.75 13.2 14.6 15.3 12 15.3C9.4 15.3 7.25 13.2 6.85 9.4Z"/><path fill="currentColor" d="M10.5 15.0L13.5 15.0L13.5 18.0L10.5 18.0Z"/><path fill="currentColor" d="M7.6 17.8L16.4 17.8L17.6 21.3L6.4 21.3Z"/><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" d="M6.5 4.4C3.7 4.5 2.5 6.0 2.9 7.9C3.3 9.8 4.9 10.8 7.25 11.1M17.5 4.4C20.3 4.5 21.5 6.0 21.1 7.9C20.7 9.8 19.1 10.8 16.75 11.1"/></svg>';
+  function cupIcon() {
+    const box = document.createElement('span');
+    box.innerHTML = CUP_SVG;          // a constant of ours, never anyone's input
+    return box.firstChild;
+  }
+
   function vsStandingsRows() {
     const rows = g.players.map((p, i) => ({
       idx: i,
@@ -4359,7 +4372,8 @@
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = row.name;
       const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = row.score;
-      const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆' + vsWinsOf(row.name);
+      const vw = document.createElement('span'); vw.className = 'vw';
+      vw.append(cupIcon(), String(vsWinsOf(row.name)));
       li.append(rk, nm, sc, vw);
       standingsEl.appendChild(li);
     });
@@ -4470,7 +4484,8 @@
       nm.textContent = p.name + (i === 0 ? ' · HOST' : '') + (p.ref === vs.ref ? ' (YOU)' : '');
       li.append(rk, fl, nm);
       if (seriesOn) {
-        const vw = document.createElement('span'); vw.className = 'vw'; vw.textContent = '🏆' + vsWinsOf(p.name);
+        const vw = document.createElement('span'); vw.className = 'vw';
+        vw.append(cupIcon(), String(vsWinsOf(p.name)));
         li.append(vw);
       }
       vsRosterEl.appendChild(li);
