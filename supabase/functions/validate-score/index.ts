@@ -14,7 +14,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   replay, MODES, SPEEDS, START_LEN,
-} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@e6b6c7022b5604e187cb961ce3f76b879ef8ae26/packages/engine/engine.js';
+} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@b8ff12b855f261ca59621c16918a1af5443985f1/packages/engine/engine.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -490,13 +490,21 @@ async function roomRound(
   // with 'malformed inputs', and nothing but a live round could have shown
   // it: a synthetic placings blob never goes near the log.
   const inputs = log.inputs;
-  // [quantum, x, y, seat]: (x, y) exactly one unit step (see the solo path),
-  // seat a real slot in this room.
+  // Two shapes, and nothing else. A TURN is [quantum, x, y, seat] with (x, y)
+  // exactly one unit step (see the solo path). A WITHDRAWAL is
+  // [quantum, 0, 0, seat, remove] since v27: a seat giving up its claim, and
+  // the (0,0) vector setDir refuses is what keeps the two from ever being
+  // confused. Checking it here rather than trusting the pinned engine closes
+  // a crafted log server-side whichever commit this function runs, which is
+  // the same reason the solo path re-checks its own rows.
   if (!Array.isArray(inputs) || inputs.length > 60000 ||
-      !inputs.every((r) =>
-        Array.isArray(r) && r.length === 4 && r.every(Number.isInteger) &&
-        Math.abs(r[1]) + Math.abs(r[2]) === 1 &&
-        r[3] >= 0 && r[3] < (players as number))) {
+      !inputs.every((r) => {
+        if (!Array.isArray(r) || !r.every(Number.isInteger)) return false;
+        if (!(r[3] >= 0 && r[3] < (players as number))) return false;
+        if (r.length === 4) return Math.abs(r[1]) + Math.abs(r[2]) === 1;
+        if (r.length === 5) return r[1] === 0 && r[2] === 0 && (r[4] === 0 || r[4] === 1);
+        return false;
+      })) {
     return refuse('malformed inputs');
   }
   if (!Number.isInteger(log.end) || (log.end as number) <= 0 || (log.end as number) > 720000) {
@@ -518,7 +526,7 @@ async function roomRound(
   try { played = replay(log); } catch { return refuse('log does not replay'); }
   const game = played as unknown as {
     alive: boolean; quanta: number;
-    players: { idx: number; score: number; diedAt: number }[];
+    players: { idx: number; score: number; diedAt: number; withdrawn?: boolean }[];
   };
   if (game.alive) return refuse('round never ended');
   if (game.quanta !== log.end) return refuse('length mismatch');
