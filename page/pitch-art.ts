@@ -43,6 +43,15 @@ export interface SkinArt {
   spikes: string | null;
   /** The crest's second colour, alternating tooth by tooth. */
   spikesAlt: string | null;
+  /**
+   * A patterned body: colour stops cycled head to tail instead of the plain
+   * two-colour ramp. `cycles` is how many times the whole stop sequence
+   * repeats along the body, hard-edged rings unless `soft`, which
+   * cross-fades between stops (an ember glow rather than a band). The
+   * pattern rides the body FRACTION, not the segment index, which is what a
+   * real snake's rings do: growing stretches them, it never mints more.
+   */
+  pattern?: { colors: readonly (readonly number[])[]; cycles: number; soft?: boolean };
 }
 
 // The hats grew past this file's ceiling and moved to their own module
@@ -74,24 +83,33 @@ export const SKINS = {
                   spikes: null, spikesAlt: null },
   'skin-gilt':  { head: [252, 232, 152], tail: [194, 150, 56],  line: 'rgba(140,100,30,0.7)',
                   spikes: null, spikesAlt: null },
-  // The colour drop, 2026-09-10: seven more ramps, each picked so the HEAD
-  // stays bright against the pitch green and no two heads read alike at a
-  // glance. Crestless on purpose: the app does not draw the viper's spikes,
-  // and a skin that looks different per platform would lie in a room.
-  'skin-ocean':   { head: [111, 215, 232], tail: [ 20,  82, 110], line: 'rgba(90,190,210,0.6)',
-                    spikes: null, spikesAlt: null },
-  'skin-copper':  { head: [232, 160, 106], tail: [124,  74,  34], line: 'rgba(150,92,44,0.65)',
-                    spikes: null, spikesAlt: null },
-  'skin-frost':   { head: [223, 244, 255], tail: [122, 168, 204], line: 'rgba(150,200,235,0.6)',
-                    spikes: null, spikesAlt: null },
-  'skin-cherry':  { head: [255, 122, 112], tail: [142,  18,  38], line: 'rgba(200,60,70,0.6)',
-                    spikes: null, spikesAlt: null },
+  // The template drop, 2026-09-10: seven patterned bodies, the owner's call
+  // that a skin is a TEMPLATE and not a recolour. Each is a stop sequence
+  // cycled along the body (see `pattern`); head/tail still name the ends so
+  // everything that samples a ramp (swatches, fallbacks) keeps working.
+  // Crestless on purpose: the app does not draw the viper's spikes, and a
+  // skin that looks different per platform would lie in a room.
+  'skin-ocean':   { head: [223, 238, 244], tail: [ 23,  57,  74], line: 'rgba(90,190,210,0.6)',
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[223, 238, 244], [23, 57, 74]], cycles: 5 } },
+  'skin-copper':  { head: [217, 154,  94], tail: [ 94,  58,  28], line: 'rgba(150,92,44,0.65)',
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[217, 154, 94], [94, 58, 28]], cycles: 6 } },
+  'skin-frost':   { head: [235, 248, 255], tail: [122, 168, 204], line: 'rgba(150,200,235,0.6)',
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[235, 248, 255], [122, 168, 204]], cycles: 5, soft: true } },
+  'skin-cherry':  { head: [212,  58,  47], tail: [ 38,  35,  43], line: 'rgba(200,60,70,0.6)',
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[212, 58, 47], [242, 197, 61], [38, 35, 43], [242, 197, 61]], cycles: 2 } },
   'skin-violet':  { head: [201, 162, 255], tail: [ 91,  42, 168], line: 'rgba(160,110,240,0.6)',
-                    spikes: null, spikesAlt: null },
-  'skin-royal':   { head: [125, 162, 255], tail: [ 29,  63, 168], line: 'rgba(120,150,240,0.65)',
-                    spikes: null, spikesAlt: null },
-  'skin-inferno': { head: [255, 138,  60], tail: [179,  32,  19], line: 'rgba(230,120,50,0.6)',
-                    spikes: null, spikesAlt: null },
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[201, 162, 255], [91, 42, 168]], cycles: 4 } },
+  'skin-royal':   { head: [125, 162, 255], tail: [240, 244, 252], line: 'rgba(120,150,240,0.65)',
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[125, 162, 255], [240, 244, 252]], cycles: 6 } },
+  'skin-inferno': { head: [255, 170,  80], tail: [179,  32,  19], line: 'rgba(230,120,50,0.6)',
+                    spikes: null, spikesAlt: null,
+                    pattern: { colors: [[255, 170, 80], [179, 32, 19]], cycles: 4, soft: true } },
 } as const satisfies Record<string, SkinArt>;
 
 
@@ -135,6 +153,19 @@ export const SNAKE_SHADES = 64;
 export function buildLutFor(skin: SkinArt): string[] {
   return Array.from({ length: SNAKE_SHADES }, (_, i) => {
     const t = i / (SNAKE_SHADES - 1);
+    const p = skin.pattern;
+    if (p) {
+      // a template: the stop sequence cycled along the body, hard rings by
+      // default, cross-faded when soft. Same table, same zero frame cost.
+      const u = t * p.cycles * p.colors.length;
+      const a = p.colors[Math.trunc(u) % p.colors.length] ?? skin.head;
+      const bStop = p.colors[(Math.trunc(u) + 1) % p.colors.length] ?? skin.tail;
+      const f = p.soft ? u - Math.trunc(u) : 0;
+      const r = (a[0] ?? 0) + ((bStop[0] ?? 0) - (a[0] ?? 0)) * f;
+      const g = (a[1] ?? 0) + ((bStop[1] ?? 0) - (a[1] ?? 0)) * f;
+      const b2 = (a[2] ?? 0) + ((bStop[2] ?? 0) - (a[2] ?? 0)) * f;
+      return `rgb(${Math.trunc(r)}, ${Math.trunc(g)}, ${Math.trunc(b2)})`;
+    }
     const h = skin.head, l = skin.tail;
     const r = (h[0] ?? 0) + ((l[0] ?? 0) - (h[0] ?? 0)) * t;
     const g = (h[1] ?? 0) + ((l[1] ?? 0) - (h[1] ?? 0)) * t;
