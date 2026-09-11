@@ -11,7 +11,6 @@ import type { RuleMode } from './modes';
 // carries over without a migration step
 const KEYS: Record<RuleMode, string> = {
   classic: 'pitchSnakeBest',
-  speedrun: 'pitchSnakeBest.speedrun',
   survival: 'pitchSnakeBest.survival',
 };
 

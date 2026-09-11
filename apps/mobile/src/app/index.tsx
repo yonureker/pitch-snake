@@ -45,14 +45,12 @@ import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
 const MODE_LABELS: { mode: UiMode; label: string }[] = [
   { mode: 'classic', label: 'CLASSIC' },
-  { mode: 'speedrun', label: 'SPEED RUN' },
   { mode: 'survival', label: 'SURVIVAL' },
   { mode: 'versus', label: 'MULTIPLAYER' },
   { mode: 'tourney', label: 'TOURNAMENT' },
 ];
 const RULE_LABEL: Record<RuleMode, string> = {
   classic: 'CLASSIC',
-  speedrun: 'SPEED RUN',
   survival: 'SURVIVAL',
 };
 const DURATION_LABELS: { label: string; minutes: number }[] = [
@@ -659,7 +657,7 @@ export default function Index() {
                             maxLength={24}
                           />
                           <View style={styles.speedRow}>
-                            {(['classic', 'speedrun', 'survival'] as const).map((m) => (
+                            {(['classic', 'survival'] as const).map((m) => (
                               <Pressable
                                 accessibilityRole="button"
                                 key={m}

@@ -44,9 +44,8 @@
 // sprite passes them all. This hashes the canvas.
 //
 // WHAT IT COVERS. Only frames that do not depend on a seed, which means the
-// board before kickoff, in classic and speed run, with the viper skin and
-// with no hat: the body, the colour ramp, the outline, the crest, the hat and
-// the arena.
+// board before kickoff, in classic, with the viper skin and with no hat:
+// the body, the colour ramp, the outline, the crest, the hat and the arena.
 //
 // WHAT IT DELIBERATELY DOES NOT COVER: survival. It was the best frame here,
 // standing all 31 segments and five ghosts on the pitch at once, and it is
@@ -131,7 +130,6 @@ const SHOTS = [
   { name: 'classic-desk', query: '', width: 1512, height: 900, mode: 'classic' },
   { name: 'classic-phone', query: '', width: 390, height: 844, mode: 'classic' },
   { name: 'survival-desk', query: '', width: 1512, height: 900, mode: 'survival' },
-  { name: 'speedrun-desk', query: '', width: 1512, height: 900, mode: 'speedrun' },
   { name: 'viper-desk', query: '?skin=viper', width: 1512, height: 900, mode: 'classic' },
   { name: 'nohat-desk', query: '?hat=off', width: 1512, height: 900, mode: 'classic' },
 ];

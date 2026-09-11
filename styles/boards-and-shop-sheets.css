@@ -23,11 +23,11 @@
      was silently discarded and the sheet grew to four screens tall. The list
      rule survived, which is why it looked like a layout bug rather than a
      parse error. scripts/check-stylesheets.mjs now refuses that shape. */
-  /* Wider than the other sheets. It carries a hundred rows of rank, flag,
-     name and score, and since the ladder joined it as a fourth chip the row
-     of chips needed 342px in a 272px box, so the rating chip (LADDER then,
-     ELO since) dropped to a line of its own. The board is the one sheet
-     that earns the width. */
+  /* Wider than the other sheets: it carries a hundred rows of rank, flag,
+     name and score, and that alone is what earns the width. The chips used
+     to ask for it too (four of them needed 342px in a 272px box, so ELO
+     dropped to a line of its own); three of them fit, and the rows keep
+     the sheet wide regardless. */
   .modal.boards { max-height: 86vh; width: min(390px, 92vw); }
   .modal.boards .boards-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
   /* the header row the SHOP still wears; it outlived the achievement shelf
@@ -40,9 +40,9 @@
   .shelf-head b { font-family: 'Anton', sans-serif; font-size: 15px; color: var(--sheet-gold); letter-spacing: 1px; }
 
   /* ---- the boards sheet ---- */
-  /* Four chips since the ladder joined them, which is enough to squeeze a
-     two-word label into breaking mid-name. The chips wrap as a ROW rather
-     than letting SPEED RUN become two lines of one button. */
+  /* Three chips since SPEED RUN was retired, and the wrap stays: a
+     two-word label squeezed into a short row breaks mid-name, and the
+     chips wrap as a ROW rather than becoming two lines of one button. */
   .board-chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
   .board-chips button {
     font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;

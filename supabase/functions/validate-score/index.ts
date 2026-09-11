@@ -24,6 +24,13 @@ const reply = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const refuse = (error: string, status = 422) => reply({ error }, status);
 
+// The boards the server keeps, and so the only mode names a submission may
+// claim. MODES is deliberately not that list: the engine still carries
+// speedrun's config as data after the mode was retired from every shell on
+// 2026-09-11 (the levels are there on the same terms), and a ruleset with no
+// board must not be able to write a row through the back door.
+const BOARD_MODES = ['classic', 'survival'];
+
 // every knob a log may carry, with the CURRENT classic default it means when
 // absent (since v22 a classic TNT and a teleport trip both grow five, so
 // tntGrowth and portalGrowth default 5 here; pre-v15 logs that carried
@@ -232,7 +239,10 @@ function logFingerprint(log: Record<string, unknown>): number {
 // client for it now would be asking the loser to describe the match.
 function modeFromKnobs(log: Record<string, unknown>): string | null {
   for (const [name, m] of Object.entries(MODES as Record<string, Record<string, unknown>>)) {
-    if (name === 'versus') continue;
+    // the same door the solo path uses, for the same reason: MODES still
+    // carries the retired speedrun config, and a room whose knobs happened to
+    // match it would be rated in a pool with no board behind it
+    if (!BOARD_MODES.includes(name)) continue;
     let fits = true;
     for (const [k, dflt] of Object.entries(KNOBS)) {
       if ((log[k] ?? dflt) !== (m[k] ?? dflt)) { fits = false; break; }
@@ -336,7 +346,7 @@ Deno.serve(async (req) => {
   // the knobs must be exactly what the page can produce for the claimed
   // mode: the mode's own values, any of the three speeds, walls either way
   const m = (MODES as Record<string, Record<string, unknown>>)[mode];
-  if (!m || mode === 'versus') return refuse('unknown mode');
+  if (!m || !BOARD_MODES.includes(mode)) return refuse('unknown mode');
   for (const [k, dflt] of Object.entries(KNOBS)) {
     if ((log[k] ?? dflt) !== (m[k] ?? dflt)) return refuse('knobs do not match the mode');
   }
@@ -356,7 +366,7 @@ Deno.serve(async (req) => {
   if (game.alive) return refuse('round never ended');
   if (game.quanta !== log.end) return refuse('length mismatch');
   const score = game.score as number;
-  if (score < -999 || score > (mode === 'speedrun' ? 300 : 9999)) return refuse('score out of range');
+  if (score < -999 || score > 9999) return refuse('score out of range');
 
   // same name wash the SQL always applied
   const clean = String(name ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';

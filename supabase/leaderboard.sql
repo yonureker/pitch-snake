@@ -24,9 +24,11 @@
 
 -- ------------------------------------------------------------- scores ----
 -- One row per submitted run. mode partitions the boards ('classic',
--- 'speedrun', 'survival'); seed and user_id are recorded now so that server-side replay
+-- 'survival'); seed and user_id are recorded now so that server-side replay
 -- validation and accounts arrive later without a migration. Ties go to
 -- whoever got there first, which is why created_at is part of every order.
+-- 'speedrun' was a third board until 2026-09-11; the mode is retired and its
+-- rows were deleted (speedrun_retire.sql), so nothing may write that name.
 
 create table if not exists public.pitch_snake_scores (
   id          bigint generated always as identity primary key,
@@ -222,7 +224,7 @@ declare
   t_end       timestamptz;
   i           integer;
 begin
-  if p_mode is null or p_mode not in ('classic', 'speedrun', 'survival') then
+  if p_mode is null or p_mode not in ('classic', 'survival') then
     raise exception 'unknown mode';
   end if;
   if p_starts_in_minutes is null or p_starts_in_minutes < 0 or p_starts_in_minutes > 43200 then

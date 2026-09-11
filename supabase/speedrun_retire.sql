@@ -1,0 +1,15 @@
+-- One-time, run on 2026-09-11. SPEED RUN is retired: the chooser, the board
+-- chip, the tournament chip and the mobile picker no longer offer it, and
+-- pitch_snake_tournament_create no longer accepts the name (re-run
+-- leaderboard.sql for that guard; this file only moves data).
+--
+-- The rows go rather than sit under a board nobody can open. A score is only
+-- worth keeping while there is a board to read it on, and a mode with no
+-- shell has none; leaving 105 orphans in the table would only make the next
+-- person wonder which of the three boards they belong to.
+--
+-- What is NOT undone: the coins those rounds paid. They are ledger rows with
+-- reason='round', earned honestly under the rules of the day, and taking
+-- them back would be theft - the same call the achievements made when they
+-- were withdrawn. The ledger is append-only and stays that way.
+delete from public.pitch_snake_scores where mode = 'speedrun';

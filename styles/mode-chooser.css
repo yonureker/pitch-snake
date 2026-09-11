@@ -40,7 +40,6 @@
   /* One colour per mode: a tile with no accent read as disabled next to
      its coloured siblings. */
   #modeRow button[data-mode="classic"]  { --accent: #c9a961; }
-  #modeRow button[data-mode="speedrun"] { --accent: #4fc3d9; }
   #modeRow button[data-mode="survival"] { --accent: #e2803a; }
   #modeRow button[data-mode="versus"]   { --accent: #7dbf5c; }
   #modeRow button[data-mode="tourney"]  { --accent: #a878d8; }

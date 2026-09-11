@@ -25,7 +25,7 @@
   .ov-body.two-col .acct { margin-top: 12px; }
   /* ---- the wide chooser ----
      Same threshold and the same two measurement traps as the result screen
-     above. The six modes become glyph tiles, two columns, CENTERED: play
+     above. The four modes become glyph tiles, two columns, CENTERED: play
      testing tried them beside a facts rail and the half empty column read
      as clutter next to a game whose whole character is centered, so the
      numbers live behind the trophy's boards sheet and the tiles keep the
@@ -51,7 +51,7 @@
     .ov-body.modes-grid .stack-choice button {
       display: flex; align-items: center; justify-content: center; text-align: center;
       gap: clamp(10px, 1.8cqw, 16px);
-      /* compact rows: six of them have to fit the smallest wide panel
+      /* compact rows: all of them have to fit the smallest wide panel
          without scrolling, and the fade cutting TOURNAMENTS in half is how
          the first stack shipped */
       min-height: 42px;
