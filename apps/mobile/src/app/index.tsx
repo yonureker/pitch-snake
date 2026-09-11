@@ -841,11 +841,10 @@ export default function Index() {
                       : `${String(prevBest - loop.score)} off your best.`}
                     </Text>
                   : null}
-                  {dead && uiMode !== 'versus' && submit.data !== undefined && submit.data.coins > 0 && (
-                    <Text style={styles.coinNote}>
-                      +{submit.data.coins} COINS {'\u00b7'} one per five points
-                    </Text>
-                  )}
+                  {/* The round-pay line was retired on 2026-09-11 with the
+                      page's, at the owner's call: it announced what the purse
+                      already says, since the coin count ticks up on its own.
+                      The coins are still paid; only the telling is gone. */}
                   {/* A placing round with no profile name behind it is offered
                       the CLAIM rather than a bare name field: the sheet is
                       where the name and the account live together, and the
@@ -1516,7 +1515,6 @@ const styles = StyleSheet.create({
   boardMine: { color: GameColors.goldBright },
   ballBox: { overflow: 'hidden', alignSelf: 'center' },
   stickerText: { fontFamily: BARLOW_BOLD, fontSize: 13, color: GameColors.goldBright, letterSpacing: 0.5 },
-  coinNote: { fontFamily: BARLOW, fontSize: 11, color: GameColors.goldBright, letterSpacing: 0.5 },
   purse: {
     flexDirection: 'row',
     alignItems: 'center',

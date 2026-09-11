@@ -21,7 +21,6 @@
   .ov-body.two-col .result { display: block; text-align: center; width: auto; }
   .ov-body.two-col .entry,
   .ov-body.two-col .save-note,
-  .ov-body.two-col .badges,
   .ov-body.two-col .acct { margin-top: 12px; }
   /* ---- the wide chooser ----
      Same threshold and the same two measurement traps as the result screen
