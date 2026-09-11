@@ -53,6 +53,15 @@ const ICE: RTCConfiguration = {
 const RETRY_MIN_MS = 2000;
 const RETRY_MAX_MS = 8000;
 
+/**
+ * How long a peer may vanish from presence before its channel is torn down.
+ * Supabase presence drops and re-adds a key on the presenter's own reconnect,
+ * and there is a re-track on every SUBSCRIBED, so a healthy connection would
+ * otherwise be renegotiated on every flicker. Presence drives CONNECT at once
+ * and DISCONNECT only after this grace, so a blink costs nothing.
+ */
+const ABSENCE_GRACE_MS = 6000;
+
 /** A rejected ICE add is ordinary on a racing handshake; swallow it by name. */
 function ignore(): void {
   /* intentionally empty: a failed candidate is not a failed connection */
@@ -81,6 +90,8 @@ interface Peer {
   /** candidates that arrived before the remote description; flushed after */
   pending: RTCIceCandidateInit[];
   remoteSet: boolean;
+  /** an offer is being answered right now: a duplicate must not race it in */
+  answering: boolean;
   retryMs: number;
 }
 
@@ -95,6 +106,7 @@ interface Peer {
 export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
   const peers = new Map<string, Peer>();
   const retryTimers = new Set<ReturnType<typeof setTimeout>>();
+  const dropTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let wanted: string[] = [];
   let onMsg: ((m: unknown) => void) | null = null;
   let closed = false;
@@ -134,7 +146,8 @@ export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
     if (closed || peers.has(ref)) return;
     const pc = new RTCPeerConnection(ICE);
     const peer: Peer = {
-      pc, dc: null, open: false, pending: [], remoteSet: false, retryMs: RETRY_MIN_MS,
+      pc, dc: null, open: false, pending: [], remoteSet: false, answering: false,
+      retryMs: RETRY_MIN_MS,
     };
     peers.set(ref, peer);
 
@@ -182,6 +195,8 @@ export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
   }
 
   function drop(ref: string): void {
+    const dt = dropTimers.get(ref);
+    if (dt !== undefined) { clearTimeout(dt); dropTimers.delete(ref); }
     const peer = peers.get(ref);
     if (!peer) return;
     peers.delete(ref);
@@ -209,9 +224,21 @@ export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
     setPeers(refs: string[]) {
       if (closed) return;
       wanted = refs.filter((r) => r !== myRef);
-      for (const ref of wanted) connect(ref);
-      const present = [...peers.keys()];
-      for (const ref of present) if (!wanted.includes(ref)) drop(ref);
+      for (const ref of wanted) {
+        const dt = dropTimers.get(ref);   // a peer that came back cancels its drop
+        if (dt !== undefined) { clearTimeout(dt); dropTimers.delete(ref); }
+        connect(ref);
+      }
+      // a peer gone from presence is dropped only after the grace, and only if
+      // it is still gone then: a flicker never tears down a live channel
+      for (const ref of peers.keys()) {
+        if (wanted.includes(ref) || dropTimers.has(ref)) continue;
+        const timer = setTimeout(() => {
+          dropTimers.delete(ref);
+          if (!closed && !wanted.includes(ref)) drop(ref);
+        }, ABSENCE_GRACE_MS);
+        dropTimers.set(ref, timer);
+      }
     },
     signal(fromRef: string, data: Record<string, unknown>) {
       if (closed || typeof fromRef !== 'string' || fromRef === myRef) return;
@@ -222,6 +249,21 @@ export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
       const sdp = isSdp(data.sdp) ? data.sdp : null;
       const cand = isCand(data.cand) ? data.cand : null;
       if (sdp) {
+        // Perfect-negotiation, one-shot flavour: this mesh only ever makes one
+        // offer per connection (at connect), so any offer is a first offer to
+        // the callee. An offer reaching the caller is glare; an offer reaching
+        // an already-answered callee is a stale duplicate (Broadcast can
+        // redeliver, a retry can double-send). Either way, answering it in a
+        // non-'stable' or already-negotiated state throws InvalidStateError,
+        // whose catch would drop a WORKING connection. So gate hard.
+        if (sdp.type === 'offer') {
+          if (iCall(fromRef) || peer.remoteSet || peer.answering) return;
+          if (peer.pc.signalingState !== 'stable') return;
+          peer.answering = true;
+        } else {
+          // an answer is only meaningful to the caller still awaiting one
+          if (!iCall(fromRef) || peer.pc.signalingState !== 'have-local-offer') return;
+        }
         void peer.pc
           .setRemoteDescription(sdp)
           .then(async () => {
@@ -235,7 +277,7 @@ export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
               say(fromRef, { sdp: peer.pc.localDescription?.toJSON() });
             }
           })
-          .catch(() => { scheduleRetry(fromRef, peer); });
+          .catch(() => { peer.answering = false; scheduleRetry(fromRef, peer); });
       } else if (cand) {
         if (peer.remoteSet) void peer.pc.addIceCandidate(cand).catch(ignore);
         else peer.pending.push(cand);
@@ -245,6 +287,8 @@ export function openMesh(myRef: string, sendSignal: SignalSend): MeshTransport {
       closed = true;
       for (const t of retryTimers) clearTimeout(t);
       retryTimers.clear();
+      for (const t of dropTimers.values()) clearTimeout(t);
+      dropTimers.clear();
       const present = [...peers.keys()];
       for (const ref of present) drop(ref);
       onMsg = null;
