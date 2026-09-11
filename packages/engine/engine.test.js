@@ -2203,6 +2203,86 @@ test('multi-snake: the last snake standing clinches by passing the field, not by
   assert.ok(g.players[0].snake.length >= START_LEN, 'the champion keeps their body on the field');
 });
 
+test('withdraw: a conceded lead stops being a rival, and the survivor clinches behind', () => {
+  const g = quietGame({ players: 3 });
+  foodFar(g);
+  setPlayerSnake(g, 2, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  // A and B are dead and ahead; C is alive and a long way behind
+  for (const i of [0, 1]) {
+    const p = g.players[i];
+    p.alive = false; p.deadReason = 'wall'; p.diedAt = 10 * (i + 1);
+    p.snake.length = 0; p.snakeSet.clear();
+  }
+  g.players[0].score = 26;
+  g.players[1].score = 25;
+  g.players[2].score = 12;
+  g.advanceQuanta(1);
+  assert.equal(g.alive, true, 'behind two live claims, the round goes on');
+  g.withdraw(0, false);
+  g.advanceQuanta(1);
+  assert.equal(g.alive, true, 'one claim conceded is not enough: B still leads C');
+  g.withdraw(1, false);
+  g.advanceQuanta(1);
+  assert.equal(g.players[2].deadReason, 'won', 'with every claim conceded the survivor takes it');
+  assert.equal(g.players[2].score, 12, 'and wins on twelve against twenty-six');
+  assert.deepEqual(g.players.map(p => p.withdrawn), [true, true, false]);
+});
+
+test('withdraw: leaving removes the snake from the board at once', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 15], [4, 15], [3, 15]], 1, 0);
+  g.players[0].score = 4;
+  g.players[1].score = 9;
+  assert.ok(g.players[1].snake.length > 0, 'the leaver is on the board to begin with');
+  g.withdraw(1, true);
+  assert.equal(g.players[1].snake.length, 0, 'the body is gone');
+  assert.equal(g.players[1].snakeSet.size, 0, 'and so is its occupancy');
+  assert.equal(g.players[1].alive, false);
+  assert.equal(g.players[1].deadReason, 'left', 'left is its own ending, not a crash');
+  g.advanceQuanta(1);
+  assert.equal(g.players[0].deadReason, 'won', 'the seat that stayed takes the room');
+});
+
+test('withdraw: it is idempotent, and it replays exactly', () => {
+  const g = quietGame({ players: 2 });
+  foodFar(g);
+  setPlayerSnake(g, 0, [[5, 5], [4, 5], [3, 5]], 1, 0);
+  setPlayerSnake(g, 1, [[5, 15], [4, 15], [3, 15]], 1, 0);
+  g.advanceQuanta(30);
+  g.withdraw(1, true);
+  g.withdraw(1, true);              // the wire may deliver it twice
+  g.withdraw(1, false);
+  const rows = g.log.inputs.filter(r => r[1] === 0 && r[2] === 0);
+  assert.equal(rows.length, 1, 'one withdrawal, however many times it arrives');
+  let guard = 400;
+  while (g.alive && guard-- > 0) g.advanceQuanta(1);
+  const again = replay(g.log);
+  assert.deepEqual(again.players.map(p => p.withdrawn), g.players.map(p => p.withdrawn),
+    'the replay withdrew the same seat');
+  assert.deepEqual(again.players.map(p => p.score), g.players.map(p => p.score));
+  assert.deepEqual(again.players.map(p => p.deadReason), g.players.map(p => p.deadReason));
+  assert.equal(again.quanta, g.quanta, 'and ended on the same quantum');
+});
+
+test('withdraw: a rollback resim reproduces the withdrawal', () => {
+  const g = quietGame({ players: 3 });
+  foodFar(g);
+  for (let i = 0; i < 3; i++) setPlayerSnake(g, i, [[5, 3 + i * 5], [4, 3 + i * 5], [3, 3 + i * 5]], 1, 0);
+  g.advanceQuanta(20);
+  const snap = g.snapshot();
+  g.withdraw(2, false);
+  g.advanceQuanta(10);
+  const after = g.players.map(p => p.withdrawn);
+  g.restore(snap);
+  assert.deepEqual(g.players.map(p => p.withdrawn), [false, false, false],
+    'the rollback rewound past the withdrawal');
+  g.withdraw(2, false);             // the resim re-applies it on the same timeline
+  g.advanceQuanta(10);
+  assert.deepEqual(g.players.map(p => p.withdrawn), after, 'and the resim lands the same');
+});
+
 test('multi-snake: a leader outliving the last rival clinches on the same quantum', () => {
   const g = quietGame({ players: 2 });
   foodFar(g);

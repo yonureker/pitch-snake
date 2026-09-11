@@ -551,7 +551,9 @@ export default function Index() {
           round out badly; see supabase/RATING_RULES.md. */}
       {room.status === 'lobby' && !room.over && (loop.phase === 'playing' || loop.phase === 'countdown') && (
         <View style={styles.vsActions}>
-          {loop.mySeatAlive && !loop.forfeited ?
+          {/* FORFEIT only in its window: dead, and still ahead of everyone
+              alive. LEAVE is always there, because leaving concedes too. */}
+          {loop.canForfeit && (
             <Pressable
               accessibilityRole="button"
               onPress={() => {
@@ -571,10 +573,10 @@ export default function Index() {
                 {giveArmed ? 'GIVE UP?' : 'FORFEIT'}
               </Text>
             </Pressable>
-          : <Pressable accessibilityRole="button" onPress={room.leave} style={styles.vsAction}>
-              <Text style={styles.vsActionText}>{'\u2715'} LEAVE</Text>
-            </Pressable>
-          }
+          )}
+          <Pressable accessibilityRole="button" onPress={room.leave} style={styles.vsAction}>
+            <Text style={styles.vsActionText}>{'\u2715'} LEAVE</Text>
+          </Pressable>
           {loop.forfeited && <Text style={styles.vsNote}>FORFEITED</Text>}
         </View>
       )}

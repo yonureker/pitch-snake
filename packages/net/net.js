@@ -257,7 +257,10 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       const list = table[p];
       while (applied[p] < list.length && list[applied[p]].q === q) {
         const e = list[applied[p]];
-        game.setDir(e.x, e.y, p);
+        // an exit is not a turn: 2 takes the body with it (leave), 1 leaves
+        // the corpse where it fell (forfeit)
+        if (e.w === 1 || e.w === 2) game.withdraw(p, e.w === 2);
+        else game.setDir(e.x, e.y, p);
         applied[p]++;
       }
       // an entry stamped before the current quantum with no rollback pending
@@ -317,9 +320,22 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
     // rejecting is as deterministic as accepting.
     if (!(p >= 0 && p < N) || p === myIdx) return Infinity;
     if (!(msg.s >= 1) || !(msg.q >= 0) || msg.q > MAX_INPUT_Q) return Infinity;
-    const ax = msg.x === 1 || msg.x === -1 ? 1 : msg.x === 0 ? 0 : -1;
-    const ay = msg.y === 1 || msg.y === -1 ? 1 : msg.y === 0 ? 0 : -1;
-    if (ax < 0 || ay < 0 || ax + ay !== 1) return Infinity;   // exactly one unit step
+    // A WITHDRAWAL rides the input stream so it inherits the whole timeline
+    // for free: sequence numbers, the resend path, the ballast, and a
+    // rollback that re-applies it at exactly its own quantum. It is marked
+    // by w (1 forfeit, 2 leave) and must carry the (0,0) vector setDir
+    // refuses, so an exit and a turn can never be mistaken for one another.
+    // Written as positive assertions like the direction gate below it, and
+    // every peer runs the same filter, so refusing is as deterministic as
+    // accepting.
+    const exit = msg.w === 1 || msg.w === 2;
+    if (exit) {
+      if (msg.x !== 0 || msg.y !== 0) return Infinity;
+    } else {
+      const ax = msg.x === 1 || msg.x === -1 ? 1 : msg.x === 0 ? 0 : -1;
+      const ay = msg.y === 1 || msg.y === -1 ? 1 : msg.y === 0 ? 0 : -1;
+      if (ax < 0 || ay < 0 || ax + ay !== 1) return Infinity;   // exactly one unit step
+    }
     if (msg.s <= lastSeq[p]) return Infinity;              // duplicate
     if (msg.q > peerQ[p]) { peerQ[p] = msg.q; peerQAt[p] = nowMs; }
     if (msg.s !== lastSeq[p] + 1) {                        // a gap: hold it, ask again
@@ -327,7 +343,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       requestResend(p, nowMs);
       return Infinity;
     }
-    let back = commit(p, { s: msg.s, q: msg.q, x: msg.x, y: msg.y });
+    let back = commit(p, { s: msg.s, q: msg.q, x: msg.x, y: msg.y, w: msg.w });
     let next;
     while ((next = buffered[p].get(lastSeq[p] + 1))) {     // drain what queued behind it
       buffered[p].delete(next.s);
@@ -482,7 +498,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
         for (let k = 0; k < msg.r.length && k < REDUNDANCY; k++) {
           const a = msg.r[k];
           const before = lastSeq[msg.p];
-          back = Math.min(back, acceptInput({ p: msg.p, s: a[0], q: a[1], x: a[2], y: a[3] }, nowMs));
+          back = Math.min(back, acceptInput({ p: msg.p, s: a[0], q: a[1], x: a[2], y: a[3], w: a[4] }, nowMs));
           if (lastSeq[msg.p] > before) stats.patched += lastSeq[msg.p] - before;
         }
       }
@@ -491,7 +507,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
     } else if (msg.t === 'ri') {                 // a resend batch: same as inputs
       if (!pOk || !Array.isArray(msg.list)) return;
       let back = Infinity;
-      for (const e of msg.list) back = Math.min(back, acceptInput({ p: msg.p, s: e[0], q: e[1], x: e[2], y: e[3] }, nowMs));
+      for (const e of msg.list) back = Math.min(back, acceptInput({ p: msg.p, s: e[0], q: e[1], x: e[2], y: e[3], w: e[4] }, nowMs));
       if (back < pendingBack) pendingBack = back;   // coalesced: one rollback in pump()
     } else if (msg.t === 'b') {
       if (!pOk) return;                          // one validation, not three
@@ -514,7 +530,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       if (nowMs - replyAt[msg.p] < NEED_COOLDOWN) return;
       replyAt[msg.p] = nowMs;
       const list = [];
-      for (const e of myHist) if (e.s >= msg.from) list.push([e.s, e.q, e.x, e.y]);
+      for (const e of myHist) if (e.s >= msg.from) list.push([e.s, e.q, e.x, e.y, e.w]);
       if (list.length) {
         stats.resends++;
         transport.send({ t: 'ri', v: NET_PROTO, rd: roundId, p: myIdx, list: list.slice(0, 400) });
@@ -556,9 +572,42 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       const r = [];
       for (let k = Math.max(0, myHist.length - 1 - REDUNDANCY); k < myHist.length - 1; k++) {
         const h = myHist[k];
-        r.push([h.s, h.q, h.x, h.y]);
+        r.push([h.s, h.q, h.x, h.y, h.w]);
       }
       transport.send({ t: 'i', v: NET_PROTO, rd: roundId, p: myIdx, s: e.s, q: e.q, x, y, r });
+    },
+
+    /**
+     * Take this seat out of the reckoning, on the shared timeline.
+     *
+     * The same road a turn takes, for the same reason: a withdrawal changes
+     * who wins, so every peer has to apply it at the SAME quantum or the
+     * room disagrees about the ending. Riding the input stream buys the
+     * sequence numbers, the ballast, the resend path and rollback safety
+     * without a second protocol.
+     *
+     * Unlike a turn this is allowed while the seat is already dead, because
+     * that is precisely when a forfeit is offered: dead and still ahead.
+     *
+     * @param remove - true to take the body off the board too (LEAVE), false
+     *   to leave the corpse where it fell (FORFEIT).
+     */
+    localExit(remove, nowMs) {
+      if (dead || ended || game.players[myIdx].withdrawn) return;
+      if (typeof nowMs === 'number' && lastNow >= 0 && nowMs > lastNow) pump(nowMs);
+      if (dead || ended || game.players[myIdx].withdrawn) return;
+      const w = remove ? 2 : 1;
+      const e = { s: ++mySeq, q: game.quanta + 1, x: 0, y: 0, w };
+      myHist.push(e);
+      if (myHist.length > 640) myHist.splice(0, myHist.length - 512);
+      table[myIdx].push(e);
+      lastSeq[myIdx] = mySeq;
+      const r = [];
+      for (let k = Math.max(0, myHist.length - 1 - REDUNDANCY); k < myHist.length - 1; k++) {
+        const h = myHist[k];
+        r.push([h.s, h.q, h.x, h.y, h.w]);
+      }
+      transport.send({ t: 'i', v: NET_PROTO, rd: roundId, p: myIdx, s: e.s, q: e.q, x: 0, y: 0, w, r });
     },
 
     /**
@@ -575,7 +624,7 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       const list = [];
       for (let k = Math.max(0, myHist.length - REDUNDANCY * 2); k < myHist.length; k++) {
         const e = myHist[k];
-        list.push([e.s, e.q, e.x, e.y]);
+        list.push([e.s, e.q, e.x, e.y, e.w]);
       }
       if (list.length) {
         stats.resends++;

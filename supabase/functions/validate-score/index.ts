@@ -263,13 +263,30 @@ function modeFromKnobs(log: Record<string, unknown>): string | null {
 // within seven seconds. Ranking by array position would hand that to
 // whichever seat sorted first, which is a coin toss the loser can see.
 // Competition ranking, so a shared first place is followed by third.
-function placingsOf(game: { players: { idx: number; score: number; diedAt: number }[] }) {
+function placingsOf(
+  game: { players: { idx: number; score: number; diedAt: number; withdrawn?: boolean }[] },
+) {
+  // A WITHDRAWN seat cannot take the room, and that is the whole of it:
+  // conceding gives up the WIN, not the placing. The best seat that never
+  // withdrew is lifted to first; everyone else keeps plain score order,
+  // withdrawn or not. Four seats scoring 26f, 25f, 12 and 9 finish 12, 26,
+  // 25, 9. The room's own results screen sorts identically, because a rating
+  // that disagrees with what the players just read is a rating nobody will
+  // believe.
   const rows = game.players
-    .map((p) => ({ seat: p.idx, score: p.score, diedAt: p.diedAt, place: 1 }))
+    .map((p) => ({
+      seat: p.idx, score: p.score, diedAt: p.diedAt,
+      out: p.withdrawn === true, place: 1,
+    }))
     .sort((a, b) => b.score - a.score || b.diedAt - a.diedAt || a.seat - b.seat);
+  const top = rows.findIndex((r) => !r.out);
+  if (top > 0) rows.unshift(rows.splice(top, 1)[0]);
   for (let i = 0; i < rows.length; i++) {
     const prev = i > 0 ? rows[i - 1] : null;
-    rows[i].place = prev && prev.score === rows[i].score && prev.diedAt === rows[i].diedAt
+    // the lifted winner stands alone at the top, so a draw can only form
+    // among the seats below it
+    rows[i].place = prev && i > 1 && prev.out === rows[i].out
+      && prev.score === rows[i].score && prev.diedAt === rows[i].diedAt
       ? prev.place
       : i + 1;
   }

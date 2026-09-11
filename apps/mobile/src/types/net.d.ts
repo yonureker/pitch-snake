@@ -17,6 +17,12 @@ declare module '@pitch-snake/net' {
   export interface NetSession {
     frame(nowMs: number): void;
     localDir(x: number, y: number, nowMs: number): void;
+    /**
+     * Take this seat out of the reckoning on the shared timeline: `remove`
+     * takes the body with it (LEAVE), otherwise the corpse stays (FORFEIT).
+     * Rides the input stream, so every peer applies it at the same quantum.
+     */
+    localExit(remove: boolean, nowMs: number): void;
     dropPeer(i: number): void;
     flush(): void;
     stalled: boolean;

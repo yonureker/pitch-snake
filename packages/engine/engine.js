@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 26;  // 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 27;  // 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -433,6 +433,12 @@ export function createGame(cfg = {}) {
       doom: null,              // {tx, ty, until, reason} while a fatal move hangs (rule 25)
       doomSave: null,          // a press taken during that window, applied by the next quantum
       alive: true, deadReason: null, diedAt: 0,
+      // Out of the reckoning by the player's own hand (see withdraw). A
+      // withdrawn seat still has its score and its place in the standings,
+      // but it cannot win and it is no longer a rival the clinch must beat,
+      // which is what lets a room end the moment everyone still in it is
+      // beaten. Rides the log, so replays and the validator agree.
+      withdrawn: false,
       _majX: 0, _majY: 0,          // this quantum's majority cell (rule 24 scratch)
     };
     for (const [x, y] of cells) { p.snake.push({ x, y }); p.snakeSet.add(K(x, y)); }
@@ -1632,8 +1638,16 @@ export function createGame(cfg = {}) {
       let last = null, up = 0;
       for (const p of players) if (p.alive) { last = p; up++; }
       if (up === 1) {
+        // A withdrawn seat is not a rival: it gave up its claim, so the
+        // survivor has nothing left to beat there. With every other seat
+        // withdrawn this is -Infinity, and the survivor clinches on the spot
+        // however far behind it was, which is exactly what a room of
+        // forfeits should do rather than play a decided round out.
         let bestOther = -Infinity;
-        for (const p of players) if (p !== last && p.score > bestOther) bestOther = p.score;
+        for (const p of players) {
+          if (p === last || p.withdrawn) continue;
+          if (p.score > bestOther) bestOther = p.score;
+        }
         if (last.score > bestOther) die(last, 'won');
         // Not past them yet, so the round carries on with one snake: this is
         // the exact state sudden death exists for, and the only state that
@@ -1696,6 +1710,36 @@ export function createGame(cfg = {}) {
       // li ties this queued turn to its log row (see clearQueue)
       p.dirQueue.push({ x, y, li: S.log.inputs.length - 1 });
     }
+  }
+
+  /**
+   * Take a seat out of the reckoning.
+   *
+   * Two doors lead here and they differ only in what happens to the body.
+   * LEAVE (`remove`) is a player walking out of the room: the snake vanishes
+   * from the board at once, so nobody is steering around a ghost of someone
+   * who has gone. FORFEIT keeps the corpse, because it is only ever offered
+   * to a seat that is already dead and still ahead: conceding a lead so the
+   * room can stop playing for a score nobody is defending.
+   *
+   * Either way the seat keeps its score and its place in the standings but
+   * stops being a rival the clinch has to beat, which is what lets a round
+   * end the moment every seat still in it is beaten.
+   *
+   * Logged like an input, with its quantum, because it changes the shared
+   * outcome: replay, the rollback resim and the server's own validation all
+   * have to reach the same end. Idempotent, since the wire may deliver a
+   * withdrawal twice.
+   */
+  function withdraw(player, remove) {
+    const p = players[player];
+    if (!p || p.withdrawn) return;
+    p.withdrawn = true;
+    // (0,0) is the marker: setDir refuses a non-unit vector, so no honest
+    // input can ever collide with it. The fifth column says whether the body
+    // goes with the seat.
+    S.log.inputs.push([S.quanta, 0, 0, player, remove ? 1 : 0]);
+    if (remove && p.alive) die(p, 'left');
   }
 
   // A turn queued before a pause, or a save held against a window whose clock
@@ -1768,6 +1812,7 @@ export function createGame(cfg = {}) {
         doom: p.doom ? { tx: p.doom.tx, ty: p.doom.ty, until: p.doom.until, reason: p.doom.reason } : null,
         doomSave: p.doomSave ? { x: p.doomSave.x, y: p.doomSave.y } : null,
         alive: p.alive, deadReason: p.deadReason, diedAt: p.diedAt,
+        withdrawn: p.withdrawn,
       })),
       // log.finalScores/diedAt are deliberately not captured: they are stamped
       // only by stampEnd, and any rollback that rewinds past an ending re-runs
@@ -1809,6 +1854,7 @@ export function createGame(cfg = {}) {
       p.doom = q.doom ? { tx: q.doom.tx, ty: q.doom.ty, until: q.doom.until, reason: q.doom.reason } : null;
       p.doomSave = q.doomSave ? { x: q.doomSave.x, y: q.doomSave.y } : null;
       p.alive = q.alive; p.deadReason = q.deadReason; p.diedAt = q.diedAt;
+      p.withdrawn = q.withdrawn;
     }
     // the log is append-only: rewinding forgets the inputs recorded after the
     // snapshot, and the resim re-records them at the same quanta
@@ -1866,7 +1912,7 @@ export function createGame(cfg = {}) {
   }
 
   return Object.assign(S, {
-    setDir, clearQueue, advance, advanceQuanta,
+    setDir, withdraw, clearQueue, advance, advanceQuanta,
     snapshot, restore,
     renderProg, renderNow, drainEvents,
     ghostAt, portalEndAt, cellOccupied, portalBusy,
@@ -1915,7 +1961,14 @@ export function replay(log) {
   const inputs = log.inputs;
   let i = 0;
   for (let q = 0; q < log.end && game.alive; q++) {
-    while (i < inputs.length && inputs[i][0] === q) { game.setDir(inputs[i][1], inputs[i][2], inputs[i][3] ?? 0); i++; }
+    while (i < inputs.length && inputs[i][0] === q) {
+      const row = inputs[i];
+      // (0,0) is a withdrawal, never a turn: setDir refuses a non-unit
+      // vector, so the two can never be confused
+      if (row[1] === 0 && row[2] === 0) game.withdraw(row[3] ?? 0, row[4] === 1);
+      else game.setDir(row[1], row[2], row[3] ?? 0);
+      i++;
+    }
     game.advanceQuanta(1);
   }
   return game;

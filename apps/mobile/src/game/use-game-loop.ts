@@ -73,6 +73,8 @@ export interface GameLoop {
   endVersus: () => void;
   /** Concede the round: the seat stops steering and the snake runs out. */
   forfeit: () => void;
+  /** Is FORFEIT offered right now (dead, and ahead of everyone alive)? */
+  canForfeit: boolean;
   /** Whether this seat has conceded the round it is in. */
   forfeited: boolean;
   /** In a room: whether MY snake is still running. Solo rounds read true. */
@@ -165,6 +167,8 @@ interface LoopBox {
   /** conceded this round: the seat sends nothing more (see forfeit) */
   forfeited: boolean;
   lastMineAlive: boolean;
+  /** last pushed answer to "is FORFEIT offered", so state is written on change */
+  lastCanForfeit: boolean;
   vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] } | null;
   lastScore: number;
   lastCount: string;
@@ -217,6 +221,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     session: null,
     forfeited: false,
     lastMineAlive: true,
+    lastCanForfeit: false,
     vsIdx: -1,
     vsRc: null,
     lastScore: -1,
@@ -231,6 +236,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // frame loop consults (refs are not readable during render)
   const [forfeited, setForfeited] = useState(false);
   const [mySeatAlive, setMySeatAlive] = useState(true);
+  const [canForfeit, setCanForfeit] = useState(false);
   // whether the round in play carries a ticket, as state so the entry form
   // can gate on it without reading refs mid-render
   const [canSubmit, setCanSubmit] = useState(false);
@@ -393,6 +399,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           if (alive !== box.lastMineAlive) {
             box.lastMineAlive = alive;
             setMySeatAlive(alive);
+          }
+          // the forfeit window opens and shuts as the room plays: dead, and
+          // still ahead of everyone alive. Derived per frame, pushed to state
+          // only when the answer changes (performance rule 8's spirit).
+          const can = canForfeitNow();
+          if (can !== box.lastCanForfeit) {
+            box.lastCanForfeit = can;
+            setCanForfeit(can);
           }
         }
         if (myScore !== box.lastScore) {
@@ -629,13 +643,29 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setPhase('countdown');
   };
 
-  // full time (or a desync): the session said the round is over
-  // Concede the ROUND, keeping the seat. Mechanically this is the disconnect
-  // the ladder already rates: stop sending inputs and the snake crashes on
-  // its own, identically on every peer, so the log still corroborates.
+  // Concede the CLAIM, keeping the seat and the corpse. Offered in one narrow
+  // window (dead and still ahead of everyone alive), because that is the only
+  // moment the room is playing on for a score nobody is defending. The
+  // withdrawal rides the shared timeline, so every peer applies it at the
+  // same quantum and the round can end on the spot.
+  /** Dead, not already withdrawn, and ahead of every seat still alive. */
+  const canForfeitNow = (): boolean => {
+    const box = boxRef.current;
+    const g = game.current;
+    if (g === null || box.vsIdx < 0 || box.phase !== 'playing') return false;
+    const mine = g.players[box.vsIdx];
+    if (!mine || mine.alive || mine.withdrawn) return false;
+    for (let i = 0; i < g.players.length; i++) {
+      const p = g.players[i]; // noUncheckedIndexedAccess: possibly undefined
+      if (p !== undefined && i !== box.vsIdx && p.alive && p.score >= mine.score) return false;
+    }
+    return true;
+  };
+
   const forfeit = (): void => {
     const box = boxRef.current;
-    if (box.session === null || box.forfeited) return;
+    if (box.session === null || !canForfeitNow()) return;
+    box.session.localExit(false, nowMs());
     box.forfeited = true;
     setForfeited(true);
   };
@@ -652,6 +682,16 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // walking out of the room: back to a solo ready screen with a preview game
   const leaveVersus = (): void => {
     const box = boxRef.current;
+    // walking out concedes, and the room is told on the shared timeline
+    // before the session is let go: the seat withdraws and its body leaves
+    // the board at once, so nobody steers around a snake whose player has gone
+    if (box.session !== null && box.vsIdx >= 0 && box.phase === 'playing') {
+      try {
+        box.session.localExit(true, nowMs());
+      } catch {
+        // a room that cannot be told is a room being left anyway
+      }
+    }
     box.session = null;
     box.vsIdx = -1;
     box.vsRc = null;
@@ -705,6 +745,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     startVersus,
     endVersus,
     forfeit,
+    canForfeit,
     forfeited,
     mySeatAlive,
     leaveVersus,

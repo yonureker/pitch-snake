@@ -62,6 +62,70 @@ test('two sessions over 120ms latency converge on one timeline, rollbacks and al
   assert.ok(sessions.every(s => s.stats.rollbacks > 0), 'latency actually forced rollbacks on both sides');
 });
 
+test('an exit crosses the wire and both machines record the same withdrawal', () => {
+  // seat 1 walks out mid-round over a rough wire; both timelines must agree
+  // that it happened, at the same quantum, and end the same way
+  const bus = loopbackBus(2, { latency: 110, jitter: 40, drop: 0.15, seed: 21 });
+  const results = [];
+  const sessions = [];
+  for (let i = 0; i < 2; i++) {
+    const game = createGame({ ...QUIET, players: 2 });
+    const r = { game, desync: null };
+    results.push(r);
+    sessions.push(createSession({
+      game, myIdx: i, transport: bus.endpoints[i],
+      onEnd: () => {}, onDesync: (why) => { r.desync = why; },
+    }));
+  }
+  for (let now = 0; now <= 12000; now += 10) {
+    bus.pump(now);
+    if (now === 3000) sessions[1].localExit(true, now);      // LEAVE
+    for (let i = 0; i < 2; i++) sessions[i].frame(now);
+  }
+  for (const r of results) assert.equal(r.desync, null, 'no desync around the exit');
+  assert.equal(logOf(results[0]), logOf(results[1]), 'both machines recorded the same round');
+  for (const r of results) {
+    assert.equal(r.game.players[1].withdrawn, true, 'the seat is withdrawn on both machines');
+    assert.equal(r.game.players[1].snake.length, 0, 'and its body left the board on both');
+  }
+  const exits = results[0].game.log.inputs.filter(row => row[1] === 0 && row[2] === 0);
+  assert.equal(exits.length, 1, 'exactly one exit in the log');
+  assert.equal(exits[0][3], 1, 'stamped to the seat that left');
+  assert.equal(exits[0][4], 1, 'and marked as a leave, body and all');
+});
+
+test('a forfeit crosses the wire and hands the room to the seat that stayed', () => {
+  const bus = loopbackBus(2, { latency: 80, jitter: 20, seed: 22 });
+  const results = [];
+  const sessions = [];
+  for (let i = 0; i < 2; i++) {
+    const game = createGame({ ...QUIET, players: 2 });
+    const r = { game, ended: 0 };
+    results.push(r);
+    sessions.push(createSession({
+      game, myIdx: i, transport: bus.endpoints[i],
+      onEnd: () => { r.ended++; }, onDesync: () => {},
+    }));
+  }
+  // seat 0 is dead and ahead: exactly when a forfeit is offered
+  for (const r of results) {
+    const p = r.game.players[0];
+    p.alive = false; p.deadReason = 'wall'; p.diedAt = 5;
+    p.snake.length = 0; p.snakeSet.clear();
+    p.score = 20;
+  }
+  for (let now = 0; now <= 6000; now += 10) {
+    bus.pump(now);
+    if (now === 1500) sessions[0].localExit(false, now);     // FORFEIT, corpse stays
+    for (let i = 0; i < 2; i++) sessions[i].frame(now);
+  }
+  assert.equal(logOf(results[0]), logOf(results[1]), 'both machines recorded the same round');
+  for (const r of results) {
+    assert.equal(r.game.players[0].withdrawn, true);
+    assert.equal(r.game.players[1].deadReason, 'won', 'the seat that stayed took the room');
+  }
+});
+
 test('20% loss with heavy reorder still converges, healed mostly by input ballast', () => {
   const { sessions, results } = runRoom(2, { latency: 90, jitter: 140, drop: 0.2, seed: 11 }, 30000,
     QUIET, i => denseTaps(i, 25000));

@@ -106,6 +106,12 @@ export interface Player {
   alive: boolean; deadReason: string | null;
   /** Quantum this snake went down on; 0 while alive. */
   diedAt: number;
+  /**
+   * Out of the reckoning by the player's own hand: LEAVE took the body with
+   * it, FORFEIT left the corpse. A withdrawn seat keeps its score but cannot
+   * take the room, and stops being a rival the clinch has to beat.
+   */
+  withdrawn: boolean;
 }
 
 export interface Doom {
@@ -198,6 +204,12 @@ export interface Game {
   events: GameEvent[]; log: RoundLog;
   /** Steer a snake; the shells that know one snake omit the player index. */
   setDir(x: number, y: number, player?: number): void;
+  /**
+   * Take a seat out of the reckoning: `remove` takes the body off the board
+   * (LEAVE), otherwise the corpse stays (FORFEIT). Logged with its quantum,
+   * so replays and the validator reach the same ending. Idempotent.
+   */
+  withdraw(player: number, remove: boolean): void;
   clearQueue(): void;
   advance(dtMs: number): void;
   advanceQuanta(n: number): void;
