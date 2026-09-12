@@ -118,29 +118,76 @@
      below, so the bar gets the full width between them. The grid only
      applies while a room is open; without one the header is the flex row
      it always was. */
-  html.touchless .wrap.mp-open header {
+  /* ONE grid for both pointer types since 2026-09-12, at the owner's call.
+     The qualifier was html.touchless and the phone fell through to the flex
+     row with `flex-wrap: wrap`, where the room bar (flex-basis: 100%) took a
+     line of its own and LEAVE took a THIRD, so a room cost the phone 125px of
+     header against the 63 it needs. On a touch layout every pixel of chrome
+     comes out of the d-pad, which is what is left after the board and the
+     header, so that was sixty pixels of thumb spent on nothing.
+
+     Two more things went wrong in that fall-through and both are fixed by
+     being here rather than by a rule of their own. The header's flex
+     `justify-content: space-between` threw the cluster to the far right edge
+     the moment `.scores` was hidden, which is most of a live round (seat-out
+     hides it whenever LEAVE is offered), so the pills drifted right in a room
+     and sat left everywhere else with nothing having decided it. And the
+     three rows put the seats BELOW the whole logo instead of beside SNAKE.
+
+     The alignment is the owner's, stated plainly: the seats pill's bottom
+     sits on the logo's bottom line. That is why h1 is align-self: end rather
+     than stretched. Hanging both from the TOP instead only lines them up
+     while the pills happen to be exactly as tall as two lines of Anton,
+     which is true at no width in particular; hanging them from the bottom is
+     true at every width, and the bottom is the line the eye actually reads
+     these two objects against. */
+  .wrap.mp-open header {
     display: grid; align-items: center;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: 22px; row-gap: 7px;
+    column-gap: min(22px, max(7px, 2.4vw)); row-gap: min(7px, max(3px, 0.9vw));
   }
-  html.touchless .wrap.mp-open header h1 { grid-row: 1 / span 2; grid-column: 1; }
-  html.touchless .wrap.mp-open .hdr-cluster { grid-row: 1; grid-column: 2; }
-  html.touchless .wrap.mp-open header > .mp-bar { grid-row: 2; grid-column: 2; }
-  html.touchless .wrap.mp-open .scores { grid-row: 1 / span 2; grid-column: 3; margin-left: 0; min-width: 150px; }
+  /* the logo hangs from the bottom so SNAKE's baseline and the seats pill's
+     bottom edge are one line; see the block above */
+  .wrap.mp-open header h1 { grid-row: 1 / span 2; grid-column: 1; align-self: end; }
+  .wrap.mp-open .hdr-cluster { grid-row: 1; grid-column: 2; align-self: start; }
+  .wrap.mp-open header > .mp-bar { grid-row: 2; grid-column: 2 / span 2; align-self: end; }
+  /* IN A ROOM THE SEATS PILL IS THE SCOREBOARD, so the block goes.
+     It was already gone for most of a round: seat-out hid it, and seat-out
+     is set whenever LEAVE is offered, which is every moment of a live room
+     except the forfeit window. So SCORE and BEST appeared for exactly one
+     state, the one where you are dead and ahead, which is the state that
+     needs them least: the round is over for you, your number is sitting in
+     the pill with your name underlined in gold, and BEST is a solo figure
+     that has nothing to say about this room. One state's worth of scoreboard
+     was not a feature, it was the gap left by a rule written for the other
+     states.
+     Taking it out is what frees column 3 for the exit in EVERY room state,
+     which is what lets the seats have both remaining columns, which is what
+     stops a five-seat pill being cut off mid-name. */
+  .wrap.mp-open .scores { display: none; }
   /* Once your seat is out, the score block has nothing left to say: the
      round is settled and BEST is a solo number. So the corner it owns goes
      to the exit instead, which is the owner's "save space" ask taken at its
      word, and it frees the middle column for the seats and their status. */
-  html.touchless .wrap.mp-open > header > .mp-quit {
-    grid-row: 1 / span 2; grid-column: 3; justify-self: end; align-self: center;
+  /* The exit takes the top corner, on the chrome's own line. It used to span
+     both rows and centre itself there, which read well against a scoreboard
+     that no longer exists; beside the pills it simply belongs on their row.
+     Row 1 also keeps it out of the seats' way, which is the whole point of
+     giving them row 2 end to end. */
+  .wrap.mp-open > header > .mp-quit {
+    grid-row: 1; grid-column: 3; justify-self: end; align-self: start;
   }
-  .wrap.seat-out .scores { display: none; }
   .wrap .mp-bar {
     flex-basis: 100%; width: auto; display: flex; align-items: center;
     justify-content: flex-start; gap: 9px;
-    /* seats, status and the exit are three objects: let them wrap rather
-       than squeeze, so a full table with a note never distorts */
-    flex-wrap: wrap; row-gap: 6px;
+    /* NOWRAP, since 2026-09-12. These three objects were allowed to wrap
+       rather than squeeze, on the reasoning that a full table with a note
+       should never distort. But the bar is a row of the HEADER now, so a
+       wrap is not the bar growing, it is the header growing, and on the
+       phone that comes straight out of the d-pad. The seats pill already
+       knows how to give way instead (min-width: 0 and overflow: hidden),
+       which is the squeeze this was avoiding and the cheaper of the two. */
+    flex-wrap: nowrap;
   }
   .wrap .mp-hud {
     display: inline-flex; align-items: stretch; gap: 0; padding: 0;
@@ -179,6 +226,34 @@
      scoreboard leave, so the actions earn their place beside the seats
      rather than wrapping under them at every table size */
   .wrap .mp-quit { height: 34px; padding: 0 10px; font-size: 10.5px; letter-spacing: 1px; }
+
+  /* The seats own row 2 end to end, which is what five of them need: named
+     seats want about 375px and the middle column alone offers a phone 233,
+     so the pill used to clip, and what it clipped was whichever seats came
+     last. In a five-seat room you could lose your own score off the end of
+     your own scoreboard. Wrapping is what used to absorb that, and wrapping
+     is exactly what the header may no longer do.
+
+     The cells give a little too, so five of them fit the row they now
+     have rather than fitting by being cut off. Scaled like everything else
+     in the narrow block: flat at full size from 900px up, easing to a floor
+     that is still legible at arm's length. */
+  @media (max-width: 899.98px) {
+    /* the exit matches the chrome pills it now sits beside, or a 34px button
+       against their 25 sets the top row's height on its own and hands back
+       ten of the pixels this whole change is about. Same size as the gear and
+       the trophy, which are the tap targets it is lined up with. */
+    .wrap .mp-quit, .wrap .mp-notes { height: min(34px, max(25px, 3.78vw)); }
+    .wrap .mp-hud { height: min(34px, max(27px, 4.1vw)); }
+    .wrap .mp-hud .pl { padding: 0 min(8px, max(4px, 0.95vw)); gap: min(6px, max(3px, 0.7vw)); }
+    .wrap .mp-hud .pl:first-child { padding-left: min(12px, max(6px, 1.4vw)); }
+    .wrap .mp-hud .pl:last-child { padding-right: min(12px, max(6px, 1.4vw)); }
+    .wrap .mp-hud .pl .nm {
+      font-size: min(10.5px, max(8.5px, 1.17vw));
+      letter-spacing: min(1.2px, max(0.4px, 0.13vw));
+    }
+    .wrap .mp-hud .pl .sc { font-size: min(15px, max(12px, 1.67vw)); }
+  }
 
   canvas {
     display: block;

@@ -47,12 +47,26 @@
     padding: 16px;
     width: 100%;
     max-width: 540px;
-    /* the versus strip's height plus its gap, claimed only while a room is on
+    /* What a room costs the shell in height, claimed only while one is on
        screen; every height sum below subtracts it, so solo layouts are
-       untouched and the pitch never has to share its surface */
+       untouched and the pitch never has to share its surface. */
     --mp-h: 0px;
   }
-  .wrap.mp-open { --mp-h: 42px; }
+  /* 42px was the strip's own height back when a room drew a strip. It has
+     been a ROW OF THE HEADER since 2026-09-06 and the number never followed
+     it, so the shell went on setting aside a whole strip for something that
+     had moved: measured on 2026-09-12, a room grows the touch header by 11px
+     (45 to 56) and the desktop header by nothing at all, since the logo and
+     the chrome already make that column 94px tall. The difference came
+     straight off the pitch on any phone short enough for the height term to
+     bind: a 420x620 screen drew a 319px board where 344 fits.
+
+     Kept a couple of pixels generous rather than pinned at 17, because the
+     header's row gap and pill sizes scale with the viewport while this does
+     not, and a budget that runs SHORT overlaps the pad instead of merely
+     wasting space. Being wrong by two pixels of margin is the safe side. */
+  .wrap.mp-open { --mp-h: 14px; }
+  html.touchless .wrap.mp-open { --mp-h: 0px; }
 
   header {
     width: 100%;
