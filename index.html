@@ -3810,11 +3810,20 @@
   function syncMpQuit() {
     const live = !!vs && vsView() && (state === 'playing' || state === 'countdown');
     const canGive = live && vsCanForfeit();
-    // LEAVE is on the screen for the whole round now. It used to be hidden
-    // while your seat was alive so nobody could walk out without conceding;
-    // leaving IS conceding since v27 (the seat withdraws and the body goes
-    // with it), so there is nothing left to protect the player from.
-    const out = live;
+    // ONE exit at a time, and never two. FORFEIT owns the corner in the one
+    // window it is offered (dead, and still ahead of everyone alive); LEAVE
+    // owns it the rest of the round. Both were on screen together for a
+    // day and read as clutter in a five-seat room, which is what it was:
+    // two ways out competing for the same glance.
+    //
+    // LEAVE cannot simply go, though, however tidy that would be. It is the
+    // only exit an ALIVE player has, and the only one a player who is dead
+    // but BEHIND has, since forfeiting is not offered to either; without it
+    // both would be left closing the tab, which is the worse ending for
+    // everyone else (a clean leave withdraws the seat and takes the body off
+    // the board, a dropped peer leaves the snake running on its last
+    // heading). The room's own LEAVE at full time is too late to help them.
+    const out = live && !canGive;
     if (mpQuitBtn.hidden === !out && mpGiveBtn.hidden === !canGive) return;
     mpQuitBtn.hidden = !out;
     mpGiveBtn.hidden = !canGive;
@@ -5690,6 +5699,7 @@
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
   }
+
 
 
 
