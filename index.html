@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=093617dfc9">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=093617dfc9">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=c37be78b94">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=c37be78b94">
 </head>
 <body>
   <div class="wrap">
@@ -492,24 +492,24 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=093617dfc9",
-    "./packages/net/net.js": "./packages/net/net.js?v=093617dfc9",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=093617dfc9",
-    "./page/build/dom.js": "./page/build/dom.js?v=093617dfc9",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=093617dfc9",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=093617dfc9",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=093617dfc9",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=093617dfc9",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=093617dfc9",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=093617dfc9",
-    "./page/build/kit.js": "./page/build/kit.js?v=093617dfc9",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=093617dfc9",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=093617dfc9",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=093617dfc9",
-    "./page/build/shop.js": "./page/build/shop.js?v=093617dfc9",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=093617dfc9",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=093617dfc9",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=093617dfc9"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=c37be78b94",
+    "./packages/net/net.js": "./packages/net/net.js?v=c37be78b94",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=c37be78b94",
+    "./page/build/dom.js": "./page/build/dom.js?v=c37be78b94",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=c37be78b94",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=c37be78b94",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=c37be78b94",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=c37be78b94",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=c37be78b94",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=c37be78b94",
+    "./page/build/kit.js": "./page/build/kit.js?v=c37be78b94",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=c37be78b94",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=c37be78b94",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=c37be78b94",
+    "./page/build/shop.js": "./page/build/shop.js?v=c37be78b94",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=c37be78b94",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=c37be78b94",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=c37be78b94"
   }
 }
 </script>
@@ -4403,6 +4403,16 @@
     // failure is silence, sockets fine and frames simply never arriving, so a
     // rise here is the earliest sign the transport has stopped delivering.
     reportIssue('versus-desync', { reason: String(why || 'unknown') });
+    // A ROUND THAT IS ALREADY OVER is told, not torn down. These two reasons
+    // are the only ones raised after full time: the room finished on two
+    // different quanta, or on two different boards. There is nothing left to
+    // rescue by resetting, the player is already reading a result, and the
+    // useful half of catching it is the row it just wrote to net_events. So
+    // the standings stay on screen and the session is simply let go. It also
+    // keeps a false positive cheap: if some benign difference ever reaches
+    // the end hash, it costs a telemetry row rather than flashing CONNECTION
+    // LOST over every room in the game.
+    if (why === 'end-quanta' || why === 'end-hash') { vs.session = null; return; }
     vs.session = null;
     vs.game = null;
     vs.over = true;

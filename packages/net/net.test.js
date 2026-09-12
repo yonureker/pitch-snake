@@ -62,6 +62,106 @@ test('two sessions over 120ms latency converge on one timeline, rollbacks and al
   assert.ok(sessions.every(s => s.stats.rollbacks > 0), 'latency actually forced rollbacks on both sides');
 });
 
+test('a lost exit is healed by gossip, even after its sender has gone', () => {
+  // The 2026-09-12 fork, as a test. Seat 2 never receives the withdrawal and
+  // cannot ask for it, because seat 0 leaves the moment it sends: before the
+  // gossip the survivors played two different rounds and ended 6000 quanta
+  // apart, with only two of the three noticing.
+  const N = 3;
+  const inbox = [[], [], []];
+  const blind = new Set([2]);            // the seat the exit never reaches
+  let senderGone = false;
+  const wire = (i) => {
+    let cb = null;
+    return {
+      send(obj) {
+        if (i === 0 && senderGone) return;          // it left; it answers nothing
+        for (let j = 0; j < N; j++) {
+          if (j === i) continue;
+          const copy = JSON.parse(JSON.stringify(obj));
+          const isExit = copy.t === 'i' && (copy.w === 1 || copy.w === 2);
+          if (blind.has(j) && i === 0) {
+            if (isExit) continue;                    // the packet itself is lost
+            if (Array.isArray(copy.r)) copy.r = copy.r.filter(a => a[4] !== 1 && a[4] !== 2);
+          }
+          inbox[j].push(copy);
+        }
+      },
+      onMessage(f) { cb = f; },
+      setOpen() {}, isOpen() { return true; },
+      deliver() { const q = inbox[i]; inbox[i] = []; for (const m of q) if (cb) cb(m); },
+      close() {},
+    };
+  };
+  const wires = [wire(0), wire(1), wire(2)];
+  const games = [], sessions = [], desyncs = [null, null, null];
+  for (let i = 0; i < N; i++) {
+    const g = createGame({ ...QUIET, players: N });
+    games.push(g);
+    sessions.push(createSession({
+      game: g, myIdx: i, transport: wires[i],
+      onEnd: () => {}, onDesync: (why) => { desyncs[i] = why; },
+    }));
+  }
+  let now = 0;
+  const step = (until) => {
+    for (; now <= until; now += 10) {
+      for (const w of wires) w.deliver();
+      for (const s of sessions) s.frame(now);
+      if (games.every(g => !g.alive)) return true;
+    }
+    return false;
+  };
+  step(2000);
+  sessions[0].localExit(true, now);
+  step(now + 40);
+  senderGone = true;                     // vsLeave: the wire comes down
+  step(120000);
+
+  assert.deepEqual(games.map(g => g.players[0].withdrawn), [true, true, true],
+    'every survivor learned the withdrawal, including the one that never received it');
+  assert.equal(games[1].quanta, games[2].quanta,
+    'and the survivors ended the round on the same quantum');
+  assert.deepEqual(games[1].players.map(p => p.score), games[2].players.map(p => p.score));
+  assert.deepEqual(desyncs.slice(1), [null, null], 'no desync: it was repaired, not merely caught');
+});
+
+test('an ending nobody else agrees with is caught, not swallowed', () => {
+  // The other half of the same failure: before this, a peer that finished
+  // stopped talking, which looked exactly like a peer that finished
+  // correctly, so two machines could report two different rounds in silence.
+  const seen = [];
+  let cb = null;
+  const solo = {
+    send(m) { seen.push(m); },
+    onMessage(f) { cb = f; },
+    setOpen() {}, isOpen() { return true; }, close() {},
+  };
+  // a TIMED round, so there is a definite ending to announce and compare
+  const game = createGame({ ...QUIET, players: 2, durationMs: 3000 });
+  let why = null;
+  const session = createSession({
+    game, myIdx: 0, transport: solo,
+    onEnd: () => {}, onDesync: (w) => { why = w; },
+  });
+  // nobody is talking on the other seat, and a session waits for its room:
+  // release it so the round can actually reach an ending
+  session.dropPeer(1);
+  // run until this seat's round is over and it has announced the ending
+  for (let now = 0; now <= 120000 && why === null; now += 10) {
+    session.frame(now);
+    if (seen.some(m => m.t === 'e')) break;
+  }
+  const mine = seen.find(m => m.t === 'e');
+  assert.ok(mine, 'the ending was announced at all');
+  assert.equal(typeof mine.q, 'number');
+  assert.ok(mine.h > 0, 'and carried a fold of the final board');
+
+  // a peer claiming the same round ended somewhere else entirely
+  cb({ t: 'e', v: NET_PROTO, p: 1, q: mine.q + 400, h: mine.h });
+  assert.equal(why, 'end-quanta', 'a different ending quantum is a desync, not a shrug');
+});
+
 test('an exit crosses the wire and both machines record the same withdrawal', () => {
   // seat 1 walks out mid-round over a rough wire; both timelines must agree
   // that it happened, at the same quantum, and end the same way
@@ -751,4 +851,78 @@ test('two wires: a full room ends identically with one peer stranded on the slow
   const heads = games.map((g) => g.players.map((p) => `${p.snake[0].x},${p.snake[0].y},${p.score}`).join('|'));
   assert.equal(heads[1], heads[0], 'seat 1 matched seat 0');
   assert.equal(heads[2], heads[0], 'the stranded seat matched the room');
+});
+
+test('a withdrawal that arrives out of order still withdraws the seat', () => {
+  // The drain path behind a sequence gap rebuilt each held message by hand
+  // and rebuilt it WITHOUT w, so a withdrawal that had to wait its turn
+  // committed as a (0,0) turn: nothing at all. The seat played on here and
+  // was gone everywhere else, which is the 2026-09-12 fork by a second road.
+  const sent = [];
+  let cb = null;
+  const solo = {
+    send(m) { sent.push(m); },
+    onMessage(f) { cb = f; },
+    setOpen() {}, isOpen() { return true; }, close() {},
+  };
+  const game = createGame({ ...QUIET, players: 2 });
+  const session = createSession({
+    game, myIdx: 0, transport: solo, onEnd: () => {}, onDesync: () => {},
+  });
+  for (let now = 0; now <= 400; now += 10) session.frame(now);
+
+  // seat 1's exit (seq 2) overtakes its turn (seq 1), so it is held
+  cb({ t: 'i', v: NET_PROTO, p: 1, s: 2, q: 30, x: 0, y: 0, w: 2 });
+  session.frame(410);
+  assert.equal(game.players[1].withdrawn, false, 'held behind the gap, as it should be');
+
+  // the turn arrives late; the exit must drain out behind it INTACT
+  cb({ t: 'i', v: NET_PROTO, p: 1, s: 1, q: 20, x: 0, y: -1 });
+  session.frame(420);
+  assert.equal(game.players[1].withdrawn, true,
+    'the held withdrawal kept its w and actually withdrew the seat');
+});
+
+test('a peer answers a resend for a seat that has already left', () => {
+  // The gap the gossip cannot close: a turn is lost, the exit queues behind
+  // it, and the only machine that could resend the turn has gone. Every peer
+  // holds the same table for every seat, so anyone still here can answer.
+  const sent = [];
+  let cb = null;
+  const solo = {
+    send(m) { sent.push(m); },
+    onMessage(f) { cb = f; },
+    setOpen() {}, isOpen() { return true; }, close() {},
+  };
+  const game = createGame({ ...QUIET, players: 3 });
+  const session = createSession({
+    game, myIdx: 0, transport: solo, onEnd: () => {}, onDesync: () => {},
+  });
+  for (let now = 0; now <= 400; now += 10) session.frame(now);
+
+  // seat 2 turns and then leaves; this machine heard both
+  cb({ t: 'i', v: NET_PROTO, p: 2, s: 1, q: 20, x: 0, y: -1 });
+  cb({ t: 'i', v: NET_PROTO, p: 2, s: 2, q: 30, x: 0, y: 0, w: 2 });
+  session.frame(410);
+  assert.equal(game.players[2].withdrawn, true, 'this seat has the whole story');
+
+  // seat 1 missed the lot and asks about seat 2, who is no longer here
+  sent.length = 0;
+  cb({ t: 'n', v: NET_PROTO, p: 1, of: 2, from: 1 });
+  const relay = sent.find(m => m.t === 'ri');
+  assert.ok(relay, 'the ask was answered by a bystander rather than dropped');
+  assert.equal(relay.of, 2, 'and stamped with the seat it speaks FOR, not the speaker');
+  assert.deepEqual(relay.list.map(e => e[0]), [1, 2], 'both of that seat`s messages');
+  assert.equal(relay.list[1][4], 2, 'the withdrawal still carries its w');
+
+  // and a relayed batch lands on the seat it belongs to, not on the relayer
+  const other = createGame({ ...QUIET, players: 3 });
+  const listener = createSession({
+    game: other, myIdx: 1, transport: solo, onEnd: () => {}, onDesync: () => {},
+  });
+  for (let now = 0; now <= 400; now += 10) listener.frame(now);
+  cb(relay);
+  listener.frame(410);
+  assert.equal(other.players[2].withdrawn, true, 'seat 2 withdrew');
+  assert.equal(other.players[0].withdrawn, false, 'and the relayer did not');
 });

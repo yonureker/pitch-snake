@@ -92,6 +92,25 @@ export const END_GRACE_MS = 600;
 // beat) has had ample time to finish: comfortably several beat cycles, and
 // still well inside the snapshot horizon.
 export const SETTLED_Q = 600;
+/**
+ * How many copies of a withdrawal go out.
+ *
+ * Three, because an exit is unrepairable once its sender has left and the
+ * wire beneath it drops datagrams on purpose. Duplicates are free: every
+ * receiver dedupes by sequence number, so the extra copies cost two packets
+ * and nothing else.
+ */
+export const EXIT_COPIES = 3;
+/**
+ * How far past a peer's reported ending this machine may still be running
+ * before that counts as a disagreement rather than ordinary slack.
+ *
+ * A peer announces its ending after END_GRACE_MS, and clocks drift, so a
+ * little daylight is normal. Two seconds of simulation is far more than
+ * pacing can explain and far less than the four-second fork the boards
+ * recorded.
+ */
+export const END_SKEW_Q = 200;
 // How far a peer's clock may sit from ours before we lean on the throttle.
 // Even aged forward, a report is still one wire trip old, so the band has to
 // swallow a bad transcontinental link (150ms is 15 quanta) with room to
@@ -189,6 +208,34 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
   let lastHashBeat = -1e15;
   let deadSince = -1;                                  // when the board first went still
   let ended = false, dead = false;                     // dead = desynced/aborted
+  let myEndHash = 0;                                   // folded once, on demand
+  // What each peer said about its own ending, kept until this machine has an
+  // ending of its own to compare it against. Without this the detection is
+  // one-sided: whoever finishes LAST hears the other's account while already
+  // ended and can judge it, while whoever finishes FIRST hears nothing it can
+  // use, discards the report, and keeps a result it has no reason to doubt.
+  // Both machines are equally wrong, so both must be able to say so.
+  const peerEnd = [];
+  /**
+   * Every withdrawal this peer knows about, as [seat, seq, quantum, w].
+   *
+   * An exit is the one message the ordinary repair paths cannot always heal.
+   * A lost TURN is asked for again from the peer who sent it; a lost EXIT is
+   * usually the last thing its sender ever says before leaving, so there is
+   * nobody left to ask, and the room silently forks: one machine withdraws a
+   * seat and ends the round, another plays on. That is not a theory, it is
+   * what the boards recorded on 2026-09-12 (room JT65M, one peer ending 429
+   * quanta before the other two, no desync raised).
+   *
+   * So the knowledge is GOSSIPED instead of owned: anyone who has it repeats
+   * it in every beat, and a peer missing it can learn from whoever is still
+   * here. At most one entry per seat, so the beat stays tiny.
+   */
+  const knownExits = [];
+  function rememberExit(seat, sq, q, w) {
+    for (const e of knownExits) if (e[0] === seat) return;
+    knownExits.push([seat, sq, q, w]);
+  }
   let stalled = false;
   // The earliest quantum any message drained since the last pump reaches back
   // to. Rolling back once to this, in pump(), instead of once per message is
@@ -213,6 +260,24 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
 
   const fail = (why) => {
     if (dead || ended) return;
+    dead = true;
+    if (onDesync) onDesync(why);
+  };
+
+  /**
+   * Report a disagreement about the ENDING, which fail() cannot.
+   *
+   * fail() goes quiet once `ended`, so a late straggler arriving after a
+   * legitimate finish cannot spoil a round that is already in the books.
+   * That guard is right for every other check and is precisely what hid the
+   * 2026-09-12 fork: an ending disagreement can only ever be discovered
+   * AFTER ending, so the one check that matters here was silenced by the
+   * one rule that protects everything else. Narrow on purpose: only the
+   * end comparison reaches this, and only against another peer's own
+   * account of how the round finished.
+   */
+  const failEnd = (why) => {
+    if (dead) return;
     dead = true;
     if (onDesync) onDesync(why);
   };
@@ -343,11 +408,17 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       requestResend(p, nowMs);
       return Infinity;
     }
+    if (msg.w === 1 || msg.w === 2) rememberExit(p, msg.s, msg.q, msg.w);
     let back = commit(p, { s: msg.s, q: msg.q, x: msg.x, y: msg.y, w: msg.w });
     let next;
     while ((next = buffered[p].get(lastSeq[p] + 1))) {     // drain what queued behind it
       buffered[p].delete(next.s);
-      back = Math.min(back, commit(p, { s: next.s, q: next.q, x: next.x, y: next.y }));
+      // CARRY w. Without it a withdrawal that arrived out of order commits as
+      // a (0,0) turn, which is nothing at all: the seat never withdraws on
+      // this machine and the round ends differently here than everywhere
+      // else. Silent, and exactly the fork of 2026-09-12 by a second route.
+      if (next.w === 1 || next.w === 2) rememberExit(p, next.s, next.q, next.w);
+      back = Math.min(back, commit(p, { s: next.s, q: next.q, x: next.x, y: next.y, w: next.w }));
     }
     return back;
   }
@@ -375,12 +446,52 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
     return sn.h || (sn.h = foldHash(JSON.stringify(sn.s)) || 1);
   }
 
+  /**
+   * Compare one peer's account of the ending with this machine's own.
+   *
+   * A round is a pure function of its inputs, so two peers that played the
+   * same one stop on the same quantum with the same board. Anything else
+   * means the timelines parted, and the players were shown two different
+   * results for what they believe was one game.
+   */
+  function judgeEnd(q, h) {
+    if (dead) return;
+    if (q !== game.quanta) failEnd('end-quanta');
+    else if (h !== (myEndHash ||= foldHash(JSON.stringify(game.snapshot())) || 1)) failEnd('end-hash');
+  }
+
+  /**
+   * Post a packet whose loss is not merely late: several copies, on every
+   * wire the room has. The ordinary send drops the slow wire the moment the
+   * fast one is proven, which is the right saving for a turn (the next beat
+   * repairs it) and the wrong one for a message that is said exactly once.
+   */
+  function postCritical(packet, copies) {
+    const post = transport.sendBoth ? (m) => transport.sendBoth(m) : (m) => transport.send(m);
+    for (let i = 0; i < copies; i++) post(packet);
+  }
+
+  // The ending, stated: the quantum it ended on and a fold of the final
+  // board. Cheap (once a round) and the only thing that can catch a room
+  // whose machines stopped agreeing right at the whistle. Said once and
+  // never repeated, because frame() stops being called the moment a round is
+  // over, so it goes out in duplicate rather than trusting one datagram.
+  function sendEnd() {
+    postCritical({
+      t: 'e', v: NET_PROTO, rd: roundId, p: myIdx,
+      q: game.quanta, h: (myEndHash ||= foldHash(JSON.stringify(game.snapshot())) || 1),
+    }, 2);
+  }
+
   function sendBeat() {
     const s = settledSnap();
     lastHashBeat = lastNow < 0 ? 0 : lastNow;
     transport.send({
       t: 'b', v: NET_PROTO, rd: roundId, p: myIdx, q: game.quanta, s: mySeq,
       hq: s ? s.q : -1, h: s ? snapHash(s) : 0,
+      // the gossip: every withdrawal I know of, so a peer that missed one can
+      // learn it from anybody rather than only from a sender who has left
+      x: knownExits.length ? knownExits : undefined,
     });
   }
 
@@ -484,7 +595,24 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
   }
 
   transport.onMessage((msg) => {
-    if (!msg || msg.v !== NET_PROTO || dead || ended) return;
+    if (!msg || msg.v !== NET_PROTO || dead) return;
+    // An ending is judged even after MY round is over, which is the whole
+    // point: the disagreement being hunted is precisely two peers finishing
+    // differently, and the ordinary gate below would drop the evidence.
+    if (msg.t === 'e') {
+      if (msg.rd !== undefined && msg.rd !== roundId) return;
+      if (!(msg.p >= 0 && msg.p < N) || msg.p === myIdx) return;
+      if (!ended) {
+        peerEnd[msg.p] = { q: msg.q, h: msg.h };
+        // they finished and I have not: in a deterministic round that cannot
+        // happen unless we stopped playing the same one
+        if (game.quanta > msg.q + END_SKEW_Q) fail('ended-apart');
+        return;
+      }
+      judgeEnd(msg.q, msg.h);
+      return;
+    }
+    if (ended) return;
     // a straggler from another round on this reused channel; see roundId above
     if (msg.rd !== undefined && msg.rd !== roundId) return;
     const nowMs = lastNow < 0 ? 0 : lastNow;
@@ -506,8 +634,13 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       if (back < pendingBack) pendingBack = back;   // coalesced: one rollback in pump()
     } else if (msg.t === 'ri') {                 // a resend batch: same as inputs
       if (!pOk || !Array.isArray(msg.list)) return;
+      // `of` names the seat these inputs BELONG to, which is the sender for an
+      // ordinary resend and a departed peer for a relayed one. Absent means
+      // the sender, so an older client's batches still land where they should.
+      const of = msg.of === undefined ? msg.p : msg.of;
+      if (!(of >= 0 && of < N)) return;
       let back = Infinity;
-      for (const e of msg.list) back = Math.min(back, acceptInput({ p: msg.p, s: e[0], q: e[1], x: e[2], y: e[3], w: e[4] }, nowMs));
+      for (const e of msg.list) back = Math.min(back, acceptInput({ p: of, s: e[0], q: e[1], x: e[2], y: e[3], w: e[4] }, nowMs));
       if (back < pendingBack) pendingBack = back;   // coalesced: one rollback in pump()
     } else if (msg.t === 'b') {
       if (!pOk) return;                          // one validation, not three
@@ -520,8 +653,48 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
         const mine = snaps.find(sn => sn.q === msg.hq);
         if (mine && snapHash(mine) !== msg.h) fail('hash');
       }
+      // A withdrawal somebody else knows about and I do not. It carries its
+      // own quantum, so applying it late is the ordinary rollback path and
+      // not a second timeline; acceptInput dedupes by sequence, so hearing
+      // the same exit from all four peers costs nothing.
+      if (Array.isArray(msg.x)) {
+        let back = Infinity;
+        for (const e of msg.x) {
+          if (!Array.isArray(e) || e.length !== 4) continue;
+          back = Math.min(back, acceptInput({ p: e[0], s: e[1], q: e[2], x: 0, y: 0, w: e[3] }, nowMs));
+        }
+        if (back < pendingBack) pendingBack = back;
+      }
     } else if (msg.t === 'n') {
-      if (!pOk || msg.of !== myIdx) return;
+      if (!pOk) return;
+      // ANSWERING FOR SOMEBODY ELSE. Normally only the author of a sequence
+      // can resend it, which leaves one hole: the peer being asked about has
+      // gone, so the ask reaches nobody and the gap never closes. That is
+      // fatal precisely when the missing message is a withdrawal, because
+      // everything queued behind it is stranded with it and this machine
+      // ends the round differently from the room.
+      //
+      // Every peer holds the same table for every seat, so anyone still here
+      // can answer. This is safe in the way the dropPeer drain would NOT have
+      // been: it hands over messages that seat genuinely sent, rather than
+      // deciding locally to skip one, so WHICH inputs land stays a property
+      // of the round and not of one machine's presence guess. The reply is
+      // stamped with the seat it speaks FOR, never the seat speaking.
+      if (msg.of !== myIdx) {
+        if (!(msg.of >= 0 && msg.of < N) || msg.of === msg.p) return;
+        if (nowMs - replyAt[msg.p] < NEED_COOLDOWN) return;
+        replyAt[msg.p] = nowMs;
+        const relay = [];
+        for (const e of table[msg.of]) if (e.s >= msg.from) relay.push([e.s, e.q, e.x, e.y, e.w]);
+        if (relay.length) {
+          stats.resends++;
+          transport.send({
+            t: 'ri', v: NET_PROTO, rd: roundId, p: myIdx, of: msg.of,
+            list: relay.slice(0, 400),
+          });
+        }
+        return;
+      }
       // throttle answers per requester, the way requestResend throttles asks.
       // The room channel is open to anyone with the code, so an unthrottled 'n'
       // loop would make every client spew 400-entry batches and drain the
@@ -602,12 +775,21 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       if (myHist.length > 640) myHist.splice(0, myHist.length - 512);
       table[myIdx].push(e);
       lastSeq[myIdx] = mySeq;
+      rememberExit(myIdx, e.s, e.q, w);
       const r = [];
       for (let k = Math.max(0, myHist.length - 1 - REDUNDANCY); k < myHist.length - 1; k++) {
         const h = myHist[k];
         r.push([h.s, h.q, h.x, h.y, h.w]);
       }
-      transport.send({ t: 'i', v: NET_PROTO, rd: roundId, p: myIdx, s: e.s, q: e.q, x: 0, y: 0, w, r });
+      const packet = { t: 'i', v: NET_PROTO, rd: roundId, p: myIdx, s: e.s, q: e.q, x: 0, y: 0, w, r };
+      // SENT MORE THAN ONCE, AND ON EVERY WIRE. This is usually the last
+      // thing a leaving peer ever says, so the resend path cannot save it:
+      // the peer that missed it would be asking a machine that has gone. The
+      // channels are deliberately unreliable (maxRetransmits 0), so three
+      // datagrams turn a five percent drop into one in eight thousand, and
+      // sendBoth refuses the fast-wire-only optimisation for this one packet
+      // because losing it forks the room rather than merely delaying a turn.
+      postCritical(packet, EXIT_COPIES);
     },
 
     /**
@@ -663,7 +845,20 @@ export function createSession({ game, myIdx, transport, onEnd, onDesync, round }
       // can still roll the last quanta back and un-still the board
       if (!game.alive) {
         if (deadSince < 0) deadSince = nowMs;
-        if (!ended && nowMs - deadSince >= END_GRACE_MS) { ended = true; if (onEnd) onEnd(); }
+        if (!ended && nowMs - deadSince >= END_GRACE_MS) {
+          ended = true;
+          // SAY HOW IT ENDED. An ending was the one thing nobody checked: a
+          // peer that finishes stops simulating and goes quiet, which looks
+          // exactly like a peer that finished correctly, so a room that
+          // ended at two different quanta reported two different rounds and
+          // raised nothing (2026-09-12). The settled hash could not catch it
+          // either, since it only ever inspects state SETTLED_Q behind the
+          // present and the divergence lived inside that blind window.
+          sendEnd();
+          // anything a peer said before I had an ending to compare it to
+          for (const e of peerEnd) if (e) judgeEnd(e.q, e.h);
+          if (onEnd) onEnd();
+        }
       } else {
         deadSince = -1;
       }
@@ -786,6 +981,18 @@ export function dualTransport(fast, slow, { seats, myIdx, now = () => Date.now()
       sample(onlyFast);
       if (fast.isOpen()) fast.send(obj);
       if (!onlyFast) slow.send(obj);
+    },
+    /**
+     * Send on BOTH wires whatever the fast one has proved, for the packets
+     * where a loss is not merely late. The ordinary send drops the slow wire
+     * as soon as every seat is proven fast, which is the whole point of it;
+     * a withdrawal cannot afford that saving, because a lost one forks the
+     * room instead of arriving a beat later.
+     */
+    sendBoth(obj) {
+      sample(fastOnly());
+      if (fast.isOpen()) fast.send(obj);
+      slow.send(obj);
     },
     onMessage(f) { cb = f; },
     setOpen(v) { slow.setOpen(v); },
