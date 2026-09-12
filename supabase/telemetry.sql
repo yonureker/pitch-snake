@@ -22,7 +22,13 @@ create table if not exists public.pitch_snake_net_events (
   user_id     uuid,                    -- who saw it; null for a signed-out client
   kind        text        not null,    -- 'round' | 'desync'
   code        text,                    -- room code, so one bad room is visible as one room
-  reason      text,                    -- desync only: 'behind' | 'hash' | ...
+  reason      text,                    -- desync only, punctuation stripped by the
+                                       -- RPC: 'behind' | 'hash' | 'endquanta' |
+                                       -- 'endhash' | 'endedapart' | ...
+                                       -- the three 'end' reasons arrived 2026-09-12
+                                       -- endedapart is raised DURING a round, the
+                                       -- other two only after full time, when two
+                                       -- peers finished the same round differently
   peers       smallint,                -- seats in the room
   quanta      integer,                 -- how far the round had run
   stalled_ms  integer,                 -- total time frozen
