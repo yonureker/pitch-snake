@@ -146,9 +146,23 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     column-gap: min(22px, max(7px, 2.4vw)); row-gap: min(7px, max(3px, 0.9vw));
   }
-  /* the logo hangs from the bottom so SNAKE's baseline and the seats pill's
-     bottom edge are one line; see the block above */
-  .wrap.mp-open header h1 { grid-row: 1 / span 2; grid-column: 1; align-self: end; }
+  /* The logo hangs from the bottom so SNAKE's baseline and the seats pill's
+     bottom edge are one line; see the block above.
+     The negative margin is the last hairline of that. A text box does not
+     end at its baseline: it ends half a leading plus the font's descent
+     lower, and for Anton at these line-heights that slack is 0.027 of the
+     font size ((line-height - ascent + descent) / 2, measured off the live
+     metrics at 19px, 24px and 52px, where it comes out 0.0389, 0.0275 and
+     0.0269 of an em). Aligning the BOXES therefore left the pill about a
+     pixel and a half below the letters at desktop size. Pulling the h1 down
+     by exactly that slack puts its BASELINE on the grid floor instead of its
+     box, so the two bottoms are one line by construction rather than by
+     luck, at every one of the sizes the logo scales through.
+     In em, so it tracks the responsive font-size on its own. The gold drop
+     shadow still falls below both, which is what a shadow is for. */
+  .wrap.mp-open header h1 {
+    grid-row: 1 / span 2; grid-column: 1; align-self: end; margin-bottom: -0.027em;
+  }
   .wrap.mp-open .hdr-cluster { grid-row: 1; grid-column: 2; align-self: start; }
   .wrap.mp-open header > .mp-bar { grid-row: 2; grid-column: 2 / span 2; align-self: end; }
   /* IN A ROOM THE SEATS PILL IS THE SCOREBOARD, so the block goes.
