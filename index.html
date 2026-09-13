@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=43a7475e48">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=43a7475e48">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=f72180af7b">
 </head>
 <body>
   <div class="wrap">
@@ -178,6 +178,11 @@
             <div class="t-code" id="vsRoomCode"></div>
             <div class="t-meta" id="vsRoomStatus"></div>
             <ol class="standings" id="vsRoster"></ol>
+            <!-- Who came and who went. Its own line rather than vsNote's,
+                 which carries the join errors and the full-round note: a
+                 room's comings and goings must not eat a sentence the
+                 player still needs, or be eaten by one. -->
+            <div class="save-note soft" id="vsNotice" hidden></div>
             <div class="btn-row">
               <button class="btn small" id="vsReadyBtn">READY UP</button>
               <button class="btn small" id="vsStartBtn" hidden>START ROUND</button>
@@ -492,24 +497,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=43a7475e48",
-    "./packages/net/net.js": "./packages/net/net.js?v=43a7475e48",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=43a7475e48",
-    "./page/build/dom.js": "./page/build/dom.js?v=43a7475e48",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=43a7475e48",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=43a7475e48",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=43a7475e48",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=43a7475e48",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=43a7475e48",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=43a7475e48",
-    "./page/build/kit.js": "./page/build/kit.js?v=43a7475e48",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=43a7475e48",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=43a7475e48",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=43a7475e48",
-    "./page/build/shop.js": "./page/build/shop.js?v=43a7475e48",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=43a7475e48",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=43a7475e48",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=43a7475e48"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=f72180af7b",
+    "./packages/net/net.js": "./packages/net/net.js?v=f72180af7b",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=f72180af7b",
+    "./page/build/dom.js": "./page/build/dom.js?v=f72180af7b",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=f72180af7b",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=f72180af7b",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=f72180af7b",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=f72180af7b",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=f72180af7b",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=f72180af7b",
+    "./page/build/kit.js": "./page/build/kit.js?v=f72180af7b",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=f72180af7b",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=f72180af7b",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=f72180af7b",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=f72180af7b",
+    "./page/build/shop.js": "./page/build/shop.js?v=f72180af7b",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=f72180af7b",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=f72180af7b",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=f72180af7b"
   }
 }
 </script>
@@ -877,6 +883,11 @@
   // handshake leaves the room on Broadcast, no worse than before. Signaling
   // rides the room's own channel (the 'rtc' event). See page/rtc-mesh.ts.
   import { openMesh } from './page/build/rtc-mesh.js';
+  // A room that says who came and who went. The module owns the subtraction
+  // of two presence snapshots and the phrasing; which VERB a departure earns
+  // is the shell's call, because the answer is in engine state. See
+  // page/room-notices.ts.
+  import { NOTICE_MS, noticeLine, rosterChange } from './page/build/room-notices.js';
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
@@ -3377,6 +3388,7 @@
   const vsCodeInput = document.getElementById('vsCode');
   const vsCreateBtn = document.getElementById('vsCreateBtn');
   const vsNote = document.getElementById('vsNote');
+  const vsNoticeEl = document.getElementById('vsNotice');
 
   let vsClient = null;    // one Realtime socket, reused across rooms
   let vs = null;          // the current room, or null
@@ -3404,6 +3416,69 @@
     vsNote.classList.toggle('soft', !!hint);
   }
   const vsCleanName = (v) => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'YOU';
+
+  // ---- who came and who went ----
+  // A roster that shrinks on its own leaves a player guessing whether a rival
+  // quit, crashed or is lagging, and mid-round that guess is the difference
+  // between a snake somebody is steering and one running on rails. The
+  // subtraction of two presence snapshots and the phrasing live in
+  // page/room-notices.ts; what stays here is the one thing that module must
+  // not know, which is what the ENGINE says about a seat.
+  //
+  // The VERB is decided when the line is DRAWN, never when the movement is
+  // detected. A LEAVE puts its withdrawal on the wire and pulls the socket
+  // down a beat later, so on a rough wire the presence drop can arrive first
+  // and the withdrawal second; holding the refs and asking again on every draw
+  // is what lets DROPPED correct itself to LEFT the moment the truth lands.
+  // That is syncMpFlags' rule in another costume: derive from the live state,
+  // because an event fired once cannot be repaired and a rollback repairs
+  // things.
+  function vsNotice(change) {
+    const seats = change.gone.length ? change.gone : change.joined;
+    if (!seats.length) return;
+    const room = vs;
+    room.notice = { seats, arrival: !change.gone.length, at: performance.now() };
+    mpHudHash = -1;                       // the strip has something new to say
+    clearTimeout(room.noticeTimer);
+    // Nothing is running on the lobby screen, so that line needs telling when
+    // its six seconds are up. The strip over the pitch needs no timer at all:
+    // it is polled on the frame clock already, which is where a round's clocks
+    // belong (rule 15).
+    room.noticeTimer = setTimeout(() => { if (vs === room) vsRefreshPanel(); }, NOTICE_MS + 60);
+  }
+
+  // the seat a presence ref is playing this round, or -1 for a spectator who
+  // arrived in the middle of one
+  function vsSeatOf(ref) {
+    if (!vs.roster) return -1;
+    for (let i = 0; i < vs.roster.length; i++) if (vs.roster[i].ref === ref) return i;
+    return -1;
+  }
+
+  // DROPPED is reserved for the one departure we genuinely cannot explain: a
+  // seat in a LIVE round that stopped answering without ever saying it was
+  // going. Anywhere else (the lobby, a spectator, a seat that withdrew first)
+  // the player simply left, and saying otherwise would invent a disconnection
+  // nobody had.
+  function vsNoticeVerb() {
+    if (!vs || !vs.notice || performance.now() - vs.notice.at > NOTICE_MS) return '';
+    if (vs.notice.arrival) return 'JOINED';
+    if (!vsInRound()) return 'LEFT';
+    for (const s of vs.notice.seats) {
+      const i = vsSeatOf(s.ref);
+      if (i < 0 || (g.players[i] && g.players[i].withdrawn)) return 'LEFT';
+    }
+    return 'DROPPED';
+  }
+
+  // The line as it reads right now, or '' when there is nothing to say. Built
+  // only where it is about to be written to the DOM: the verb above is enough
+  // to decide whether anything CHANGED, and it allocates nothing (rule 4).
+  function vsNoticeLine() {
+    const verb = vsNoticeVerb();
+    if (!verb) return '';
+    return noticeLine(verb, vs.notice.seats.map(s => s.name));
+  }
 
   function vsMakeCode() {
     const a = crypto.getRandomValues(new Uint8Array(5));
@@ -3450,10 +3525,20 @@
       return;
     }
     let h = (vs.spectating && !vs.over ? 1 : 0) | (vs.stalled ? 2 : 0) | 4;
+    // The notice by SHAPE rather than by text: which verb it would use and how
+    // many names. That is enough to rebuild when it appears, when it expires
+    // and when a DROPPED corrects itself to LEFT, and it builds no string on
+    // the frames in between (rule 4).
+    const nv = vsNoticeVerb();
+    const said = nv !== '' && nv !== 'JOINED';
+    h = (Math.imul(h, 131) + nv.length * 7 + (vs.notice ? vs.notice.seats.length : 0)) | 0;
     let up = 0, lastIdx = -1;
     for (let i = 0; i < g.players.length; i++) {
       const p = g.players[i];
-      h = (Math.imul(h, 131) + p.score * 2 + (p.alive ? 1 : 0)) | 0;
+      // withdrawn rides the hash too: a seat that FORFEITS while already dead
+      // moves no score and no pulse, so without this the note that says so
+      // waited for somebody else to eat before it appeared.
+      h = (Math.imul(h, 131) + p.score * 2 + (p.alive ? 1 : 0) + (p.withdrawn ? 4 : 0)) | 0;
       if (p.alive) { up++; lastIdx = i; }
     }
     if (h === mpHudHash) return;
@@ -3477,6 +3562,7 @@
     // them up is what made this a long bar in the first place, and it cost
     // the exit its place on the row.
     let noteText = vs.stalled ? 'WAITING…'
+      : said ? vsNoticeLine()
       : vsIWithdrew() ? 'FORFEITED'
       : (vs.spectating && !vs.over) ? 'SPECTATING'
       : '';
@@ -3498,11 +3584,15 @@
       el.append(nm, sc);
       mpHud.appendChild(el);
     }
-    if (chase > 0 && !vs.stalled) {
+    if (chase > 0 && !vs.stalled && !said) {
       noteText = lastIdx === vs.myIdx
         ? chase + ' TO CLINCH'
         : (vs.roster[lastIdx] ? vs.roster[lastIdx].name : '?') + ' NEEDS ' + chase;
     }
+    // An arrival is the quietest news a room has: somebody is watching, and
+    // they play in the next round. It waits for a gap rather than taking the
+    // line off a clinch that decides this one.
+    if (!noteText && nv === 'JOINED') noteText = vsNoticeLine();
     if (noteText) mpNotes.appendChild(hudNote(noteText));
     mpNotes.hidden = mpNotes.children.length === 0;
     mpHud.hidden = false;
@@ -3609,6 +3699,7 @@
         settled = true;
         vsSetNote('Could not reach the room service. Try again.');
         clearInterval(room.touchTimer);
+        clearTimeout(room.noticeTimer);
         // the mesh was built before subscribe; a failed join must not leave
         // its peer connections retrying ICE for ever with nobody to close them
         try { room.mesh.close(); } catch (e) {}
@@ -3752,6 +3843,7 @@
       try { room.session.localExit(true, performance.now()); } catch (e) {}
     }
     clearInterval(room.touchTimer);
+    clearTimeout(room.noticeTimer);
     // AND THE REALTIME SOCKET GOES WITH IT. Unsubscribing a channel leaves the
     // connection open, and a connection is the scarcest thing Supabase gives
     // away: 200 concurrent on the free tier, 500 on Pro. Held for the life of
@@ -3879,6 +3971,10 @@
     if (fresh) vsSay(vs.ready);
     // the host anchors slot one; everyone else queues by arrival
     list.sort((a, b) => (b.host - a.host) || (a.ts - b.ts) || (a.ref < b.ref ? -1 : 1));
+    // who came and who went, said out loud. Only while the wire is up, and
+    // rosterChange itself throws out any snapshot that has lost US, because
+    // our own reconnect re-lands the whole room's presence at once.
+    if (vs.up) vsNotice(rosterChange(vs.present, list, vs.ref));
     vs.present = list;
     // the mesh connects to exactly who is present, and prunes whoever left
     if (vs.mesh) vs.mesh.setPeers(list.map(p => p.ref));
@@ -4127,6 +4223,7 @@
     }
     vs.roster = m.roster;
     vs.myIdx = idx;
+    vs.notice = null;           // a notice never crosses a kickoff
     vsRefit();                  // dress the seats from presence
     vsTakeSeat();               // on the record before a single input exists
     vs.over = false;
@@ -4514,6 +4611,9 @@
       }
       vsRosterEl.appendChild(li);
     });
+    const notice = vsNoticeLine();
+    vsNoticeEl.textContent = notice;
+    vsNoticeEl.hidden = !notice;
     vsReadyBtn.hidden = vsInRound();
     vsReadyBtn.disabled = !vs.up;
     vsReadyBtn.textContent = vs.ready ? 'UNREADY' : 'READY UP';
