@@ -231,9 +231,18 @@
     height: 34px; padding: 0 14px; border-radius: 17px;
     background: #24321b; border-color: var(--gold); color: var(--gold-bright);
   }
+  /* THE NOTE GIVES WAY FIRST, not the seats. Five named seats and a status
+     chip together want more than a narrow screen has, and whichever of the
+     two yields decides what the strip stops saying. A note is one word and
+     survives being clipped; a name is an identity and does not. The high
+     shrink factor is what orders that: both may give, but the note gives a
+     hundred times more readily, so the seats keep their names until it has
+     nothing left to give. */
   .wrap .mp-notes {
     height: 34px; padding: 0 14px; font-size: 11px; letter-spacing: 1.5px;
     border: 1.5px solid rgba(194,162,90,0.55); border-radius: 17px; background: #24321b;
+    flex: 0 100 auto; min-width: 34px; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
   }
   .wrap .mp-hud .note { align-self: center; padding: 0 12px; font-size: 11px; letter-spacing: 1.5px; }
   /* compact in the header: the middle column is what the logo and the

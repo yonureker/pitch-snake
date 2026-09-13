@@ -47,6 +47,19 @@ import { resetVsSmoothing } from './vs-smoothing';
 /** The page-side round phases, mirroring the web version. */
 export type RoundPhase = 'ready' | 'countdown' | 'playing' | 'paused' | 'dead';
 
+/** One seat in the live strip: who, how many, and whether they are still up. */
+export interface SeatRow {
+  /** the engine seat index, which is also the seat's colour */
+  idx: number;
+  name: string;
+  score: number;
+  alive: boolean;
+  /** this device's own seat, which wears the gold and the underline */
+  me: boolean;
+  /** leading on score, so the crown rides here */
+  leader: boolean;
+}
+
 /** What the screen reads and calls. */
 export interface GameLoop {
   /** The live engine instance; null until the loop's mount effect creates it. */
@@ -79,6 +92,19 @@ export interface GameLoop {
   forfeited: boolean;
   /** In a room: whether MY snake is still running. Solo rounds read true. */
   mySeatAlive: boolean;
+  /**
+   * The live seat strip, the page's mp-hud in data form: every seat in the
+   * room ordered by score (ties by seat), leader first. Empty in a solo
+   * round. Rebuilt only when a human-visible number changes, never per frame.
+   */
+  seats: SeatRow[];
+  /**
+   * The one status line beside the strip, most urgent first, '' for none.
+   * The page's rule verbatim: a stalled wire is actionable, a clinch chase
+   * decides the round, and SPECTATING is the least of the three because a
+   * struck-through seat already says you are out.
+   */
+  seatNote: string;
   /** Out of the room, back to a solo ready screen. */
   leaveVersus: () => void;
   /** 3, 2, 1 or START! while counting down, empty otherwise. */
@@ -171,6 +197,8 @@ interface LoopBox {
   lastCanForfeit: boolean;
   vsRc: { myIdx: number; names: string[]; fits: { skin: string | null; hat: string | null }[] } | null;
   lastScore: number;
+  /** hash of what the seat strip shows, so it is rebuilt on change only */
+  lastSeatHash: number;
   lastCount: string;
   /** the last closing-seconds number pushed to state ('' outside them) */
   lastCall: string;
@@ -225,6 +253,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     vsIdx: -1,
     vsRc: null,
     lastScore: -1,
+    lastSeatHash: 0,
     lastCount: '',
     lastCall: '',
     preAim: null,
@@ -241,6 +270,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // can gate on it without reading refs mid-render
   const [canSubmit, setCanSubmit] = useState(false);
   const [score, setScore] = useState(0);
+  const [seats, setSeats] = useState<SeatRow[]>([]);
+  const [seatNote, setSeatNote] = useState('');
   const [best, setBest] = useState(0);
   const [countText, setCountText] = useState('');
   const [deadReason, setDeadReason] = useState('');
@@ -261,6 +292,111 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       setBest((current) => (stored > current ? stored : current));
     });
   }, []);
+
+  // These two are declared BEFORE the frame loop that calls them, rather than
+  // beside the room's other helpers where they would read more naturally. The
+  // React Compiler's immutability rule refuses a reference to a value declared
+  // later in the component, because the earlier reader cannot see that value
+  // change over time. canForfeitNow had been sitting on that error unnoticed
+  // since it was written, because the mobile lint dies on an unrelated EPERM
+  // before it ever reports.
+  // Concede the CLAIM, keeping the seat and the corpse. Offered in one narrow
+  // window (dead and still ahead of everyone alive), because that is the only
+  // moment the room is playing on for a score nobody is defending. The
+  // withdrawal rides the shared timeline, so every peer applies it at the
+  // same quantum and the round can end on the spot.
+  /** Dead, not already withdrawn, and ahead of every seat still alive. */
+  const canForfeitNow = (): boolean => {
+    const box = boxRef.current;
+    const g = game.current;
+    if (g === null || box.vsIdx < 0 || box.phase !== 'playing') return false;
+    const mine = g.players[box.vsIdx];
+    if (!mine || mine.alive || mine.withdrawn) return false;
+    for (let i = 0; i < g.players.length; i++) {
+      const p = g.players[i]; // noUncheckedIndexedAccess: possibly undefined
+      if (p !== undefined && i !== box.vsIdx && p.alive && p.score >= mine.score) return false;
+    }
+    return true;
+  };
+
+  /**
+   * Rebuild the live seat strip, but only when it would actually look
+   * different. This is the page's mpHudHash trick ported whole: the strip is
+   * read every frame and changes a few times a second, so a fresh array per
+   * frame would push React state sixty times a second to say the same thing.
+   * The hash folds each seat's score and whether it is still up, which is
+   * everything the strip draws, so an unchanged hash means an unchanged strip.
+   */
+  const syncSeats = (g: Game): void => {
+    const box = boxRef.current;
+    let h = (box.session?.stalled === true ? 2 : 0) | (box.forfeited ? 4 : 0) | 8;
+    let up = 0;
+    let lastIdx = -1;
+    for (let i = 0; i < g.players.length; i++) {
+      const p = g.players[i];
+      if (p === undefined) continue;
+      h = (Math.imul(h, 131) + p.score * 2 + (p.alive ? 1 : 0)) | 0;
+      if (p.alive) {
+        up++;
+        lastIdx = i;
+      }
+    }
+    if (h === box.lastSeatHash) return;
+    box.lastSeatHash = h;
+
+    const names = box.vsRc?.names ?? [];
+    const order: number[] = [];
+    for (let i = 0; i < g.players.length; i++) order.push(i);
+    order.sort((a, b) => (g.players[b]?.score ?? 0) - (g.players[a]?.score ?? 0) || a - b);
+    const rows: SeatRow[] = [];
+    for (let k = 0; k < order.length; k++) {
+      const i = order[k] ?? 0;
+      const p = g.players[i];
+      if (p === undefined) continue;
+      rows.push({
+        idx: i,
+        name: names[i] ?? '?',
+        score: p.score,
+        alive: p.alive,
+        me: i === box.vsIdx,
+        leader: k === 0,
+      });
+    }
+    setSeats(rows);
+
+    // the clinch chase: with one seat left, how many points until the round
+    // ends on the spot. Only meaningful while somebody is actually alone.
+    let chase = 0;
+    if (up === 1 && lastIdx >= 0) {
+      let bestOther = -Infinity;
+      for (let i = 0; i < g.players.length; i++) {
+        const p = g.players[i];
+        if (p !== undefined && i !== lastIdx && p.score > bestOther) bestOther = p.score;
+      }
+      const lead = g.players[lastIdx]?.score ?? 0;
+      if (lead <= bestOther) chase = bestOther + 1 - lead;
+    }
+    const mine = box.vsIdx >= 0 ? g.players[box.vsIdx] : undefined;
+    let othersAlive = false;
+    for (let i = 0; i < g.players.length; i++) {
+      const p = g.players[i];
+      if (p !== undefined && i !== box.vsIdx && p.alive) {
+        othersAlive = true;
+        break;
+      }
+    }
+    // ONE status at a time, most urgent first; see the field's doc comment
+    const note =
+      box.session?.stalled === true ? 'WAITING…'
+      : box.forfeited ? 'FORFEITED'
+      : chase > 0 ?
+        lastIdx === box.vsIdx ?
+          `${chase} TO CLINCH`
+        : `${names[lastIdx] ?? '?'} NEEDS ${chase}`
+      : mine !== undefined && !mine.alive && othersAlive ? 'SPECTATING'
+      : '';
+    setSeatNote(note);
+  };
 
   useEffect(() => {
     const box = boxRef.current;
@@ -408,6 +544,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             box.lastCanForfeit = can;
             setCanForfeit(can);
           }
+          syncSeats(g);
         }
         if (myScore !== box.lastScore) {
           box.lastScore = myScore;
@@ -643,25 +780,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setPhase('countdown');
   };
 
-  // Concede the CLAIM, keeping the seat and the corpse. Offered in one narrow
-  // window (dead and still ahead of everyone alive), because that is the only
-  // moment the room is playing on for a score nobody is defending. The
-  // withdrawal rides the shared timeline, so every peer applies it at the
-  // same quantum and the round can end on the spot.
-  /** Dead, not already withdrawn, and ahead of every seat still alive. */
-  const canForfeitNow = (): boolean => {
-    const box = boxRef.current;
-    const g = game.current;
-    if (g === null || box.vsIdx < 0 || box.phase !== 'playing') return false;
-    const mine = g.players[box.vsIdx];
-    if (!mine || mine.alive || mine.withdrawn) return false;
-    for (let i = 0; i < g.players.length; i++) {
-      const p = g.players[i]; // noUncheckedIndexedAccess: possibly undefined
-      if (p !== undefined && i !== box.vsIdx && p.alive && p.score >= mine.score) return false;
-    }
-    return true;
-  };
-
   const forfeit = (): void => {
     const box = boxRef.current;
     if (box.session === null || !canForfeitNow()) return;
@@ -695,6 +813,12 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     box.session = null;
     box.vsIdx = -1;
     box.vsRc = null;
+    // the strip belongs to the room, so it goes out with it: leaving to a
+    // solo screen with five seats still listed is a scoreboard for a game
+    // nobody is playing
+    box.lastSeatHash = 0;
+    setSeats([]);
+    setSeatNote('');
     game.current = createGame({ seed: freshSeed(), tickMs: SPEEDS.normal });
     game.current.drainEvents();
     clearParticles();
@@ -748,6 +872,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     canForfeit,
     forfeited,
     mySeatAlive,
+    seats,
+    seatNote,
     leaveVersus,
     score,
     best,

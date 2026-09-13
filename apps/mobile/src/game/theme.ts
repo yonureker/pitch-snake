@@ -4,6 +4,16 @@
  * @module
  */
 
+/**
+ * Rival seat colours, the web's VS_COLORS: identity for tags, not clothing.
+ *
+ * Here rather than in the renderer because the header's seat strip paints the
+ * same names in the same colours the pitch tags them with, and a UI component
+ * should not have to import the whole Skia renderer to learn a colour. Two
+ * lists would drift; this is the one.
+ */
+export const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'] as const;
+
 /** Field and chrome colors, hex, straight from the web version. */
 export const GameColors = {
   pageBg: '#efe6d0',

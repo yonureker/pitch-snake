@@ -19,6 +19,7 @@ import atlasSource from '@/assets/food-atlas.png';
 import flagSheet from '@/assets/flags.png';
 import skullIcon from '@/assets/icon-skull.png';
 import { Dpad } from '@/components/dpad';
+import { GameHeader } from '@/components/game-header';
 import { RoomPanel } from '@/components/room-panel';
 import { ProfileSheet } from '@/components/profile-sheet';
 import { SettingsSheet } from '@/components/settings-sheet';
@@ -220,9 +221,6 @@ export default function Index() {
   const loopSetKit = loop.setKit;
   const wallet = useWallet();
   const crowd = useCrowd(loop.phase);
-  // conceding arms on the first tap, like the page's exit: giving up a round
-  // is not something a stray thumb should be able to do
-  const [giveArmed, setGiveArmed] = useState(false);
   // a newer build waiting to be applied; offered, never forced, and never
   // mid-round (see use-updates)
   const update = useUpdates();
@@ -461,6 +459,10 @@ export default function Index() {
     wantsEntry && judged && !placed ? (topScores.data[BOARD_PLACES - 1]?.score ?? null) : null;
   const saving = submit.isPending || tSubmit.isPending;
   const menuPhase = loop.phase === 'ready' || dead;
+  // a room round actually on the pitch: the header swaps its score block for
+  // the seat strip on exactly this, and the exit appears with it
+  const inRoundRoom =
+    room.status === 'lobby' && !room.over && (loop.phase === 'playing' || loop.phase === 'countdown');
   const modeCaption =
     uiMode === 'tourney' ?
       tourney === null ?
@@ -480,106 +482,39 @@ export default function Index() {
   return (
     <View style={[styles.screen, dark && darkStyles.screen, screenPad]}>
       <StatusBar style={dark ? 'light' : 'dark'} />
-      {/* ONE compact header band, the web phone header's twin since its
-          2026-09 rework: the logo keeps the left, the score block keeps the
-          right, and the chrome (player chip, purse, gear) rides between
-          them instead of stacking a row each below. The chips sleep off the
-          menus exactly as they did before, so a live round keeps its width. */}
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
-          <Text style={[styles.title, dark && darkStyles.title]}>SNAKE</Text>
-        </View>
-        <View style={styles.hdrChips}>
-          {menuPhase && (
-            <>
-              {/* the player chip, the page's twin: the door to the name, the
-                  flag and the account, and the only place identity is edited */}
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setProfileOpen(true);
-                }}
-                style={styles.whoChip}
-              >
-                <Flag code={profile.data?.country ?? null} />
-                <Text style={[styles.whoText, dark && darkStyles.whoText]}>{profileName ?? 'PLAYER'}</Text>
-              </Pressable>
-              {wallet.isSuccess && (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setShopOpen(true);
-                  }}
-                  style={styles.purse}
-                >
-                  <View style={styles.purseCoin} />
-                  <Text style={[styles.purseText, dark && darkStyles.purseText]}>
-                    {wallet.data.coins} {'\u00b7'} SHOP
-                  </Text>
-                </Pressable>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Settings"
-                onPress={() => {
-                  setSettingsOpen(true);
-                }}
-                style={styles.gearBtn}
-              >
-                <Text style={[styles.gearText, dark && darkStyles.gearText]}>{'\u2699\ufe0e'}</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-        <Pressable accessibilityRole="button" onPress={onScoreTap} style={styles.scores}>
-          <Text style={[styles.scoreLabel, dark && darkStyles.scoreLabel]}>SCORE</Text>
-          <Text style={[styles.scoreValue, dark && darkStyles.scoreValue]}>{loop.score}</Text>
-          <Text style={styles.bestValue}>BEST {loop.best}</Text>
-          {loop.clockText !== '' && (
-            <Text style={[styles.clockText, dark && darkStyles.clockText]}>{loop.clockText}</Text>
-          )}
-        </Pressable>
-      </View>
+      {/* The header band, owned entirely by GameHeader: one layout for the
+          phone, the mobile web and the desktop, differing only by width.
+          Solo it is logo / chrome / SCORE; in a room the seat strip takes the
+          second line beside SNAKE and the exit joins the chrome above it, so
+          a room never costs the d-pad a row. */}
+      <GameHeader
+        dark={dark}
+        menuPhase={menuPhase}
+        profileName={profileName}
+        country={profile.data?.country ?? null}
+        coins={wallet.isSuccess ? wallet.data.coins : null}
+        onProfile={() => {
+          setProfileOpen(true);
+        }}
+        onShop={() => {
+          setShopOpen(true);
+        }}
+        onSettings={() => {
+          setSettingsOpen(true);
+        }}
+        score={loop.score}
+        best={loop.best}
+        clockText={loop.clockText}
+        onScoreTap={onScoreTap}
+        inRoom={inRoundRoom}
+        seats={loop.seats}
+        seatNote={loop.seatNote}
+        canForfeit={loop.canForfeit}
+        onForfeit={loop.forfeit}
+        onLeave={room.leave}
+      />
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
-      {/* The room's mid-round actions, on the same rule the page uses: while
-          your seat is alive the only way out of a live round is to concede
-          it (there is no stray LEAVE to press, because walking out of a round
-          IS conceding it), and once you are out, crashed or conceded, LEAVE
-          is all that is left. Both cost the same on the ladder as playing the
-          round out badly; see supabase/RATING_RULES.md. */}
-      {room.status === 'lobby' && !room.over && (loop.phase === 'playing' || loop.phase === 'countdown') && (
-        <View style={styles.vsActions}>
-          {/* FORFEIT only in its window: dead, and still ahead of everyone
-              alive. LEAVE is always there, because leaving concedes too. */}
-          {loop.canForfeit && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                if (giveArmed) {
-                  loop.forfeit();
-                  setGiveArmed(false);
-                } else {
-                  setGiveArmed(true);
-                  setTimeout(() => {
-                    setGiveArmed(false);
-                  }, 2600);
-                }
-              }}
-              style={[styles.vsAction, giveArmed && styles.vsActionArmed]}
-            >
-              <Text style={[styles.vsActionText, giveArmed && styles.vsActionTextArmed]}>
-                {giveArmed ? 'GIVE UP?' : 'FORFEIT'}
-              </Text>
-            </Pressable>
-          )}
-          <Pressable accessibilityRole="button" onPress={room.leave} style={styles.vsAction}>
-            <Text style={styles.vsActionText}>{'\u2715'} LEAVE</Text>
-          </Pressable>
-          {loop.forfeited && <Text style={styles.vsNote}>FORFEITED</Text>}
-        </View>
-      )}
       {/* the app's stale-build banner, the page's twin: quiet, never
           blocking, and only shown where a restart is safe */}
       {update.ready && menuPhase && (
@@ -1131,43 +1066,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  title: {
-    fontFamily: ANTON,
-    fontSize: 21,
-    lineHeight: 22,
-    letterSpacing: 1,
-    color: GameColors.ink,
-    textShadowColor: GameColors.gold,
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 0,
-  },
-  // the band between logo and score: chips wrap rather than push the edges
-  hdrChips: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  gearBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: GameColors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gearText: { fontSize: 14, color: GameColors.ink },
-  scores: { alignItems: 'flex-end' },
   // chip clothes shared by the tournament create panel's mode and length rows
   speedRow: { flexDirection: 'row', gap: 8 },
   speedBtn: {
@@ -1179,26 +1077,7 @@ const styles = StyleSheet.create({
   },
   speedBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
   speedText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
-  scoreLabel: {
-    fontFamily: BARLOW,
-    fontSize: 10,
-    letterSpacing: 2,
-    color: GameColors.muted,
-  },
-  scoreValue: { fontFamily: ANTON, fontSize: 24, color: GameColors.ink, lineHeight: 26 },
-  bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   boardWrap: { alignItems: 'center' },
-  whoChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: GameColors.gold,
-  },
-  whoText: { fontFamily: BARLOW_BOLD, fontSize: 11.5, letterSpacing: 1.4, color: GameColors.ink },
   claimBtn: {
     alignSelf: 'center',
     marginTop: 4,
@@ -1242,26 +1121,6 @@ const styles = StyleSheet.create({
     backgroundColor: GameColors.food,
   },
   updateBtnText: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 1, color: '#ffffff' },
-  vsActions: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  vsAction: {
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(244,236,216,0.35)',
-    backgroundColor: 'rgba(20,17,13,0.55)',
-  },
-  vsActionArmed: { backgroundColor: GameColors.food, borderColor: GameColors.food },
-  vsActionText: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 1.2, color: '#e9e0cd' },
-  vsActionTextArmed: { color: '#ffffff' },
-  vsNote: { fontFamily: BARLOW_BOLD, fontSize: 10, letterSpacing: 1.4, color: GameColors.goldBright },
   perf: {
     position: 'absolute',
     top: 2,
@@ -1391,7 +1250,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
-  clockText: { fontFamily: ANTON, fontSize: 18, color: GameColors.ink, letterSpacing: 1 },
   modeList: { gap: 8, alignSelf: 'stretch', alignItems: 'center' },
   modeBtn: {
     minWidth: 220,
@@ -1515,25 +1373,6 @@ const styles = StyleSheet.create({
   boardMine: { color: GameColors.goldBright },
   ballBox: { overflow: 'hidden', alignSelf: 'center' },
   stickerText: { fontFamily: BARLOW_BOLD, fontSize: 13, color: GameColors.goldBright, letterSpacing: 0.5 },
-  purse: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    height: 26,
-    borderWidth: 1,
-    borderColor: GameColors.gold,
-    borderRadius: 13,
-    paddingHorizontal: 9,
-  },
-  purseCoin: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: GameColors.goldBright,
-    borderWidth: 1,
-    borderColor: GameColors.gold,
-  },
-  purseText: { fontFamily: BARLOW_BOLD, fontSize: 11, color: GameColors.ink, letterSpacing: 1 },
 });
 
 // The dark table: only the colors the theme swaps, layered over the light
@@ -1541,11 +1380,4 @@ const styles = StyleSheet.create({
 // are the web's html.theme-dark tokens value for value.
 const darkStyles = StyleSheet.create({
   screen: { backgroundColor: DarkShell.bg },
-  title: { color: DarkShell.ink, textShadowColor: GameColors.gold },
-  scoreLabel: { color: DarkShell.muted },
-  scoreValue: { color: DarkShell.ink },
-  clockText: { color: DarkShell.ink },
-  whoText: { color: DarkShell.ink },
-  purseText: { color: DarkShell.ink },
-  gearText: { color: DarkShell.ink },
 });

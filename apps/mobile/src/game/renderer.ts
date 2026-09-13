@@ -44,7 +44,7 @@ import {
 import { type Kit, KIT_NONE, kitKey } from '../lib/kit';
 import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
 import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from './vs-smoothing';
-import { GameColors, GhostColors, SNAKE_SHADES, skinRamp, snakeShadeFor } from './theme';
+import { GameColors, GhostColors, SNAKE_SHADES, VS_COLORS, skinRamp, snakeShadeFor } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
 export interface RenderContext {
@@ -71,8 +71,6 @@ export interface RenderContext {
   };
 }
 
-/** Rival seat colours, the web's VS_COLORS: identity for tags, not clothing. */
-const VS_COLORS = ['#f4ecd8', '#7ec8f5', '#9df57e', '#f5d67e', '#f57ea8'] as const;
 // A rival is one ghost at one alpha: body, hat and tag fade together and
 // sit well back, so another snake's outfit is never mistaken for your own.
 // Safe to take low: a rival's body is not lethal in the engine.
