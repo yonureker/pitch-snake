@@ -44,6 +44,45 @@
   /* a pressed wedge is a gold flash, whose label is dark ink in any theme */
   .dpad .wedge.pressed { background: var(--gold); color: #211e1a; }
 
+  /* ---- the analog stick, the pad's other shape ----
+     One surface, two readings. In stick mode the wedges stop being drawn but
+     stay in the DOM: they remain the accessible controls, and the input code
+     still resolves a push to one of them, so `padPointers`, `paintPad` and
+     both input pipelines carry on unchanged. Only the paint differs.
+     The base is where the thumb LANDED, not the middle of the pad: a floating
+     origin is what makes a stick usable without looking, which is the whole
+     reason to offer one. It is positioned in JS and hidden until a finger is
+     down. */
+  /* The arrows STAY, at a whisper. Hiding them outright left a blank slab
+     that reads as a broken control before the first touch, and they are also
+     true: a stick here is quantised to the same four directions, so the pad
+     should still say which four. The diagonal seams go, because in this shape
+     they mark nothing. */
+  .dpad.stick .wedge { opacity: 0.2; }
+  .dpad.stick .wedge.pressed { background: transparent; color: var(--pad-ink); opacity: 0.55; }
+  .dpad.stick { background-image: radial-gradient(ellipse at 50% 45%, var(--pad-hi), var(--pad-mid) 72%, var(--pad-lo) 100%); }
+  .stick-base {
+    position: absolute; width: 128px; height: 128px; margin: -64px 0 0 -64px;
+    border-radius: 50%; border: 2px solid var(--pad-ring);
+    background: radial-gradient(circle at 50% 45%, var(--pad-shade), transparent 70%);
+    box-shadow: inset 0 0 0 1px var(--pad-glare);
+    pointer-events: none; opacity: 0; transition: opacity 110ms ease-out;
+  }
+  .dpad.stick .stick-base.live { opacity: 1; }
+  .stick-knob {
+    position: absolute; left: 50%; top: 50%;
+    width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%;
+    background: var(--gold); opacity: 0.92;
+    border: 2px solid var(--pad-ring);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.32);
+    /* driven every pointermove, so no transition: a knob that eases is a knob
+       that lags the thumb, and this control is judged entirely on that */
+    will-change: transform;
+  }
+  /* the pad only exists on touch, so the choice between its two shapes does
+     too; offering it on a desktop would be a control with nothing to control */
+  html.touchless #controlRow { display: none; }
+
   /* ---- settings gear + modal ---- */
   .gear {
     position: absolute; top: 8px; right: 8px; z-index: 6;
