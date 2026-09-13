@@ -17,6 +17,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DarkShell, GameColors } from '@/game/theme';
+import type { ControlPref } from '@/lib/control-prefs';
 import type { ThemePref } from '@/lib/theme-prefs';
 
 const BARLOW_BOLD = 'Barlow_700Bold';
@@ -28,10 +29,17 @@ const THEME_LABELS: { label: string; pref: ThemePref }[] = [
   { label: 'DARK', pref: 'dark' },
 ];
 
-/** Props: the two knobs, whether the dark table is on, and the way out. */
+const CONTROL_LABELS: { label: string; pref: ControlPref }[] = [
+  { label: 'PAD', pref: 'pad' },
+  { label: 'STICK', pref: 'stick' },
+];
+
+/** Props: the knobs, whether the dark table is on, and the way out. */
 export interface SettingsSheetProps {
   themePref: ThemePref;
   onThemePref: (pref: ThemePref) => void;
+  controlPref: ControlPref;
+  onControlPref: (pref: ControlPref) => void;
   crowdOn: boolean;
   onCrowd: (on: boolean) => void;
   dark: boolean;
@@ -42,6 +50,8 @@ export interface SettingsSheetProps {
 export function SettingsSheet({
   themePref,
   onThemePref,
+  controlPref,
+  onControlPref,
   crowdOn,
   onCrowd,
   dark,
@@ -64,6 +74,24 @@ export function SettingsSheet({
             style={chip(themePref === t.pref)}
           >
             <Text style={chipText(themePref === t.pref)}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {/* The page's CONTROLS chips. Not locked mid-round the way a rule would
+          be: both shapes end at the same onDir, so this changes how you steer
+          and never what the round is. */}
+      <View style={styles.row}>
+        <Text style={[styles.label, dark && darkStyles.label]}>CONTROLS</Text>
+        {CONTROL_LABELS.map((c) => (
+          <Pressable
+            accessibilityRole="button"
+            key={c.pref}
+            onPress={() => {
+              onControlPref(c.pref);
+            }}
+            style={chip(controlPref === c.pref)}
+          >
+            <Text style={chipText(controlPref === c.pref)}>{c.label}</Text>
           </Pressable>
         ))}
       </View>

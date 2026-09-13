@@ -23,6 +23,7 @@ import { GameHeader } from '@/components/game-header';
 import { RoomPanel } from '@/components/room-panel';
 import { ProfileSheet } from '@/components/profile-sheet';
 import { SettingsSheet } from '@/components/settings-sheet';
+import { StickPad } from '@/components/stick-pad';
 import { ShopSheet } from '@/components/shop-sheet';
 import { DarkShell, GameColors } from '@/game/theme';
 import { useGameLoop } from '@/game/use-game-loop';
@@ -40,6 +41,7 @@ import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
 import { BOARD_PLACES, FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
 import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
+import { loadControlPref, saveControlPref, type ControlPref } from '@/lib/control-prefs';
 import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
@@ -195,6 +197,7 @@ export default function Index() {
   // everything drawn on the board keep their colors in both themes, exactly
   // as the page does.
   const [themePref, setThemePref] = useState<ThemePref>('auto');
+  const [controlPref, setControlPref] = useState<ControlPref>('pad');
   const systemScheme = useColorScheme();
   const dark = themePref === 'dark' || (themePref === 'auto' && systemScheme === 'dark');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -284,6 +287,7 @@ export default function Index() {
   // restore the saved mode and tournament once; the loop follows the choice
   useEffect(() => {
     void loadThemePref().then(setThemePref);
+    void loadControlPref().then(setControlPref);
     void loadModePrefs().then((prefs) => {
       setUiMode(prefs.uiMode);
       setTourney(prefs.tourney);
@@ -1000,6 +1004,11 @@ export default function Index() {
                   setThemePref(pref);
                   void saveThemePref(pref);
                 }}
+                controlPref={controlPref}
+                onControlPref={(pref) => {
+                  setControlPref(pref);
+                  void saveControlPref(pref);
+                }}
                 crowdOn={crowdOn}
                 onCrowd={setCrowdOn}
                 dark={dark}
@@ -1053,7 +1062,9 @@ export default function Index() {
       </View>
 
       <View style={styles.padWrap}>
-        <Dpad onDir={loop.steer} heading={loop.effectiveHeading} dark={dark} />
+        {controlPref === 'stick' ?
+          <StickPad onDir={loop.steer} dark={dark} />
+        : <Dpad onDir={loop.steer} heading={loop.effectiveHeading} dark={dark} />}
       </View>
     </View>
   );
