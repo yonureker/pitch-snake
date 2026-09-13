@@ -10,8 +10,24 @@ description: >-
 
 # Verify and ship
 
-Pitch Snake has no CI. This loop is the CI. Every step here exists because
-skipping it once broke something in production.
+Every step here exists because skipping it once broke something in production.
+
+**CI exists and does not replace this loop.** `.github/workflows/ci.yml` runs
+on every push and pull request, and it covers exactly what a machine can check
+from a checkout: the engine and netcode suites, the page lint, that
+`page/build` still matches `page/*.ts`, that the asset stamps match their
+content, and the mobile lint and typecheck. That is the pre-commit hook's set,
+run somewhere a missing `install-hooks` and a `--no-verify` cannot skip it.
+
+What CI cannot do is the half of this loop that matters most here: it never
+opens the page in a browser, never bundles the app, and never looks at what
+the two origins are actually serving after a push. A green tick means the
+tree is consistent with itself, not that the site works. Read the run rather
+than assuming it (`gh run list --workflow=CI --limit 5`): the mobile lint job
+sat red for twelve commits on 2026-09-12 while every local check passed,
+because ESLint dies on this machine with `EPERM scandir '/Users/<you>/Desktop'`
+inside `import/no-unresolved`, and the habit of working around that locally
+with `--no-verify` is exactly what hid a real failure.
 
 ## 1. Tests
 
