@@ -749,16 +749,13 @@
   // In a versus round the turn goes through the session, which stamps it,
   // broadcasts it, and feeds it to the engine on the shared timeline.
   //
-  // The countdown keeps ONE press, not a queue. Presses during the count used
-  // to flow straight into the engine, whose three-deep queue then replayed
-  // them over the opening steps: taps from five seconds before the whistle
-  // steering the round, which read as the pad having a mind of its own. Only
-  // the last press before kickoff means anything (it is where you want to
-  // open), so the count holds exactly that one and kickoff feeds it in.
-  let preAim = null;
+  // The countdown holds NOTHING (owner's call, 2026-09-13). It once let
+  // every press queue, which read as taps from five seconds ago steering the
+  // round; then it kept exactly one as the opening aim. Now a press during
+  // 3-2-1 does nothing at all: a turn means something only once the round is
+  // running, and the round opens on its start heading every time.
   function dirInput(x, y, src) {
-    if (state !== 'playing' && state !== 'countdown') { traceKey(src, x, y, '.'); return; }
-    if (state === 'countdown') { preAim = { x, y }; traceKey(src, x, y, '~'); return; }
+    if (state !== 'playing') { traceKey(src, x, y, '.'); return; }
     // the press's own clock rides along so the session can advance to the
     // true instant before stamping (rule 12, netcode edition)
     if (vsInRound()) {
@@ -2334,14 +2331,7 @@
     if (state === 'countdown') {
       countClock += dt;
       if (countClock >= COUNT_TOTAL) {
-        state = 'playing';   // kick off
-        // the one press the countdown held opens the round on its first step
-        if (preAim) {
-          if (vsInRound()) { if (!vsIWithdrew()) vs.session.localDir(preAim.x, preAim.y, now); }
-          else g.setDir(preAim.x, preAim.y);
-          traceKey('a', preAim.x, preAim.y, 'OK');
-          preAim = null;
-        }
+        state = 'playing';   // kick off, on the start heading: the count held nothing
       }
     }
     if (state === 'playing') {
@@ -4331,7 +4321,6 @@
     // wild device clock can only trim the count, never eat it; whatever
     // skew remains is the session's pacing to close, as before.
     state = 'countdown';
-    preAim = null;                // a press from a previous screen is not an aim
     traceRound();
     const skew = typeof m.at === 'number' ? Date.now() - m.at : 0;
     countClock = Math.min(1200, Math.max(0, skew));
@@ -4809,7 +4798,6 @@
     if (state === 'dead' || state === 'ready') { lastRunKey = runKey(); newRound(true); }
     else g.clearQueue();          // a turn queued before the pause must not fire on resume
     state = 'countdown';          // the round opens on 3, 2, 1, START!
-    preAim = null;                // a press from the menus is not an aim
     traceRound();
     countClock = 0; countBeat = -1;
     lastTick = 0;

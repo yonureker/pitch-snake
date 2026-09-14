@@ -126,6 +126,10 @@ export interface GameLoop {
   debugDie: () => void;
   /** DEV-only frame meter: "fps avg / worst-frame ms", refreshed each second. */
   perfText: string;
+  /** DEV-only per-round input tally: every press and the engine's verdict
+   *  (ok / R reversal / = repeat / Q queue-full / . countdown / > room), so
+   *  a dropped combo press can be convicted where it actually died. */
+  inputAudit: string;
   pause: () => void;
   /** Direction input from any source; gated on phase like the web page. */
   steer: (x: number, y: number) => void;
@@ -214,7 +218,8 @@ interface LoopBox {
    * (it is where you want to open), so the count holds exactly that one and
    * kickoff feeds it in.
    */
-  preAim: { x: number; y: number } | null;
+  /** DEV-only per-round tally of every press and the engine's verdict. */
+  audit: { ok: number; rev: number; rep: number; full: number; sent: number; tail: string[] };
 }
 
 function makeEmptyPicture(): SkPicture {
@@ -261,7 +266,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     lastSeatHash: 0,
     lastCount: '',
     lastCall: '',
-    preAim: null,
+    audit: { ok: 0, rev: 0, rep: 0, full: 0, sent: 0, tail: [] },
   });
   const picture = useSharedValue<SkPicture>(makeEmptyPicture());
 
@@ -284,6 +289,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [clockText, setClockText] = useState('');
   const [lastCallText, setLastCallText] = useState('');
   const [perfText, setPerfText] = useState('');
+  // DEV-only: the queue on trial. Every press the shell hands the engine and
+  // the engine's own verdict, per round, so "the pad fired but the turn
+  // died" stops being a theory: ok / R reversal / = repeat / Q queue-full
+  // are read from what setDir actually did (the log is the truth: an
+  // accepted press grows it, doom saves included), . is a countdown press
+  // (ignored by design: the count holds nothing since 2026-09-13), > went
+  // to a room's shared timeline (its verdict lands at apply time).
+  const [inputAudit, setInputAudit] = useState('');
 
   // mirror render props into the loop's box after render, never during it
   useEffect(() => {
@@ -517,14 +530,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           setCountText('');
           box.phase = 'playing';
           setPhase('playing');
-          // the one press the countdown held opens the round on its first step
-          if (box.preAim !== null) {
-            const aim = box.preAim;
-            box.preAim = null;
-            if (box.session !== null) {
-              if (!box.forfeited) box.session.localDir(aim.x, aim.y, now);
-            } else g.setDir(aim.x, aim.y);
-          }
+          // The countdown holds NOTHING (owner's call, 2026-09-13): it used
+          // to keep the last press as the opening aim, and before that it
+          // let every press queue, which read as taps from five seconds ago
+          // steering the round. No queueing during the count at all now; a
+          // press means something only once the round is running.
         }
       }
       if (box.phase === 'playing') {
@@ -647,7 +657,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setCountText('3');
     box.lastCall = '';
     setLastCallText('');
-    box.preAim = null; // a press from the menus is not an aim
+    box.audit = { ok: 0, rev: 0, rep: 0, full: 0, sent: 0, tail: [] };
+    if (__DEV__) setInputAudit('');
     box.phase = 'countdown';
     setPhase('countdown');
   };
@@ -660,11 +671,50 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     }
   };
 
+  const ARROW: Record<string, string> = { '0,-1': '↑', '0,1': '↓', '-1,0': '←', '1,0': '→' };
+  const auditNote = (x: number, y: number, mark: string): void => {
+    if (!__DEV__) return;
+    const box = boxRef.current;
+    const a = box.audit;
+    if (mark === '✓') a.ok++;
+    else if (mark === 'R') a.rev++;
+    else if (mark === '=') a.rep++;
+    else if (mark === 'Q') a.full++;
+    else if (mark === '>') a.sent++;
+    a.tail.push(`${ARROW[`${String(x)},${String(y)}`] ?? '?'}${mark === '✓' ? '' : mark}`);
+    if (a.tail.length > 12) a.tail.shift();
+    setInputAudit(
+      `ok${String(a.ok)} R${String(a.rev)} =${String(a.rep)} Q${String(a.full)}` +
+        `${a.sent > 0 ? ` >${String(a.sent)}` : ''} | ${a.tail.join(' ')}`,
+    );
+  };
+  // The engine's verdict on one solo press, read from what setDir DID: an
+  // accepted press grew the log (rule 12 records at press time, doom saves
+  // included), so anything else was refused, and the reason reconstructs
+  // from the same reference setDir filtered against, captured before the
+  // call. Solo only: a room press joins the shared timeline and is judged
+  // when its quantum plays.
+  const auditSolo = (
+    g: Game,
+    x: number,
+    y: number,
+    before: number,
+    refX: number,
+    refY: number,
+    qLen: number,
+  ): void => {
+    if (!__DEV__) return;
+    if (g.log.inputs.length > before) auditNote(x, y, '✓');
+    else if (qLen >= 3) auditNote(x, y, 'Q');
+    else if (x === -refX && y === -refY) auditNote(x, y, 'R');
+    else auditNote(x, y, '=');
+  };
+
   const steer = (x: number, y: number): void => {
     const box = boxRef.current;
     if (box.phase !== 'playing' && box.phase !== 'countdown') return;
     if (box.phase === 'countdown') {
-      box.preAim = { x, y };
+      auditNote(x, y, '.'); // ignored by design: the count holds nothing
       return;
     }
     const g = game.current;
@@ -678,6 +728,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       // the session stamps the true press time, broadcasts it, and feeds
       // the shared timeline (the web's dirInput, netcode edition)
       box.session.localDir(x, y, nowMs());
+      auditNote(x, y, '>');
       return;
     }
     // Stamp the press at the moment it happened, not at the last frame tick:
@@ -695,7 +746,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         box.lastFrameTs = now;
       }
     }
+    const ref = g.dirQueue[g.dirQueue.length - 1] ?? g.dir;
+    const before = g.log.inputs.length;
+    const qLen = g.dirQueue.length;
     g.setDir(x, y);
+    auditSolo(g, x, y, before, ref.x, ref.y, qLen);
   };
 
   const effectiveHeading = (): { x: number; y: number } | null => {
@@ -778,7 +833,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setClockText('');
     box.lastCall = '';
     setLastCallText('');
-    box.preAim = null; // a press from the lobby is not an aim
+    box.audit = { ok: 0, rev: 0, rep: 0, full: 0, sent: 0, tail: [] };
+    if (__DEV__) setInputAudit('');
     box.countClock = Math.min(1200, Math.max(0, preElapsedMs));
     box.lastCount = '';
     box.phase = 'countdown';
@@ -898,6 +954,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     pause,
     steer,
     effectiveHeading,
+    inputAudit,
     debugDie,
     perfText,
     canSubmit,

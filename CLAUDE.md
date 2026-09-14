@@ -47,7 +47,7 @@ The game must hold 60fps on a mid-range phone. Every change to the script keeps 
 
 ### Round states
 
-15. The states are `ready`, `countdown`, `playing`, `paused`, `dead`. Anything gating on `playing` has to decide what `countdown` does: the field is on screen and drawn, input buffers into the queue, but nothing simulates. Timed sequences run off the loop clock with the shared dt clamp, never `setTimeout` or `setInterval`.
+15. The states are `ready`, `countdown`, `playing`, `paused`, `dead`. Anything gating on `playing` has to decide what `countdown` does: the field is on screen and drawn, nothing simulates, and since 2026-09-13 input is IGNORED outright (owner's call; it buffered into the queue, then held one press as the opening aim, and both read as the pad steering before the whistle). A round opens on its start heading, every time, in both shells. Timed sequences run off the loop clock with the shared dt clamp, never `setTimeout` or `setInterval`.
 
 ### Teleport windows
 

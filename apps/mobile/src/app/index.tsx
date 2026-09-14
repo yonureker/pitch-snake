@@ -619,6 +619,7 @@ export default function Index() {
       />
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
+      {__DEV__ && loop.inputAudit !== '' && <Text style={styles.perf}>{loop.inputAudit}</Text>}
       {/* the app's stale-build banner, the page's twin: quiet, never
           blocking, and only shown where a restart is safe */}
       {update.ready && menuPhase && (
