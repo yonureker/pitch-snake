@@ -5042,6 +5042,28 @@
   const PAD_ASSIST_PX = 24;   // half a thumb pad, the one dial
   function padResolve(e) {
     const primary = padZone(e, false);
+    // NEVER WHILE ANOTHER FINGER IS DOWN.
+    //
+    // The assist was built for one thumb drilling fast alternations, and its
+    // whole licence is that the literal reading would be DEAD: a press that
+    // lands on the axis the snake already runs on does nothing, so firing the
+    // neighbour across the seam is a better guess than firing nothing. That
+    // guess is chosen by which side of the pad's centre line the thumb landed
+    // on, which means it can fire a direction the player did not press.
+    // Demonstrated: heading right, thumb inside the RIGHT wedge near the
+    // up/right seam, and the pad fired UP. The snake then ran up.
+    //
+    // With one thumb that is a fair trade, because the alternative was
+    // nothing at all. With two it is not, and it is worse than nothing: the
+    // invented turn becomes the heading, so the OTHER thumb's real press is
+    // judged against it and refused as a reversal. The player asks for right
+    // then down, gets up, and the down never happens. That is the reported
+    // shape exactly, and it is why a SLIDE is flawless where a two-finger
+    // combo is not: a slide resolves through padZone, which is literal and
+    // has never guessed at anything.
+    //
+    // So the assist keeps the case it earned and loses the one it never had.
+    if (padPointers.size > 0) return { btn: primary, assisted: false };
     const h = padHeading();
     if (!h) return { btn: primary, assisted: false };
     const d = padDirOf.get(primary);
