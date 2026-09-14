@@ -28,7 +28,7 @@
  *
  * @module
  */
-import type { NetTransport } from './room-wire.js';
+import type { NetTransport } from '@pitch-snake/net/room-wire';
 
 /** How the shell ferries handshake payloads (over the room's channel). */
 export type SignalSend = (toRef: string, data: Record<string, unknown>) => void;

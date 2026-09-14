@@ -1,0 +1,26 @@
+{
+  "//": "The netcode's TypeScript modules. net.js itself stays hand-written plain JS (the page's inline script imports it raw and the loopback tests drive it in node), but everything ADDED to this package is TypeScript under src/, compiled to committed JS in build/, which is what the page's import map serves and what the app resolves through the package's exports. Committed for the same reason page/build is: GitHub Pages serves this repo as it stands and a push is the whole deploy, so the pre-commit hook and CI rebuild and refuse a drifted artefact. Unlike page/build this output is NOT minified: it ships beside net.js and engine.js, which ship annotated, and a second minify pipeline would buy nothing but a second thing to break. Strict flags match page/tsconfig.json.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "rootDir": "./src",
+    "outDir": "./build",
+    "declaration": true,
+    "sourceMap": false,
+    "removeComments": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true
+  },
+  "include": ["src/*.ts"]
+}

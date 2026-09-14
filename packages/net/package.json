@@ -4,8 +4,16 @@
   "private": true,
   "type": "module",
   "main": "net.js",
+  "types": "net.d.ts",
   "exports": {
-    ".": "./net.js"
+    ".": {
+      "types": "./net.d.ts",
+      "default": "./net.js"
+    },
+    "./room-wire": {
+      "types": "./build/room-wire.d.ts",
+      "default": "./build/room-wire.js"
+    }
   },
   "scripts": {
     "test": "node --test"

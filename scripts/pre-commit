@@ -11,17 +11,21 @@ npm test --silent
 # its source, and the drift would be invisible: the page keeps working, just
 # not the way the source says. So rebuild and refuse the commit if anything
 # moved. Rebuilding also type-checks, which is the point of the .ts files.
+# The shared packages' TypeScript (packages/*/src -> packages/*/build) is the
+# same contract, and builds FIRST because page modules import its .d.ts.
+echo "pre-commit: shared packages typescript"
+npm run build:packages --silent
 echo "pre-commit: page lint + typescript"
 npm run lint:page --silent
 npm run build:page --silent
-if ! git diff --quiet -- page/build; then
+if ! git diff --quiet -- page/build 'packages/*/build'; then
   echo
-  echo "  page/build is out of date with page/*.ts."
+  echo "  Committed build output is out of date with its TypeScript source."
   echo "  It has just been rebuilt; stage it and commit again:"
   echo
-  git diff --name-only -- page/build | sed 's/^/    /'
+  git diff --name-only -- page/build 'packages/*/build' | sed 's/^/    /'
   echo
-  echo "    git add page/build"
+  echo "    git add page/build packages/*/build"
   echo
   exit 1
 fi

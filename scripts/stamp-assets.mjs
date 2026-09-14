@@ -43,6 +43,9 @@ function versioned() {
   return [
     ...globSync('styles/*.css', { cwd: ROOT }),
     ...globSync('page/build/*.js', { cwd: ROOT }),
+    // The shared packages' committed TypeScript output, importable by the
+    // page, so it must move caches exactly as page/build does.
+    ...globSync('packages/*/build/*.js', { cwd: ROOT }),
     'packages/engine/engine.js',
     'packages/net/net.js',
   ].sort();

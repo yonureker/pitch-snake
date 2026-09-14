@@ -86,6 +86,18 @@ async function build(file) {
   if (typeof result.map === 'string') writeFileSync(STAGE + file + '.min.map', result.map);
 }
 
+// Sweep the STAGING tree first. tsc never deletes an emit whose source is
+// gone, and .tsc is gitignored, so on a dev machine a deleted page/*.ts
+// leaves a ghost module that this script would happily keep minifying into
+// page/build for ever; the drift check cannot see it because the committed
+// output matches the (stale) rebuild. Caught live on 2026-09-14 when
+// room-wire.ts moved to packages/net and the ghost kept shipping.
+const sources = new Set(globSync('*.ts', { cwd: ROOT + 'page/' }).map((f) => f.replace(/\.ts$/, '')));
+for (const stale of globSync('*', { cwd: STAGE })) {
+  const stem = stale.replace(/\.(?:js|d\.ts)(?:\.map|\.min\.map)?$/, '');
+  if (!sources.has(stem)) rmSync(STAGE + stale);
+}
+
 const staged = globSync('*.js', { cwd: STAGE }).sort();
 if (staged.length === 0) throw new Error('page/.tsc is empty: did tsc run?');
 mkdirSync(OUT, { recursive: true });

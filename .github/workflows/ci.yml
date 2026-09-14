@@ -40,18 +40,24 @@ jobs:
       - name: engine + netcode tests
         run: npm test
 
+      # The shared packages' TypeScript builds first: page modules import its
+      # emitted .d.ts, so lint and the page build both depend on it existing.
+      - name: shared packages typescript
+        run: npm run build:packages
+
       - name: page lint
         run: npm run lint:page
 
-      # page/build is COMMITTED because a push is the whole deploy, so it can
-      # drift from page/*.ts and the drift is invisible: the page keeps working,
-      # just not the way the source says. Rebuild and fail if anything moved.
-      - name: page typescript builds and matches its committed output
+      # page/build and packages/*/build are COMMITTED because a push is the
+      # whole deploy, so they can drift from their .ts sources and the drift is
+      # invisible: the page keeps working, just not the way the source says.
+      # Rebuild and fail if anything moved.
+      - name: typescript builds match their committed output
         run: |
           npm run build:page
-          if ! git diff --quiet -- page/build; then
-            echo "::error::page/build is out of date with page/*.ts. Run 'npm run build:page' and commit page/build."
-            git --no-pager diff --stat -- page/build
+          if ! git diff --quiet -- page/build 'packages/*/build'; then
+            echo "::error::Committed build output is out of date with its TypeScript source. Run 'npm run build:packages && npm run build:page' and commit the result."
+            git --no-pager diff --stat -- page/build 'packages/*/build'
             exit 1
           fi
 

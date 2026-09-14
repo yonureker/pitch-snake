@@ -61,7 +61,13 @@ module.exports = defineConfig([
       'page/build/**', // that emit, minified; the .ts source is what gets linted
       'node_modules/**',
       'apps/**', // its own workspace, its own config, its own script
-      'packages/**', // the engine is plain JS on purpose: three runtimes import it raw
+      // The engine and net.js stay plain JS on purpose: three runtimes import
+      // them raw. The packages' TypeScript under src/ IS linted (see files
+      // below); its committed emit in build/ is not, same as page/build.
+      'packages/*/*.js',
+      'packages/*/*.d.ts',
+      'packages/*/build/**',
+      'packages/*/fixtures/**',
       'styles/**',
       'supabase/**',
       'cloudflare/**',
@@ -69,7 +75,11 @@ module.exports = defineConfig([
     ],
   },
   {
-    files: ['page/**/*.ts'],
+    // The page's modules and the shared packages' sources carry the same
+    // conventions: both ship to the browser, and the packages additionally
+    // ship into the app. projectService finds each file's own tsconfig
+    // (page/tsconfig.json, packages/*/tsconfig.json) for the type-aware tier.
+    files: ['page/**/*.ts', 'packages/*/src/**/*.ts'],
     extends: [
       tseslint.configs.recommendedTypeChecked,
       tseslint.configs.stylisticTypeChecked,

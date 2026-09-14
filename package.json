@@ -11,9 +11,10 @@
     "install-hooks": "sh scripts/install-hooks.sh",
     "lint": "npm --workspace apps/mobile run lint",
     "typecheck": "npm --workspace apps/mobile run typecheck",
-    "lint:page": "eslint page",
+    "lint:page": "eslint page packages/*/src",
     "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
     "build:page": "tsc -p page/tsconfig.json && node scripts/minify-page.mjs",
+    "build:packages": "tsc -p packages/net/tsconfig.json",
     "stamp": "node scripts/stamp-assets.mjs",
     "stamp:check": "node scripts/stamp-assets.mjs --check"
   },

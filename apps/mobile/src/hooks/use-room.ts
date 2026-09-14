@@ -22,10 +22,10 @@ import {
   type NetSession,
   type NetTransport,
 } from '@pitch-snake/net';
+import { openRoomSocket } from '@pitch-snake/net/room-wire';
 
 import type { GameLoop } from '@/game/use-game-loop';
 import { prepareVersusSprites } from '@/game/renderer';
-import { openRoomSocket } from '@/lib/room-wire';
 import {
   VS_MAX,
   VS_MIN,

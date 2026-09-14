@@ -11,7 +11,8 @@
  * five players sitting together in Istanbul still see about 190ms of each other
  * through a relay in California. The relay behind this socket is a Durable
  * Object created in the data centre nearest whoever opened the room, so it
- * follows the ROOM. See cloudflare/room-wire.js for the other end.
+ * follows the ROOM. See cloudflare/room-wire.js for the other end, which is a
+ * different program (the relay), never a copy of this one (the plug).
  *
  * IT IS NEVER THE ONLY WIRE. `dualTransport` in packages/net keeps Broadcast
  * alongside it until every seat has been heard here, so a socket that cannot
@@ -19,12 +20,16 @@
  * this module never throws and never reports failure: being down is an
  * ordinary state, answered honestly by `isOpen()`.
  *
- * MUST NEVER be reached from the frame loop.
+ * SHARED, NOT COPIED. This lived twice, as page/room-wire.ts and the app's
+ * lib/room-wire.ts, "kept in step" by hand, and by 2026-09-14 the page's copy
+ * had already grown reconnect bookkeeping the app's never received. Both
+ * clients speak the same WHATWG WebSocket, so one source now serves them: the
+ * page through the stamped import map, the app through the workspace. The page
+ * has retired the relay from its fast slot (the WebRTC mesh took it) but the
+ * app's rooms still ride this, and scripts/check-room-wire.mjs drives it
+ * against a real relay.
  *
- * THE MOBILE TWIN of page/room-wire.ts, and a copy on purpose: the app cannot
- * import from page/build, and React Native ships a WHATWG WebSocket over native
- * sockets, so the code is identical and the only thing shared would be a
- * package neither client needs. Keep the two in step; they are one idea.
+ * MUST NEVER be reached from the frame loop.
  *
  * @module room-wire
  */
@@ -108,6 +113,8 @@ export function openRoomSocket(code: string, origin: string = RELAY_ORIGIN): Net
     socket = ws;
     ws.addEventListener('open', () => {
       retryMs = RETRY_MIN_MS;
+      tries.everOpened = true;
+      tries.failures = 0;
     });
     ws.addEventListener('message', (ev: MessageEvent) => {
       if (cb === null || typeof ev.data !== 'string') return;
@@ -115,7 +122,7 @@ export function openRoomSocket(code: string, origin: string = RELAY_ORIGIN): Net
       try {
         parsed = JSON.parse(ev.data);
       } catch {
-        return; // not ours; the relay forwards bytes, not meaning
+        return;                       // not ours; the relay forwards bytes, not meaning
       }
       cb(parsed);
     });
@@ -130,7 +137,7 @@ export function openRoomSocket(code: string, origin: string = RELAY_ORIGIN): Net
   const schedule = (): void => {
     if (closed || retryTimer !== null) return;
     if (!tries.everOpened && ++tries.failures > RETRY_GIVE_UP) {
-      closed = true; // nobody is home; stop knocking for this room
+      closed = true;             // nobody is home; stop knocking for this room
       return;
     }
     retryTimer = setTimeout(() => {
@@ -153,31 +160,18 @@ export function openRoomSocket(code: string, origin: string = RELAY_ORIGIN): Net
         // closing; its close event is on the way and the retry follows it.
       }
     },
-    onMessage(f: (m: unknown) => void): void {
-      cb = f;
-    },
+    onMessage(f: (m: unknown) => void): void { cb = f; },
     // The shell drives the Broadcast wire's open state from its subscribe
     // callback; a socket knows its own, so this is deliberately inert.
-    setOpen(): void {
-      /* a socket answers for itself */
-    },
-    isOpen(): boolean {
-      return socket?.readyState === WebSocket.OPEN;
-    },
+    setOpen(): void { /* a socket answers for itself */ },
+    isOpen(): boolean { return socket?.readyState === WebSocket.OPEN; },
     close(): void {
       closed = true;
       cb = null;
-      if (retryTimer !== null) {
-        clearTimeout(retryTimer);
-        retryTimer = null;
-      }
+      if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
       const ws = socket;
       socket = null;
-      try {
-        ws?.close(1000, 'left the room');
-      } catch {
-        /* already gone */
-      }
+      try { ws?.close(1000, 'left the room'); } catch { /* already gone */ }
     },
   };
 }

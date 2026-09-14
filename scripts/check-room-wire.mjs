@@ -2,8 +2,9 @@
 //
 // The netcode suite proves the CONTRACT on a virtual clock, and the dual-wire
 // tests prove a room cannot half-migrate. Neither of them opens a socket. This
-// runs two full sessions over the built page module (page/build/room-wire.js,
-// the exact file the browser loads) against a real Durable Object, with the
+// runs two full sessions over the built shared module
+// (packages/net/build/room-wire.js, the exact file the browser is served and
+// the app bundles) against a real Durable Object, with the
 // slow wire deliberately dead so every byte has to cross the relay, and then
 // checks the one thing that matters: both timelines ended in the same place.
 //
@@ -18,7 +19,7 @@
 // @module
 import { createGame } from '../packages/engine/engine.js';
 import { createSession, dualTransport } from '../packages/net/net.js';
-import { openRoomSocket } from '../page/build/room-wire.js';
+import { openRoomSocket } from '../packages/net/build/room-wire.js';
 import { report, check } from './browser-harness.mjs';
 
 const args = new Map(
