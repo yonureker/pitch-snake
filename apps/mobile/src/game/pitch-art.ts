@@ -70,11 +70,13 @@ export function paintPitch(c: SkCanvas, boardPx: number): void {
   c.drawCircle(boardPx / 2, boardPx / 2, Math.max(3, cell * 0.12), spot);
 }
 
-// The hats grew past this file's ceiling and moved to their own module
-// (hat-art.ts, with three regional collections); the re-export keeps every
-// existing import working.
-export { hatArt } from './hat-art';
-export type { HatArt } from './hat-art';
+// The hats grew past this file's ceiling, moved to their own module, and on
+// 2026-09-14 moved again into the shared cosmetics package, where both
+// clients draw them through the HatSurface dialect (this app adapts its Skia
+// canvas in hat-canvas.ts); the re-export keeps every existing import
+// working, under the shared catalogue's own name.
+export { hatFor } from '@pitch-snake/cosmetics/hat-art';
+export type { HatArt } from '@pitch-snake/cosmetics/hat-art';
 
 /**
  * The eight offsets the number's dark trim is drawn at, so a digit is outlined

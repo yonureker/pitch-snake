@@ -47,7 +47,8 @@ import {
 import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from '@pitch-snake/net/vs-smoothing';
 
 import { type Kit, KIT_NONE, kitKey } from '@pitch-snake/cosmetics/kit';
-import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
+import { drawHatOn } from './hat-canvas';
+import { hatFor, paintBolt, paintJersey, paintPitch } from './pitch-art';
 import { GameColors, GhostColors, SNAKE_SHADES, VS_COLORS, skinRamp, snakeShadeFor } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
@@ -430,12 +431,12 @@ function bakeSnakeCells(cell: number, skin: string | null): void {
 }
 
 function bakeOutfit(cell: number, hatId: string | null, kit: Kit): void {
-  const art = hatArt(hatId);
+  const art = hatFor(hatId);
   const w = Math.ceil(cell * art.wf);
   const h = Math.ceil(cell * art.hf);
   retire(hatSprite?.image);
   hatSprite = bake(w, h, (c) => {
-    art.draw(c, w, h);
+    drawHatOn(c, art, w, h);
   });
   hatDy = art.dy(cell, h);
   const js = Math.ceil(cell * 0.84);
@@ -494,12 +495,12 @@ export function prepareVersusSprites(
     if (!rivalSkinSprites.has(skinKey)) rivalSkinSprites.set(skinKey, bakeSkinSet(cell, fit.skin));
     const hatKey = fit.hat ?? 'classic';
     if (!rivalHatSprites.has(hatKey)) {
-      const art = hatArt(fit.hat);
+      const art = hatFor(fit.hat);
       const w = Math.ceil(cell * art.wf);
       const h = Math.ceil(cell * art.hf);
       rivalHatSprites.set(hatKey, {
         sprite: bake(w, h, (c) => {
-          art.draw(c, w, h);
+          drawHatOn(c, art, w, h);
         }),
         dy: art.dy(cell, h),
       });

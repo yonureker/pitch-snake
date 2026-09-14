@@ -7,6 +7,10 @@
     "./kit": {
       "types": "./build/kit.d.ts",
       "default": "./build/kit.js"
+    },
+    "./hat-art": {
+      "types": "./build/hat-art.d.ts",
+      "default": "./build/hat-art.js"
     }
   },
   "scripts": {

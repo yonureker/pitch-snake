@@ -10,13 +10,14 @@
  * @module
  */
 import type { HatArt } from './hat-art.js';
+import type { HatSurface } from './hat-surface.js';
 
 /** The collection, merged into the catalogue by hat-art.ts. */
 export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-beret': {
     wf: 1.2, hf: 0.45,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.45,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       // the soft disc, drooping to the right the way a beret slumps
       c.fillStyle = '#b03040';
       c.beginPath();
@@ -39,7 +40,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
     // height, but a hat that sits on the head covers the head
     wf: 1.2, hf: 0.95,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.38 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const brimY = h * 0.8;
       // the stovepipe, a whisker wider at the top than the band
       c.fillStyle = '#26232b';
@@ -66,7 +67,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-bowler': {
     wf: 1.15, hf: 0.65,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const brimY = h * 0.74;
       c.fillStyle = '#26232b';
       c.beginPath();                          // the hard round dome
@@ -89,7 +90,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-boater': {
     wf: 1.3, hf: 0.5,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const brimY = h * 0.68;
       c.fillStyle = '#e6cf7e';                // the flat straw pillbox
       c.fillRect(w * 0.2, h * 0.06, w * 0.6, brimY - h * 0.06);
@@ -104,7 +105,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-tam': {
     wf: 1.25, hf: 0.5,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.45,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#3e5a3a';                // the wide soft disc
       c.beginPath();
       c.moveTo(w * 0.1, h * 0.8);
@@ -136,7 +137,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
     // hat that sits on the head covers the head (the module rule)
     wf: 1.05, hf: 0.72,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.5,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       // the truncated cone, crimson
       c.fillStyle = '#b8232e';
       c.beginPath();
@@ -165,7 +166,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-kufi': {
     wf: 0.95, hf: 0.42,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.36 - height * 0.4,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#b0562e';                // the low round cap
       c.beginPath();
       c.moveTo(w * 0.05, h * 0.94);
@@ -182,7 +183,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-kepi': {
     wf: 0.95, hf: 0.55,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.36 - height * 0.42,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#34486e';                // the drum, tapering up
       c.beginPath();
       c.moveTo(w * 0.08, h * 0.78);
@@ -205,7 +206,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-pith': {
     wf: 1.2, hf: 0.65,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.38 - height * 0.5,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const brimY = h * 0.7;
       c.fillStyle = '#ded4b8';                // the dome
       c.beginPath();
@@ -230,7 +231,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-fisher': {
     wf: 1.05, hf: 0.5,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.36 - height * 0.4,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#2c3a55';                // the soft crown, leaning back
       c.beginPath();
       c.moveTo(w * 0.06, h * 0.72);
@@ -256,7 +257,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-tyrol': {
     wf: 1.25, hf: 0.75,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.72;
       c.fillStyle = '#4a6741';                // the green felt crown
@@ -287,7 +288,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-bicorne': {
     wf: 1.45, hf: 0.62,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       // worn side-on, the way the portraits have it: one solid boat with
       // both tips rising. (The face-on crescent was tried first and filled
       // as a floating smile at twenty pixels.)
@@ -314,7 +315,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
   'hat-cordobes': {
     wf: 1.4, hf: 0.6,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const brimY = h * 0.72;
       c.fillStyle = '#26232b';                // the low flat drum
       c.fillRect(w * 0.19, h * 0.1, w * 0.62, brimY - h * 0.1);
@@ -329,7 +330,7 @@ export const OLD_WORLD_HATS: Record<string, HatArt> = {
     // base stops short of the eyes (the first cut swallowed the whole face)
     wf: 0.95, hf: 1.05,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.15 - height,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#26232b';                // the fur column
       c.beginPath();
       c.moveTo(w * 0.07, h * 0.96);

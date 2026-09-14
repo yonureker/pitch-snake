@@ -10,6 +10,7 @@
  * @module
  */
 import type { HatArt } from './hat-art.js';
+import type { HatSurface } from './hat-surface.js';
 
 /** The collection, merged into the catalogue by hat-art.ts. */
 export const NEW_WORLD_HATS: Record<string, HatArt> = {
@@ -18,7 +19,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
     // behind the head on the pitch
     wf: 1.6, hf: 0.85,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.68;
       // the crown: a tall straw cone with a blunt top
@@ -49,7 +50,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
     wf: 1.05, hf: 0.9,
     // worn, not perched: the flaps hold the head's sides
     dy: (cellPixels: number, height: number) => -cellPixels * 0.3 - height * 0.42,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       // the knit dome
       c.fillStyle = '#2e7d84';
       c.beginPath();
@@ -87,7 +88,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
   'hat-panama': {
     wf: 1.4, hf: 0.75,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.58,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.7;
       c.fillStyle = '#efe3c2';                // the dented cream crown
@@ -114,7 +115,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
   'hat-cowboy': {
     wf: 1.55, hf: 0.9,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.58,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.7;
       c.fillStyle = '#b07f42';                // tall crown, creased down the middle
@@ -142,7 +143,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
   'hat-mountie': {
     wf: 1.5, hf: 0.8,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.56,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.7;
       c.fillStyle = '#c8a55a';                // the campaign peak
@@ -162,7 +163,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
   'hat-vueltiao': {
     wf: 1.5, hf: 0.7,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.56,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.68;
       c.fillStyle = '#e8dcb0';                // the woven crown
@@ -194,7 +195,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
   'hat-cocar': {
     wf: 1.35, hf: 0.85,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.36 - height * 0.5,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       // seven feathers fanning from the band, colours alternating
       const colors = ['#d94036', '#e8c23a', '#2f74c0', '#d94036', '#2f74c0', '#e8c23a', '#d94036'];
       for (let i = 0; i < 7; i++) {
@@ -218,7 +219,7 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
   'hat-bush': {
     wf: 1.4, hf: 0.7,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.42 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.66;
       c.fillStyle = '#6b6b3a';                // the low soft crown

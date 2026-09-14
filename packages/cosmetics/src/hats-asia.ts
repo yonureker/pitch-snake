@@ -10,6 +10,7 @@
  * @module
  */
 import type { HatArt } from './hat-art.js';
+import type { HatSurface } from './hat-surface.js';
 
 /** The collection, merged into the catalogue by hat-art.ts. */
 export const ASIA_HATS: Record<string, HatArt> = {
@@ -17,7 +18,7 @@ export const ASIA_HATS: Record<string, HatArt> = {
     wf: 1.1, hf: 0.8,
     // worn: the fur holds the head, the flaps hang past the brow
     dy: (cellPixels: number, height: number) => -cellPixels * 0.32 - height * 0.42,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#9a938c';                // the crown
       c.beginPath();
       c.moveTo(w * 0.08, h * 0.6);
@@ -43,7 +44,7 @@ export const ASIA_HATS: Record<string, HatArt> = {
   'hat-turban': {
     wf: 1.1, hf: 0.68,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.34 - height * 0.45,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       c.fillStyle = '#e08a2e';                // the wrapped dome
       c.beginPath();
       c.moveTo(w * 0.06, h * 0.9);
@@ -69,7 +70,7 @@ export const ASIA_HATS: Record<string, HatArt> = {
   'hat-gat': {
     wf: 1.5, hf: 0.85,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.55,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       const midX = w / 2;
       const brimY = h * 0.76;
       c.fillStyle = '#2b2b30';                // the tall tapered crown
@@ -95,7 +96,7 @@ export const ASIA_HATS: Record<string, HatArt> = {
   'hat-nonla': {
     wf: 1.55, hf: 0.62,
     dy: (cellPixels: number, height: number) => -cellPixels * 0.4 - height * 0.5,
-    draw(c: CanvasRenderingContext2D, w: number, h: number) {
+    draw(c: HatSurface, w: number, h: number) {
       // one clean straw cone, edge to edge; the shape IS the hat
       c.fillStyle = '#d9b872';
       c.beginPath();

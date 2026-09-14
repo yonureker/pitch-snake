@@ -54,10 +54,11 @@ export interface SkinArt {
   pattern?: { colors: readonly (readonly number[])[]; cycles: number; soft?: boolean };
 }
 
-// The hats grew past this file's ceiling and moved to their own module
-// (hat-art.ts); the re-export below keeps every existing import working.
-export { HATS, hatFor } from './hat-art.js';
-export type { HatArt } from './hat-art.js';
+// The hats grew past this file's ceiling, moved to their own module, and
+// on 2026-09-14 moved again into the shared cosmetics package, where both
+// clients draw them; the re-export keeps every existing import working.
+export { HATS, hatFor } from '@pitch-snake/cosmetics/hat-art';
+export type { HatArt } from '@pitch-snake/cosmetics/hat-art';
 
 /**
  * The skins.
