@@ -550,7 +550,7 @@ export function createGame(cfg = {}) {
     // dryOrder/dryNext exist only while drying. All of it snapshots, or a
     // rollback would fork the flood.
     weather: 'clear', weatherEnd: 0, rainNextAt: 0, rainBlobs: 0,
-    puddleSet: new Set(), puddleGrowNext: 0, dryOrder: [], dryNext: 0,
+    puddleSet: new Set(), puddleGrowNext: 0, dryOrder: [], dryNext: 0, dryPer: 0,
 
     // what happened since the caller last drained; renderers turn these into
     // bursts, sprites and DOM updates. Sim state never depends on it.
@@ -813,6 +813,10 @@ export function createGame(cfg = {}) {
   // deterministic by construction.
   function buildDryOrder() {
     const rows = [];
+    // cells removed per pass, fixed from the STARTING size: recomputing it
+    // from the shrinking remainder each pass turned the drain geometric and
+    // stretched a full flood's 4s to ~6s (caught in review, never shipped)
+    S.dryPer = 0;
     for (const k of S.puddleSet) {
       const x = k / GRID | 0, y = k % GRID;
       let wet = 0;
@@ -822,14 +826,12 @@ export function createGame(cfg = {}) {
     }
     rows.sort((a, b) => (a[1] - b[1]) || (a[2] - b[2]));
     S.dryOrder = rows.map(r => r[0]);
+    S.dryPer = Math.max(1, Math.ceil(S.dryOrder.length / (PUDDLE_DRY_MS / PUDDLE_DRY_STEP_MS)));
   }
 
   function dryPass() {
-    // spread the whole shrink across PUDDLE_DRY_MS in fixed steps
-    const steps = PUDDLE_DRY_MS / PUDDLE_DRY_STEP_MS;
-    const per = Math.max(1, Math.ceil(S.dryOrder.length / steps));
     let dried = false;
-    for (let i = 0; i < per && S.dryOrder.length; i++) {
+    for (let i = 0; i < S.dryPer && S.dryOrder.length; i++) {
       const k = S.dryOrder.shift();
       if (S.puddleSet.delete(k)) dried = true;
     }
@@ -1997,7 +1999,7 @@ export function createGame(cfg = {}) {
       weather: S.weather, weatherEnd: S.weatherEnd, rainNextAt: S.rainNextAt,
       rainBlobs: S.rainBlobs, wrng: wrngState,
       puddles: [...S.puddleSet], puddleGrowNext: S.puddleGrowNext,
-      dryOrder: [...S.dryOrder], dryNext: S.dryNext,
+      dryOrder: [...S.dryOrder], dryNext: S.dryNext, dryPer: S.dryPer,
       players: players.map(p => ({
         snake: p.snake.map(c => ({ x: c.x, y: c.y })),
         tailFrom: p.tailFrom ? { x: p.tailFrom.x, y: p.tailFrom.y } : null,
@@ -2041,7 +2043,7 @@ export function createGame(cfg = {}) {
     S.rainBlobs = s.rainBlobs; wrngState = s.wrng | 0;
     S.puddleSet = new Set(s.puddles);
     S.puddleGrowNext = s.puddleGrowNext;
-    S.dryOrder = [...s.dryOrder]; S.dryNext = s.dryNext;
+    S.dryOrder = [...s.dryOrder]; S.dryNext = s.dryNext; S.dryPer = s.dryPer;
     for (let i = 0; i < players.length; i++) {
       const p = players[i], q = s.players[i];
       p.snake.length = 0;
