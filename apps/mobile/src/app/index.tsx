@@ -44,7 +44,7 @@ import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';
 import { loadWallsPref, saveWallsPref } from '@/lib/walls-prefs';
 import { loadSfxPref, saveSfxPref } from '@/lib/sfx-prefs';
-import { setSfxEnabled } from '@/game/sfx';
+import { primeSfx, setSfxEnabled } from '@/game/sfx';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
@@ -312,6 +312,7 @@ export default function Index() {
   const create = useCreateTournament();
   const tapTimes = useRef<number[]>([]);
   const loopSetMode = loop.setMode;
+  const loopSetWalls = loop.setWalls;
   const loopSetWorn = loop.setWorn;
   const loopSetKit = loop.setKit;
   const wallet = useWallet();
@@ -381,12 +382,15 @@ export default function Index() {
     void loadThemePref().then(setThemePref);
     void loadWallsPref().then((on) => {
       setWallsOn(on);
-      loop.setWalls(on);
+      loopSetWalls(on);
     });
     void loadSfxPref().then((on) => {
       setSoundOn(on);
       setSfxEnabled(on);
     });
+    // build every sfx player now, at mount, so no effect ever allocates one
+    // inside the frame that fires it (see primeSfx: the eaten-bonus crash)
+    primeSfx();
     void loadModePrefs().then((prefs) => {
       setUiMode(prefs.uiMode);
       setTourney(prefs.tourney);
@@ -397,7 +401,7 @@ export default function Index() {
         : prefs.uiMode,
       );
     });
-  }, [loopSetMode]);
+  }, [loopSetMode, loopSetWalls]);
 
   // A window can open or close while the app just sits on an overlay, so the
   // status re-reads on a slow tick (a subscription to the wall clock, which

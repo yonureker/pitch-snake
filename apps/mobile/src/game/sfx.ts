@@ -89,6 +89,45 @@ export function setSfxEnabled(on: boolean): void {
   enabled = on;
 }
 
+/** Every effect name, listed once so priming needs no cast over SOURCES. */
+const ALL_SFX: SfxName[] = [
+  'eat',
+  'bonus',
+  'hop',
+  'tnt',
+  'wallwarn',
+  'wallsolid',
+  'portalopen',
+  'ghostin',
+  'crash',
+  'flourish',
+  'tick',
+  'save',
+  'zap',
+  'kickoff',
+  'fulltime',
+];
+/**
+ * Create every player once, up front, OFF the gameplay hot path.
+ *
+ * This is not just a warm cache: creating a player is synchronous native
+ * work (allocation, and the source decode), and doing it lazily meant the
+ * FIRST use of each effect paid that cost inside the frame that fired it. On
+ * the first bonus that frame already does the most work of any (thirty
+ * particles, the +5 float), and the added stall was enough to desync the JS
+ * and render threads, at which point the loop's two-frames-late SkPicture
+ * dispose could free a picture the render thread was still replaying, which
+ * is the native-only "Attempted to access a disposed object" crash reported
+ * on eating a five-point emoji. Priming at mount moves all of that off the
+ * round entirely; a trigger then only seeks and plays.
+ *
+ * Idempotent and swallowed: a device that will not build a player simply has
+ * no sound for it, never a crash.
+ */
+export function primeSfx(): void {
+  for (const name of ALL_SFX) playerFor(name);
+}
+
 function playerFor(name: SfxName): AudioPlayer | null {
   const existing = players.get(name);
   if (existing) return existing;

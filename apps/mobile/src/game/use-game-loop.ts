@@ -243,7 +243,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const pocket = useRef<SeedTicket | null>(null);
   const roundTicket = useRef<number | null>(null);
   const boxRef = useRef<LoopBox>({
-    retired: [null, null],
+    retired: [null, null, null],
     frameCount: 0,
     frameWorst: 0,
     frameWindowStart: 0,
@@ -641,12 +641,19 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         // past rather than teleport through it; see game/vs-smoothing.ts
         vs: box.vsRc === null ? undefined : { ...box.vsRc, rollbacks: box.session?.stats.rollbacks ?? 0 },
       });
-      // Dispose pictures deterministically, two frames late: the newest
-      // retired one may still be mid-replay on the render thread, and leaving
-      // them to the GC is exactly what flickers - a finalizer can release the
-      // native picture while the canvas is drawing it.
-      const stale = box.retired[1];
+      // Dispose pictures deterministically, THREE frames late, never to the
+      // GC: a finalizer can release the native picture while the canvas is
+      // still drawing it, which flickers. Two frames was the original margin
+      // and it held until a heavy frame (the first bonus: thirty particles,
+      // the +5 float, and once a lazily-built sound player) stalled the JS
+      // thread far enough ahead of the render thread that a picture two back
+      // was still mid-replay when freed, the native "disposed object" crash.
+      // The sound players now prime at mount so that stall is gone, and this
+      // holds one extra frame so an ordinary hitch can never reach a picture
+      // the render thread has not finished.
+      const stale = box.retired[2];
       if (stale !== null && stale !== undefined) stale.dispose();
+      box.retired[2] = box.retired[1] ?? null;
       box.retired[1] = box.retired[0] ?? null;
       box.retired[0] = previous;
     };
