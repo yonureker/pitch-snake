@@ -35,6 +35,7 @@ import { DarkShell, GameColors, VS_COLORS } from '@/game/theme';
 
 import type { SeatRow } from '@/game/use-game-loop';
 import { FLAG_COLS, flagIndex } from '@/lib/leaderboard';
+import { CupIcon, GearIcon } from '@/components/tray-icons';
 
 const ANTON = 'Anton_400Regular';
 const BARLOW = 'Barlow_600SemiBold';
@@ -229,7 +230,7 @@ export function GameHeader({
                     onPress={onBoards}
                     style={[styles.trayBtn, coins !== null && styles.trayDivided]}
                   >
-                    <Text style={[styles.trayIcon, dark && darkStyles.trayIcon]}>{'🏆'}</Text>
+                    <CupIcon size={14} color={dark ? DarkShell.ink : GameColors.ink} />
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
@@ -237,7 +238,7 @@ export function GameHeader({
                     onPress={onSettings}
                     style={[styles.trayBtn, styles.trayDivided]}
                   >
-                    <Text style={[styles.trayIcon, dark && darkStyles.trayIcon]}>{'⚙︎'}</Text>
+                    <GearIcon size={14} color={dark ? DarkShell.ink : GameColors.ink} />
                   </Pressable>
                 </View>
               </>
@@ -338,7 +339,6 @@ const styles = StyleSheet.create({
   trayBtn: { paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
   trayPurse: { gap: 5 },
   trayDivided: { borderLeftWidth: 1, borderLeftColor: 'rgba(194,162,90,0.45)' },
-  trayIcon: { fontSize: 12, color: GameColors.ink },
   whoChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -464,7 +464,6 @@ const darkStyles = StyleSheet.create({
   whoText: { color: DarkShell.ink },
   purseText: { color: DarkShell.ink },
   tray: { borderColor: DarkShell.padRing },
-  trayIcon: { color: DarkShell.ink },
   scoreLabel: { color: DarkShell.muted },
   scoreValue: { color: DarkShell.ink },
   clockText: { color: DarkShell.ink },
