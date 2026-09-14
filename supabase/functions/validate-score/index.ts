@@ -13,7 +13,7 @@
 // boards: degraded, never wrong.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
-  replay, MODES, SPEEDS, START_LEN,
+  replay, MODES, SPEEDS, START_LEN, RAIN_EVERY_MS,
 } from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@b8ff12b855f261ca59621c16918a1af5443985f1/packages/engine/engine.js';
 
 const CORS = {
@@ -44,6 +44,14 @@ const KNOBS: Record<string, unknown> = {
   // levels are the only rounds with a goal and they never submit, so a
   // submitted round claiming a board mode must carry none
   goalScore: 0,
+  // weather (v28): the world's one cadence, and no other. Unchecked, this
+  // knob was the exact shopping hole KNOBS exists to close: a doctored
+  // rainEveryMs (0 for the old dry game, or a downpour tuned to drown the
+  // ghost pack in survival) would have validated and paid. A pre-v28 log
+  // carries no knob and passes via the default here, while replay() plays
+  // it dry under its own backward-compat default, which is the sky that
+  // round was actually played under.
+  rainEveryMs: RAIN_EVERY_MS,
 };
 
 // ---- the evidence trail ----
