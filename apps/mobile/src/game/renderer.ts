@@ -17,6 +17,7 @@
  * @module
  */
 import {
+  TileMode,
   PaintStyle,
   Skia,
   StrokeCap,
@@ -236,6 +237,9 @@ const C = {
   ink: Skia.Color(GameColors.ink),
   snakeOutline: Skia.Color(GameColors.snakeOutline),
   white: Skia.Color('#ffffff'),
+  // weather: the downpour's shade over the pitch and the streaks themselves
+  rainShade: Skia.Color('#101812'),
+  rainStreak: Skia.Color('#cfe3ee'),
   ghostEye: Skia.Color(GameColors.ghostEye),
   // the bolt-slow dizzy halo, precomputed so the per-ghost per-frame draw
   // never builds a colour (rule 5)
@@ -398,6 +402,75 @@ function bakeArena(boardPx: number): void {
   arenaSprite = bake(boardPx, boardPx, (c) => {
     paintPitch(c, boardPx);
   });
+}
+
+// ---- weather (v28) ----
+// The water is engine state read per frame like walls: one soft-edged sprite,
+// oversized with a feathered alpha edge so adjacent wet cells fuse into a
+// blob, drawn after the arena and before the walls (a wall forming over a
+// puddle covers it). The rain is paint, and CLOSED-FORM paint: each streak's
+// position is a pure function of the renderer's clock and a fixed lane seed,
+// so a downpour costs ninety drawLine calls and not one byte of per-frame
+// state. Lane seeds come from a tiny local generator at module load, never
+// Math.random: not because streaks are gameplay (they are not, and each
+// screen may legally rain differently), but because a fixed shower is free
+// and reproducible screenshots are worth having.
+let puddleSprite: Baked | null = null;
+function bakePuddle(cell: number): void {
+  retire(puddleSprite?.image);
+  const s = Math.max(6, Math.ceil(cell * 1.6));
+  puddleSprite = bake(s, s, (c) => {
+    const paint = Skia.Paint();
+    paint.setShader(
+      Skia.Shader.MakeRadialGradient(
+        { x: s / 2, y: s / 2 },
+        s * 0.5,
+        [
+          Skia.Color('rgba(62,110,146,0.52)'),
+          Skia.Color('rgba(56,100,136,0.40)'),
+          Skia.Color('rgba(56,100,136,0)'),
+        ],
+        [0.08, 0.62, 1],
+        TileMode.Clamp,
+      ),
+    );
+    c.drawRect(Skia.XYWHRect(0, 0, s, s), paint);
+    // one off-centre sky glint: the highlight that says water, not shadow
+    paint.setShader(
+      Skia.Shader.MakeRadialGradient(
+        { x: s * 0.38, y: s * 0.34 },
+        s * 0.22,
+        [Skia.Color('rgba(214,236,248,0.28)'), Skia.Color('rgba(214,236,248,0)')],
+        [0, 1],
+        TileMode.Clamp,
+      ),
+    );
+    c.drawRect(Skia.XYWHRect(0, 0, s, s), paint);
+    paint.dispose();
+  });
+}
+
+const RAIN_N = 90;
+const rainLaneX = new Float32Array(RAIN_N);
+const rainLaneY = new Float32Array(RAIN_N);
+const rainLaneV = new Float32Array(RAIN_N);
+const rainLaneL = new Float32Array(RAIN_N);
+{
+  // mulberry32, the engine's own die, seeded with a constant: fixed lanes
+  let st = 0x5241494e; // 'RAIN'
+  const roll = (): number => {
+    st |= 0;
+    st = (st + 0x6d2b79f5) | 0;
+    let t = Math.imul(st ^ (st >>> 15), 1 | st);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = 0; i < RAIN_N; i++) {
+    rainLaneX[i] = roll();
+    rainLaneY[i] = roll();
+    rainLaneV[i] = 0.6 + roll() * 0.5;
+    rainLaneL[i] = 0.5 + roll() * 0.5;
+  }
 }
 
 function bakeBolt(cell: number): Baked | null {
@@ -614,6 +687,7 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
     bakedBoard = boardPx;
     retire(arenaSprite?.image);
     bakeArena(boardPx);
+    bakePuddle(boardPx / GRID);
   }
   // the outfit rebakes on its own key: an equip at menu time swaps the
   // sprites without waiting for a resize, exactly like the web's applyWorn
@@ -883,6 +957,14 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   const now = game.renderNow();
 
   if (arenaSprite !== null) drawBaked(canvas, arenaSprite, 0, 0);
+
+  // water under everything: a wall forming over a puddle covers it
+  if (puddleSprite !== null && game.puddleSet.size > 0) {
+    const off = (puddleSprite.w - cell) / 2;
+    for (const k of game.puddleSet) {
+      drawBaked(canvas, puddleSprite, ((k / GRID) | 0) * cell - off, (k % GRID) * cell - off);
+    }
+  }
 
   // walls: one image, alpha animated per frame
   if (game.wallState !== 'off' && wallSprite !== null) {
@@ -1161,6 +1243,32 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       }
       fillPaint.setAlphaf(1);
     }
+  }
+
+  // the sky is nearest the camera: shade and streaks over everything while
+  // it pours. Alpha steps with the phase rather than fading (the page eases;
+  // here a tween would need per-frame state, and the warn phase already
+  // reads as the ramp). Positions are closed-form on the clock: no state.
+  const sky = game.weather;
+  if (sky === 'warn' || sky === 'rain') {
+    const alpha = sky === 'rain' ? 1 : 0.35;
+    fillPaint.setColor(C.rainShade);
+    fillPaint.setAlphaf(0.12 * alpha);
+    canvas.drawRect(_bounds, fillPaint);
+    fillPaint.setAlphaf(1);
+    strokePaint.setColor(C.rainStreak);
+    strokePaint.setStrokeWidth(Math.max(1, cell * 0.045));
+    strokePaint.setAlphaf(0.45 * alpha);
+    const H = rc.boardPx,
+      fall = H / 900;
+    for (let i = 0; i < RAIN_N; i++) {
+      const len = rainLaneL[i]! * cell;
+      const span = H + len;
+      const y = ((rainLaneY[i]! * span + rc.pulseMs * rainLaneV[i]! * fall) % span) - len;
+      const x = (rainLaneX[i]! * H + rc.pulseMs * rainLaneV[i]! * fall * 0.16) % H;
+      canvas.drawLine(x, y, x - len * 0.18, y - len, strokePaint);
+    }
+    strokePaint.setAlphaf(1);
   }
 
   return recorder.finishRecordingAsPicture();
