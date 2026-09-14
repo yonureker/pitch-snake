@@ -115,7 +115,7 @@ revoke all on table public.pitch_snake_seats from anon, authenticated;
 create table if not exists public.pitch_snake_ratings (
   user_id    uuid        not null,
   mode       text        not null,
-  rating     integer     not null default 1200,
+  rating     integer     not null default 1000,
   rounds     integer     not null default 0,
   wins       integer     not null default 0,
   updated_at timestamptz not null default now(),
@@ -126,6 +126,49 @@ create index if not exists pitch_snake_ratings_board_idx
   on public.pitch_snake_ratings (mode, rating desc);
 
 alter table public.pitch_snake_ratings enable row level security;
+
+-- The SEASON ladder, the same Elo run again on a clock that resets. A season
+-- is a UTC calendar month ('YYYY-MM'); a round in a new month simply writes to
+-- rows that do not exist yet and so default to base, which is the whole reset:
+-- no cron rolls anything over, the season key does. Kept forever (a row is
+-- tiny) so past seasons and season stats stay answerable. This ladder is
+-- INDEPENDENT of the lifetime one above: its expectations come from the
+-- season's own before-round ratings, computed alongside the lifetime move in
+-- seal_round, never derived from it. Base and floor match the lifetime ladder.
+create table if not exists public.pitch_snake_ratings_season (
+  user_id    uuid        not null,
+  mode       text        not null,
+  season     text        not null,               -- 'YYYY-MM', UTC
+  rating     integer     not null default 1000,
+  rounds     integer     not null default 0,
+  wins       integer     not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, mode, season)
+);
+
+create index if not exists pitch_snake_ratings_season_board_idx
+  on public.pitch_snake_ratings_season (mode, season, rating desc);
+
+alter table public.pitch_snake_ratings_season enable row level security;
+
+-- The season registry: one row per season that has ever hosted a rated round,
+-- keyed by the same 'YYYY-MM' string every season-scoped column already joins
+-- on, so it is an ADDRESSABLE season rather than a bare string. Populated
+-- lazily by seal_round the first time a round seals in a season (no cron rolls
+-- a season over; the key does), and the place season metadata lands when it
+-- exists: rewards, a display label, an explicit close. starts_at/ends_at are
+-- the UTC month bounds, stored so a client need not recompute them. No hard FK
+-- from ratings_season, deliberately: a rating write must never fail because a
+-- registry row was missing, exactly as a room must never fail because the
+-- ladder is down.
+create table if not exists public.pitch_snake_seasons (
+  season     text        primary key,            -- 'YYYY-MM', UTC
+  starts_at  timestamptz not null,
+  ends_at    timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.pitch_snake_seasons enable row level security;
 revoke all on table public.pitch_snake_ratings from anon, authenticated;
 
 -- ------------------------------------------------------- take your seat ----
@@ -294,7 +337,18 @@ declare
   actual    numeric;
   cur_rat   integer;
   cur_n     integer;
+  -- the SEASON ladder, run alongside the lifetime one on its own snapshot
+  v_season    text;
+  before_s    numeric[] := '{}';
+  kfac_s      numeric[] := '{}';
+  adj_s       numeric;
+  cur_rat_s   integer;
+  cur_n_s     integer;
 begin
+  -- the current season key, UTC calendar month; a round always seals into the
+  -- season it is sealed in, which is the season it was played in bar the rare
+  -- round straddling midnight on the 1st, close enough for a monthly ladder
+  v_season := to_char((now() at time zone 'utc'), 'YYYY-MM');
   select * into r from public.pitch_snake_rounds where id = p_round for update;
   if not found or r.sealed_at is not null then return 0; end if;
 
@@ -407,12 +461,31 @@ begin
     select rt.rating, rt.rounds into cur_rat, cur_n
     from public.pitch_snake_ratings rt
     where rt.user_id = uids[i] and rt.mode = agreed_mode;
-    if not found then cur_rat := 1200; cur_n := 0; end if;
+    if not found then cur_rat := 1000; cur_n := 0; end if;
     before := before || cur_rat::numeric;
     -- provisional players move fast and settle: K decays once a rating has
     -- something behind it
     kfac := kfac || (case when cur_n < 10 then 40 else 20 end)::numeric;
+
+    -- the same snapshot for the season ladder, from THIS season's rows, which
+    -- default to base each month so the reset needs no sweep; provisional is
+    -- judged per season, so everyone is provisional early in a new month
+    select rt.rating, rt.rounds into cur_rat_s, cur_n_s
+    from public.pitch_snake_ratings_season rt
+    where rt.user_id = uids[i] and rt.mode = agreed_mode and rt.season = v_season;
+    if not found then cur_rat_s := 1000; cur_n_s := 0; end if;
+    before_s := before_s || cur_rat_s::numeric;
+    kfac_s := kfac_s || (case when cur_n_s < 10 then 40 else 20 end)::numeric;
   end loop;
+
+  -- register the season the first time a round seals in it (the UTC month
+  -- bounds are stored so clients need not recompute them); no FK depends on
+  -- this, so a failure here could never cost a rating
+  insert into public.pitch_snake_seasons (season, starts_at, ends_at)
+  values (v_season,
+          (v_season || '-01')::timestamp at time zone 'utc',
+          ((v_season || '-01')::timestamp at time zone 'utc') + interval '1 month')
+  on conflict (season) do nothing;
 
   for i in 1..n loop
     adj := 0;
@@ -436,6 +509,32 @@ begin
       set rating     = greatest(100, public.pitch_snake_ratings.rating + adj::integer),
           rounds     = public.pitch_snake_ratings.rounds + 1,
           wins       = public.pitch_snake_ratings.wins + case when places[i] = 1 then 1 else 0 end,
+          updated_at = now();
+
+    -- the SEASON move: the identical maths on the season snapshot. Independent
+    -- of the lifetime adj above (different before-ratings, different K when a
+    -- player is provisional this season but settled all-time), so it is summed
+    -- from scratch rather than reused. seats.delta stays the LIFETIME move;
+    -- the season standing is read straight off this table (rating - base is the
+    -- net season gain), so no season delta needs storing per seat.
+    adj_s := 0;
+    for j in 1..n loop
+      if i = j then continue; end if;
+      expect := 1.0 / (1.0 + power(10.0, (before_s[j] - before_s[i]) / 400.0));
+      actual := case when places[i] < places[j] then 1.0
+                     when places[i] > places[j] then 0.0
+                     else 0.5 end;
+      adj_s := adj_s + (actual - expect);
+    end loop;
+    adj_s := round(kfac_s[i] * adj_s / (n - 1));
+
+    insert into public.pitch_snake_ratings_season (user_id, mode, season, rating, rounds, wins)
+    values (uids[i], agreed_mode, v_season, greatest(100, (before_s[i] + adj_s)::integer), 1,
+            case when places[i] = 1 then 1 else 0 end)
+    on conflict (user_id, mode, season) do update
+      set rating     = greatest(100, public.pitch_snake_ratings_season.rating + adj_s::integer),
+          rounds     = public.pitch_snake_ratings_season.rounds + 1,
+          wins       = public.pitch_snake_ratings_season.wins + case when places[i] = 1 then 1 else 0 end,
           updated_at = now();
 
     update public.pitch_snake_seats
@@ -595,6 +694,114 @@ as $$
   order by s.place, s.seat;
 $$;
 
+-- ------------------------------------------------------- season + stats ----
+-- All read-only and scoped to the CALLER (auth.uid()) or to public game
+-- facts (a season board, an opponent you actually played), so all safe for
+-- anon and authenticated. Every monthly window is keyed the same way seasons
+-- are: to_char(ts at time zone 'utc','YYYY-MM'), so the board, the ladder and
+-- the stats all agree on where a month begins.
+
+-- The season ladder: the lifetime top_rated pointed at the season table.
+drop function if exists public.pitch_snake_top_rated_season(text, text, integer);
+create or replace function public.pitch_snake_top_rated_season(
+  p_mode text, p_season text, p_limit integer default 10)
+returns table (name text, country text, rating integer, rounds integer, wins integer, provisional boolean)
+language sql security definer set search_path = '' stable
+as $$
+  select coalesce(p.name, 'YOU'), p.country, rt.rating, rt.rounds, rt.wins, rt.rounds < 10
+  from public.pitch_snake_ratings_season rt
+  left join public.pitch_snake_profiles p on p.user_id = rt.user_id
+  where rt.mode = p_mode and rt.season = p_season
+  order by rt.rating desc, rt.rounds desc, rt.updated_at
+  limit least(greatest(coalesce(p_limit, 10), 1), 50);
+$$;
+
+-- My season standing, my_rating's json shape for one season (default current).
+-- 'gain' is rating - base, the net move this season, which is the monthly
+-- ELO gain/loss the stats screen wants without a per-seat season delta.
+drop function if exists public.pitch_snake_my_rating_season(text);
+create or replace function public.pitch_snake_my_rating_season(p_season text default null)
+returns json language sql security definer set search_path = '' stable
+as $$
+  select coalesce(json_object_agg(t.mode, json_build_object(
+           'rating', t.rating, 'rounds', t.rounds, 'wins', t.wins,
+           'provisional', t.rounds < 10, 'season', t.season,
+           'gain', t.rating - 1000)), '{}'::json)
+  from (
+    select rt.mode, rt.rating, rt.rounds, rt.wins, rt.season
+    from public.pitch_snake_ratings_season rt
+    where rt.user_id = auth.uid() and auth.uid() is not null
+      and rt.season = coalesce(p_season, to_char((now() at time zone 'utc'), 'YYYY-MM'))
+  ) t;
+$$;
+
+-- My multiplayer record, lifetime or one season. Only RATED seats count
+-- (place is filled at sealing), so an unrated or unsealed round never does.
+drop function if exists public.pitch_snake_my_mp_stats(text);
+create or replace function public.pitch_snake_my_mp_stats(p_season text default null)
+returns json language sql security definer set search_path = '' stable
+as $$
+  select json_build_object(
+    'played', count(*),
+    'won',    count(*) filter (where s.place = 1),
+    'lost',   count(*) filter (where s.place > 1),
+    'delta',  coalesce(sum(s.delta), 0))
+  from public.pitch_snake_seats s
+  where s.user_id = auth.uid() and auth.uid() is not null and s.place is not null
+    and (p_season is null
+         or to_char(s.claimed_at at time zone 'utc', 'YYYY-MM') = p_season);
+$$;
+
+-- Head to head against one opponent: rated rounds you both played, and who
+-- finished ahead. Both sides come from seats, so it needs no new storage.
+drop function if exists public.pitch_snake_h2h(uuid);
+create or replace function public.pitch_snake_h2h(p_opponent uuid)
+returns json language sql security definer set search_path = '' stable
+as $$
+  select json_build_object(
+    'games',      count(*),
+    'my_wins',    count(*) filter (where me.place < opp.place),
+    'their_wins', count(*) filter (where me.place > opp.place),
+    'draws',      count(*) filter (where me.place = opp.place))
+  from public.pitch_snake_seats me
+  join public.pitch_snake_seats opp
+    on opp.round_id = me.round_id and opp.user_id = p_opponent
+  where me.user_id = auth.uid() and auth.uid() is not null
+    and me.place is not null and opp.place is not null;
+$$;
+
+-- Who you have played, most recent first, with the record against each. This
+-- is how a client offers an opponent to inspect, since names are display and
+-- the identity is the user_id.
+drop function if exists public.pitch_snake_recent_opponents(integer);
+create or replace function public.pitch_snake_recent_opponents(p_limit integer default 20)
+returns table (opponent uuid, name text, country text, games bigint,
+               my_wins bigint, their_wins bigint, last_played timestamptz)
+language sql security definer set search_path = '' stable
+as $$
+  with mine as (
+    select round_id, place, claimed_at
+    from public.pitch_snake_seats
+    where user_id = auth.uid() and auth.uid() is not null and place is not null
+  ),
+  paired as (
+    select opp.user_id as opponent, m.place as my_place, opp.place as opp_place, m.claimed_at
+    from mine m
+    join public.pitch_snake_seats opp
+      on opp.round_id = m.round_id and opp.user_id <> auth.uid() and opp.place is not null
+  )
+  select pr.opponent, coalesce(p.name, 'YOU'), p.country,
+         count(*),
+         count(*) filter (where pr.my_place < pr.opp_place),
+         count(*) filter (where pr.my_place > pr.opp_place),
+         max(pr.claimed_at)
+  from paired pr
+  left join public.pitch_snake_profiles p on p.user_id = pr.opponent
+  group by pr.opponent, p.name, p.country
+  order by max(pr.claimed_at) desc
+  limit least(greatest(coalesce(p_limit, 20), 1), 100);
+$$;
+
 -- Postgres grants EXECUTE to PUBLIC on every new function; take it back, then
 -- hand it out deliberately. Note what is NOT handed out: record_round and
 -- seal_round take a user id or decide a rating, so they belong to the service
@@ -624,3 +831,15 @@ grant execute on function public.pitch_snake_take_seat(text, integer, integer, t
 grant execute on function public.pitch_snake_my_rating()                              to anon, authenticated;
 grant execute on function public.pitch_snake_top_rated(text, integer)                 to anon, authenticated;
 grant execute on function public.pitch_snake_round_ratings(text, integer)             to anon, authenticated;
+
+-- season + stats reads: all caller-scoped or public game facts, so anon + auth
+revoke all on function public.pitch_snake_top_rated_season(text, text, integer)       from public;
+revoke all on function public.pitch_snake_my_rating_season(text)                      from public;
+revoke all on function public.pitch_snake_my_mp_stats(text)                           from public;
+revoke all on function public.pitch_snake_h2h(uuid)                                   from public;
+revoke all on function public.pitch_snake_recent_opponents(integer)                   from public;
+grant execute on function public.pitch_snake_top_rated_season(text, text, integer)    to anon, authenticated;
+grant execute on function public.pitch_snake_my_rating_season(text)                   to anon, authenticated;
+grant execute on function public.pitch_snake_my_mp_stats(text)                        to anon, authenticated;
+grant execute on function public.pitch_snake_h2h(uuid)                                to anon, authenticated;
+grant execute on function public.pitch_snake_recent_opponents(integer)               to anon, authenticated;

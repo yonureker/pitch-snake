@@ -145,6 +145,7 @@ revoke all on table public.pitch_snake_tournament_scores from anon, authenticate
 -- will not replace a function with one that returns a different shape.
 drop function if exists public.pitch_snake_top_scores(integer);
 drop function if exists public.pitch_snake_top_scores(integer, text);
+drop function if exists public.pitch_snake_top_scores(integer, text, text);
 
 -- THE BOARD IS FOR PLAYERS WHO CAN BE FOUND AGAIN (2026-09-08, owner's call).
 -- An anonymous score belongs to a browser rather than a person: it cannot be
@@ -171,22 +172,49 @@ drop function if exists public.pitch_snake_top_scores(integer, text);
 -- punishing people retroactively for a rule that did not exist when they
 -- played. Rows older than the cutoff include the pre-identity ones, which have
 -- no user_id at all and are grandfathered by the same clause.
-create or replace function public.pitch_snake_top_scores(limit_count integer default 10, p_mode text default 'classic')
+create or replace function public.pitch_snake_top_scores(
+  limit_count integer default 10, p_mode text default 'classic', p_season text default null)
 returns table (id bigint, name text, score integer, country text, created_at timestamptz)
 language sql
 security definer
 set search_path = ''
 stable
 as $$
+  -- p_season null is the ALL-TIME board (unchanged); a 'YYYY-MM' string windows
+  -- it to that UTC month, the same key the season ladder uses, so the two
+  -- monthly boards agree on where a month begins.
   select s.id, s.name, s.score, p.country, s.created_at
   from public.pitch_snake_scores s
   left join public.pitch_snake_profiles p on p.user_id = s.user_id
   left join auth.users u on u.id = s.user_id
   where s.mode = coalesce(p_mode, 'classic')
+    and (p_season is null or to_char(s.created_at at time zone 'utc', 'YYYY-MM') = p_season)
     and (s.created_at < timestamptz '2026-09-08 01:00:00+00'
          or (u.id is not null and u.is_anonymous is false))
   order by s.score desc, s.created_at asc
   limit least(greatest(coalesce(limit_count, 10), 1), 100);
+$$;
+
+-- The caller's own solo record for a mode, lifetime or one season. Derived
+-- from the score rows we already keep (every validated round writes one), so
+-- games/avg/best need no counter table; reads only auth.uid()'s own rows.
+drop function if exists public.pitch_snake_my_stats(text, text);
+create or replace function public.pitch_snake_my_stats(
+  p_mode text default 'classic', p_season text default null)
+returns json
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select json_build_object(
+    'games', count(*),
+    'avg',   coalesce(round(avg(s.score))::integer, 0),
+    'best',  coalesce(max(s.score), 0))
+  from public.pitch_snake_scores s
+  where s.user_id = auth.uid() and auth.uid() is not null
+    and s.mode = coalesce(p_mode, 'classic')
+    and (p_season is null or to_char(s.created_at at time zone 'utc', 'YYYY-MM') = p_season);
 $$;
 
 -- --------------------------------------------------------------- write ----
@@ -314,11 +342,13 @@ drop function if exists public.pitch_snake_tournament_submit(text, text, integer
 -- these callable by roles we never considered. Take that back, then hand it
 -- out deliberately. EXECUTE is also all it takes to publish a function at
 -- /rest/v1/rpc/<name>; tables need far more, which is exactly why we use these.
-revoke all on function public.pitch_snake_top_scores(integer, text)                       from public;
+revoke all on function public.pitch_snake_top_scores(integer, text, text)                 from public;
+revoke all on function public.pitch_snake_my_stats(text, text)                            from public;
 revoke all on function public.pitch_snake_tournament_create(text, text, integer, integer) from public;
 revoke all on function public.pitch_snake_tournament_get(text)                            from public;
 revoke all on function public.pitch_snake_tournament_top(text, integer)                   from public;
-grant execute on function public.pitch_snake_top_scores(integer, text)                       to anon, authenticated;
+grant execute on function public.pitch_snake_top_scores(integer, text, text)                 to anon, authenticated;
+grant execute on function public.pitch_snake_my_stats(text, text)                            to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_create(text, text, integer, integer) to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_get(text)                            to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_top(text, integer)                   to anon, authenticated;

@@ -49,7 +49,9 @@ takes no user id as a parameter, so it can seat nobody but its caller.
   rating about as far as one duel and rooms of two and five share a pool.
 - Expectations come from a **snapshot of the ratings before the round**, so the
   result never depends on the order players are visited.
-- **K is 40** until ten rounds are behind a player, then **20**. The floor is
+- **K is 40** until ten rounds are behind a player, then **20**. The base is
+  **1000** (was 1200 until 2026-09-14; the four accounts that predated the
+  change were rebased to 1000 and the constant moved with them) and the floor is
   **100**. Ratings are per mode, like the boards, and hidden until ten rounds
   (marked `P`, the chess convention, rather than withheld).
 - Equal score on the same quantum is a **draw**, worth 0.5 to each side.
@@ -58,6 +60,28 @@ takes no user id as a parameter, so it can seat nobody but its caller.
   clinch rule ends a round the moment the last survivor passes every fallen
   rival, so a dominant win STOPS EARLY and records a margin of one point.
   Margins are compressed exactly when somebody is winning big.
+
+## 3a. Seasons (the monthly ladder)
+
+- Two ladders run off the SAME sealed round. The **lifetime** ladder
+  (`pitch_snake_ratings`) never resets and is the ALL-TIME board. The **season**
+  ladder (`pitch_snake_ratings_season`) resets every calendar month and is the
+  MONTHLY board. `seal_round` computes both moves in one pass; they are
+  independent, the season move uses the season's own before-round snapshot and
+  its own provisional count, never the lifetime adjustment.
+- A season is a **UTC calendar month**, keyed `'YYYY-MM'`. The reset needs no
+  cron: a round in a new month simply writes to season rows that do not exist
+  yet and so default to base (1000). The same key windows the monthly score
+  boards and every monthly stat, so the whole product agrees on where a month
+  begins.
+- `pitch_snake_seasons` is the season registry, one row per season that has
+  hosted a rated round, written lazily by `seal_round` (no FK depends on it, so
+  a registry failure can never cost a rating). It is where season metadata and,
+  later, **rewards** will hang; a season's net Elo for a player is
+  `rating - 1000`, read straight off the season ladder.
+- Every rate is per season too: provisional-until-ten is judged **per season**,
+  so most players read `P` early in a month. That is the season being young, not
+  a bug.
 
 ## 4. Sealing: whose word decides the round
 
