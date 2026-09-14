@@ -11,6 +11,7 @@
  * @module
  */
 import { BlurStyle, PaintStyle, Skia, TileMode, type SkCanvas } from '@shopify/react-native-skia';
+import { buildPath } from './path-build';
 
 import { GRID } from '@pitch-snake/engine';
 
@@ -196,14 +197,15 @@ export function paintBolt(c: SkCanvas, size: number, cell: number): void {
   const bx = size / 2;
   const by = size / 2;
   const s = cell * 0.55;
-  const p = Skia.Path.Make();
-  p.moveTo(bx + s * 0.18, by - s);
-  p.lineTo(bx - s * 0.62, by + s * 0.12);
-  p.lineTo(bx - s * 0.06, by + s * 0.12);
-  p.lineTo(bx - s * 0.22, by + s);
-  p.lineTo(bx + s * 0.66, by - s * 0.18);
-  p.lineTo(bx + s * 0.08, by - s * 0.18);
-  p.close();
+  const p = buildPath((b) => {
+    b.moveTo(bx + s * 0.18, by - s);
+    b.lineTo(bx - s * 0.62, by + s * 0.12);
+    b.lineTo(bx - s * 0.06, by + s * 0.12);
+    b.lineTo(bx - s * 0.22, by + s);
+    b.lineTo(bx + s * 0.66, by - s * 0.18);
+    b.lineTo(bx + s * 0.08, by - s * 0.18);
+    b.close();
+  });
   const halo = Skia.Paint();
   halo.setColor(Skia.Color('rgba(255,214,102,0.9)'));
   halo.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, Math.max(2, cell * 0.16), true));

@@ -11,6 +11,7 @@
  * @module
  */
 import { PaintStyle, Skia, type SkCanvas } from '@shopify/react-native-skia';
+import { buildPath } from './path-build';
 
 import type { HatArt } from './hat-art';
 
@@ -28,12 +29,13 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const brimY = h * 0.68;
       // the crown: a tall straw cone with a blunt top
       paint.setColor(Skia.Color('#e0b45c'));
-      const p1 = Skia.Path.Make();
-      p1.moveTo(midX - w * 0.17, brimY);
-      p1.lineTo(midX - w * 0.08, h * 0.08);
-      p1.quadTo(midX, 0, midX + w * 0.08, h * 0.08);
-      p1.lineTo(midX + w * 0.17, brimY);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(midX - w * 0.17, brimY);
+        b.lineTo(midX - w * 0.08, h * 0.08);
+        b.quadTo(midX, 0, midX + w * 0.08, h * 0.08);
+        b.lineTo(midX + w * 0.17, brimY);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       // the band: a red stripe where crown meets brim
@@ -41,13 +43,14 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       c.drawRect(Skia.XYWHRect(midX - w * 0.175, brimY - h * 0.17, w * 0.35, h * 0.15), paint);
       // the brim: very wide, curling up hard at the tips
       paint.setColor(Skia.Color('#caa04e'));
-      const p2 = Skia.Path.Make();
-      p2.moveTo(midX - w * 0.5, brimY - h * 0.22);
-      p2.quadTo(midX - w * 0.42, brimY + h * 0.16, midX, brimY + h * 0.2);
-      p2.quadTo(midX + w * 0.42, brimY + h * 0.16, midX + w * 0.5, brimY - h * 0.22);
-      p2.quadTo(midX + w * 0.38, brimY + h * 0.02, midX, brimY + h * 0.04);
-      p2.quadTo(midX - w * 0.38, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.22);
-      p2.close();
+      const p2 = buildPath((b) => {
+        b.moveTo(midX - w * 0.5, brimY - h * 0.22);
+        b.quadTo(midX - w * 0.42, brimY + h * 0.16, midX, brimY + h * 0.2);
+        b.quadTo(midX + w * 0.42, brimY + h * 0.16, midX + w * 0.5, brimY - h * 0.22);
+        b.quadTo(midX + w * 0.38, brimY + h * 0.02, midX, brimY + h * 0.04);
+        b.quadTo(midX - w * 0.38, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.22);
+        b.close();
+      });
       c.drawPath(p2, paint);
       p2.dispose();
     },
@@ -61,11 +64,12 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const paint = Skia.Paint();
       // the knit dome
       paint.setColor(Skia.Color('#2e7d84'));
-      const p1 = Skia.Path.Make();
-      p1.moveTo(w * 0.1, h * 0.62);
-      p1.quadTo(w * 0.12, h * 0.16, w * 0.5, h * 0.14);
-      p1.quadTo(w * 0.88, h * 0.16, w * 0.9, h * 0.62);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(w * 0.1, h * 0.62);
+        b.quadTo(w * 0.12, h * 0.16, w * 0.5, h * 0.14);
+        b.quadTo(w * 0.88, h * 0.16, w * 0.9, h * 0.62);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       // the patterned band across the brow
@@ -77,21 +81,23 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       }
       // the ear flaps, hanging just past the band
       paint.setColor(Skia.Color('#2e7d84'));
-      const p2 = Skia.Path.Make();
-      p2.moveTo(w * 0.1, h * 0.64);
-      p2.quadTo(w * 0.1, h * 0.94, w * 0.22, h * 0.96);
-      p2.lineTo(w * 0.26, h * 0.68);
-      p2.close();
-      p2.moveTo(w * 0.9, h * 0.64);
-      p2.quadTo(w * 0.9, h * 0.94, w * 0.78, h * 0.96);
-      p2.lineTo(w * 0.74, h * 0.68);
-      p2.close();
+      const p2 = buildPath((b) => {
+        b.moveTo(w * 0.1, h * 0.64);
+        b.quadTo(w * 0.1, h * 0.94, w * 0.22, h * 0.96);
+        b.lineTo(w * 0.26, h * 0.68);
+        b.close();
+        b.moveTo(w * 0.9, h * 0.64);
+        b.quadTo(w * 0.9, h * 0.94, w * 0.78, h * 0.96);
+        b.lineTo(w * 0.74, h * 0.68);
+        b.close();
+      });
       c.drawPath(p2, paint);
       p2.dispose();
       // the pompom
       paint.setColor(Skia.Color('#d97f2e'));
-      const p3 = Skia.Path.Make();
-      p3.addCircle(w * 0.5, h * 0.1, w * 0.08);
+      const p3 = buildPath((b) => {
+        b.addCircle(w * 0.5, h * 0.1, w * 0.08);
+      });
       c.drawPath(p3, paint);
       p3.dispose();
     },
@@ -105,24 +111,26 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const midX = w / 2;
       const brimY = h * 0.7;
       paint.setColor(Skia.Color('#efe3c2')); // the dented cream crown
-      const p1 = Skia.Path.Make();
-      p1.moveTo(midX - w * 0.19, brimY);
-      p1.lineTo(midX - w * 0.165, h * 0.24);
-      p1.quadTo(midX - w * 0.1, h * 0.06, midX - w * 0.04, h * 0.16);
-      p1.quadTo(midX, h * 0.24, midX + w * 0.04, h * 0.16);
-      p1.quadTo(midX + w * 0.1, h * 0.06, midX + w * 0.165, h * 0.24);
-      p1.lineTo(midX + w * 0.19, brimY);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(midX - w * 0.19, brimY);
+        b.lineTo(midX - w * 0.165, h * 0.24);
+        b.quadTo(midX - w * 0.1, h * 0.06, midX - w * 0.04, h * 0.16);
+        b.quadTo(midX, h * 0.24, midX + w * 0.04, h * 0.16);
+        b.quadTo(midX + w * 0.1, h * 0.06, midX + w * 0.165, h * 0.24);
+        b.lineTo(midX + w * 0.19, brimY);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       paint.setColor(Skia.Color('#26232b')); // the black band
       c.drawRect(Skia.XYWHRect(midX - w * 0.195, brimY - h * 0.16, w * 0.39, h * 0.14), paint);
       paint.setColor(Skia.Color('#e3d5ae')); // the brim, a gentle wave
-      const p2 = Skia.Path.Make();
-      p2.moveTo(midX - w * 0.5, brimY - h * 0.08);
-      p2.quadTo(midX, brimY + h * 0.28, midX + w * 0.5, brimY - h * 0.08);
-      p2.quadTo(midX, brimY + h * 0.04, midX - w * 0.5, brimY - h * 0.08);
-      p2.close();
+      const p2 = buildPath((b) => {
+        b.moveTo(midX - w * 0.5, brimY - h * 0.08);
+        b.quadTo(midX, brimY + h * 0.28, midX + w * 0.5, brimY - h * 0.08);
+        b.quadTo(midX, brimY + h * 0.04, midX - w * 0.5, brimY - h * 0.08);
+        b.close();
+      });
       c.drawPath(p2, paint);
       p2.dispose();
     },
@@ -136,25 +144,27 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const midX = w / 2;
       const brimY = h * 0.7;
       paint.setColor(Skia.Color('#b07f42')); // tall crown, creased down the middle
-      const p1 = Skia.Path.Make();
-      p1.moveTo(midX - w * 0.19, brimY);
-      p1.lineTo(midX - w * 0.17, h * 0.1);
-      p1.quadTo(midX - w * 0.08, h * 0.02, midX, h * 0.18);
-      p1.quadTo(midX + w * 0.08, h * 0.02, midX + w * 0.17, h * 0.1);
-      p1.lineTo(midX + w * 0.19, brimY);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(midX - w * 0.19, brimY);
+        b.lineTo(midX - w * 0.17, h * 0.1);
+        b.quadTo(midX - w * 0.08, h * 0.02, midX, h * 0.18);
+        b.quadTo(midX + w * 0.08, h * 0.02, midX + w * 0.17, h * 0.1);
+        b.lineTo(midX + w * 0.19, brimY);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       paint.setColor(Skia.Color('#6e4a24')); // the band
       c.drawRect(Skia.XYWHRect(midX - w * 0.195, brimY - h * 0.14, w * 0.39, h * 0.12), paint);
       paint.setColor(Skia.Color('#c08d4c')); // the gull-wing brim
-      const p2 = Skia.Path.Make();
-      p2.moveTo(midX - w * 0.5, brimY - h * 0.3);
-      p2.quadTo(midX - w * 0.4, brimY + h * 0.18, midX, brimY + h * 0.22);
-      p2.quadTo(midX + w * 0.4, brimY + h * 0.18, midX + w * 0.5, brimY - h * 0.3);
-      p2.quadTo(midX + w * 0.36, brimY + h * 0.02, midX, brimY + h * 0.04);
-      p2.quadTo(midX - w * 0.36, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.3);
-      p2.close();
+      const p2 = buildPath((b) => {
+        b.moveTo(midX - w * 0.5, brimY - h * 0.3);
+        b.quadTo(midX - w * 0.4, brimY + h * 0.18, midX, brimY + h * 0.22);
+        b.quadTo(midX + w * 0.4, brimY + h * 0.18, midX + w * 0.5, brimY - h * 0.3);
+        b.quadTo(midX + w * 0.36, brimY + h * 0.02, midX, brimY + h * 0.04);
+        b.quadTo(midX - w * 0.36, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.3);
+        b.close();
+      });
       c.drawPath(p2, paint);
       p2.dispose();
     },
@@ -168,12 +178,13 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const midX = w / 2;
       const brimY = h * 0.7;
       paint.setColor(Skia.Color('#c8a55a')); // the campaign peak
-      const p1 = Skia.Path.Make();
-      p1.moveTo(midX - w * 0.17, brimY);
-      p1.lineTo(midX - w * 0.05, h * 0.06);
-      p1.lineTo(midX + w * 0.05, h * 0.06);
-      p1.lineTo(midX + w * 0.17, brimY);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(midX - w * 0.17, brimY);
+        b.lineTo(midX - w * 0.05, h * 0.06);
+        b.lineTo(midX + w * 0.05, h * 0.06);
+        b.lineTo(midX + w * 0.17, brimY);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       paint.setColor(Skia.Color('#7a5c28')); // the strap band
@@ -193,30 +204,33 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const midX = w / 2;
       const brimY = h * 0.68;
       paint.setColor(Skia.Color('#e8dcb0')); // the woven crown
-      const p1 = Skia.Path.Make();
-      p1.moveTo(midX - w * 0.17, brimY);
-      p1.lineTo(midX - w * 0.15, h * 0.12);
-      p1.quadTo(midX, h * 0.02, midX + w * 0.15, h * 0.12);
-      p1.lineTo(midX + w * 0.17, brimY);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(midX - w * 0.17, brimY);
+        b.lineTo(midX - w * 0.15, h * 0.12);
+        b.quadTo(midX, h * 0.02, midX + w * 0.15, h * 0.12);
+        b.lineTo(midX + w * 0.17, brimY);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       paint.setColor(Skia.Color('#26232b')); // the black turns of the weave
       c.drawRect(Skia.XYWHRect(midX - w * 0.16, h * 0.22, w * 0.32, h * 0.09), paint);
       c.drawRect(Skia.XYWHRect(midX - w * 0.175, brimY - h * 0.16, w * 0.35, h * 0.12), paint);
       paint.setColor(Skia.Color('#e8dcb0')); // the wide brim, nearly flat
-      const p2 = Skia.Path.Make();
-      p2.moveTo(midX - w * 0.5, brimY - h * 0.12);
-      p2.quadTo(midX, brimY + h * 0.24, midX + w * 0.5, brimY - h * 0.12);
-      p2.quadTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.12);
-      p2.close();
+      const p2 = buildPath((b) => {
+        b.moveTo(midX - w * 0.5, brimY - h * 0.12);
+        b.quadTo(midX, brimY + h * 0.24, midX + w * 0.5, brimY - h * 0.12);
+        b.quadTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.12);
+        b.close();
+      });
       c.drawPath(p2, paint);
       p2.dispose();
       stroke.setColor(Skia.Color('#26232b')); // the banded brim edge
       stroke.setStrokeWidth(Math.max(1, h * 0.06));
-      const p3 = Skia.Path.Make();
-      p3.moveTo(midX - w * 0.46, brimY - h * 0.08);
-      p3.quadTo(midX, brimY + h * 0.2, midX + w * 0.46, brimY - h * 0.08);
+      const p3 = buildPath((b) => {
+        b.moveTo(midX - w * 0.46, brimY - h * 0.08);
+        b.quadTo(midX, brimY + h * 0.2, midX + w * 0.46, brimY - h * 0.08);
+      });
       c.drawPath(p3, stroke);
       p3.dispose();
     },
@@ -238,9 +252,10 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
         const tipY = h * 0.68 - Math.sin(a) * h * 0.62;
         stroke.setColor(Skia.Color(colors[i] ?? '#d94036'));
         stroke.setStrokeWidth(w * 0.09);
-        const p1 = Skia.Path.Make();
-        p1.moveTo(bx, h * 0.72);
-        p1.lineTo(tipX, tipY);
+        const p1 = buildPath((b) => {
+          b.moveTo(bx, h * 0.72);
+          b.lineTo(tipX, tipY);
+        });
         c.drawPath(p1, stroke);
         p1.dispose();
       }
@@ -259,22 +274,24 @@ export const NEW_WORLD_HATS: Record<string, HatArt> = {
       const midX = w / 2;
       const brimY = h * 0.66;
       paint.setColor(Skia.Color('#6b6b3a')); // the low soft crown
-      const p1 = Skia.Path.Make();
-      p1.moveTo(midX - w * 0.18, brimY);
-      p1.quadTo(midX - w * 0.16, h * 0.1, midX, h * 0.08);
-      p1.quadTo(midX + w * 0.16, h * 0.1, midX + w * 0.18, brimY);
-      p1.close();
+      const p1 = buildPath((b) => {
+        b.moveTo(midX - w * 0.18, brimY);
+        b.quadTo(midX - w * 0.16, h * 0.1, midX, h * 0.08);
+        b.quadTo(midX + w * 0.16, h * 0.1, midX + w * 0.18, brimY);
+        b.close();
+      });
       c.drawPath(p1, paint);
       p1.dispose();
       paint.setColor(Skia.Color('#4f5029')); // the band
       c.drawRect(Skia.XYWHRect(midX - w * 0.185, brimY - h * 0.14, w * 0.37, h * 0.12), paint);
       paint.setColor(Skia.Color('#7a7a45')); // the brim, slouching right
-      const p2 = Skia.Path.Make();
-      p2.moveTo(midX - w * 0.5, brimY - h * 0.16);
-      p2.quadTo(midX - w * 0.3, brimY + h * 0.22, midX + w * 0.1, brimY + h * 0.18);
-      p2.quadTo(midX + w * 0.42, brimY + h * 0.3, midX + w * 0.5, brimY + h * 0.02);
-      p2.quadTo(midX + w * 0.2, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.16);
-      p2.close();
+      const p2 = buildPath((b) => {
+        b.moveTo(midX - w * 0.5, brimY - h * 0.16);
+        b.quadTo(midX - w * 0.3, brimY + h * 0.22, midX + w * 0.1, brimY + h * 0.18);
+        b.quadTo(midX + w * 0.42, brimY + h * 0.3, midX + w * 0.5, brimY + h * 0.02);
+        b.quadTo(midX + w * 0.2, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.16);
+        b.close();
+      });
       c.drawPath(p2, paint);
       p2.dispose();
     },

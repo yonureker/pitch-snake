@@ -27,6 +27,7 @@ import {
   type SkPicture,
   type SkSurface,
 } from '@shopify/react-native-skia';
+import { buildPath } from './path-build';
 import { PixelRatio, Platform } from 'react-native';
 
 import {
@@ -470,19 +471,20 @@ function bakeGhosts(cell: number): void {
       const gx = w / 2;
       const gy = ghostSpriteOriginY;
       const domeY = -r * 0.16;
-      const path = Skia.Path.Make();
-      path.addArc(Skia.XYWHRect(gx - r, gy + domeY - r, r * 2, r * 2), 180, 180);
-      path.lineTo(gx + r, gy + r);
       const n = 4;
       const step = (2 * r) / n;
-      let x = gx + r;
-      for (let i = 0; i < n; i++) {
-        path.lineTo(x - step / 2, gy + r - r * 0.42);
-        path.lineTo(x - step, gy + r);
-        x -= step;
-      }
-      path.lineTo(gx - r, gy + domeY);
-      path.close();
+      const path = buildPath((b) => {
+        b.addArc(Skia.XYWHRect(gx - r, gy + domeY - r, r * 2, r * 2), 180, 180);
+        b.lineTo(gx + r, gy + r);
+        let x = gx + r;
+        for (let i = 0; i < n; i++) {
+          b.lineTo(x - step / 2, gy + r - r * 0.42);
+          b.lineTo(x - step, gy + r);
+          x -= step;
+        }
+        b.lineTo(gx - r, gy + domeY);
+        b.close();
+      });
       fillPaint.setColor(Skia.Color(col.body));
       c.drawPath(path, fillPaint);
       strokePaint.setColor(Skia.Color(col.edge));

@@ -667,7 +667,7 @@ export default function Index() {
                   </>
                 : tScreen ?
                   <>
-                    <Text style={styles.overlayTitle}>TOURNAMENT</Text>
+                    <Text style={styles.overlayTitle}>TOURNAMENTS</Text>
                     <View style={styles.tPanel}>
                       {tourney !== null ?
                         <>

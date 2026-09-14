@@ -16,6 +16,7 @@
  * @module
  */
 import { Skia, type SkCanvas } from '@shopify/react-native-skia';
+import { buildPath } from './path-build';
 
 import { ASIA_HATS } from './hats-asia';
 import { NEW_WORLD_HATS } from './hats-new-world';
@@ -49,24 +50,26 @@ export const HAT_ART = {
       const brimY = h * 0.72;
       const paint = Skia.Paint();
       paint.setColor(Skia.Color('#8a5a2b'));
-      const crown = Skia.Path.Make();
-      crown.moveTo(midX - w * 0.2, brimY);
-      crown.lineTo(midX - w * 0.165, h * 0.3);
-      crown.quadTo(midX - w * 0.1, h * 0.11, midX - w * 0.045, h * 0.2);
-      crown.quadTo(midX, h * 0.3, midX + w * 0.045, h * 0.2);
-      crown.quadTo(midX + w * 0.1, h * 0.11, midX + w * 0.165, h * 0.3);
-      crown.lineTo(midX + w * 0.2, brimY);
-      crown.close();
+      const crown = buildPath((b) => {
+        b.moveTo(midX - w * 0.2, brimY);
+        b.lineTo(midX - w * 0.165, h * 0.3);
+        b.quadTo(midX - w * 0.1, h * 0.11, midX - w * 0.045, h * 0.2);
+        b.quadTo(midX, h * 0.3, midX + w * 0.045, h * 0.2);
+        b.quadTo(midX + w * 0.1, h * 0.11, midX + w * 0.165, h * 0.3);
+        b.lineTo(midX + w * 0.2, brimY);
+        b.close();
+      });
       c.drawPath(crown, paint);
       crown.dispose();
       paint.setColor(Skia.Color('#42291a'));
       c.drawRect(Skia.XYWHRect(midX - w * 0.205, brimY - h * 0.16, w * 0.41, h * 0.13), paint);
       paint.setColor(Skia.Color('#9a6631'));
-      const brim = Skia.Path.Make();
-      brim.moveTo(midX - w * 0.5, brimY - h * 0.06);
-      brim.quadTo(midX, brimY + h * 0.26, midX + w * 0.5, brimY - h * 0.06);
-      brim.quadTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.06);
-      brim.close();
+      const brim = buildPath((b) => {
+        b.moveTo(midX - w * 0.5, brimY - h * 0.06);
+        b.quadTo(midX, brimY + h * 0.26, midX + w * 0.5, brimY - h * 0.06);
+        b.quadTo(midX, brimY + h * 0.02, midX - w * 0.5, brimY - h * 0.06);
+        b.close();
+      });
       c.drawPath(brim, paint);
       brim.dispose();
     },
@@ -90,21 +93,23 @@ export const HAT_ART = {
     draw(c: SkCanvas, w: number, h: number) {
       const paint = Skia.Paint();
       paint.setColor(Skia.Color('#6b5b45'));
-      const dome = Skia.Path.Make();
-      dome.moveTo(w * 0.06, h * 0.78);
-      dome.quadTo(w * 0.1, h * 0.1, w * 0.5, h * 0.08);
-      dome.quadTo(w * 0.9, h * 0.1, w * 0.94, h * 0.78);
-      dome.close();
+      const dome = buildPath((b) => {
+        b.moveTo(w * 0.06, h * 0.78);
+        b.quadTo(w * 0.1, h * 0.1, w * 0.5, h * 0.08);
+        b.quadTo(w * 0.9, h * 0.1, w * 0.94, h * 0.78);
+        b.close();
+      });
       c.drawPath(dome, paint);
       dome.dispose();
       paint.setColor(Skia.Color('#57482f'));
       c.drawRect(Skia.XYWHRect(w * 0.46, h * 0.02, w * 0.08, h * 0.1), paint);
       paint.setColor(Skia.Color('#4c3f2c'));
-      const brim = Skia.Path.Make();
-      brim.moveTo(w * 0.04, h * 0.76);
-      brim.quadTo(w * 0.5, h * 1.02, w * 0.96, h * 0.76);
-      brim.quadTo(w * 0.5, h * 0.8, w * 0.04, h * 0.76);
-      brim.close();
+      const brim = buildPath((b) => {
+        b.moveTo(w * 0.04, h * 0.76);
+        b.quadTo(w * 0.5, h * 1.02, w * 0.96, h * 0.76);
+        b.quadTo(w * 0.5, h * 0.8, w * 0.04, h * 0.76);
+        b.close();
+      });
       c.drawPath(brim, paint);
       brim.dispose();
     },
@@ -116,15 +121,16 @@ export const HAT_ART = {
     draw(c: SkCanvas, w: number, h: number) {
       const paint = Skia.Paint();
       paint.setColor(Skia.Color('#f0c440'));
-      const points = Skia.Path.Make();
-      points.moveTo(w * 0.08, h * 0.92);
-      points.lineTo(w * 0.08, h * 0.3);
-      points.lineTo(w * 0.28, h * 0.58);
-      points.lineTo(w * 0.5, h * 0.06);
-      points.lineTo(w * 0.72, h * 0.58);
-      points.lineTo(w * 0.92, h * 0.3);
-      points.lineTo(w * 0.92, h * 0.92);
-      points.close();
+      const points = buildPath((b) => {
+        b.moveTo(w * 0.08, h * 0.92);
+        b.lineTo(w * 0.08, h * 0.3);
+        b.lineTo(w * 0.28, h * 0.58);
+        b.lineTo(w * 0.5, h * 0.06);
+        b.lineTo(w * 0.72, h * 0.58);
+        b.lineTo(w * 0.92, h * 0.3);
+        b.lineTo(w * 0.92, h * 0.92);
+        b.close();
+      });
       c.drawPath(points, paint);
       points.dispose();
       paint.setColor(Skia.Color('#a87d1e'));

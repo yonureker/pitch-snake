@@ -59,9 +59,27 @@ function svg(d: string): SkPath | null {
     return null;
   }
 }
-const gearPath = svg(GEAR_D);
-// even-odd is what punches the hub out of the gear's body
-gearPath?.setFillType(FillType.EvenOdd);
+/**
+ * The gear parsed with EVEN-ODD fill, which punches the hub out of the body.
+ * setFillType is deprecated on SkPath itself, so it goes through PathBuilder
+ * (its own setFillType is current) and the intermediate objects are freed.
+ * Guarded like svg(): a chrome icon must never take the screen down.
+ */
+function evenOddGear(): SkPath | null {
+  const raw = svg(GEAR_D);
+  if (raw === null) return null;
+  try {
+    const b = Skia.PathBuilder.MakeFromPath(raw);
+    b.setFillType(FillType.EvenOdd);
+    const path = b.build();
+    b.dispose();
+    raw.dispose();
+    return path;
+  } catch {
+    return raw;
+  }
+}
+const gearPath = evenOddGear();
 const cupBowl = svg(CUP_BOWL);
 const cupStem = svg(CUP_STEM);
 const cupBase = svg(CUP_BASE);
