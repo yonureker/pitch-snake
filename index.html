@@ -4973,6 +4973,7 @@
   // without that test this guard also swallows a finger crossing into a NEW
   // wedge inside the window, which is exactly how a fast corner is drawn.
   const PAD_ECHO_MS = 60;
+  const padNoCapture = new URLSearchParams(location.search).get('nocap') === '1';
   const padDownAt = new Map();
   // How many presses this pad has dispatched. An echo is a re-delivery with
   // NOTHING in between; if another finger got a turn in, the second delivery
@@ -5095,7 +5096,20 @@
     if (!padRect) padRect = dpad.getBoundingClientRect();
     traceRaw('pd' + e.pointerId);
     if (showKeys) { burstNote('p', e.pointerId); paintTrace(); }
-    try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
+    // POINTER CAPTURE, AND THE SWITCH TO TURN IT OFF.
+    //
+    // Capture keeps a finger that slides off the pad still reporting to it.
+    // That is all it buys, and it is worth little: a finger that has left the
+    // control has arguably stopped steering. Against that, WebKit's handling
+    // of capture alongside several simultaneous touches is the one remaining
+    // suspect for a second thumb whose events never arrive at all, and it is
+    // not something this page can observe from here.
+    //
+    // So it stays on by default and `?nocap=1` turns it off, which makes the
+    // hypothesis testable on the device where it actually fails: play the
+    // same combo on the normal URL and on that one and see whether the misses
+    // stop. Cheaper than another blind fix, and it costs nothing when unused.
+    if (!padNoCapture) { try { dpad.setPointerCapture(e.pointerId); } catch (err) {} }
     // a touch that got here first already played this press
     if (padCovered('p', e.pointerId, e.clientX, e.clientY)) { traceRaw('Pd'); return; }
     padNote('p', e.pointerId, e.clientX, e.clientY);
