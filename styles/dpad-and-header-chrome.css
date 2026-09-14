@@ -61,6 +61,7 @@
     user-select: text; -webkit-user-select: text;
   }
   .trace-panel[hidden] { display: none; }
+  .trace-sum { color: #7CFC00; font-size: 15px; font-weight: 700; letter-spacing: 0.5px; }
   .trace-legend { color: #9a8f72; font-size: 9.5px; letter-spacing: 0.2px; margin-bottom: 3px; }
 
   /* ---- settings gear + modal ---- */

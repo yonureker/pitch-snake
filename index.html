@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=001b3dc954">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=f9449cde20">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=f9449cde20">
 </head>
 <body>
   <div class="wrap">
@@ -304,6 +304,7 @@
          to read and impossible to screenshot mid-round. This is DOM, so it
          can be photographed, selected and pasted. -->
     <div class="trace-panel" id="tracePanel" hidden>
+      <div class="trace-sum" id="traceSum"></div>
       <div class="trace-legend">pd/ts arrived &middot; Pd/Ts deduped &middot; x echo &middot; !pit off-pad &middot; &raquo; turn played</div>
       <div class="trace-line" id="traceLine"></div>
     </div>
@@ -507,25 +508,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=001b3dc954",
-    "./packages/net/net.js": "./packages/net/net.js?v=001b3dc954",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=001b3dc954",
-    "./page/build/dom.js": "./page/build/dom.js?v=001b3dc954",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=001b3dc954",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=001b3dc954",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=001b3dc954",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=001b3dc954",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=001b3dc954",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=001b3dc954",
-    "./page/build/kit.js": "./page/build/kit.js?v=001b3dc954",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=001b3dc954",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=001b3dc954",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=001b3dc954",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=001b3dc954",
-    "./page/build/shop.js": "./page/build/shop.js?v=001b3dc954",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=001b3dc954",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=001b3dc954",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=001b3dc954"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=f9449cde20",
+    "./packages/net/net.js": "./packages/net/net.js?v=f9449cde20",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=f9449cde20",
+    "./page/build/dom.js": "./page/build/dom.js?v=f9449cde20",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=f9449cde20",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=f9449cde20",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=f9449cde20",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=f9449cde20",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=f9449cde20",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=f9449cde20",
+    "./page/build/kit.js": "./page/build/kit.js?v=f9449cde20",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=f9449cde20",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=f9449cde20",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=f9449cde20",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=f9449cde20",
+    "./page/build/shop.js": "./page/build/shop.js?v=f9449cde20",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=f9449cde20",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=f9449cde20",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=f9449cde20"
   }
 }
 </script>
@@ -2175,19 +2176,40 @@
   // the trace answers the only question that matters first: did the touch
   // arrive at all?
   const rawTrail = [];
+  // A BURST is everything that happens within 400ms of the first touch of it.
+  // Counting per burst is what makes the panel answer the question in one
+  // glance: two thumbs went down, so did the browser hand us two fingers, and
+  // did the pad fire two presses? Anything else is the answer to where it
+  // went, without anyone having to read the token stream underneath.
+  let burstAt = 0, burstP = null, burstT = null, burstFired = 0, burstText = '';
+  function burstNote(kind, id) {
+    const now = performance.now();
+    if (now - burstAt > 400) { burstAt = now; burstP = new Set(); burstT = new Set(); burstFired = 0; }
+    // The two pipelines are counted SEPARATELY, which is the whole diagnostic:
+    // POINTER 1 / TOUCH 2 means WebKit ate a pointerdown and the backstop
+    // covered it, POINTER 1 / TOUCH 1 for two thumbs means the browser never
+    // handed us the second finger on either pipeline and no page fix can
+    // reach it, and FIRED short of either means the pad dropped it.
+    if (kind === 'p') burstP.add(String(id));
+    else if (kind === 't') burstT.add(String(id));
+    else burstFired++;
+    burstText = 'POINTER ' + burstP.size + ' · TOUCH ' + burstT.size + ' · FIRED ' + burstFired;
+  }
   function traceRaw(tag) {
     if (!showKeys) return;
     rawTrail.push(tag);
     if (rawTrail.length > 22) rawTrail.shift();
     paintTrace();
   }
-  let tracePanel = null, traceLine = null;
+  let tracePanel = null, traceLine = null, traceSum = null;
   function paintTrace() {
     if (!showKeys) return;
     tracePanel ??= document.getElementById('tracePanel');
     traceLine ??= document.getElementById('traceLine');
     if (!tracePanel) return;
     tracePanel.hidden = false;
+    traceSum ??= document.getElementById('traceSum');
+    if (traceSum) traceSum.textContent = burstText;
     traceLine.textContent = rawTrail.join(' ') + '\n' + keysTrail.join(' ');
   }
   // a bar in the trail marks a round starting, so presses never read across
@@ -4974,9 +4996,19 @@
     padDownAt.set(id, now);
     padPointers.set(id, btn);
     padFlashUntil.set(btn, now + PAD_FLASH_MS);
-    paintPad();
+    // THE GAME HEARS FIRST, THEN THE PIXELS MOVE.
+    //
+    // This used to paint the wedge and then tell the engine, which is the
+    // wrong way round for a control judged on latency. Measured here the
+    // paint costs about a tenth of a millisecond, so it was never the delay
+    // anyone was feeling, but it is a style invalidation on four clip-path
+    // wedges and that is not free on a phone whose renderer is already
+    // behind. Nothing downstream of dirInput needs the class to be set, so
+    // there is no reason for the press to wait behind it, ever.
     const d = padDirOf.get(btn);
     dirInput(d.x, d.y, src || 'p');
+    paintPad();
+    if (showKeys) { burstNote('fired'); paintTrace(); }
   }
   // A MOVE is different: a finger resting inside a wedge is one press, not a
   // stream of them, so a slide fires only when it crosses into a new wedge.
@@ -5026,6 +5058,7 @@
     return { btn, assisted: true };
   }
   function padEnd(e) {
+    padForget(e.pointerId);
     padDownAt.delete(e.pointerId);
     padFiredAt.delete(e.pointerId);
     if (!padPointers.delete(e.pointerId)) return;
@@ -5039,6 +5072,7 @@
     // layout at the exact moment a fast player needs the frame budget most.
     if (!padRect) padRect = dpad.getBoundingClientRect();
     traceRaw('pd' + e.pointerId);
+    if (showKeys) { burstNote('p', e.pointerId); paintTrace(); }
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
     // a touch that got here first already played this press
     if (padCovered('p', e.pointerId, e.clientX, e.clientY)) { traceRaw('Pd'); return; }
@@ -5111,12 +5145,35 @@
   // eats the second pointerdown, and the touch covering for it was mistaken
   // for the first thumb's). Re-delivery of the SAME finger still matches its
   // own receipt, so a repeated event cannot double-fire either.
+  // A RECEIPT LIVES UNTIL THE FINGER LIFTS, NOT FOR 120ms.
+  //
+  // The stopwatch was the wrong primitive, and this is what it cost. The two
+  // pipelines almost always describe the same finger within a fraction of a
+  // millisecond, but not always: measured over 25 presses here the median gap
+  // was 0.1ms and the WORST was 151ms, with one press in twenty-five past the
+  // old 120ms window. A window that a hitch can blow is a window that will be
+  // blown, and a phone under load blows it far more often than a desktop does,
+  // which is exactly the shape of the complaint.
+  //
+  // Past the window the backstop stops recognising the press it already
+  // played and fires it a SECOND time. That duplicate is perpendicular to
+  // whatever the other thumb just queued, so the engine accepts it, and it
+  // spends a slot in a queue three deep. The press after it is then dropped
+  // silently and for free. So a delayed event did not lose itself; it made
+  // the pad lose the NEXT one, which is why this reads as random.
+  //
+  // Two pipelines describing one physical finger should be matched by
+  // identity, and a finger's identity lasts until it lifts. So receipts are
+  // cleared on the lift (and on a cancel, which is a lift the system took)
+  // rather than by age. PAD_RECEIPT_MS remains only as a leak guard for a
+  // lift that never arrives at all, and is now far longer than any hitch.
+  const PAD_RECEIPT_MS = 2000;
   function padCovered(who, id, x, y) {
     const now = performance.now();
     let best = -1, bestDist = Infinity;
     for (let i = padRecent.length - 1; i >= 0; i--) {
       const r = padRecent[i];
-      if (now - r.t > 120) break;
+      if (now - r.t > PAD_RECEIPT_MS) break;
       if (r.who === who) continue;           // never claim your own pipeline's
       if (r.by === id) return true;          // already spent on this finger
       if (r.by !== undefined) continue;      // spoken for by another finger
@@ -5129,14 +5186,22 @@
     return true;
   }
   function padNote(who, id, x, y) {
-    padRecent.push({ who, x, y, t: performance.now(), by: undefined });
+    padRecent.push({ who, id, x, y, t: performance.now(), by: undefined });
     if (padRecent.length > 8) padRecent.shift();
+  }
+  /** The finger is gone: its receipt, and any it claimed, go with it. */
+  function padForget(id) {
+    for (let i = padRecent.length - 1; i >= 0; i--) {
+      const r = padRecent[i];
+      if (r.id === id || r.by === id) padRecent.splice(i, 1);
+    }
   }
   dpad.addEventListener('touchstart', (e) => {
     e.preventDefault();       // no gesture may form over the pad
     if (!padRect) padRect = dpad.getBoundingClientRect();
     for (const t of e.changedTouches) {
       traceRaw('ts' + t.identifier);
+      if (showKeys) { burstNote('t', t.identifier); paintTrace(); }
       if (padCovered('t', 'T' + t.identifier, t.clientX, t.clientY)) { traceRaw('Ts'); continue; }
       padNote('t', 'T' + t.identifier, t.clientX, t.clientY);
       traceMark('tB');        // the backstop caught one the pointer pipeline ate
@@ -5154,6 +5219,7 @@
   const padTouchEnd = (e) => {
     for (const t of e.changedTouches) {
       traceRaw((e.type === 'touchcancel' ? 'tc' : 'te') + t.identifier);
+      padForget('T' + t.identifier);
       padDownAt.delete('T' + t.identifier);
       padFiredAt.delete('T' + t.identifier);
       if (padPointers.delete('T' + t.identifier)) paintPad();
@@ -5199,9 +5265,11 @@
   // pitch (the strip above the pad is the classic one), !ui anything else.
   document.addEventListener('pointerdown', (e) => {
     if (!showKeys) return;
-    if (state !== 'playing' && state !== 'countdown') return;
     if (dpad.contains(e.target)) return;
-    traceMark(e.target === canvas ? '!pit' : '!ui');
+    // No longer gated on a live round: the whole point of this trace is that
+    // the fault reproduces on the menu screen, which is where the gate used
+    // to switch it off.
+    traceRaw(e.target === canvas ? '!pit' : '!ui');
   }, { capture: true });
 
 
