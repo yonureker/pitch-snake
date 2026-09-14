@@ -90,20 +90,6 @@ export interface DpadProps {
   heading?: () => { x: number; y: number } | null;
 }
 
-interface TouchPoint {
-  identifier: string | number;
-  pageX: number;
-  pageY: number;
-}
-
-// Some RN versions deliver the first touch with an empty changedTouches;
-// the event itself is then the touch.
-function touchesOf(e: GestureResponderEvent): TouchPoint[] {
-  const changed = e.nativeEvent.changedTouches;
-  if (changed.length > 0) return changed;
-  return [e.nativeEvent];
-}
-
 /** The four-wedge multi-touch pad. */
 export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   const padRef = useRef<View>(null);
@@ -276,65 +262,63 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
     return { zone: neighbor, assisted: true };
   };
 
-  // onTouchStart fires per changed touch, second and third fingers included,
-  // with no responder negotiation involved
-  const handleDown = (e: GestureResponderEvent): void => {
-    measure(); // layout can shift; refresh for the next event at worst
-    for (const t of touchesOf(e)) {
-      const r = resolveDown(t.pageX, t.pageY);
-      fireDown(Number(t.identifier), r.zone, r.assisted ? 'a' : 't');
-    }
-    sweepActive(e);
-  };
-  const onDownRaw = (e: GestureResponderEvent): void => {
-    handleDown(e);
-  };
-
-  const onTouchMove = (e: GestureResponderEvent): void => {
-    for (const t of touchesOf(e)) {
-      fireMove(Number(t.identifier), zoneAt(t.pageX, t.pageY));
-    }
-    sweepActive(e);
-  };
-
-  // THE SECOND FINGER, HOWEVER IT ARRIVES.
+  // INPUT IS STATE, NOT EVENTS: the Netflix-controller model.
   //
-  // The whole pipeline is `changedTouches`, on the stated assumption that iOS
-  // delivers each finger its own touchstart. Two thumbs landing a few
-  // milliseconds apart break that assumption: the reported failure is a
-  // down+left corner where the two presses are ~5ms apart, works at 0ms and
-  // works slowly, fails ~90% at 5ms. The engine accepts down+left at every
-  // gap (proven), so the lost press is one WebKit folded into another event,
-  // or into a move, and never surfaced in a changedTouches this pad read.
+  // A game controller, physical or on-screen, is polled: the game samples
+  // which directions are held each tick, so a second finger landing a few
+  // milliseconds after the first is simply down in the next sample and
+  // nothing is ever "missed in delivery". Our earlier model was the
+  // opposite, one turn per delivered touchstart, and it lost the second of a
+  // fast two-thumb corner whenever WebKit folded that finger's start into
+  // another event: the reported down+left within ~5ms failing nine times in
+  // ten while 0ms and slow presses worked.
   //
-  // So after every touch event, sweep `touches` (every finger currently down)
-  // and fire any that sit in a wedge this pad has not yet registered. It can
-  // only ADD a press a real finger is genuinely making: a finger already
-  // registered is skipped, the echo and reversal guards downstream still
-  // hold, and a finger resting between wedges (no definite zone) is ignored.
-  // Whichever event the second finger rode in on, this catches it.
-  const sweepActive = (e: GestureResponderEvent): void => {
+  // So `touches` (every finger currently on the glass, which EVERY touch
+  // event carries in full, not just the changed one) is the single source of
+  // truth. On any event we reconcile it against what we hold: a finger in the
+  // set we have not fired is a new press, a finger we hold that has left the
+  // set is a lift. Whichever event a finger's start rode in on, and however
+  // WebKit folded or delayed it, the next event of any kind carries the whole
+  // set and the reconcile catches it. changedTouches is no longer trusted for
+  // correctness; the pure poll a native controller enjoys is not reachable
+  // from JS (touch state exists only inside these callbacks), but reconciling
+  // the authoritative set on every event is as close as RN allows.
+  const reconcile = (e: GestureResponderEvent): void => {
     const active = e.nativeEvent.touches;
-    if (active.length < 2) return; // one finger needs no rescue
+    const seen = new Set<number>();
     for (const t of active) {
       const id = Number(t.identifier);
-      if (fingers.current.has(id)) continue; // already firing this finger
-      fireDown(id, zoneAt(t.pageX, t.pageY), 's');
+      seen.add(id);
+      if (fingers.current.has(id)) {
+        fireMove(id, zoneAt(t.pageX, t.pageY)); // a slide into a new wedge
+      } else {
+        const r = resolveDown(t.pageX, t.pageY); // a new press; assist may apply
+        fireDown(id, r.zone, r.assisted ? 'a' : 't');
+      }
     }
-  };
-
-  // onTouchEnd = each individual lift; onTouchCancel = the system swallowed
-  // the gesture (incoming call, control center). Both must clean up.
-  const onTouchUp = (e: GestureResponderEvent): void => {
-    for (const t of touchesOf(e)) {
-      const id = Number(t.identifier);
+    // any finger we still hold that is no longer down has lifted
+    for (const id of [...fingers.current.keys()]) {
+      if (seen.has(id)) continue;
       lastDownAt.current.delete(id);
       lastFireNo.current.delete(id);
-      if (fingers.current.delete(id)) note(`e${String(t.identifier)}`);
+      if (fingers.current.delete(id)) note(`e${String(id)}`);
     }
     paint(nowMs());
   };
 
+  const onTouchStart = (e: GestureResponderEvent): void => {
+    measure(); // layout can shift; refresh before resolving a new press
+    reconcile(e);
+  };
+  const onTouchMove = (e: GestureResponderEvent): void => {
+    reconcile(e);
+  };
+  const onTouchEnd = (e: GestureResponderEvent): void => {
+    reconcile(e);
+  };
+
+  // onTouchCancel: the system took the gesture (call, control center). Its
+  // `touches` may be empty or stale, so clear everything rather than reconcile.
   const onTerminate = (): void => {
     fingers.current.clear();
     lastDownAt.current.clear();
@@ -389,9 +373,9 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
       ref={padRef}
       style={[styles.pad, dark && darkStyles.pad]}
       onLayout={onLayout}
-      onTouchStart={onDownRaw}
+      onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
-      onTouchEnd={onTouchUp}
+      onTouchEnd={onTouchEnd}
       onTouchCancel={onTerminate}
     >
       {padSize.w > 0 && (
