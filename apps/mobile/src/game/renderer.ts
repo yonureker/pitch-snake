@@ -17,7 +17,6 @@
  * @module
  */
 import {
-  TileMode,
   PaintStyle,
   Skia,
   StrokeCap,
@@ -43,6 +42,8 @@ import {
   ghostRenderPos,
   type Game,
   type Player,
+  K,
+  wrap,
 } from '@pitch-snake/engine';
 
 import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from '@pitch-snake/net/vs-smoothing';
@@ -240,6 +241,14 @@ const C = {
   // weather: the downpour's shade over the pitch and the streaks themselves
   rainShade: Skia.Color('#101812'),
   rainStreak: Skia.Color('#cfe3ee'),
+  // the water, the page's exact five-pass palette (see index.html's
+  // rebuildPuddleLayer): soaked ground, shore light, flat body, deep pool,
+  // glint. A room must show the same water on every screen.
+  puddleGround: Skia.Color('rgba(16,14,7,0.42)'),
+  puddleShore: Skia.Color('rgba(180,215,230,0.65)'),
+  puddleBody: Skia.Color('rgba(44,88,116,0.92)'),
+  puddleDeep: Skia.Color('rgba(27,58,82,0.95)'),
+  puddleGlint: Skia.Color('rgba(234,246,252,0.85)'),
   ghostEye: Skia.Color(GameColors.ghostEye),
   // the bolt-slow dizzy halo, precomputed so the per-ghost per-frame draw
   // never builds a colour (rule 5)
@@ -415,39 +424,80 @@ function bakeArena(boardPx: number): void {
 // Math.random: not because streaks are gameplay (they are not, and each
 // screen may legally rain differently), but because a fixed shower is free
 // and reproducible screenshots are worth having.
-let puddleSprite: Baked | null = null;
-function bakePuddle(cell: number): void {
-  retire(puddleSprite?.image);
-  const s = Math.max(6, Math.ceil(cell * 1.6));
-  puddleSprite = bake(s, s, (c) => {
-    const paint = Skia.Paint();
-    paint.setShader(
-      Skia.Shader.MakeRadialGradient(
-        { x: s / 2, y: s / 2 },
-        s * 0.5,
-        [
-          Skia.Color('rgba(62,110,146,0.52)'),
-          Skia.Color('rgba(56,100,136,0.40)'),
-          Skia.Color('rgba(56,100,136,0)'),
-        ],
-        [0.08, 0.62, 1],
-        TileMode.Clamp,
-      ),
+let puddleLayerSprite: Baked | null = null;
+let puddleGlintSprite: Baked | null = null;
+let puddleBakedSize = -1;
+let puddleBakedSum = -1;
+let puddleBakedBoard = 0;
+/**
+ * Bake the water as one full-board layer plus a glint layer, the page's
+ * five passes in Skia: soaked-ground ring, shore light offset up-left, flat
+ * body, a UNIONED deep pool on fully-interior cells, and scattered glints
+ * that buildPicture pulses per frame with one alpha'd blit. Each pass is a
+ * single SkPath of rounded rects, so overlapping cells fuse into an organic
+ * silhouette with no seams. Rebuilt only when the water changes (size and
+ * key-sum move on every grow and dry pass), the wall layer's contract.
+ */
+function bakePuddleLayer(game: Game, boardPx: number): void {
+  const cell = boardPx / GRID;
+  retire(puddleLayerSprite?.image);
+  retire(puddleGlintSprite?.image);
+  const paint = Skia.Paint();
+  const pass = (
+    c: SkCanvas,
+    color: SkColor,
+    pad: number,
+    r: number,
+    dx: number,
+    dy: number,
+    keep?: (k: number) => boolean,
+  ): void => {
+    const path = buildPath((b) => {
+      for (const k of game.puddleSet) {
+        if (keep !== undefined && !keep(k)) continue;
+        const x = Math.floor(k / GRID) * cell,
+          y = (k % GRID) * cell;
+        b.addRRect(
+          Skia.RRectXY(Skia.XYWHRect(x - pad + dx, y - pad + dy, cell + pad * 2, cell + pad * 2), r, r),
+        );
+      }
+    });
+    paint.setColor(color);
+    c.drawPath(path, paint);
+    path.dispose();
+  };
+  const interior = (k: number): boolean => {
+    const x = Math.floor(k / GRID),
+      y = k % GRID;
+    return (
+      game.puddleSet.has(K(wrap(x + 1), y)) &&
+      game.puddleSet.has(K(wrap(x - 1), y)) &&
+      game.puddleSet.has(K(x, wrap(y + 1))) &&
+      game.puddleSet.has(K(x, wrap(y - 1)))
     );
-    c.drawRect(Skia.XYWHRect(0, 0, s, s), paint);
-    // one off-centre sky glint: the highlight that says water, not shadow
-    paint.setShader(
-      Skia.Shader.MakeRadialGradient(
-        { x: s * 0.38, y: s * 0.34 },
-        s * 0.22,
-        [Skia.Color('rgba(214,236,248,0.28)'), Skia.Color('rgba(214,236,248,0)')],
-        [0, 1],
-        TileMode.Clamp,
-      ),
-    );
-    c.drawRect(Skia.XYWHRect(0, 0, s, s), paint);
-    paint.dispose();
+  };
+  puddleLayerSprite = bake(boardPx, boardPx, (c) => {
+    pass(c, C.puddleGround, cell * 0.16, cell * 0.46, 0, 0);
+    pass(c, C.puddleShore, cell * 0.05, cell * 0.4, -cell * 0.035, -cell * 0.06);
+    pass(c, C.puddleBody, cell * 0.05, cell * 0.4, cell * 0.02, cell * 0.045);
+    // inset only a whisker so adjacent deep cells union into one dark pool
+    pass(c, C.puddleDeep, -cell * 0.06, cell * 0.34, cell * 0.015, cell * 0.025, interior);
   });
+  puddleGlintSprite = bake(boardPx, boardPx, (c) => {
+    const stroke = Skia.Paint();
+    stroke.setStyle(PaintStyle.Stroke);
+    stroke.setStrokeWidth(Math.max(1, cell * 0.075));
+    stroke.setColor(C.puddleGlint);
+    for (const k of game.puddleSet) {
+      // deterministic by key, so every peer's water sparkles alike
+      if ((Math.imul(k, 2654435761) >>> 0) % 5 !== 0) continue;
+      const x = Math.floor(k / GRID) * cell,
+        y = (k % GRID) * cell;
+      c.drawLine(x + cell * 0.26, y + cell * 0.38, x + cell * 0.58, y + cell * 0.3, stroke);
+    }
+    stroke.dispose();
+  });
+  paint.dispose();
 }
 
 const RAIN_N = 90;
@@ -687,7 +737,7 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
     bakedBoard = boardPx;
     retire(arenaSprite?.image);
     bakeArena(boardPx);
-    bakePuddle(boardPx / GRID);
+    puddleBakedBoard = 0; // the water layer follows the new geometry
   }
   // the outfit rebakes on its own key: an equip at menu time swaps the
   // sprites without waiting for a resize, exactly like the web's applyWorn
@@ -958,12 +1008,30 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
 
   if (arenaSprite !== null) drawBaked(canvas, arenaSprite, 0, 0);
 
-  // water under everything: a wall forming over a puddle covers it
-  if (puddleSprite !== null && game.puddleSet.size > 0) {
-    const off = (puddleSprite.w - cell) / 2;
-    for (const k of game.puddleSet) {
-      drawBaked(canvas, puddleSprite, ((k / GRID) | 0) * cell - off, (k % GRID) * cell - off);
+  // water under everything: a wall forming over a puddle covers it. The
+  // layer rebakes only when the water changes (size + key-sum, both move on
+  // every grow and dry pass); the glints breathe on the clock, one blit.
+  if (game.puddleSet.size > 0) {
+    let sum = 0;
+    for (const k of game.puddleSet) sum = (sum + k) | 0;
+    if (
+      game.puddleSet.size !== puddleBakedSize ||
+      sum !== puddleBakedSum ||
+      rc.boardPx !== puddleBakedBoard
+    ) {
+      puddleBakedSize = game.puddleSet.size;
+      puddleBakedSum = sum;
+      puddleBakedBoard = rc.boardPx;
+      bakePuddleLayer(game, rc.boardPx);
     }
+    if (puddleLayerSprite !== null) drawBaked(canvas, puddleLayerSprite, 0, 0);
+    if (puddleGlintSprite !== null) {
+      fillPaint.setAlphaf(0.45 + 0.4 * Math.sin(now / 640));
+      drawBaked(canvas, puddleGlintSprite, 0, 0);
+      fillPaint.setAlphaf(1);
+    }
+  } else {
+    puddleBakedSize = 0;
   }
 
   // walls: one image, alpha animated per frame

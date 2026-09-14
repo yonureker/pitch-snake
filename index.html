@@ -575,7 +575,7 @@
   import {
     createGame, ghostRenderPos, MODES,
     GRID, SPEEDS, FOOD_TTL, REDIRECT_MS, BOLT_LIFE_MS,
-    PORTAL_OPEN_MS, PORTAL_WARN_MS,
+    PORTAL_OPEN_MS, PORTAL_WARN_MS, K, wrap,
   } from './packages/engine/engine.js';
   // versus rides the same deterministic engine: every client simulates the
   // whole room and only quantum-stamped turns cross the wire (rollback
@@ -1174,8 +1174,8 @@
   // (and a late-arriving web font) can refresh it all
   function rebuildStaticArt() {
     buildArena();
-    buildPuddleSprite();
-    rainSeeded = false;   // lanes and lengths are geometry: re-roll on resize
+    puddleBakedSize = -1;   // the water layer follows the new geometry
+    rainSeeded = false;     // lanes and lengths are geometry: re-roll on resize
     buildTntSprite();
     buildGhostSprites();
     buildPortalSprites();
@@ -1723,28 +1723,88 @@
   // (<= PUDDLE_MAX_CELLS blits): oversized with a feathered edge so adjacent
   // cells fuse into a blob instead of a grid of tiles, and drawn under the
   // walls, because a wall forming over a puddle covers it.
-  const puddleCanvas = document.createElement('canvas');
-  function buildPuddleSprite() {
-    const s = Math.max(6, Math.round(cell * 1.6));
-    puddleCanvas.width = s; puddleCanvas.height = s;
-    const c = puddleCanvas.getContext('2d');
-    const body = c.createRadialGradient(s / 2, s / 2, s * 0.08, s / 2, s / 2, s * 0.5);
-    body.addColorStop(0, 'rgba(62,110,146,0.52)');
-    body.addColorStop(0.62, 'rgba(56,100,136,0.40)');
-    body.addColorStop(1, 'rgba(56,100,136,0)');
-    c.fillStyle = body; c.fillRect(0, 0, s, s);
-    // one off-centre sky glint: the highlight that says water, not shadow
-    const glint = c.createRadialGradient(s * 0.38, s * 0.34, 0, s * 0.38, s * 0.34, s * 0.22);
-    glint.addColorStop(0, 'rgba(214,236,248,0.28)');
-    glint.addColorStop(1, 'rgba(214,236,248,0)');
-    c.fillStyle = glint; c.fillRect(0, 0, s, s);
+  // Two offscreen layers, rebuilt only when the water CHANGES (detected by
+  // size + key-sum against the last bake: grow and dry always move the size,
+  // and the sum catches a rollback swapping cells at equal size), exactly the
+  // wall layer's event-cadence contract (rule 11). The look is flat and
+  // graphic, not airbrushed: a dark soaked-ground rim, a light shore crescent
+  // offset up-left, the flat body, a deeper tone on fully-interior cells, and
+  // a handful of glints on their own layer so they can breathe per frame with
+  // one drawImage and a time-based alpha (rule 3). Every pass is ONE path
+  // with a rounded-rect subpath per cell and ONE fill, so overlapping cells
+  // union into an organic silhouette with no double-alpha seams.
+  const puddleLayer = document.createElement('canvas');
+  const puddleGlintLayer = document.createElement('canvas');
+  let puddleBakedSize = -1, puddleBakedSum = -1;
+  function rebuildPuddleLayer() {
+    const W = canvas.width, H = canvas.height;
+    if (puddleLayer.width !== W || puddleLayer.height !== H) {
+      puddleLayer.width = W; puddleLayer.height = H;
+      puddleGlintLayer.width = W; puddleGlintLayer.height = H;
+    }
+    const c = puddleLayer.getContext('2d');
+    const gl = puddleGlintLayer.getContext('2d');
+    c.clearRect(0, 0, W, H); gl.clearRect(0, 0, W, H);
+    if (!g.puddleSet.size) return;
+    const cellsPass = (pad, r, dx, dy) => {
+      c.beginPath();
+      for (const k of g.puddleSet) {
+        const x = (k / GRID | 0) * cell, y = (k % GRID) * cell;
+        c.roundRect(x - pad + dx, y - pad + dy, cell + pad * 2, cell + pad * 2, r);
+      }
+      c.fill();
+    };
+    // the ground drinks first: a soft dark ring of soaked turf
+    c.fillStyle = 'rgba(16,14,7,0.42)';
+    cellsPass(cell * 0.16, cell * 0.46, 0, 0);
+    // the shore crescent: the light body sits up-left, the water covers all
+    // but its top-left sliver, which reads as the sky catching the edge
+    c.fillStyle = 'rgba(180,215,230,0.65)';
+    cellsPass(cell * 0.05, cell * 0.40, -cell * 0.035, -cell * 0.06);
+    // the body: flat, teal against the green, confident
+    c.fillStyle = 'rgba(44,88,116,0.92)';
+    cellsPass(cell * 0.05, cell * 0.40, cell * 0.02, cell * 0.045);
+    // depth: cells wet on all four sides are deep water. Inset only a
+    // whisker, so adjacent deep cells UNION into one dark pool instead of
+    // stamping polka dots (the first draft's mistake: paired dots read as
+    // eyes on a face nobody drew).
+    c.fillStyle = 'rgba(27,58,82,0.95)';
+    c.beginPath();
+    for (const k of g.puddleSet) {
+      const x = k / GRID | 0, y = k % GRID;
+      if (!g.puddleSet.has(K(wrap(x + 1), y)) || !g.puddleSet.has(K(wrap(x - 1), y)) ||
+          !g.puddleSet.has(K(x, wrap(y + 1))) || !g.puddleSet.has(K(x, wrap(y - 1)))) continue;
+      c.roundRect(x * cell + cell * 0.06, y * cell + cell * 0.09, cell * 0.9, cell * 0.86, cell * 0.34);
+    }
+    c.fill();
+    // the glints: short sky dashes on scattered cells, deterministic by key
+    // so every peer's water sparkles in the same places
+    gl.strokeStyle = 'rgba(234,246,252,0.85)';
+    gl.lineWidth = Math.max(1, cell * 0.075);
+    gl.lineCap = 'round';
+    gl.beginPath();
+    for (const k of g.puddleSet) {
+      if ((Math.imul(k, 2654435761) >>> 0) % 5 !== 0) continue;
+      const x = (k / GRID | 0) * cell, y = (k % GRID) * cell;
+      gl.moveTo(x + cell * 0.26, y + cell * 0.38);
+      gl.lineTo(x + cell * 0.58, y + cell * 0.30);
+    }
+    gl.stroke();
   }
   function drawPuddles() {
-    if (!g.puddleSet.size) return;
-    const off = (puddleCanvas.width - cell) / 2;
-    for (const k of g.puddleSet) {
-      ctx.drawImage(puddleCanvas, ((k / GRID) | 0) * cell - off, (k % GRID) * cell - off);
+    const n = g.puddleSet.size;
+    if (!n) { puddleBakedSize = 0; return; }
+    let sum = 0;
+    for (const k of g.puddleSet) sum = (sum + k) | 0;
+    if (n !== puddleBakedSize || sum !== puddleBakedSum || puddleLayer.width !== canvas.width) {
+      puddleBakedSize = n; puddleBakedSum = sum;
+      rebuildPuddleLayer();
     }
+    ctx.drawImage(puddleLayer, 0, 0);
+    // the water breathes: the glints swell and fade on the clock, one blit
+    ctx.globalAlpha = 0.45 + 0.4 * Math.sin(g.renderNow() / 640);
+    ctx.drawImage(puddleGlintLayer, 0, 0);
+    ctx.globalAlpha = 1;
   }
   // The streaks: a preallocated pool advanced by dt (rule 4), one path and
   // one stroke per frame (rule 6), constant styles with globalAlpha carrying
