@@ -42,6 +42,7 @@ import { FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/l
 import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';
+import { loadWallsPref, saveWallsPref } from '@/lib/walls-prefs';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
@@ -272,6 +273,7 @@ export default function Index() {
   // everything drawn on the board keep their colors in both themes, exactly
   // as the page does.
   const [themePref, setThemePref] = useState<ThemePref>('auto');
+  const [wallsOn, setWallsOn] = useState(true);
   const systemScheme = useColorScheme();
   const dark = themePref === 'dark' || (themePref === 'auto' && systemScheme === 'dark');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -361,6 +363,10 @@ export default function Index() {
   // restore the saved mode and tournament once; the loop follows the choice
   useEffect(() => {
     void loadThemePref().then(setThemePref);
+    void loadWallsPref().then((on) => {
+      setWallsOn(on);
+      loop.setWalls(on);
+    });
     void loadModePrefs().then((prefs) => {
       setUiMode(prefs.uiMode);
       setTourney(prefs.tourney);
@@ -1111,6 +1117,15 @@ export default function Index() {
                 }}
                 crowdOn={crowdOn}
                 onCrowd={setCrowdOn}
+                wallsOn={wallsOn}
+                onWalls={(on) => {
+                  setWallsOn(on);
+                  loop.setWalls(on);
+                  void saveWallsPref(on);
+                }}
+                wallsLocked={
+                  loop.phase === 'playing' || loop.phase === 'countdown' || loop.phase === 'paused'
+                }
                 dark={dark}
                 onClose={() => {
                   setSettingsOpen(false);

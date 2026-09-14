@@ -114,6 +114,8 @@ export interface GameLoop {
   /** The ruleset the next round runs under; refused mid-round. */
   mode: RuleMode;
   setMode: (m: RuleMode) => void;
+  /** Walls on the next round; the page's WALLS toggle. Menu-time only. */
+  setWalls: (on: boolean) => void;
   /** M:SS remaining in a timed round, '' in an endless one. */
   clockText: string;
   /** 5..1 over the pitch in a timed round's closing seconds, '' otherwise. */
@@ -187,6 +189,8 @@ interface LoopBox {
   boardPx: number;
   /** What the snake wears; swapped at menu time by setWorn, read per frame. */
   worn: { skin: string | null; hat: string | null; kit: Kit };
+  /** whether the next solo round is built with walls (page's pageWalls) */
+  walls: boolean;
   /** A room's round: the session drives the sim and myIdx is my seat. */
   session: NetSession | null;
   vsIdx: number;
@@ -246,6 +250,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     atlas: null,
     boardPx: 1,
     worn: { skin: null, hat: null, kit: KIT_NONE },
+    walls: true,
     session: null,
     forfeited: false,
     lastMineAlive: true,
@@ -626,7 +631,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       // one pace for everyone (the SPEED setting retired 2026-09-10, with
       // the web's): every solo score competes at the same tick, as rooms
       // always have. SPEEDS keeps its values in the engine for old logs.
-      game.current = createGame({ seed, tickMs: SPEEDS.normal, ...MODES[box.mode] });
+      game.current = createGame({ seed, tickMs: SPEEDS.normal, wallsEnabled: box.walls, ...MODES[box.mode] });
       game.current.drainEvents();
       box.lastClock = game.current.durationMs > 0 ? fmtClock(game.current.durationMs) : '';
       setClockText(box.lastClock);
@@ -833,6 +838,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // never change shape under the player. BEST swaps with it: zero first so a
   // stale value never shows, then the stored best raises it when it arrives
   // (and only if the mode is still the one it was loaded for).
+  const setWalls = (on: boolean): void => {
+    // the engine setting: it binds when the next round is built, never mid
+    // round, exactly like setMode. Preview games rebuild off it too.
+    boxRef.current.walls = on;
+  };
   const setMode = (m: RuleMode): void => {
     const box = boxRef.current;
     if (box.phase !== 'ready' && box.phase !== 'dead') return;
@@ -881,6 +891,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     deadReason,
     mode,
     setMode,
+    setWalls,
     clockText,
     lastCallText,
     start,

@@ -326,7 +326,22 @@ let wallSprite: Baked | null = null;
 
 const tntFontFamily = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
 // rival name tags in rooms: one font object, matched once
-const tagFont = matchFont({ fontFamily: tntFontFamily, fontSize: 11, fontWeight: 'bold' });
+/**
+ * A font that fails to match costs the TEXT it would have drawn, never the
+ * screen. matchFont goes through the platform's font manager, which React
+ * Native Web does not implement, and this call used to run bare at module
+ * scope: importing the renderer anywhere without a native font manager took
+ * the whole app down before a frame existed. Native always has one, so on a
+ * phone this guard changes nothing at all.
+ */
+function safeMatchFont(opts: Parameters<typeof matchFont>[0]): ReturnType<typeof matchFont> | null {
+  try {
+    return matchFont(opts);
+  } catch {
+    return null;
+  }
+}
+const tagFont = safeMatchFont({ fontFamily: tntFontFamily, fontSize: 11, fontWeight: 'bold' });
 
 function bakeArena(boardPx: number): void {
   // pitch-art owns the whole look: grass, bands, glow, grid and chalk
@@ -489,8 +504,8 @@ function bakeGhosts(cell: number): void {
 function bakeTnt(cell: number): void {
   const B = cell * 0.9;
   const fontSize = Math.round(cell * 0.27);
-  const font = matchFont({ fontFamily: tntFontFamily, fontSize, fontWeight: 'bold' });
-  const labelWidth = font.measureText('TNT').width;
+  const font = safeMatchFont({ fontFamily: tntFontFamily, fontSize, fontWeight: 'bold' });
+  const labelWidth = font === null ? 0 : font.measureText('TNT').width;
   retire(tntSprite?.image);
   tntSprite = bake(B, B, (c) => {
     fillPaint.setColor(C.tntBody);
@@ -500,7 +515,7 @@ function bakeTnt(cell: number): void {
     fillPaint.setColor(C.tntBandDark);
     c.drawRect(Skia.XYWHRect(0, B * 0.58, B, B * 0.08), fillPaint);
     fillPaint.setColor(C.tntInk);
-    c.drawText('TNT', (B - labelWidth) / 2, B * 0.45 + fontSize * 0.36, fillPaint, font);
+    if (font !== null) c.drawText('TNT', (B - labelWidth) / 2, B * 0.45 + fontSize * 0.36, fillPaint, font);
   });
 }
 
@@ -941,6 +956,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       }
       fillPaint.setAlphaf(0.6);
       const name = rc.vs.names[pi] ?? '?';
+      if (tagFont === null) continue;
       const tagW = tagFont.measureText(name).width;
       fillPaint.setColor(particleColor(VS_COLORS[pi % VS_COLORS.length] ?? '#f4ecd8'));
       canvas.drawText(name, hx - tagW / 2, hy - cell * 0.75, fillPaint, tagFont);
@@ -1047,7 +1063,7 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   if (floats.length > 0) {
     if (floatFontCell !== cell) {
       floatFontCell = cell;
-      floatFont = matchFont({
+      floatFont = safeMatchFont({
         fontFamily: tntFontFamily,
         fontSize: Math.max(13, Math.round(cell * 0.62)),
         fontWeight: 'bold',

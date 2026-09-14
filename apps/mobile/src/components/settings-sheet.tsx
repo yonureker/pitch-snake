@@ -19,6 +19,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DarkShell, GameColors } from '@/game/theme';
 import type { ThemePref } from '@/lib/theme-prefs';
 
+const BARLOW = 'Barlow_600SemiBold';
 const BARLOW_BOLD = 'Barlow_700Bold';
 const ANTON = 'Anton_400Regular';
 
@@ -34,6 +35,11 @@ export interface SettingsSheetProps {
   onThemePref: (pref: ThemePref) => void;
   crowdOn: boolean;
   onCrowd: (on: boolean) => void;
+  /** walls on the next round; the page's WALLS toggle, ON by default */
+  wallsOn: boolean;
+  onWalls: (on: boolean) => void;
+  /** locked while a round is live, because walls reach the engine */
+  wallsLocked: boolean;
   dark: boolean;
   onClose: () => void;
 }
@@ -44,6 +50,9 @@ export function SettingsSheet({
   onThemePref,
   crowdOn,
   onCrowd,
+  wallsOn,
+  onWalls,
+  wallsLocked,
   dark,
   onClose,
 }: SettingsSheetProps) {
@@ -66,6 +75,22 @@ export function SettingsSheet({
             <Text style={chipText(themePref === t.pref)}>{t.label}</Text>
           </Pressable>
         ))}
+      </View>
+      <View style={styles.row}>
+        <Text style={[styles.label, dark && darkStyles.label]}>WALLS</Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={wallsLocked}
+          onPress={() => {
+            onWalls(!wallsOn);
+          }}
+          style={[chip(wallsOn), wallsLocked && styles.chipLocked]}
+        >
+          <Text style={chipText(wallsOn)}>{wallsOn ? 'ON' : 'OFF'}</Text>
+        </Pressable>
+        {wallsLocked && (
+          <Text style={[styles.lockHint, dark && darkStyles.label]}>Finish the round to change.</Text>
+        )}
       </View>
       <View style={styles.row}>
         <Text style={[styles.label, dark && darkStyles.label]}>CROWD</Text>
@@ -106,6 +131,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chipLocked: { opacity: 0.4 },
+  lockHint: { fontFamily: BARLOW, fontSize: 10, letterSpacing: 0.5, color: GameColors.muted, flexShrink: 1 },
   label: {
     fontFamily: BARLOW_BOLD,
     fontSize: 12,
