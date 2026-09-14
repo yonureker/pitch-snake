@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=4d008aeab5">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=4d008aeab5">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=f72180af7b">
 </head>
 <body>
   <div class="wrap">
@@ -296,15 +296,6 @@
       <button class="wedge right" data-dir="1,0"  aria-label="Right">&rarr;</button>
       <button class="wedge down"  data-dir="0,1"  aria-label="Down">&darr;</button>
       <button class="wedge left"  data-dir="-1,0" aria-label="Left">&larr;</button>
-      <!-- The analog stick lives INSIDE the pad rather than beside it, because
-           the pad element is the hit surface every hardened input path already
-           keys off: pointer capture, the iOS second-thumb backstop, the lazy
-           rect cache. Swapping the control scheme therefore swaps how a
-           position becomes a direction and what is drawn, and touches none of
-           the plumbing that took two rounds of field traces to get right.
-           Purely decorative, so aria-hidden: the wedges above stay the
-           accessible controls in both modes. -->
-      <div class="stick-base" aria-hidden="true"><div class="stick-knob"></div></div>
     </div>
 
     <div class="hint">
@@ -327,13 +318,6 @@
           <button data-theme="auto" class="active">AUTO</button>
           <button data-theme="light">LIGHT</button>
           <button data-theme="dark">DARK</button>
-        </div>
-        <!-- Touch only: a desktop has no pad to choose the shape of, and the
-             row is hidden there rather than offered and inert. -->
-        <div class="speed-row" id="controlRow">
-          <span>CONTROLS</span>
-          <button data-control="pad" class="active">PAD</button>
-          <button data-control="stick">STICK</button>
         </div>
         <div class="toggle-row">
           <span>WALLS</span>
@@ -513,25 +497,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=4d008aeab5",
-    "./packages/net/net.js": "./packages/net/net.js?v=4d008aeab5",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=4d008aeab5",
-    "./page/build/dom.js": "./page/build/dom.js?v=4d008aeab5",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=4d008aeab5",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=4d008aeab5",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=4d008aeab5",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=4d008aeab5",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=4d008aeab5",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=4d008aeab5",
-    "./page/build/kit.js": "./page/build/kit.js?v=4d008aeab5",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=4d008aeab5",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=4d008aeab5",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=4d008aeab5",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=4d008aeab5",
-    "./page/build/shop.js": "./page/build/shop.js?v=4d008aeab5",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=4d008aeab5",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=4d008aeab5",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=4d008aeab5"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=f72180af7b",
+    "./packages/net/net.js": "./packages/net/net.js?v=f72180af7b",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=f72180af7b",
+    "./page/build/dom.js": "./page/build/dom.js?v=f72180af7b",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=f72180af7b",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=f72180af7b",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=f72180af7b",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=f72180af7b",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=f72180af7b",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=f72180af7b",
+    "./page/build/kit.js": "./page/build/kit.js?v=f72180af7b",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=f72180af7b",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=f72180af7b",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=f72180af7b",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=f72180af7b",
+    "./page/build/shop.js": "./page/build/shop.js?v=f72180af7b",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=f72180af7b",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=f72180af7b",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=f72180af7b"
   }
 }
 </script>
@@ -4864,59 +4848,6 @@
   // it clearly lands in. Keyboard has no such noise, which is why it felt
   // cleaner. PAD_DEAD_R2 / PAD_SEAM are in pad-fraction units, tune for feel.
   const PAD_DEAD_R2 = 0.13 * 0.13, PAD_SEAM = 0.05;
-
-  // ---- the two shapes of the pad ----
-  // 'pad' is the four wedges this game shipped with; 'stick' reads the same
-  // surface as an analog thumbstick with a floating origin. The choice is the
-  // player's and rides localStorage. It is deliberately NOT locked mid-round
-  // like WALLS is: nothing here reaches the engine, both shapes end at the
-  // same dirInput, so switching changes how you steer and never what the
-  // round is.
-  let padMode = 'pad';
-  // where each finger first touched down, which is that finger's stick centre
-  const stickOrigin = new Map();
-  const stickBase = document.querySelector('.stick-base');
-  const stickKnob = document.querySelector('.stick-knob');
-  // Push past this before the stick means anything, as a fraction of the pad's
-  // shorter side. A resting thumb wanders a few pixels and must not steer.
-  const STICK_DEAD = 0.075;
-  // ...and a band either side of the diagonal where the push is ambiguous and
-  // the last direction is kept. The wedges' PAD_SEAM reasoning applies exactly:
-  // without hysteresis a thumb held near 45 degrees chatters between two
-  // directions and fills the engine's three-slot queue with turns nobody asked
-  // for. Wider than the pad's because a stick is held, not tapped.
-  const STICK_SEAM = 0.16;
-  /** The stick's reading of one finger: null means "keep what you had". */
-  function stickZone(e, id) {
-    const o = stickOrigin.get(id);
-    if (!o) return null;
-    const reach = Math.min(padRect.width, padRect.height);
-    const dx = (e.clientX - o.x) / reach;
-    const dy = (e.clientY - o.y) / reach;
-    if (Math.hypot(dx, dy) < STICK_DEAD) return null;                  // resting
-    if (Math.abs(Math.abs(dx) - Math.abs(dy)) < STICK_SEAM) return null;  // ambiguous
-    return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? padBtn.right : padBtn.left)
-                                       : (dy > 0 ? padBtn.down : padBtn.up);
-  }
-  /** Draw the knob under the thumb, clamped inside the base ring. */
-  function paintStick(e, id) {
-    const o = stickOrigin.get(id);
-    if (!o || !stickBase) return;
-    const reach = Math.min(padRect.width, padRect.height) * 0.22;
-    let dx = e.clientX - o.x, dy = e.clientY - o.y;
-    const len = Math.hypot(dx, dy);
-    if (len > reach) { dx = (dx / len) * reach; dy = (dy / len) * reach; }
-    stickBase.style.left = (o.x - padRect.left) + 'px';
-    stickBase.style.top = (o.y - padRect.top) + 'px';
-    stickBase.classList.add('live');
-    stickKnob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
-  }
-  function stickLift() {
-    if (stickOrigin.size || !stickBase) return;   // another thumb still has it
-    stickBase.classList.remove('live');
-    stickKnob.style.transform = '';
-  }
-
   function padZone(e, moving) {
     const u = (e.clientX - padRect.left) / padRect.width - 0.5;
     const v = (e.clientY - padRect.top) / padRect.height - 0.5;
@@ -4981,8 +4912,6 @@
     return { btn, assisted: true };
   }
   function padEnd(e) {
-    const hadStick = stickOrigin.delete(e.pointerId);
-    if (hadStick) stickLift();
     if (!padPointers.delete(e.pointerId)) return;
     paintPad();
   }
@@ -4996,25 +4925,10 @@
     padRecent.push({ x: e.clientX, y: e.clientY, t: performance.now() });
     if (padRecent.length > 8) padRecent.shift();
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
-    if (padMode === 'stick') {
-      // A stick fires on the PUSH, never on the touch: where the thumb lands
-      // is the origin it will be measured from, so landing itself says
-      // nothing about direction. This is the one real behavioural difference
-      // between the two shapes, and it is what a stick is.
-      stickOrigin.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      paintStick(e, e.pointerId);
-      return;
-    }
     const r = padResolve(e);                   // a press always picks a wedge
     firePad(e.pointerId, r.btn, r.assisted ? 'A' : 'p');
   });
   dpad.addEventListener('pointermove', (e) => {
-    if (padMode === 'stick') {
-      if (!stickOrigin.has(e.pointerId)) return;
-      paintStick(e, e.pointerId);
-      firePad(e.pointerId, stickZone(e, e.pointerId), 's');
-      return;
-    }
     if (!padPointers.has(e.pointerId)) return;
     firePad(e.pointerId, padZone(e, true));     // a move holds through the ambiguous zones
   });
@@ -5055,11 +4969,6 @@
     for (const t of e.changedTouches) {
       if (padPointerCame(t)) continue;
       traceMark('tB');        // the backstop caught one the pointer pipeline ate
-      if (padMode === 'stick') {
-        stickOrigin.set('T' + t.identifier, { x: t.clientX, y: t.clientY });
-        paintStick(t, 'T' + t.identifier);
-        continue;
-      }
       const r = padResolve(t);
       firePad('T' + t.identifier, r.btn, r.assisted ? 'A' : 'p');
     }
@@ -5067,22 +4976,13 @@
   dpad.addEventListener('touchmove', (e) => {
     e.preventDefault();
     for (const t of e.changedTouches) {
-      const id = 'T' + t.identifier;
-      if (padMode === 'stick') {
-        if (!stickOrigin.has(id)) continue;
-        paintStick(t, id);
-        firePad(id, stickZone(t, id), 's');
-        continue;
-      }
-      if (!padPointers.has(id)) continue;
-      firePad(id, padZone(t, true));
+      if (!padPointers.has('T' + t.identifier)) continue;
+      firePad('T' + t.identifier, padZone(t, true));
     }
   }, { passive: false });
   const padTouchEnd = (e) => {
     for (const t of e.changedTouches) {
-      const id = 'T' + t.identifier;
-      if (stickOrigin.delete(id)) stickLift();
-      if (padPointers.delete(id)) paintPad();
+      if (padPointers.delete('T' + t.identifier)) paintPad();
     }
   };
   dpad.addEventListener('touchend', padTouchEnd);
@@ -5162,36 +5062,6 @@
     });
     try { localStorage.setItem('snakeTheme', mode); } catch (e) {}
   }
-  /**
-   * Choose the pad's shape: 'pad' (the four wedges) or 'stick' (analog).
-   *
-   * Nothing here reaches the engine. Both shapes end at the same dirInput,
-   * which is rule 12's whole point, so this is a preference about the hand
-   * and never about the round; that is why it does not lock mid-round the
-   * way WALLS does, and why a player can switch mid-game to try it.
-   */
-  function setControls(mode) {
-    padMode = mode === 'stick' ? 'stick' : 'pad';
-    dpad.classList.toggle('stick', padMode === 'stick');
-    // any finger mid-press belongs to the old shape; drop it rather than let
-    // it steer under the new rules from an origin that no longer means anything
-    stickOrigin.clear();
-    padPointers.clear();
-    stickLift();
-    paintPad();
-    document.querySelectorAll('#controlRow button').forEach(b => {
-      b.classList.toggle('active', b.dataset.control === padMode);
-    });
-    try { localStorage.setItem('snakeControls', padMode); } catch (e) {}
-  }
-  document.querySelectorAll('#controlRow button').forEach(b => {
-    b.addEventListener('click', () => setControls(b.dataset.control));
-  });
-  setControls((() => {
-    try { return localStorage.getItem('snakeControls') === 'stick' ? 'stick' : 'pad'; }
-    catch (e) { return 'pad'; }
-  })());
-
   document.querySelectorAll('#themeRow button').forEach(b => {
     b.addEventListener('click', () => setTheme(b.dataset.theme));
   });
