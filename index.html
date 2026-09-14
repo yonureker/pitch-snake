@@ -4862,13 +4862,64 @@
     const held = new Set(padPointers.values());
     for (const b of dirButtons) b.classList.toggle('pressed', held.has(b));
   }
-  // a finger entering a wedge is a turn request; holding inside one fires once
+  // A DOWN ALWAYS FIRES, except a delivery echo. This is the app's rule
+  // (dpad.tsx) arriving on the page, and it closes the worst input hole this
+  // pad had. The old guard bailed whenever this finger was already recorded in
+  // this wedge, with no time limit and no interest in whether a lift had
+  // happened in between. That is correct for a finger RESTING in a wedge and
+  // catastrophic for a finger that pressed it again, because the record only
+  // clears on a lift, and a lift is exactly what a phone loses: iOS gesture
+  // arbitration eats events, the pad already carries a backstop for a
+  // swallowed DOWN and has never had one for a swallowed UP, and the two
+  // delivery pipelines can disagree about which of them owns a finger. Any of
+  // those leaves a stale entry, and from then on that wedge is DEAD for that
+  // finger: every press is swallowed before it reaches the engine and the
+  // wedge does not even light, which is precisely what was reported.
+  //
+  // Measured on 2026-09-13 with a two-thumb zigzag drill, each thumb
+  // returning to its own wedge: 6% of legal turns lost with clean lifts, 95%
+  // once the lifts stop arriving. With this rule both read 0.
+  //
+  // The echo it still refuses is real and must stay: the same finger, the same
+  // wedge, inside an eyeblink, with no lift between, is ONE physical press
+  // delivered twice. It must not reach the engine, because a duplicate slips
+  // the engine's repeat filter when it is not adjacent and can fill the
+  // 3-deep queue with a phantom while the real next press falls off the end.
+  // The wedge comparison is load-bearing: an echo is the SAME wedge twice, and
+  // without that test this guard also swallows a finger crossing into a NEW
+  // wedge inside the window, which is exactly how a fast corner is drawn.
+  const PAD_ECHO_MS = 60;
+  const padDownAt = new Map();
+  // How many presses this pad has dispatched. An echo is a re-delivery with
+  // NOTHING in between; if another finger got a turn in, the second delivery
+  // is a real press however fast it came. Without this the window could still
+  // swallow the third press of a right-down-right drill played inside 60ms,
+  // which is the one thing a fast player would notice.
+  const padFiredAt = new Map();
+  let padFires = 0;
   function firePad(id, btn, src) {
-    if (!btn || padPointers.get(id) === btn) return;
+    if (!btn) return;
+    const now = performance.now();
+    if (padPointers.get(id) === btn
+        && now - (padDownAt.get(id) ?? -1e9) < PAD_ECHO_MS
+        && padFiredAt.get(id) === padFires) {
+      traceMark('x');            // an echo, refused: one press delivered twice
+      padDownAt.set(id, now);
+      return;
+    }
+    padFires++;
+    padFiredAt.set(id, padFires);
+    padDownAt.set(id, now);
     padPointers.set(id, btn);
     paintPad();
     const d = padDirOf.get(btn);
     dirInput(d.x, d.y, src || 'p');
+  }
+  // A MOVE is different: a finger resting inside a wedge is one press, not a
+  // stream of them, so a slide fires only when it crosses into a new wedge.
+  function slidePad(id, btn) {
+    if (!btn || padPointers.get(id) === btn) return;
+    firePad(id, btn, 'm');
   }
 
   // What the snake will be doing when this press lands: the queue's tail if
@@ -4912,6 +4963,8 @@
     return { btn, assisted: true };
   }
   function padEnd(e) {
+    padDownAt.delete(e.pointerId);
+    padFiredAt.delete(e.pointerId);
     if (!padPointers.delete(e.pointerId)) return;
     paintPad();
   }
@@ -4922,7 +4975,7 @@
     // actually moves. Reading the rect on EVERY press forced a synchronous
     // layout at the exact moment a fast player needs the frame budget most.
     if (!padRect) padRect = dpad.getBoundingClientRect();
-    padRecent.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+    padRecent.push({ x: e.clientX, y: e.clientY, t: performance.now(), by: undefined });
     if (padRecent.length > 8) padRecent.shift();
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
     const r = padResolve(e);                   // a press always picks a wedge
@@ -4930,7 +4983,7 @@
   });
   dpad.addEventListener('pointermove', (e) => {
     if (!padPointers.has(e.pointerId)) return;
-    firePad(e.pointerId, padZone(e, true));     // a move holds through the ambiguous zones
+    slidePad(e.pointerId, padZone(e, true));    // a move holds through the ambiguous zones
   });
   dpad.addEventListener('pointerup', padEnd);
   dpad.addEventListener('pointercancel', (e) => {
@@ -4954,14 +5007,42 @@
   // ate. Backstop-owned touches ride keys prefixed 'T' in padPointers so the
   // two pipelines can never collide on an id.
   const padRecent = [];
+  // ONE POINTERDOWN VOUCHES FOR EXACTLY ONE TOUCH, and this is the fix for the
+  // bug this whole backstop was built to prevent.
+  //
+  // The test is proximity, because the two pipelines do not share identifiers
+  // and position is all they have in common. But it used only to READ the
+  // record and never spend it, so one pointerdown could vouch for any number
+  // of touches near it. That is precisely the two-thumb case: thumbs land
+  // close together and close in time, iOS eats the SECOND pointerdown (the
+  // event this backstop exists to replace), and the touch that arrives to
+  // cover for it falls within 44px of the FIRST thumb's record, is judged
+  // already-delivered, and is dropped. The press never reaches the engine and
+  // the wedge does not even light, which is exactly what was reported: fine
+  // with one thumb, fine on a keyboard, lost perhaps one time in five with
+  // two thumbs a few milliseconds apart.
+  //
+  // Consuming the match closes it. A second touch can no longer hide behind
+  // the first one's receipt, and a genuine double delivery still dedupes,
+  // because a real echo has a record of its own to match. The nearest record
+  // is the one spent, so with two thumbs down each touch claims its own.
   function padPointerCame(t) {
     const now = performance.now();
+    let best = -1, bestDist = Infinity;
     for (let i = padRecent.length - 1; i >= 0; i--) {
       const r = padRecent[i];
       if (now - r.t > 120) break;
-      if (Math.abs(r.x - t.clientX) < 44 && Math.abs(r.y - t.clientY) < 44) return true;
+      // already vouched for THIS finger: a touch delivered twice still
+      // matches its own receipt, so the backstop cannot double-fire it
+      if (r.by === t.identifier) return true;
+      const dx = Math.abs(r.x - t.clientX), dy = Math.abs(r.y - t.clientY);
+      if (dx >= 44 || dy >= 44) continue;
+      if (r.by !== undefined) continue;      // spoken for by another finger
+      if (dx + dy < bestDist) { bestDist = dx + dy; best = i; }
     }
-    return false;
+    if (best < 0) return false;
+    padRecent[best].by = t.identifier;       // claimed, and only by this one
+    return true;
   }
   dpad.addEventListener('touchstart', (e) => {
     e.preventDefault();       // no gesture may form over the pad
@@ -4977,11 +5058,13 @@
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (!padPointers.has('T' + t.identifier)) continue;
-      firePad('T' + t.identifier, padZone(t, true));
+      slidePad('T' + t.identifier, padZone(t, true));
     }
   }, { passive: false });
   const padTouchEnd = (e) => {
     for (const t of e.changedTouches) {
+      padDownAt.delete('T' + t.identifier);
+      padFiredAt.delete('T' + t.identifier);
       if (padPointers.delete('T' + t.identifier)) paintPad();
     }
   };
