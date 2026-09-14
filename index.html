@@ -4891,9 +4891,38 @@
     return Math.abs(u) > Math.abs(v) ? (u > 0 ? padBtn.right : padBtn.left)
                                      : (v > 0 ? padBtn.down : padBtn.up);
   }
+  /**
+   * How long a wedge stays lit after the finger has gone, SO TAPS READ.
+   *
+   * The pad had no flash at all: a wedge was lit exactly while a finger was
+   * down on it. A fast tap goes down and up inside one frame, so the browser
+   * often never painted the lit state, and a two-thumb combo is nothing but
+   * fast taps. The press registered, the engine took it, and the player saw
+   * NOTHING, which is indistinguishable from a pad that ignored them. That is
+   * what "it didn't even register my touch" has been describing, and the
+   * earlier report said so precisely: the trace read OK and the wedge never
+   * lit. The app has carried this since it was written (dpad.tsx, FLASH_MS)
+   * and its comment is the same sentence; the page never got it.
+   */
+  const PAD_FLASH_MS = 180;
+  const padFlashUntil = new Map();
+  let padFlashTimer = null;
   function paintPad() {
+    const now = performance.now();
     const held = new Set(padPointers.values());
-    for (const b of dirButtons) b.classList.toggle('pressed', held.has(b));
+    let longest = 0;
+    for (const b of dirButtons) {
+      const until = padFlashUntil.get(b) ?? 0;
+      const left = until - now;
+      if (left > longest) longest = left;
+      b.classList.toggle('pressed', held.has(b) || left > 0);
+    }
+    // A timer, never the frame loop: rule 8 keeps the DOM out of draw(), and
+    // a flash is a state change with a known end rather than an animation.
+    if (padFlashTimer !== null) { clearTimeout(padFlashTimer); padFlashTimer = null; }
+    if (longest > 0) {
+      padFlashTimer = setTimeout(() => { padFlashTimer = null; paintPad(); }, longest + 16);
+    }
   }
   // A DOWN ALWAYS FIRES, except a delivery echo. This is the app's rule
   // (dpad.tsx) arriving on the page, and it closes the worst input hole this
@@ -4944,6 +4973,7 @@
     padFiredAt.set(id, padFires);
     padDownAt.set(id, now);
     padPointers.set(id, btn);
+    padFlashUntil.set(btn, now + PAD_FLASH_MS);
     paintPad();
     const d = padDirOf.get(btn);
     dirInput(d.x, d.y, src || 'p');
