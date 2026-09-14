@@ -26,7 +26,7 @@ import {
 } from '@pitch-snake/engine';
 import type { NetSession } from '@pitch-snake/net';
 
-import { type Kit, KIT_NONE } from '@/lib/kit';
+import { type Kit, KIT_NONE } from '@pitch-snake/cosmetics/kit';
 import type { RuleMode } from '@/lib/modes';
 
 import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';

@@ -6,7 +6,7 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "node --test packages/engine/engine.test.js packages/net/net.test.js page/kit.test.js page/room-notices.test.js",
+    "test": "node --test packages/engine/engine.test.js packages/net/net.test.js packages/cosmetics/kit.test.js page/room-notices.test.js",
     "mobile": "npm --workspace apps/mobile run start",
     "install-hooks": "sh scripts/install-hooks.sh",
     "lint": "npm --workspace apps/mobile run lint",
@@ -14,7 +14,7 @@
     "lint:page": "eslint page packages/*/src",
     "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
     "build:page": "tsc -p page/tsconfig.json && node scripts/minify-page.mjs",
-    "build:packages": "tsc -p packages/net/tsconfig.json && tsc -p packages/flags/tsconfig.json",
+    "build:packages": "tsc -p packages/net/tsconfig.json && tsc -p packages/flags/tsconfig.json && tsc -p packages/cosmetics/tsconfig.json",
     "stamp": "node scripts/stamp-assets.mjs",
     "stamp:check": "node scripts/stamp-assets.mjs --check"
   },

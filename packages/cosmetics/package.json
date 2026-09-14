@@ -1,0 +1,15 @@
+{
+  "name": "@pitch-snake/cosmetics",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./kit": {
+      "types": "./build/kit.d.ts",
+      "default": "./build/kit.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "//": "Same contract as packages/net/tsconfig.json: TypeScript under src/, committed readable JS in build/, drift-checked by the hook and CI, stamped into the page's import map. No DOM in lib: cosmetics are data and derivation, and painting is each client's own business.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "rootDir": "./src",
+    "outDir": "./build",
+    "declaration": true,
+    "sourceMap": false,
+    "removeComments": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true
+  },
+  "include": ["src/*.ts"]
+}

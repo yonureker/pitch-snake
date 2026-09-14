@@ -1,6 +1,6 @@
 // The kit's rules, tested against the BUILT module.
 //
-// WHY THE BUILD AND NOT THE SOURCE. page/build/*.js is what index.html loads
+// WHY THE BUILD AND NOT THE SOURCE. the build/ emit is what index.html loads
 // and what a browser actually runs, and it is committed for exactly that
 // reason. Testing kit.ts through a compiler would prove something true about a
 // file nobody serves; this proves it about the bytes that ship, and it fails
@@ -13,7 +13,7 @@
 // codebase has (silent, cosmetic-looking, and impossible to reproduce from one
 // screen). Determinism here is the whole contract.
 //
-// USAGE  node --test page/kit.test.js   (or npm test, which includes it)
+// USAGE  node --test packages/cosmetics/kit.test.js   (or npm test, which includes it)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { kitColor, kitNumber, kitOf, kitNumbersFor } from './build/kit.js';

@@ -126,7 +126,8 @@ const JERSEY_GLYPH: Record<string, readonly string[]> = {
  * Worn on the square behind the head, mirroring page/pitch-art.ts. Both halves
  * and the number are the player's own since 2026-09-07; the defaults are the
  * classic yellow and red this shipped as. Colours arrive already washed by
- * lib/kit.ts, so a caller that skips that wash is the bug, not a bad hex here.
+ * the shared kit module, so a caller that skips that wash is the bug, not a
+ * bad hex here.
  *
  * The dark outline stroke is load-bearing rather than decorative now that the
  * halves are free-form: it keeps a kit chosen close to the pitch's own green

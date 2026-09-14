@@ -18,7 +18,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT } from '@/game/pitch-art';
 import { snakeShadeFor, skinRamp } from '@/game/theme';
-import { kitColor } from '@/lib/kit';
+import { kitColor } from '@pitch-snake/cosmetics/kit';
 
 const CELL = 24;
 

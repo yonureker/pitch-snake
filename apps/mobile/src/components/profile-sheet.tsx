@@ -19,7 +19,7 @@ import flagSheet from '@/assets/flags.png';
 import { authWho, sendEmailCode, signOutToAnon, verifyEmailCode } from '@/lib/auth';
 import { FLAG_CODES, FLAG_COLS, flagIndex } from '@pitch-snake/flags';
 import { useSaveProfile } from '@/hooks/queries/use-save-profile';
-import { kitOf } from '@/lib/kit';
+import { kitOf } from '@pitch-snake/cosmetics/kit';
 import type { Profile } from '@/lib/profile';
 import { DarkShell, GameColors } from '@/game/theme';
 import { SnakePreview } from '@/components/snake-preview';

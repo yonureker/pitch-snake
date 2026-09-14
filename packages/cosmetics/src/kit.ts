@@ -4,17 +4,27 @@
  *
  * OWNS the shape and the washing. A kit is free-form, unlike a skin or a hat:
  * there is no catalogue to check an id against, so validation is the only thing
- * standing between a peer's typed string and a `fillStyle`. Every value that
- * reaches the painter or the network goes through `kitColor` and `kitNumber`
- * first, and both wash to null rather than throwing, because a kit is
- * decoration and a bad one must cost a default shirt and never a round. The
- * DEFAULT colours are not here: they are art and live with the painter, which
- * is also the only place that needs them.
+ * standing between a peer's typed string and a paint. Every value that reaches
+ * a painter or the network goes through `kitColor` and `kitNumber` first, and
+ * both wash to null rather than throwing, because a kit is decoration and a bad
+ * one must cost a default shirt and never a round. The DEFAULT colours are not
+ * here: they are art and live with each painter, which is also the only place
+ * that needs them. The wash is enforced a second time by check constraints in
+ * supabase/auth.sql, so a disagreement costs a default shirt, never a corrupt
+ * row.
+ *
+ * SHARED, NOT COPIED, since 2026-09-14: this was page/kit.ts and the app's
+ * lib/kit.ts, two files whose header swore they would be "kept in step". One
+ * wash for both clients is what actually keeps a shirt the same colour on
+ * every screen. It still never enters packages/engine, because a cosmetic in
+ * the engine would chain every colour to an ENGINE_VERSION bump and a
+ * validator re-pin.
  *
  * MUST NEVER draw anything, read the DOM, or know which lane is mine. It is
- * told a list of choices and answers with a list of numbers; pitch-art paints,
- * the shell decides who wears what. That split is what lets the profile sheet,
- * the pitch and the room all agree without any of them importing each other.
+ * told a list of choices and answers with a list of numbers; the pitch-art
+ * painters paint, the shells decide who wears what. That split is what lets
+ * the profile sheet, the pitch and the room all agree without any of them
+ * importing each other.
  *
  * WHY FREE-FORM AT ALL. The owner's call on 2026-09-07, against a curated
  * palette: a player picks any two hexes. The cost is real and was flagged when
@@ -42,6 +52,9 @@ export interface Kit {
   /** The shirt number 0..99, or null to keep the seat's default. */
   num: number | null;
 }
+
+/** A kit with nothing chosen: what every unset player wears. */
+export const KIT_NONE: Kit = { left: null, right: null, num: null };
 
 /**
  * Wash one colour into `#rrggbb` lowercase, or null.
@@ -115,6 +128,16 @@ export function kitOf(value: unknown): Kit {
     right: kitColor(source.right),
     num: kitNumber(source.num),
   };
+}
+
+/**
+ * The key a renderer can compare to decide whether to rebake the shirt.
+ *
+ * @param kit The kit being worn.
+ * @returns A string that changes exactly when the painted result would.
+ */
+export function kitKey(kit: Kit): string {
+  return `${kit.left ?? ''}|${kit.right ?? ''}|${kit.num ?? ''}`;
 }
 
 /**

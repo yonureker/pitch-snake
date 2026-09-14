@@ -19,7 +19,7 @@
  *
  * @module snake-preview
  */
-import type { Kit } from './kit.js';
+import type { Kit } from '@pitch-snake/cosmetics/kit';
 import {
   buildLutFor, drawCrest, JERSEY_SOLO_NUM, paintJersey, roundRectOn,
   type HatArt, type SkinArt, SNAKE_SHADES,

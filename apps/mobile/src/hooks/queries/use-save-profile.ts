@@ -6,7 +6,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import type { Kit } from '@/lib/kit';
+import type { Kit } from '@pitch-snake/cosmetics/kit';
 import { nameTaken, saveProfile, type SaveResult } from '@/lib/profile';
 
 /** Save name and flag; invalidates the profile so the chip refetches. */

@@ -13,7 +13,7 @@
  *
  * @module
  */
-import { type Kit, kitOf } from './kit';
+import { type Kit, kitOf } from '@pitch-snake/cosmetics/kit';
 import { rpc } from './leaderboard';
 
 /** What the shell shows and edits. */

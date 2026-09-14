@@ -46,7 +46,7 @@ import {
 
 import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from '@pitch-snake/net/vs-smoothing';
 
-import { type Kit, KIT_NONE, kitKey } from '../lib/kit';
+import { type Kit, KIT_NONE, kitKey } from '@pitch-snake/cosmetics/kit';
 import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
 import { GameColors, GhostColors, SNAKE_SHADES, VS_COLORS, skinRamp, snakeShadeFor } from './theme';
 
