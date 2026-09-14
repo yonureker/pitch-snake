@@ -1174,6 +1174,7 @@
   // (and a late-arriving web font) can refresh it all
   function rebuildStaticArt() {
     buildArena();
+    buildPuddleSprite();
     buildTntSprite();
     buildGhostSprites();
     buildPortalSprites();
@@ -1715,6 +1716,81 @@
     c.beginPath(); c.arc(W / 2, H / 2, Math.max(3, cell * 0.12), 0, Math.PI * 2); c.fill();
   }
 
+  // ---- weather art (v28) ----
+  // The WATER is engine state, read per frame like walls; the RAIN is paint.
+  // One soft-edged sprite baked beside the arena and blitted per wet cell
+  // (<= PUDDLE_MAX_CELLS blits): oversized with a feathered edge so adjacent
+  // cells fuse into a blob instead of a grid of tiles, and drawn under the
+  // walls, because a wall forming over a puddle covers it.
+  const puddleCanvas = document.createElement('canvas');
+  function buildPuddleSprite() {
+    const s = Math.max(6, Math.round(cell * 1.6));
+    puddleCanvas.width = s; puddleCanvas.height = s;
+    const c = puddleCanvas.getContext('2d');
+    const body = c.createRadialGradient(s / 2, s / 2, s * 0.08, s / 2, s / 2, s * 0.5);
+    body.addColorStop(0, 'rgba(62,110,146,0.52)');
+    body.addColorStop(0.62, 'rgba(56,100,136,0.40)');
+    body.addColorStop(1, 'rgba(56,100,136,0)');
+    c.fillStyle = body; c.fillRect(0, 0, s, s);
+    // one off-centre sky glint: the highlight that says water, not shadow
+    const glint = c.createRadialGradient(s * 0.38, s * 0.34, 0, s * 0.38, s * 0.34, s * 0.22);
+    glint.addColorStop(0, 'rgba(214,236,248,0.28)');
+    glint.addColorStop(1, 'rgba(214,236,248,0)');
+    c.fillStyle = glint; c.fillRect(0, 0, s, s);
+  }
+  function drawPuddles() {
+    if (!g.puddleSet.size) return;
+    const off = (puddleCanvas.width - cell) / 2;
+    for (const k of g.puddleSet) {
+      ctx.drawImage(puddleCanvas, ((k / GRID) | 0) * cell - off, (k % GRID) * cell - off);
+    }
+  }
+  // The streaks: a preallocated pool advanced by dt (rule 4), one path and
+  // one stroke per frame (rule 6), constant styles with globalAlpha carrying
+  // the fade (rule 5: no per-frame colour strings). Positions are seeded
+  // with Math.random ON PURPOSE: the rain a screen shows is decoration, the
+  // water on the pitch is the shared truth, so per-screen droplets are the
+  // sanctioned visual-jitter exception to the engine-owns-randomness rule.
+  const RAIN_N = 90;
+  const rainX = new Float32Array(RAIN_N), rainY = new Float32Array(RAIN_N);
+  const rainV = new Float32Array(RAIN_N), rainL = new Float32Array(RAIN_N);
+  let rainSeeded = false, rainAlpha = 0;
+  function drawRain(dt) {
+    const w = g.weather;
+    const target = w === 'rain' ? 1 : w === 'warn' ? 0.35 : 0;
+    rainAlpha += (target - rainAlpha) * Math.min(1, dt / 350);
+    if (rainAlpha < 0.02) { rainAlpha = target ? rainAlpha : 0; if (rainAlpha < 0.02) return; }
+    if (!rainSeeded) {
+      rainSeeded = true;
+      for (let i = 0; i < RAIN_N; i++) {
+        rainX[i] = Math.random() * canvas.width;
+        rainY[i] = Math.random() * canvas.height;
+        rainV[i] = 0.6 + Math.random() * 0.5;
+        rainL[i] = cell * (0.5 + Math.random() * 0.5);
+      }
+    }
+    // a breath of shade over the whole pitch while it pours
+    ctx.globalAlpha = 0.12 * rainAlpha;
+    ctx.fillStyle = '#101812';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // then the streaks, slanted, wrapping top to bottom
+    ctx.globalAlpha = 0.45 * rainAlpha;
+    ctx.strokeStyle = '#cfe3ee';
+    ctx.lineWidth = Math.max(1, cell * 0.045);
+    ctx.beginPath();
+    const fall = dt * (canvas.height / 900);
+    for (let i = 0; i < RAIN_N; i++) {
+      rainY[i] += rainV[i] * fall;
+      rainX[i] += rainV[i] * fall * 0.16;
+      if (rainY[i] > canvas.height + rainL[i]) { rainY[i] = -rainL[i]; rainX[i] = Math.random() * canvas.width; }
+      if (rainX[i] > canvas.width) rainX[i] -= canvas.width;
+      ctx.moveTo(rainX[i], rainY[i]);
+      ctx.lineTo(rainX[i] - rainL[i] * 0.18, rainY[i] - rainL[i]);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
   // ---- the frame ----
   // Progress is per snake: a rival dragged by a bolt is a different way
   // through a longer step than you are through yours, so nothing may be
@@ -1724,6 +1800,7 @@
 
   function draw(dt) {
     ctx.drawImage(arenaCanvas, 0, 0);   // opaque and full-surface: doubles as the clear
+    drawPuddles();                      // water under everything: a wall covers its puddle
     drawWalls();
     drawPortals();                      // field furniture: the snake rides over the windows
 
@@ -1798,6 +1875,7 @@
     }
 
     drawGhosts();
+    drawRain(dt);                       // over the scene: the sky is nearest the camera
 
     // particles, integrated over real time; dead ones are swap-removed
     const f = dt / 16.667;
