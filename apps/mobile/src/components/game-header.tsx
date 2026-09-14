@@ -50,7 +50,23 @@ const FLAG_H = 15;
  * differently at the same size.
  */
 const LOGO_SIZE = 21;
+/**
+ * The VISUAL gap between the two logo lines, as a fraction of the font size,
+ * matching the web's 0.92. It is not the lineHeight, and that distinction is
+ * the whole of this fix: iOS CLIPS a glyph whose lineHeight is smaller than
+ * its font size, where CSS simply lets the ink overflow the line box. Setting
+ * lineHeight to 0.92 therefore reproduced the web's leading on the web and
+ * sliced the top off PITCH on a phone.
+ *
+ * So each line keeps a line box tall enough to hold its own ink, and the
+ * second line is pulled up by the difference instead. Same picture, no
+ * clipping.
+ */
 const LOGO_LEADING = 0.92;
+/** a full line box, so nothing is cut off */
+const LOGO_LINE = LOGO_SIZE;
+/** and the second line rides up to restore the tight leading */
+const LOGO_TIGHTEN = LOGO_SIZE * (LOGO_LEADING - 1);
 /**
  * How far the logo's box falls below SNAKE's baseline, in pixels.
  *
@@ -61,7 +77,7 @@ const LOGO_LEADING = 0.92;
  * construction. The gold drop shadow still falls below both, which is what a
  * shadow is for.
  */
-const LOGO_SLACK = ((LOGO_LEADING - 1.173 + 0.327) / 2) * LOGO_SIZE;
+const LOGO_SLACK = ((LOGO_LINE / LOGO_SIZE - 1.173 + 0.327) / 2) * LOGO_SIZE;
 
 /** How long FORFEIT stays armed before it forgets it was pressed. */
 const ARM_MS = 2600;
@@ -171,7 +187,7 @@ export function GameHeader({
       {/* the logo spans both lines and hangs from the bottom; see LOGO_SLACK */}
       <View style={styles.logo}>
         <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
-        <Text style={[styles.title, dark && darkStyles.title]}>SNAKE</Text>
+        <Text style={[styles.title, styles.titleSecond, dark && darkStyles.title]}>SNAKE</Text>
       </View>
 
       <View style={styles.column}>
@@ -272,13 +288,14 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: ANTON,
     fontSize: LOGO_SIZE,
-    lineHeight: LOGO_SIZE * LOGO_LEADING,
+    lineHeight: LOGO_LINE,
     letterSpacing: 1,
     color: GameColors.ink,
     textShadowColor: GameColors.gold,
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 0,
   },
+  titleSecond: { marginTop: LOGO_TIGHTEN },
   /** the two lines to the logo's right: chrome above, the room below */
   column: { flex: 1, gap: 4 },
   chromeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

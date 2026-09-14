@@ -272,6 +272,44 @@ let snakeSprites: (Baked | null)[] = [];
 let ghostSprites: (Baked | null)[] = [];
 let ghostSpriteOriginY = 0;
 let tntSprite: Baked | null = null;
+/**
+ * BAKED IMAGES ARE RETIRED, NEVER DISPOSED ON THE SPOT.
+ *
+ * Every frame is recorded into an SkPicture that holds REFERENCES to these
+ * images, and that picture is handed to the UI thread to draw. Disposing an
+ * image the moment it is replaced therefore frees something a live picture is
+ * still pointing at, and Skia says so: "Exception in HostFunction: Attempted
+ * to access a disposed object", after which the field stops updating and the
+ * round looks frozen.
+ *
+ * It bit hardest in survival, where the wall layer is rebaked on every phase
+ * change, so the race came round every few seconds and landed on whatever the
+ * player happened to be doing at the time.
+ *
+ * So a replaced image goes on this list and is freed a few frames later, by
+ * which time the picture that referenced it has been replaced and drawn. The
+ * memory is still reclaimed deterministically, just not while it is in use.
+ */
+const retired: { image: SkImage; at: number }[] = [];
+let frameNo = 0;
+const RETIRE_FRAMES = 3;
+
+/** Hand a replaced image over to be freed once no picture can still hold it. */
+function retire(image: SkImage | null | undefined): void {
+  if (image) retired.push({ image, at: frameNo });
+}
+
+/** Free everything retired long enough ago. Called once per recorded frame. */
+function sweepRetired(): void {
+  for (let i = retired.length - 1; i >= 0; i--) {
+    const r = retired[i];
+    if (r !== undefined && frameNo - r.at >= RETIRE_FRAMES) {
+      r.image.dispose();
+      retired.splice(i, 1);
+    }
+  }
+}
+
 let boltSprite: Baked | null = null;
 let hatSprite: Baked | null = null;
 let jerseySprite: Baked | null = null;
@@ -310,7 +348,7 @@ function bakeSnakeCells(cell: number, skin: string | null): void {
   const lw = Math.max(1, cell * 0.05);
   const s = r * 2 + lw + 2;
   const outline = Skia.Color(skinRamp(skin).line);
-  for (const old of snakeSprites) old?.image.dispose();
+  for (const old of snakeSprites) retire(old?.image);
   snakeSprites = [];
   for (let i = 0; i < SNAKE_SHADES; i++) {
     const color = Skia.Color(snakeShadeFor(skin, i));
@@ -331,13 +369,13 @@ function bakeOutfit(cell: number, hatId: string | null, kit: Kit): void {
   const art = hatArt(hatId);
   const w = Math.ceil(cell * art.wf);
   const h = Math.ceil(cell * art.hf);
-  hatSprite?.image.dispose();
+  retire(hatSprite?.image);
   hatSprite = bake(w, h, (c) => {
     art.draw(c, w, h);
   });
   hatDy = art.dy(cell, h);
   const js = Math.ceil(cell * 0.84);
-  jerseySprite?.image.dispose();
+  retire(jerseySprite?.image);
   jerseySprite = bake(js, js, (c) => {
     paintJersey(c, js, kit.num ?? 10, kit.left, kit.right);
   });
@@ -382,8 +420,8 @@ export function prepareVersusSprites(
   const cell = boardPx / GRID;
   if (cell !== rivalBakedCell) {
     rivalBakedCell = cell;
-    for (const set of rivalSkinSprites.values()) for (const b of set) b?.image.dispose();
-    for (const h of rivalHatSprites.values()) h.sprite?.image.dispose();
+    for (const set of rivalSkinSprites.values()) for (const b of set) retire(b?.image);
+    for (const h of rivalHatSprites.values()) retire(h.sprite?.image);
     rivalSkinSprites.clear();
     rivalHatSprites.clear();
   }
@@ -411,7 +449,7 @@ function bakeGhosts(cell: number): void {
   const w = 2 * r + lw + 4;
   const h = 2.16 * r + lw + 4;
   ghostSpriteOriginY = 1.16 * r + lw / 2 + 2;
-  for (const old of ghostSprites) old?.image.dispose();
+  for (const old of ghostSprites) retire(old?.image);
   ghostSprites = GhostColors.map((col) =>
     bake(w, h, (c) => {
       const gx = w / 2;
@@ -453,7 +491,7 @@ function bakeTnt(cell: number): void {
   const fontSize = Math.round(cell * 0.27);
   const font = matchFont({ fontFamily: tntFontFamily, fontSize, fontWeight: 'bold' });
   const labelWidth = font.measureText('TNT').width;
-  tntSprite?.image.dispose();
+  retire(tntSprite?.image);
   tntSprite = bake(B, B, (c) => {
     fillPaint.setColor(C.tntBody);
     c.drawRect(Skia.XYWHRect(0, 0, B, B), fillPaint);
@@ -502,7 +540,7 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
   const wantKitKey = kitKey(kit);
   if (boardPx !== bakedBoard) {
     bakedBoard = boardPx;
-    arenaSprite?.image.dispose();
+    retire(arenaSprite?.image);
     bakeArena(boardPx);
   }
   // the outfit rebakes on its own key: an equip at menu time swaps the
@@ -527,10 +565,10 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
     bakeOutfit(cell, hatId, kit);
     bakeGhosts(cell);
     bakeTnt(cell);
-    boltSprite?.image.dispose();
+    retire(boltSprite?.image);
     boltSprite = bakeBolt(cell);
-    portalSpriteA?.image.dispose();
-    portalSpriteB?.image.dispose();
+    retire(portalSpriteA?.image);
+    retire(portalSpriteB?.image);
     portalSpriteA = bakePortalEnd(
       cell,
       GameColors.portalARim,
@@ -546,7 +584,7 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
       GameColors.portalA,
     );
     // shape-dependent; rebaked from the wall event with the live game
-    wallSprite?.image.dispose();
+    retire(wallSprite?.image);
     wallSprite = null;
   }
 }
@@ -560,7 +598,7 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
 export function bakeWallLayer(game: Game, boardPx: number, bevel: boolean): void {
   ensureSprites(boardPx);
   const cell = boardPx / GRID;
-  wallSprite?.image.dispose();
+  retire(wallSprite?.image);
   wallSprite = bake(boardPx, boardPx, (c) => {
     const pad = cell * 0.05;
     const rad = cell * 0.3;
@@ -596,7 +634,7 @@ export function bakeWallLayer(game: Game, boardPx: number, bevel: boolean): void
 
 /** Drop the baked wall layer (round reset). */
 export function clearWallLayer(): void {
-  wallSprite?.image.dispose();
+  retire(wallSprite?.image);
   wallSprite = null;
 }
 
@@ -743,6 +781,8 @@ function drawGhost(
  * particles - everything else is a baked image.
  */
 export function buildPicture(game: Game, rc: RenderContext): SkPicture {
+  frameNo++;
+  sweepRetired();
   ensureSprites(rc.boardPx, rc.worn);
   const recorder = Skia.PictureRecorder();
   const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, rc.boardPx, rc.boardPx));
