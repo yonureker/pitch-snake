@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=f72180af7b">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=f72180af7b">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=001b3dc954">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=001b3dc954">
 </head>
 <body>
   <div class="wrap">
@@ -298,6 +298,16 @@
       <button class="wedge left"  data-dir="-1,0" aria-label="Left">&larr;</button>
     </div>
 
+    <!-- The input trace, behind ?keys=1 and nothing else. It exists because
+         a press that never arrives and a press that arrives late look
+         identical from the sofa, and on a phone the canvas trail is too small
+         to read and impossible to screenshot mid-round. This is DOM, so it
+         can be photographed, selected and pasted. -->
+    <div class="trace-panel" id="tracePanel" hidden>
+      <div class="trace-legend">pd/ts arrived &middot; Pd/Ts deduped &middot; x echo &middot; !pit off-pad &middot; &raquo; turn played</div>
+      <div class="trace-line" id="traceLine"></div>
+    </div>
+
     <div class="hint">
       <span class="kb-only"><b>&uarr;&darr;&larr;&rarr;</b> / <b>WASD</b> move</span>
       <span class="kb-only"><b>SPACE</b> pause</span>
@@ -497,25 +507,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=f72180af7b",
-    "./packages/net/net.js": "./packages/net/net.js?v=f72180af7b",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=f72180af7b",
-    "./page/build/dom.js": "./page/build/dom.js?v=f72180af7b",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=f72180af7b",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=f72180af7b",
-    "./page/build/hat-art.js": "./page/build/hat-art.js?v=f72180af7b",
-    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=f72180af7b",
-    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=f72180af7b",
-    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=f72180af7b",
-    "./page/build/kit.js": "./page/build/kit.js?v=f72180af7b",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=f72180af7b",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=f72180af7b",
-    "./page/build/room-wire.js": "./page/build/room-wire.js?v=f72180af7b",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=f72180af7b",
-    "./page/build/shop.js": "./page/build/shop.js?v=f72180af7b",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=f72180af7b",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=f72180af7b",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=f72180af7b"
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=001b3dc954",
+    "./packages/net/net.js": "./packages/net/net.js?v=001b3dc954",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=001b3dc954",
+    "./page/build/dom.js": "./page/build/dom.js?v=001b3dc954",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=001b3dc954",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=001b3dc954",
+    "./page/build/hat-art.js": "./page/build/hat-art.js?v=001b3dc954",
+    "./page/build/hats-asia.js": "./page/build/hats-asia.js?v=001b3dc954",
+    "./page/build/hats-new-world.js": "./page/build/hats-new-world.js?v=001b3dc954",
+    "./page/build/hats-old-world.js": "./page/build/hats-old-world.js?v=001b3dc954",
+    "./page/build/kit.js": "./page/build/kit.js?v=001b3dc954",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=001b3dc954",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=001b3dc954",
+    "./page/build/room-wire.js": "./page/build/room-wire.js?v=001b3dc954",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=001b3dc954",
+    "./page/build/shop.js": "./page/build/shop.js?v=001b3dc954",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=001b3dc954",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=001b3dc954",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=001b3dc954"
   }
 }
 </script>
@@ -2156,6 +2166,29 @@
     keysTrail.push(tag);
     if (keysTrail.length > 12) keysTrail.shift();
     keysLine = keysTrail.join(' ');
+    paintTrace();
+  }
+  // The raw pipelines, unfiltered. This is the half the old trail never
+  // showed: it recorded what the pad DECIDED, so a press the browser never
+  // delivered and a press the pad threw away were both simply absent. Every
+  // event either pipeline hands us is stamped here before any judgement, so
+  // the trace answers the only question that matters first: did the touch
+  // arrive at all?
+  const rawTrail = [];
+  function traceRaw(tag) {
+    if (!showKeys) return;
+    rawTrail.push(tag);
+    if (rawTrail.length > 22) rawTrail.shift();
+    paintTrace();
+  }
+  let tracePanel = null, traceLine = null;
+  function paintTrace() {
+    if (!showKeys) return;
+    tracePanel ??= document.getElementById('tracePanel');
+    traceLine ??= document.getElementById('traceLine');
+    if (!tracePanel) return;
+    tracePanel.hidden = false;
+    traceLine.textContent = rawTrail.join(' ') + '\n' + keysTrail.join(' ');
   }
   // a bar in the trail marks a round starting, so presses never read across
   function traceRound() {
@@ -4975,9 +5008,10 @@
     // actually moves. Reading the rect on EVERY press forced a synchronous
     // layout at the exact moment a fast player needs the frame budget most.
     if (!padRect) padRect = dpad.getBoundingClientRect();
+    traceRaw('pd' + e.pointerId);
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
     // a touch that got here first already played this press
-    if (padCovered('p', e.pointerId, e.clientX, e.clientY)) { traceMark('pD'); return; }
+    if (padCovered('p', e.pointerId, e.clientX, e.clientY)) { traceRaw('Pd'); return; }
     padNote('p', e.pointerId, e.clientX, e.clientY);
     const r = padResolve(e);                   // a press always picks a wedge
     firePad(e.pointerId, r.btn, r.assisted ? 'A' : 'p');
@@ -4986,8 +5020,9 @@
     if (!padPointers.has(e.pointerId)) return;
     slidePad(e.pointerId, padZone(e, true));    // a move holds through the ambiguous zones
   });
-  dpad.addEventListener('pointerup', padEnd);
+  dpad.addEventListener('pointerup', (e) => { traceRaw('pu' + e.pointerId); padEnd(e); });
   dpad.addEventListener('pointercancel', (e) => {
+    traceRaw('pc' + e.pointerId);
     // the system taking a touch back mid-press is invisible otherwise, and
     // it is one of the two ways a phone can eat a tap without a trace
     traceMark('!can');
@@ -5071,7 +5106,8 @@
     e.preventDefault();       // no gesture may form over the pad
     if (!padRect) padRect = dpad.getBoundingClientRect();
     for (const t of e.changedTouches) {
-      if (padCovered('t', 'T' + t.identifier, t.clientX, t.clientY)) continue;
+      traceRaw('ts' + t.identifier);
+      if (padCovered('t', 'T' + t.identifier, t.clientX, t.clientY)) { traceRaw('Ts'); continue; }
       padNote('t', 'T' + t.identifier, t.clientX, t.clientY);
       traceMark('tB');        // the backstop caught one the pointer pipeline ate
       const r = padResolve(t);
@@ -5087,6 +5123,7 @@
   }, { passive: false });
   const padTouchEnd = (e) => {
     for (const t of e.changedTouches) {
+      traceRaw((e.type === 'touchcancel' ? 'tc' : 'te') + t.identifier);
       padDownAt.delete('T' + t.identifier);
       padFiredAt.delete('T' + t.identifier);
       if (padPointers.delete('T' + t.identifier)) paintPad();

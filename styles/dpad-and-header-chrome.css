@@ -44,6 +44,25 @@
   /* a pressed wedge is a gold flash, whose label is dark ink in any theme */
   .dpad .wedge.pressed { background: var(--gold); color: #211e1a; }
 
+  /* The input trace panel, behind ?keys=1. Deliberately plain and high
+     contrast: its whole job is to be legible in a photograph taken on a
+     phone, one-handed, moments after a press went missing. */
+  .trace-panel {
+    /* FIXED, not in the flow. The touch shell is height-driven and must fit
+       one screen: a panel taking a row here would push the d-pad off the
+       bottom of a short phone, and the pad is the thing under test. Floating
+       it over the pitch costs the layout nothing. */
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    width: auto; margin: 0; padding: 6px 8px;
+    opacity: 0.94;
+    border-radius: 8px; background: #14110d; color: #ffd700;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.45;
+    text-align: left; word-break: break-all; white-space: pre-wrap;
+    user-select: text; -webkit-user-select: text;
+  }
+  .trace-panel[hidden] { display: none; }
+  .trace-legend { color: #9a8f72; font-size: 9.5px; letter-spacing: 0.2px; margin-bottom: 3px; }
+
   /* ---- settings gear + modal ---- */
   .gear {
     position: absolute; top: 8px; right: 8px; z-index: 6;
