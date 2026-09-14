@@ -45,11 +45,20 @@ import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs'
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
-const MODE_LABELS: { mode: UiMode; label: string }[] = [
-  { mode: 'classic', label: 'CLASSIC' },
-  { mode: 'survival', label: 'SURVIVAL' },
-  { mode: 'versus', label: 'MULTIPLAYER' },
-  { mode: 'tourney', label: 'TOURNAMENT' },
+/**
+ * The chooser's four doors, with the page's own one-line descriptions.
+ *
+ * The app listed bare titles, so the chooser said what each mode is CALLED
+ * and never what it IS. The page has always sold them: a mode nobody
+ * understands is a mode nobody picks, and SURVIVAL in particular inverts the
+ * whole game, which a title cannot say. Wording taken from index.html so the
+ * two cannot drift, TOURNAMENTS included, which the app had singular.
+ */
+const MODE_LABELS: { mode: UiMode; label: string; blurb: string }[] = [
+  { mode: 'classic', label: 'CLASSIC', blurb: 'No time limit. Chase the top 100.' },
+  { mode: 'survival', label: 'SURVIVAL', blurb: 'The clock is the score.' },
+  { mode: 'versus', label: 'MULTIPLAYER', blurb: 'Five snakes, one seed.' },
+  { mode: 'tourney', label: 'TOURNAMENTS', blurb: 'A code, a window, one board.' },
 ];
 /**
  * The strapline per mode, the page's STRAPLINES ported. "Eat to grow" over
@@ -765,6 +774,9 @@ export default function Index() {
                           <Text style={[styles.modeBtnText, uiMode === m.mode && styles.modeBtnTextOn]}>
                             {m.label}
                           </Text>
+                          <Text style={[styles.modeBtnSub, uiMode === m.mode && styles.modeBtnSubOn]}>
+                            {m.blurb}
+                          </Text>
                         </Pressable>
                       ))}
                     </View>
@@ -1305,9 +1317,10 @@ const styles = StyleSheet.create({
   pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
   modeList: { gap: 8, alignSelf: 'stretch', alignItems: 'center' },
   modeBtn: {
-    minWidth: 220,
-    alignItems: 'center',
-    paddingVertical: 11,
+    minWidth: 260,
+    alignItems: 'flex-start',
+    gap: 2,
+    paddingVertical: 10,
     paddingHorizontal: 26,
     borderRadius: 8,
     backgroundColor: 'rgba(244,236,216,0.08)',
@@ -1317,6 +1330,8 @@ const styles = StyleSheet.create({
   modeBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
   modeBtnText: { fontFamily: BARLOW_BOLD, fontSize: 14, letterSpacing: 1.5, color: '#e9e0cd' },
   modeBtnTextOn: { color: GameColors.ink },
+  modeBtnSub: { fontFamily: BARLOW, fontSize: 11.5, letterSpacing: 0.3, color: '#b7ac93' },
+  modeBtnSubOn: { color: 'rgba(33,30,26,0.72)' },
   btnRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   modeCaption: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 2, color: '#b7ac93' },
   modesBtn: {
