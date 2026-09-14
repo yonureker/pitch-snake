@@ -44,9 +44,10 @@ import {
   type Player,
 } from '@pitch-snake/engine';
 
+import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from '@pitch-snake/net/vs-smoothing';
+
 import { type Kit, KIT_NONE, kitKey } from '../lib/kit';
 import { hatArt, paintBolt, paintJersey, paintPitch } from './pitch-art';
-import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from './vs-smoothing';
 import { GameColors, GhostColors, SNAKE_SHADES, VS_COLORS, skinRamp, snakeShadeFor } from './theme';
 
 /** Everything buildPicture needs besides the game itself. */
@@ -64,7 +65,7 @@ export interface RenderContext {
   /**
    * A room's round: my seat, each seat's name and outfit, and the session's
    * rollback count. The count is here so the paint can absorb a corrected past
-   * instead of teleporting through it; see vs-smoothing.ts.
+   * instead of teleporting through it; see packages/net/src/vs-smoothing.ts.
    */
   vs:
     | {

@@ -38,9 +38,13 @@ await withPage({}, async ({ evaluate, sleep, goto, thrown }) => {
   const before = await evaluate(`window.__frames`);
   lines.push(before > 20 ? `ok   the loop runs at all (${before} frames in 1s)` : `FAIL the loop is not running (${before} frames in 1s)`);
 
-  // make a real call site inside the frame throw, every single frame
+  // make a real call site inside the frame throw, every single frame.
+  // pollGamepads returns before touching navigator until a pad has ever
+  // announced itself (padEverSeen, page/gamepad.ts), and headless Chrome
+  // never fires that event, so announce one first or the fault is dead code.
   await evaluate(`(() => {
     window.__throws = 0;
+    window.dispatchEvent(new Event('gamepadconnected'));
     navigator.getGamepads = () => { window.__throws++; throw new Error('injected: a frame threw'); };
   })()`);
   await sleep(1500);

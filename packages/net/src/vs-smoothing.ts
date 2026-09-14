@@ -16,8 +16,11 @@
  *
  * WHY PER SEGMENT rather than one offset for the snake: a correction is largest
  * at the head and zero at the settled tail, and moving the whole body by the
- * head's error made the tail shake. This is the web page's approach, ported;
- * the two clients smooth the same way so a room looks the same on every screen.
+ * head's error made the tail shake. It lives in packages/net because it is the
+ * paint-side half of the rollback the session performs, and because it was a
+ * copy in each client until 2026-09-14: the two clients smooth the same way so
+ * a room looks the same on every screen, which one module guarantees and two
+ * ports only promise.
  *
  * WHY IT IS SAFE TO LIE. Rival snakes pass through each other in the engine
  * (engine.test.js, "multi-snake: snakes pass through each other"), so a body
@@ -51,7 +54,12 @@ const segN = new Int32Array(VS_SEATS);
 let seenRollbacks = 0;
 let lastPulseMs = -1;
 
-/** The shortest way between two cells across the tunnel wrap. */
+/**
+ * The shortest way between two cells across the tunnel wrap.
+ *
+ * @param v - a raw x or y difference in cells.
+ * @returns the same difference taken the short way round.
+ */
 function wrapDelta(v: number): number {
   return (((v % GRID) + GRID * 1.5) % GRID) - GRID / 2;
 }
@@ -101,6 +109,31 @@ export function smoothY(seat: number, i: number): number {
 }
 
 /**
+ * A segment's paint OFFSET alone, for a renderer that computes its own glide
+ * and nudges it, rather than reading the absolute position back. Zero for a
+ * seat outside the table (solo passes -1) and past the smoothed depth, so the
+ * caller can add it unconditionally.
+ *
+ * @param seat - the player index, or -1 outside a room.
+ * @param i - the segment, head first.
+ * @returns cells to add to this segment's own rendered x.
+ */
+export function smoothOffX(seat: number, i: number): number {
+  return seat < 0 || seat >= VS_SEATS || i >= VS_SEG ? 0 : (offX[seat * VS_SEG + i] ?? 0);
+}
+
+/**
+ * The y half of `smoothOffX`; same guards, same use.
+ *
+ * @param seat - the player index, or -1 outside a room.
+ * @param i - the segment, head first.
+ * @returns cells to add to this segment's own rendered y.
+ */
+export function smoothOffY(seat: number, i: number): number {
+  return seat < 0 || seat >= VS_SEATS || i >= VS_SEG ? 0 : (offY[seat * VS_SEG + i] ?? 0);
+}
+
+/**
  * Fold this frame's correction, if there was one, into the paint offsets.
  *
  * Call once per frame, before anything is drawn, and only in a room. A
@@ -109,7 +142,8 @@ export function smoothY(seat: number, i: number): number {
  *
  * @param game - the round, read for its players and their per-snake progress.
  * @param rollbacks - the session's rollback count; any change means the past
- *   was rewritten since the last frame.
+ *   was rewritten since the last frame. Pass null when there is no session to
+ *   ask (a room still assembling), which reads as "nothing changed".
  * @param pulseMs - the renderer's continuous clock, used only for the frame
  *   length. The first frame after a reset simply establishes the baseline.
  * @param playing - false once the round has stopped, when every glide is done.
@@ -120,14 +154,14 @@ export function smoothY(seat: number, i: number): number {
  */
 export function updateVsSmoothing(
   game: Game,
-  rollbacks: number,
+  rollbacks: number | null,
   pulseMs: number,
   playing: boolean,
   posOf: (pl: Player, i: number, p: number) => { cx: number; cy: number },
 ): void {
   const players = game.players;
-  const corrected = rollbacks !== seenRollbacks;
-  seenRollbacks = rollbacks;
+  const corrected = rollbacks !== null && rollbacks !== seenRollbacks;
+  if (rollbacks !== null) seenRollbacks = rollbacks;
   const dt = lastPulseMs < 0 ? 16 : Math.max(0, Math.min(100, pulseMs - lastPulseMs));
   lastPulseMs = pulseMs;
   const decay = Math.exp(-dt / DECAY_MS);

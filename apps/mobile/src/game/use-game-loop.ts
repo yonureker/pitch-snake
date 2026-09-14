@@ -44,7 +44,7 @@ import {
   stepParticles,
   type RenderContext,
 } from './renderer';
-import { resetVsSmoothing } from './vs-smoothing';
+import { resetVsSmoothing } from '@pitch-snake/net/vs-smoothing';
 import { playEat, playSfx } from './sfx';
 
 /** The page-side round phases, mirroring the web version. */
@@ -683,7 +683,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         _rcVs.names = box.vsRc.names;
         _rcVs.fits = box.vsRc.fits;
         // the rollback count rides along so the paint can absorb a corrected
-        // past rather than teleport through it; see game/vs-smoothing.ts
+        // past rather than teleport through it; see packages/net/src/vs-smoothing.ts
         _rcVs.rollbacks = box.session?.stats.rollbacks ?? 0;
         _rc.vs = _rcVs;
       }

@@ -13,6 +13,10 @@
     "./room-wire": {
       "types": "./build/room-wire.d.ts",
       "default": "./build/room-wire.js"
+    },
+    "./vs-smoothing": {
+      "types": "./build/vs-smoothing.d.ts",
+      "default": "./build/vs-smoothing.js"
     }
   },
   "scripts": {

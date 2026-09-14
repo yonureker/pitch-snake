@@ -89,6 +89,16 @@ function stamp(html, files, v) {
   for (const f of files) {
     if (!f.endsWith('.js')) continue;
     imports[`./${f}`] = `./${f}?v=${v}`;
+    // The shared packages are imported by their workspace names, not by path:
+    // page sources say '@pitch-snake/net/vs-smoothing' (the same specifier the
+    // app resolves through the package's exports map), and the packages'
+    // emitted code says '@pitch-snake/engine' verbatim, because tsc does not
+    // rewrite specifiers. The map is what makes those names mean something in
+    // a browser, versioned exactly like the path form.
+    const pkg = /^packages\/([a-z-]+)\/build\/([a-z0-9-]+)\.js$/.exec(f);
+    if (pkg) imports[`@pitch-snake/${pkg[1]}/${pkg[2]}`] = `./${f}?v=${v}`;
+    if (f === 'packages/engine/engine.js') imports['@pitch-snake/engine'] = `./${f}?v=${v}`;
+    if (f === 'packages/net/net.js') imports['@pitch-snake/net'] = `./${f}?v=${v}`;
   }
   const block =
     `${MAP_MARK}\n${MAP_OPEN}\n` +
