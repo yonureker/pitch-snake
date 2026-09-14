@@ -11,6 +11,10 @@
     "./hat-art": {
       "types": "./build/hat-art.d.ts",
       "default": "./build/hat-art.js"
+    },
+    "./jersey": {
+      "types": "./build/jersey.d.ts",
+      "default": "./build/jersey.js"
     }
   },
   "scripts": {

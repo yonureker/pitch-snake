@@ -233,55 +233,15 @@ export function drawCrest(
   }
 }
 
-/**
- * The number DEALT to each room seat, which is what a player who has chosen no
- * shirt number wears, and the fallback when two players chose the same one.
- * Solo keeps the classic ten.
- *
- * It stopped being the whole story on 2026-09-07, when numbers became a player
- * choice, but it did not stop mattering: it is still what keeps a five-a-side
- * from fielding five number tens. `kitNumbersFor` in page/kit.ts is where the
- * two meet.
- */
-export const VS_NUMS = [10, 7, 9, 4, 8] as const;
-
-/**
- * 3x5 pixel glyphs, 0-9, so a shirt can wear any number.
- *
- * Blocks rather than text on purpose: 8-bit at this size, and immune to which
- * fonts a device happens to ship, which is the same reason the flags are a
- * sprite rather than regional-indicator pairs.
- */
-const JERSEY_GLYPH: Record<string, readonly string[]> = {
-  '0': ['111', '101', '101', '101', '111'], '1': ['010', '110', '010', '010', '111'],
-  '2': ['111', '001', '111', '100', '111'], '3': ['111', '001', '111', '001', '111'],
-  '4': ['101', '101', '111', '001', '001'], '5': ['111', '100', '111', '001', '111'],
-  '6': ['111', '100', '111', '101', '111'], '7': ['111', '001', '010', '010', '010'],
-  '8': ['111', '101', '111', '101', '111'], '9': ['111', '101', '111', '001', '111'],
-};
-
-/**
- * The eight offsets the number's dark trim is drawn at, so a digit is outlined
- * on every side rather than shadowed on one. See the note in `paintJersey`.
- */
-const JERSEY_TRIM = [
-  [-1, -1], [0, -1], [1, -1],
-  [-1, 0], [1, 0],
-  [-1, 1], [0, 1], [1, 1],
-] as const;
-
-/**
- * The number a snake wears when its player has chosen none: the classic ten.
- * A room deals from `VS_NUMS` instead, so this is the solo answer and the one
- * every preview shows.
- */
-export const JERSEY_SOLO_NUM = 10;
-
-/** The classic shirt's left half, worn when a player has chosen no colour. */
-export const JERSEY_LEFT_DEFAULT = '#f2c114';
-
-/** The classic shirt's right half, worn when a player has chosen no colour. */
-export const JERSEY_RIGHT_DEFAULT = '#d8231f';
+// The shirt's shared half (glyphs, trim, defaults, dealt numbers, digit
+// layout) moved to the cosmetics package on 2026-09-14, so a number cannot
+// render differently on two screens; the re-export keeps imports working.
+export {
+  JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT, JERSEY_SOLO_NUM, VS_NUMS,
+} from '@pitch-snake/cosmetics/jersey';
+import {
+  JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT, JERSEY_TRIM, jerseyDigitCells,
+} from '@pitch-snake/cosmetics/jersey';
 
 /**
  * Paint one shirt: two colour halves, a rounded edge, a centred number.
@@ -319,29 +279,13 @@ export function paintJersey(
   c.strokeStyle = 'rgba(33,30,26,0.55)';
   c.lineWidth = Math.max(1, s * 0.05);
   c.stroke();
-  // eslint-disable-next-line @typescript-eslint/no-misused-spread -- digits of a number, never text: there is nothing here for a code point to break.
-  const digits = [...String(num)];
-  const px = Math.max(1, Math.round(s * 0.11));
-  const w = digits.length * 4 - 1;   // 3px per glyph plus a 1px gap, less the trailing gap
-  const x0 = Math.round((s - px * w) / 2), y0 = Math.round((s - px * 5) / 2);
+  // the digit geometry is shared (see the jersey module for the trim's why);
+  // this side only fills the cells it is handed
+  const { px, cells } = jerseyDigitCells(num, s);
   const ink = (color: string, dx: number, dy: number): void => {
     c.fillStyle = color;
-    for (let d = 0; d < digits.length; d++) {
-      const glyph = JERSEY_GLYPH[digits[d] ?? ''];
-      if (!glyph) continue;
-      for (let r = 0; r < 5; r++)
-        for (let k = 0; k < 3; k++)
-          if (glyph[r]?.[k] === '1') c.fillRect(x0 + d * px * 4 + k * px + dx, y0 + r * px + dy, px, px);
-    }
+    for (const [x, y] of cells) c.fillRect(x + dx, y + dy, px, px);
   };
-  // A TRIM, not a drop shadow, and this is the one place free-form colours
-  // forced a change to the art. White digits over a one-sided shadow read
-  // perfectly on the classic yellow-and-red, and vanish on a white kit, which
-  // is one of the commonest shirts there is: only the shadow's edge survived,
-  // so the number became an outline of itself. Every direction instead, which
-  // is how a real shirt number is trimmed, and it holds on any two colours a
-  // player picks without the art overriding either of them. Eight passes at
-  // BAKE time, so it costs a frame nothing (performance rule 7).
   for (const [dx, dy] of JERSEY_TRIM) ink('rgba(33,30,26,0.85)', dx, dy);
   ink('#ffffff', 0, 0);
 }
