@@ -5190,6 +5190,30 @@
   // rather than by age. PAD_RECEIPT_MS remains only as a leak guard for a
   // lift that never arrives at all, and is now far longer than any hitch.
   const PAD_RECEIPT_MS = 2000;
+  /**
+   * How far apart the two pipelines may place the SAME finger.
+   *
+   * This was 44px, about a thumb's width, on the reasonable-sounding idea
+   * that the two pipelines might disagree by a little. They do not disagree
+   * at all: measured over twenty presses at scattered points, the worst
+   * coordinate difference between a pointerdown and its own touchstart was
+   * 0.00px. They report the identical position, because they describe the
+   * identical touch.
+   *
+   * So the tolerance was forty-four pixels of slack for a problem that does
+   * not exist, and it had a cost, which is the bug. Two thumbs playing a fast
+   * corner land WELL within a thumb's width of each other. When WebKit eats
+   * the second thumb's pointerdown, the touch that arrives to cover for it
+   * falls inside the first thumb's receipt, is taken for a finger already
+   * served, and is dropped. The press never reaches the engine and the wedge
+   * never lights, which is the report exactly: fine on a keyboard, which
+   * matches nothing against anything; fine with one thumb, which has no
+   * neighbour to be confused with; gone intermittently with two.
+   *
+   * Four pixels is already generous against a measured zero, and no two
+   * fingers can be four pixels apart.
+   */
+  const PAD_SAME_FINGER_PX = 4;
   function padCovered(who, id, x, y) {
     const now = performance.now();
     let best = -1, bestDist = Infinity;
@@ -5200,7 +5224,7 @@
       if (r.by === id) return true;          // already spent on this finger
       if (r.by !== undefined) continue;      // spoken for by another finger
       const dx = Math.abs(r.x - x), dy = Math.abs(r.y - y);
-      if (dx >= 44 || dy >= 44) continue;
+      if (dx >= PAD_SAME_FINGER_PX || dy >= PAD_SAME_FINGER_PX) continue;
       if (dx + dy < bestDist) { bestDist = dx + dy; best = i; }
     }
     if (best < 0) return false;
