@@ -6,14 +6,14 @@
  */
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchMyRating } from '@/lib/leaderboard';
+import { fetchMyRating, fetchMyRatingSeason } from '@/lib/leaderboard';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
 /** Your rooms rating, null when never rated, when `enabled` and configured. */
-export function useMyRating(enabled: boolean) {
+export function useMyRating(enabled: boolean, season: string | null = null) {
   return useQuery({
-    queryKey: ['leaderboard', 'my-rating'],
-    queryFn: fetchMyRating,
+    queryKey: ['leaderboard', 'my-rating', season ?? 'all'],
+    queryFn: () => (season === null ? fetchMyRating() : fetchMyRatingSeason(season)),
     enabled: enabled && SUPABASE_CONFIGURED,
     staleTime: 0,
   });

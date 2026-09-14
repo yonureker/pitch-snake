@@ -29,12 +29,43 @@ const BARLOW_BOLD = 'Barlow_700Bold';
 const ANTON = 'Anton_400Regular';
 
 type BoardTab = RuleMode | 'ladder';
+type BoardWindow = 'all' | 'month';
 
 const CHIPS: { label: string; tab: BoardTab }[] = [
   { label: 'CLASSIC', tab: 'classic' },
   { label: 'SURVIVAL', tab: 'survival' },
   { label: 'ELO', tab: 'ladder' },
 ];
+
+const WINDOWS: { label: string; win: BoardWindow }[] = [
+  { label: 'ALL TIME', win: 'all' },
+  { label: 'THIS MONTH', win: 'month' },
+];
+
+const MONTHS = [
+  'JANUARY',
+  'FEBRUARY',
+  'MARCH',
+  'APRIL',
+  'MAY',
+  'JUNE',
+  'JULY',
+  'AUGUST',
+  'SEPTEMBER',
+  'OCTOBER',
+  'NOVEMBER',
+  'DECEMBER',
+];
+
+/** This UTC calendar month as 'YYYY-MM', the same key the server seasons on. */
+function currentSeason(): string {
+  const d = new Date();
+  return `${String(d.getUTCFullYear())}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+/** "SEPTEMBER" for the this-month title face. */
+function seasonLabel(): string {
+  return MONTHS[new Date().getUTCMonth()] ?? 'THIS MONTH';
+}
 
 /** Props: the flag renderer the screen owns, and the way out. */
 export interface BoardsSheetProps {
@@ -49,23 +80,35 @@ export interface BoardsSheetProps {
  */
 export function BoardsSheet({ renderFlag, onClose }: BoardsSheetProps) {
   const [tab, setTab] = useState<BoardTab>('classic');
-  const scores = useTopScores(tab !== 'ladder', tab === 'ladder' ? 'classic' : tab);
-  const ladder = useTopRated(tab === 'ladder');
-  const mine = useMyRating(tab === 'ladder');
+  const [win, setWin] = useState<BoardWindow>('all');
+  // the season key windows every this-month query; null is the all-time face
+  const season = win === 'month' ? currentSeason() : null;
+  const scores = useTopScores(tab !== 'ladder', tab === 'ladder' ? 'classic' : tab, season);
+  const ladder = useTopRated(tab === 'ladder', season);
+  const mine = useMyRating(tab === 'ladder', season);
   const board = tab === 'ladder' ? ladder : scores;
+
+  const month = win === 'month';
+  const title =
+    tab === 'ladder' ?
+      month ? `ELO · ${seasonLabel()}`
+      : 'ELO · TOP 100'
+    : month ? `TOP 100 · ${seasonLabel()}`
+    : 'TOP 100 WORLDWIDE';
 
   // the page's own note under the ladder: your standing, and the one rule
   const my = mine.data ?? null;
+  const span = month ? ' this season' : '';
   const ladderNote =
     my !== null ?
       `You are rated ${String(my.rating)}${my.provisional ? ' P' : ''} over ${String(my.rounds)} rated ${
         my.rounds === 1 ? 'round' : 'rounds'
-      }${my.provisional ? '. P means under ten. ' : '. '}Only quick match is rated.`
-    : 'Only quick match is rated. Play one to get a rating.';
+      }${span}${my.provisional ? '. P means under ten. ' : '. '}Only quick match is rated.`
+    : `Only quick match is rated. Play one to get a rating${month ? ' this season.' : '.'}`;
 
   return (
     <View style={styles.sheet}>
-      <Text style={styles.title}>{tab === 'ladder' ? 'ELO · TOP 100' : 'TOP 100 WORLDWIDE'}</Text>
+      <Text style={styles.title}>{title}</Text>
       <View style={styles.chips}>
         {CHIPS.map((c) => (
           <Pressable
@@ -77,6 +120,20 @@ export function BoardsSheet({ renderFlag, onClose }: BoardsSheetProps) {
             style={[styles.chip, tab === c.tab && styles.chipOn]}
           >
             <Text style={[styles.chipText, tab === c.tab && styles.chipTextOn]}>{c.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.windows}>
+        {WINDOWS.map((w) => (
+          <Pressable
+            accessibilityRole="button"
+            key={w.win}
+            onPress={() => {
+              setWin(w.win);
+            }}
+            style={[styles.windowChip, win === w.win && styles.chipOn]}
+          >
+            <Text style={[styles.windowText, win === w.win && styles.chipTextOn]}>{w.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -97,7 +154,13 @@ export function BoardsSheet({ renderFlag, onClose }: BoardsSheetProps) {
       : board.data.length === 0 ?
         <View style={styles.emptyRow}>
           <Text style={styles.emptyText}>
-            {tab === 'ladder' ? 'No rated rounds yet' : 'No scores yet. The board has room.'}
+            {tab === 'ladder' ?
+              month ?
+                'No rated rounds this season'
+              : 'No rated rounds yet'
+            : month ?
+              'No scores this month yet. The board has room.'
+            : 'No scores yet. The board has room.'}
           </Text>
         </View>
       : <ScrollView style={styles.list}>
@@ -163,6 +226,18 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
   chipText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
   chipTextOn: { color: '#211e1a' },
+  // the all-time/this-month axis: smaller pills so the two axes never read as
+  // one row of equal buttons (the page's board-window, ported)
+  windows: { flexDirection: 'row', gap: 6 },
+  windowChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(33,30,26,0.25)',
+    backgroundColor: 'rgba(33,30,26,0.05)',
+  },
+  windowText: { fontFamily: BARLOW_BOLD, fontSize: 10, letterSpacing: 1, color: GameColors.ink },
   list: { alignSelf: 'stretch', maxHeight: 320 },
   entry: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   rank: { fontFamily: ANTON, fontSize: 14, color: GameColors.muted, width: 22 },

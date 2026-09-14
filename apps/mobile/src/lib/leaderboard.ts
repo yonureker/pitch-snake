@@ -86,9 +86,22 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-/** The global top N for one rule mode, best first; server-ordered, server-limited. */
-export async function fetchTopScores(limit = 10, mode: RuleMode = 'classic'): Promise<ScoreRow[]> {
-  const rows = await rpc('pitch_snake_top_scores', { limit_count: limit, p_mode: mode });
+/**
+ * The global top N for one rule mode, best first; server-ordered and limited.
+ * `season` null is the all-time board (unchanged); a 'YYYY-MM' string windows
+ * it to that UTC month, the same key the season ladder uses.
+ */
+export async function fetchTopScores(
+  limit = 10,
+  mode: RuleMode = 'classic',
+  season: string | null = null,
+): Promise<ScoreRow[]> {
+  const rows = await rpc(
+    'pitch_snake_top_scores',
+    season === null ?
+      { limit_count: limit, p_mode: mode }
+    : { limit_count: limit, p_mode: mode, p_season: season },
+  );
   if (!Array.isArray(rows)) return [];
   const list: unknown[] = rows;
   const out: ScoreRow[] = [];
@@ -153,6 +166,117 @@ export async function fetchMyRating(): Promise<MyRating | null> {
   const { rating, rounds } = mine;
   if (typeof rating !== 'number' || typeof rounds !== 'number') return null;
   return { rating, rounds, provisional: rounds < 10 };
+}
+
+// ---- seasons (the monthly ladder) ----
+
+/** The season ladder for one UTC month, the ELO board's this-month face. */
+export async function fetchTopRatedSeason(season: string, limit = 100): Promise<RatingRow[]> {
+  const rows = await rpc('pitch_snake_top_rated_season', {
+    p_mode: 'classic',
+    p_season: season,
+    p_limit: limit,
+  });
+  if (!Array.isArray(rows)) return [];
+  const list: unknown[] = rows;
+  const out: RatingRow[] = [];
+  for (const r of list) {
+    if (!isRecord(r)) continue;
+    const { name, country, rating, provisional } = r;
+    if (typeof name === 'string' && typeof rating === 'number') {
+      out.push({
+        name,
+        country: isCountry(country) ? country.toUpperCase() : null,
+        rating,
+        provisional: provisional === true,
+      });
+    }
+  }
+  return out;
+}
+
+/** Your season standing, with the net move this season (rating - base). */
+export interface MyRatingSeason extends MyRating {
+  gain: number;
+}
+
+/** Your own season rating for rooms this month, or null when unrated. */
+export async function fetchMyRatingSeason(season: string): Promise<MyRatingSeason | null> {
+  const got = await rpc('pitch_snake_my_rating_season', { p_season: season });
+  if (!isRecord(got)) return null;
+  const mine = got['classic'];
+  if (!isRecord(mine)) return null;
+  const { rating, rounds, gain } = mine;
+  if (typeof rating !== 'number' || typeof rounds !== 'number') return null;
+  return { rating, rounds, provisional: rounds < 10, gain: typeof gain === 'number' ? gain : 0 };
+}
+
+// ---- stats (all derive-on-read, caller-scoped) ----
+
+/** One mode's solo record, from pitch_snake_my_stats. */
+export interface SoloStats {
+  games: number;
+  avg: number;
+  best: number;
+}
+
+/** Your solo record for a mode, lifetime or one season. */
+export async function fetchMyStats(mode: RuleMode, season: string | null = null): Promise<SoloStats> {
+  const got = await rpc(
+    'pitch_snake_my_stats',
+    season === null ? { p_mode: mode } : { p_mode: mode, p_season: season },
+  );
+  const n = (v: unknown): number => (typeof v === 'number' ? v : 0);
+  if (!isRecord(got)) return { games: 0, avg: 0, best: 0 };
+  return { games: n(got['games']), avg: n(got['avg']), best: n(got['best']) };
+}
+
+/** Your multiplayer record, from pitch_snake_my_mp_stats. */
+export interface MpStats {
+  played: number;
+  won: number;
+  lost: number;
+  delta: number;
+}
+
+/** Your MP record, lifetime or one season. */
+export async function fetchMyMpStats(season: string | null = null): Promise<MpStats> {
+  const got = await rpc('pitch_snake_my_mp_stats', season === null ? {} : { p_season: season });
+  const n = (v: unknown): number => (typeof v === 'number' ? v : 0);
+  if (!isRecord(got)) return { played: 0, won: 0, lost: 0, delta: 0 };
+  return { played: n(got['played']), won: n(got['won']), lost: n(got['lost']), delta: n(got['delta']) };
+}
+
+/** One opponent you have played, with the head-to-head record. */
+export interface RivalRow {
+  name: string;
+  country: string | null;
+  games: number;
+  myWins: number;
+  theirWins: number;
+}
+
+/** Recent opponents, most recent first, with the record against each. */
+export async function fetchRecentOpponents(limit = 20): Promise<RivalRow[]> {
+  const rows = await rpc('pitch_snake_recent_opponents', { p_limit: limit });
+  if (!Array.isArray(rows)) return [];
+  const list: unknown[] = rows;
+  const out: RivalRow[] = [];
+  const n = (v: unknown): number => (typeof v === 'number' ? v : 0);
+  for (const r of list) {
+    if (!isRecord(r)) continue;
+    const { name, country, games, my_wins, their_wins } = r;
+    if (typeof name === 'string') {
+      out.push({
+        name,
+        country: isCountry(country) ? country.toUpperCase() : null,
+        games: n(games),
+        myWins: n(my_wins),
+        theirWins: n(their_wins),
+      });
+    }
+  }
+  return out;
 }
 
 // Submitting a score is no longer a thing any client can do: the server

@@ -6,14 +6,14 @@
  */
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchTopRated } from '@/lib/leaderboard';
+import { fetchTopRated, fetchTopRatedSeason } from '@/lib/leaderboard';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
 /** The top rated players for rooms, when `enabled` and configured. */
-export function useTopRated(enabled: boolean) {
+export function useTopRated(enabled: boolean, season: string | null = null) {
   return useQuery({
-    queryKey: ['leaderboard', 'rated'],
-    queryFn: () => fetchTopRated(100),
+    queryKey: ['leaderboard', 'rated', season ?? 'all'],
+    queryFn: () => (season === null ? fetchTopRated(100) : fetchTopRatedSeason(season, 100)),
     enabled: enabled && SUPABASE_CONFIGURED,
     staleTime: 0,
   });

@@ -13,10 +13,10 @@ import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 export const TOP_SCORES_KEY = ['leaderboard', 'top'] as const;
 
 /** One rule mode's global top ten, when `enabled` and configured. */
-export function useTopScores(enabled: boolean, mode: RuleMode) {
+export function useTopScores(enabled: boolean, mode: RuleMode, season: string | null = null) {
   return useQuery({
-    queryKey: [...TOP_SCORES_KEY, mode],
-    queryFn: () => fetchTopScores(BOARD_PLACES, mode),
+    queryKey: [...TOP_SCORES_KEY, mode, season ?? 'all'],
+    queryFn: () => fetchTopScores(BOARD_PLACES, mode, season),
     enabled: enabled && SUPABASE_CONFIGURED,
     // The FULL TIME board is a snapshot of the moment the round ended, and the
     // screen reads its tenth row to decide whether to ask for a name. A board
