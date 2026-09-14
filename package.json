@@ -14,7 +14,7 @@
     "lint:page": "eslint page packages/*/src",
     "typecheck:page": "tsc -p page/tsconfig.json --noEmit",
     "build:page": "tsc -p page/tsconfig.json && node scripts/minify-page.mjs",
-    "build:packages": "tsc -p packages/net/tsconfig.json",
+    "build:packages": "tsc -p packages/net/tsconfig.json && tsc -p packages/flags/tsconfig.json",
     "stamp": "node scripts/stamp-assets.mjs",
     "stamp:check": "node scripts/stamp-assets.mjs --check"
   },

@@ -55,8 +55,9 @@ that only bite here.
   against 500). Refactor before adding to either.
 - **The `no-secrets` lint rule fires on high-entropy strings.** The one
   standing exception is `FLAG_CODES`, a public ISO-3166 list whose shape IS
-  the sprite layout. It carries an inline disable with the reason; do not add
-  another without one.
+  the sprite layout; it lives in the shared `packages/flags` (this app
+  imports it, since 2026-09-14) and carries an inline disable with the
+  reason there. Do not add another without one.
 
 ## What lands next
 

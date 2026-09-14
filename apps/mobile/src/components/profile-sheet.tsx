@@ -17,7 +17,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import flagSheet from '@/assets/flags.png';
 import { authWho, sendEmailCode, signOutToAnon, verifyEmailCode } from '@/lib/auth';
-import { FLAG_CODES, FLAG_COLS, flagIndex } from '@/lib/leaderboard';
+import { FLAG_CODES, FLAG_COLS, flagIndex } from '@pitch-snake/flags';
 import { useSaveProfile } from '@/hooks/queries/use-save-profile';
 import { kitOf } from '@/lib/kit';
 import type { Profile } from '@/lib/profile';

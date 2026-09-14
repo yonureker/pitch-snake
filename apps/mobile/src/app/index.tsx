@@ -38,7 +38,9 @@ import { useSubmitScore } from '@/hooks/queries/use-submit-score';
 import { useSubmitTournamentScore } from '@/hooks/queries/use-submit-tournament-score';
 import { useTopScores } from '@/hooks/queries/use-top-scores';
 import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
-import { FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
+import { FLAG_COLS, flagIndex } from '@pitch-snake/flags';
+
+import { placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
 import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';

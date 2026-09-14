@@ -1,12 +1,11 @@
 /**
- * Countries: the flag artwork and the list of places it can name.
+ * Countries: how the page paints a flag, and the picker of places.
  *
- * OWNS `FLAG_CODES`, the ISO-3166 alpha-2 order that IS the layout of
- * assets/flags.png, and therefore owns the only correct way to point at a
- * cell in that sprite. The same order is carried by the mobile app and by
- * the sprite generator, which makes the three of them ONE artefact in three
- * places: regenerate them together or every flag silently shifts to its
- * neighbour. The `flag-sprite` skill is that procedure.
+ * The ISO-3166 order that IS the sprite's layout lives in the shared
+ * `packages/flags`, so the two clients cannot disagree about which cell is
+ * whose (see the flag-sprite skill for regenerating the sprite and that list
+ * together). This module owns only what is the PAGE's: the CSS background
+ * positioning that turns an index into pixels, and the country picker.
  *
  * MUST NEVER decide anything about identity. A country is decoration beside
  * a name; nothing here reads or writes a profile, and an unknown code is
@@ -19,38 +18,11 @@
  * @module
  */
 
-// A regional-indicator pair is only a flag if the platform ships flag
-// glyphs, and Windows never has: there the pair degrades to two letters,
-// so the same board looked different depending on who was reading it. The
-// flags are artwork now (assets/flags.png, 250 of them from flag-icons,
-// MIT, see assets/flags.LICENSE.txt), which renders identically on every
-// platform, including the ones that have no emoji at all: a television, a
-// Steam machine, a phone with the emoji font stripped.
-//
-// The sprite is a 16-wide grid of 60x45 cells in alphabetical code order,
-// so the index IS the position and no lookup table has to be shipped or
-// kept in step with the art. FLAG_CODES is that order, two characters per
-// country; a code that is not in it simply has no flag, which is the same
-// answer as before for anything unknown.
-// The secret scanner sees a long high-entropy string; it is a public
-// ISO-3166 list whose ORDER is the sprite's layout, so it cannot be broken
-// up or reordered without moving every flag. The app's copy carries the
-// same disable for the same reason.
-// eslint-disable-next-line no-secrets/no-secrets -- public ISO-3166 list, see above
-const FLAG_CODES = 'ADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW';
-const FLAG_COLS = 16, FLAG_W = 20, FLAG_H = 15;
-// Read the pairs into a map once rather than searching the string. Not a
-// micro-optimisation: indexOf finds the FIRST occurrence, and 98 of the 250
-// codes also appear straddling two of their neighbours ('UG' sits inside
-// 'GU'+'GW' long before Uganda's own slot), so a search would answer with
-// somebody else's flag or, once guarded against that, with none at all.
-const FLAG_AT = new Map<string, number>();
-for (let i = 0; i < FLAG_CODES.length; i += 2) FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
-// -1 for anything the sprite does not carry, which callers read as "no flag"
-function flagIndex(code: string | null | undefined): number {
-  const i = code ? FLAG_AT.get(code) : undefined;
-  return i ?? -1;
-}
+import { FLAG_COLS, flagIndex } from '@pitch-snake/flags';
+
+// How large one cell paints HERE: the page's stylesheet scales the sprite to
+// 20x15 per flag, which is a display choice and not part of the shared order.
+const FLAG_W = 20, FLAG_H = 15;
 /**
  * Paint one element as a single flag.
  *

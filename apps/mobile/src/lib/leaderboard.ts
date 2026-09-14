@@ -6,6 +6,8 @@
  * hooks in hooks/queries/ are the sanctioned wrappers.
  * @module
  */
+import { isCountry } from '@pitch-snake/flags';
+
 import { authToken } from './auth';
 import { isRuleMode, type RuleMode } from './modes';
 import { SUPABASE_ANON_KEY, SUPABASE_CONFIGURED, SUPABASE_URL } from './supabase-config';
@@ -82,44 +84,6 @@ export async function rpc(fn: string, args: Record<string, unknown>): Promise<un
 // honest about the one place data enters from the network
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
-}
-
-/** A country is a two-letter code or it is nothing; junk renders no flag. */
-function isCountry(v: unknown): v is string {
-  return typeof v === 'string' && /^[a-z]{2}$/i.test(v);
-}
-
-/**
- * Flags are artwork, not emoji. A regional-indicator pair is only a flag if
- * the platform ships flag glyphs, and several do not, so the same board
- * looked different depending on who read it. assets/flags.png is a 16-wide
- * grid of 60x45 cells in alphabetical code order (250 flags, flag-icons,
- * MIT), which means the index IS the position and no lookup table has to be
- * shipped or kept in step with the art.
- */
-// no-secrets sees 500 opaque characters and high entropy, which is exactly
-// what it is meant to catch. This is the public ISO-3166 alpha-2 list in
-// alphabetical order, one country per two characters, and its shape IS the
-// sprite's layout: it cannot be broken up or reordered without moving every
-// flag. Disabled here deliberately rather than disguised.
-export const FLAG_CODES =
-  // eslint-disable-next-line no-secrets/no-secrets
-  'ADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCRCUCVCWCXCYCZDEDJDKDMDODZECEEEGEHERESETFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW';
-/** Cells per row in the sprite; the grid is 16 wide by 16 tall. */
-export const FLAG_COLS = 16;
-
-// Read the pairs into a map once rather than searching the string. Not a
-// micro-optimisation: indexOf finds the FIRST occurrence, and 98 of the 250
-// codes also appear straddling two of their neighbours ('UG' sits inside
-// 'GU' + 'GW' long before Uganda's own slot), so a search would answer with
-// somebody else's flag or, once guarded against that, with none at all.
-const FLAG_AT = new Map<string, number>();
-for (let i = 0; i < FLAG_CODES.length; i += 2) FLAG_AT.set(FLAG_CODES.slice(i, i + 2), i / 2);
-
-/** Grid position of a country in the sprite, or -1 when it has no flag. */
-export function flagIndex(code: string | null): number {
-  if (code === null) return -1;
-  return FLAG_AT.get(code) ?? -1;
 }
 
 /** The global top N for one rule mode, best first; server-ordered, server-limited. */

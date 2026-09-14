@@ -97,6 +97,10 @@ function stamp(html, files, v) {
     // a browser, versioned exactly like the path form.
     const pkg = /^packages\/([a-z-]+)\/build\/([a-z0-9-]+)\.js$/.exec(f);
     if (pkg) imports[`@pitch-snake/${pkg[1]}/${pkg[2]}`] = `./${f}?v=${v}`;
+    // A module named after its package is that package's root export too
+    // (flags/build/flags.js answers to '@pitch-snake/flags'), matching the
+    // "exports" map in its package.json.
+    if (pkg && pkg[2] === pkg[1]) imports[`@pitch-snake/${pkg[1]}`] = `./${f}?v=${v}`;
     if (f === 'packages/engine/engine.js') imports['@pitch-snake/engine'] = `./${f}?v=${v}`;
     if (f === 'packages/net/net.js') imports['@pitch-snake/net'] = `./${f}?v=${v}`;
   }

@@ -1,10 +1,10 @@
 ---
 name: flag-sprite
 description: >-
-  Regenerate assets/flags.png and the FLAG_CODES lists that index it. Use when
+  Regenerate assets/flags.png and the FLAG_CODES list that indexes it. Use when
   adding or removing a country, when the picker and the sprite disagree, when a
   flag renders as the wrong country, or when updating the flag-icons artwork.
-  The sprite and the two code lists are one artefact in three places.
+  The sprite and the shared code list are one artefact in two places.
 ---
 
 # Regenerating the flag sprite
@@ -17,11 +17,12 @@ thing that looks the same on a phone, a television and a Steam machine.
 
 `assets/flags.png` is a **16-wide grid of 60x45 cells, alphabetical by ISO-3166
 alpha-2**. A flag's grid position IS its index in that order, so no lookup
-table ships. Three things encode that same order and must move together:
+table ships. Two things encode that same order and must move together:
 
 1. `assets/flags.png` (and the identical copy in `apps/mobile/assets/`)
-2. `FLAG_CODES` in `index.html`
-3. `FLAG_CODES` in `apps/mobile/src/lib/leaderboard.ts`
+2. `FLAG_CODES` in `packages/flags/src/flags.ts`, the ONE copy both clients
+   import (since 2026-09-14; it was one string per client before that, and
+   this skill existed largely to keep them in step)
 
 Change one alone and every flag after the edit point silently shifts to the
 wrong country. Nothing errors.
@@ -43,7 +44,7 @@ non-countries AND deprecated aliases that would otherwise appear twice (`DY`,
 
 ```bash
 node -e "
-const NOT = new Set([/* paste NOT_COUNTRIES from index.html */]);
+const NOT = new Set([/* paste NOT_COUNTRIES from page/country-flags.ts */]);
 const dn = new Intl.DisplayNames(['en'], { type: 'region' });
 const out = [];
 for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
@@ -71,8 +72,9 @@ size with `deviceScaleFactor: 1`. **Serve the page over http** — a ~2MB
 ~67KB with no visible loss; verify by cropping the hard ones (BR, ES, PT, MX,
 NP, GB, IN, KH, BT) and comparing against full colour at 3x zoom.
 
-**5. Write all three places.** Copy the PNG to `assets/` and
-`apps/mobile/assets/`; update both `FLAG_CODES` strings.
+**5. Write both places.** Copy the PNG to `assets/` and
+`apps/mobile/assets/`; update `FLAG_CODES` in `packages/flags/src/flags.ts`
+and run `npm run build:packages` so the committed emit moves with it.
 
 **6. Verify by pulling cells back out.** Do not trust the build. Index a few
 countries with the clients' own arithmetic, crop those cells, and LOOK at

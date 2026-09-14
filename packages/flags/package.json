@@ -1,0 +1,14 @@
+{
+  "name": "@pitch-snake/flags",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "build/flags.js",
+  "types": "build/flags.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/flags.d.ts",
+      "default": "./build/flags.js"
+    }
+  }
+}

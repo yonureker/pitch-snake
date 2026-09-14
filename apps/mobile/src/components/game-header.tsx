@@ -34,7 +34,7 @@ import flagSheet from '@/assets/flags.png';
 import { DarkShell, GameColors, VS_COLORS } from '@/game/theme';
 
 import type { SeatRow } from '@/game/use-game-loop';
-import { FLAG_COLS, flagIndex } from '@/lib/leaderboard';
+import { FLAG_COLS, flagIndex } from '@pitch-snake/flags';
 import { CupIcon, GearIcon } from '@/components/tray-icons';
 
 const ANTON_FONT = 'Anton_400Regular';
