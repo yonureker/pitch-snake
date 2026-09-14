@@ -14,7 +14,7 @@ import {
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
   BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress, slowTick,
   CLINCH_GRACE_MS, CLINCH_GHOST_MS,
-  wetTick, PUDDLE_MAX_CELLS, RAIN_WARN_MS,
+  rainTick, RAIN_WARN_MS,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -2005,7 +2005,8 @@ test('a level round replays to the identical end', () => {
 // ever persisted, so no record was rewritten. v28 (weather) moved NOTHING,
 // by design rather than luck: replay defaults a knob-less log to a dry
 // round, and the rain rolls its own PRNG stream, so an old seed's food and
-// walls land where they always did.
+// walls land where they always did. v29 (rain drags the pitch, puddles
+// cut) moved nothing for the same reason.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -2435,30 +2436,28 @@ test('snapshot/restore round-trips a solo game too', () => {
   assert.deepEqual(g.snapshot(), h.snapshot(), 'and the resimulated future matches a straight run');
 });
 
-// ------------------------------------------------------------ weather (v28)
-// Rain is a rule, not a costume: puddles slow whoever stands in them, so
-// everything here is about the three ways that could break a round. The
-// dice: weather rides its OWN mulberry stream off the seed, so a rained-on
-// round and a dry one roll identical food and walls (that separation is
-// what let the v4 fixtures stand unmoved through this version). The pace:
-// water only ever LENGTHENS a tick, quantized like every timing constant,
-// and stacks multiplicatively with the bolt's drag. The state: the flood
-// snapshots whole, or a rollback would fork the room's sky.
+// ------------------------------------------------------------ weather (v29)
+// Rain is a rule, not a costume: while it pours, every snake and every ghost
+// takes rainTick-long steps (25%, quantized). v28's puddles are gone, cut by
+// the owner the day they shipped, so what is left to prove is small and
+// sharp. The dice: weather rides its OWN mulberry stream off the seed, so a
+// rained-on round and a dry one roll identical food and walls (that
+// separation is what lets the v4 fixtures stand unmoved through both
+// versions). The pace: rain only ever LENGTHENS a tick and stacks
+// multiplicatively with the bolt's drag. The state: the sky snapshots whole,
+// or a rollback would fork the shower.
 
 test('weather: the same seed rains the same rain', () => {
   const a = createGame({ seed: 7001, rainEveryMs: 1000 });
   const b = createGame({ seed: 7001, rainEveryMs: 1000 });
   a.advanceQuanta(2000);
   b.advanceQuanta(2000);
-  assert.equal(a.weather, b.weather, 'same phase');
-  assert.deepEqual([...a.puddleSet].sort(), [...b.puddleSet].sort(), 'same water');
-  assert.ok(a.puddleSet.size > 0, 'and it did actually rain inside 20s at this cadence');
+  assert.equal(a.weather, b.weather, 'same phase after 20s');
+  assert.equal(a.weatherEnd, b.weatherEnd, 'same phase clock');
+  assert.equal(a.rainNextAt, b.rainNextAt, 'same next shower');
 });
 
 test('weather: its dice never touch the round\'s own', () => {
-  // identical seeds, one dry and one due to rain: until the first drop of
-  // WATER exists, every shared-stream decision (food, walls) is identical,
-  // because the weather draws from its own generator
   const dry = createGame({ seed: 4242, rainEveryMs: 0 });
   const wet = createGame({ seed: 4242, rainEveryMs: 60000 });
   dry.advanceQuanta(3000);   // 30s: before the earliest possible shower (45s)
@@ -2466,82 +2465,74 @@ test('weather: its dice never touch the round\'s own', () => {
   const a = dry.snapshot(), b = wet.snapshot();
   assert.equal(a.rng, b.rng, 'the shared PRNG stream is untouched by scheduling');
   assert.deepEqual(a.food, b.food, 'the ball landed on the same cells all along');
-  assert.equal(b.puddles.length, 0, 'and no water exists yet');
 });
 
-test('weather: the wade lengthens the tick, and stacks with the drag', () => {
-  const g = quietGame({ rainEveryMs: 0 });
+test('weather: the downpour drags every snake, and stacks with the bolt', () => {
+  const g = quietGame({ rainEveryMs: 1000 });
   const p = g.players[0];
   const base = p.tickMs;
-  g._flood([K(g.snake[0].x, g.snake[0].y)]);
+  // walk into the downpour
+  for (let i = 0; i < 4000 && g.weather !== 'rain'; i++) g.advanceQuanta(1);
+  assert.equal(g.weather, 'rain', 'reached a downpour');
+  assert.equal(p.tickMs, rainTick(base), 'a raining pitch is a slower pitch');
+  assert.equal(p.tickMs % SIM_DT, 0, 'and the tick still lands on quanta');
+  // the bolt drags this snake too: factors multiply
+  p.slowUntil = g.clockMs + 60000;
   g.advanceQuanta(1);
-  assert.equal(p.tickMs, wetTick(base), 'standing in water is a longer step');
-  // now the bolt drags this snake too: factors multiply
-  p.slowUntil = g.clockMs + 5000;
-  g._flood([K(g.snake[0].x, g.snake[0].y)]);   // head may have stepped; soak it again
-  g.advanceQuanta(1);
-  assert.equal(p.tickMs, wetTick(slowTick(base)), 'a dragged snake wades slower still');
-  assert.equal(p.tickMs % SIM_DT, 0, 'and the result still lands on quanta');
-  // dry ground and a spent drag hand the base tick straight back
-  g.puddleSet.clear();
+  assert.equal(p.tickMs, rainTick(slowTick(base)), 'dragged AND rained-on is slower still');
+  // the sky clears and the base pace comes straight back
   p.slowUntil = 0;
-  g.advanceQuanta(1);
-  assert.equal(p.tickMs, base);
+  for (let i = 0; i < 4000 && g.weather !== 'clear'; i++) g.advanceQuanta(1);
+  assert.equal(g.weather, 'clear');
+  assert.equal(p.tickMs, base, 'clear skies hand the base tick back');
 });
 
-test('weather: a ghost stamps the wade on the step that lands in water', () => {
-  const g = quietGame({ scoreByTime: true, startLen: 31, startGhosts: 1, ghostEveryMs: 100000, rainEveryMs: 0 });
-  const all = [];
-  for (let k = 0; k < GRID * GRID; k++) all.push(k);
-  g._flood(all);                        // everywhere is wet: any step is a wade
-  g.advanceQuanta(GHOST_MS / SIM_DT + 2);
-  assert.equal(g.ghosts[0].stepMs, wetTick(GHOST_MS), 'the stamped span carries the wade');
+test('weather: a ghost steps rainTick-long while it pours', () => {
+  // the sky's clocks are poked directly, like every hazard clock in this
+  // suite: waiting for a natural shower gambles on an unsteered snake
+  // surviving the walk, and a dead round freezes the sim mid-warning
+  const g = quietGame({ startGhosts: 1, ghostEveryMs: 100000, rainEveryMs: 1000 });
+  g.rainNextAt = g.clockMs;            // the sky owes a warning now
+  g.advanceQuanta(1);
+  assert.equal(g.weather, 'warn');
+  g.weatherEnd = g.clockMs;            // and the warning is over
+  g.advanceQuanta(1);
+  assert.equal(g.weather, 'rain');
+  g.weatherEnd = g.clockMs + 100000;   // hold the downpour open for the step
+  g.advanceQuanta(rainTick(GHOST_MS) / SIM_DT + 2);
+  assert.equal(g.ghosts[0].stepMs, rainTick(GHOST_MS), 'the stamped span carries the rain');
   assert.ok(g.ghosts[0].stepMs % SIM_DT === 0);
 });
 
-test('weather: water is terrain, never occupancy', () => {
-  const g = quietGame({ rainEveryMs: 0 });
-  // a wet empty cell still spawns and still builds: cellOccupied cannot see it
-  const cx = wrap(g.snake[0].x + 5), cy = wrap(g.snake[0].y + 5);
-  g._flood([K(cx, cy)]);
-  assert.equal(g.cellOccupied(cx, cy), false, 'a puddle blocks nothing');
-});
-
-test('weather: the flood is capped and the shower dries back to clear', () => {
-  // walls off so the uninstructed snake survives the whole cycle: a dead
-  // round stops simulating, which would freeze the sky mid-shower
-  const g = createGame({ seed: 31337, rainEveryMs: 1000, wallsEnabled: false });
-  let peak = 0, sawRain = false, sawClear = false;
-  // one full cycle at the test cadence: due <=1.25s, warn 2s, rain <=12s,
-  // linger <=30s, dry 4s; 60s covers it with room
-  for (let i = 0; i < 6000; i++) {
+test('weather: warn, pour, clear, and the warning never slows anyone', () => {
+  const g = createGame({ seed: 60321, rainEveryMs: 1000, wallsEnabled: false });
+  const base = g.players[0].tickMs;
+  let sawWarn = false, sawRain = false;
+  for (let i = 0; i < 8000; i++) {
     g.advanceQuanta(1);
-    if (g.puddleSet.size > peak) peak = g.puddleSet.size;
-    if (g.weather === 'rain') sawRain = true;
-    if (sawRain && g.weather === 'clear') { sawClear = true; break; }
+    if (g.weather === 'warn') {
+      sawWarn = true;
+      assert.equal(g.players[0].tickMs, base, 'full pace under the warning');
+    }
+    if (g.weather === 'rain') { sawRain = true; assert.ok(sawWarn, 'the warning came first'); }
+    if (sawRain && g.weather === 'clear') return;
   }
-  assert.ok(sawRain, 'a shower happened');
-  assert.ok(sawClear, 'and dried all the way back to clear');
-  assert.ok(peak > 0 && peak <= PUDDLE_MAX_CELLS, `the flood peaked at ${peak}, inside the cap`);
-  assert.equal(g.puddleSet.size, 0, 'no orphan water after drying');
+  assert.fail('never completed a shower cycle');
 });
 
-test('weather: snapshot/restore carries the sky, the water and its dice', () => {
+test('weather: snapshot/restore carries the sky and its dice', () => {
   const g = createGame({ seed: 555, rainEveryMs: 1000 });
-  // walk into the middle of a downpour
   for (let i = 0; i < 4000 && g.weather !== 'rain'; i++) g.advanceQuanta(1);
   assert.equal(g.weather, 'rain', 'reached a downpour');
   const snap = g.snapshot();
-  const water = [...g.puddleSet].sort();
   const straight = createGame({ seed: 555, rainEveryMs: 1000 });
   straight.advanceQuanta(g.quanta + 800);
   g.advanceQuanta(1500);                     // wander past the snapshot
   g.restore(snap);
-  assert.deepEqual([...g.puddleSet].sort(), water, 'the flood came back exactly');
-  g.advanceQuanta(800);                      // and the resim re-rolls the same shower
+  g.advanceQuanta(800);                      // the resim re-rolls the same shower
   assert.equal(g.weather, straight.weather);
-  assert.deepEqual([...g.puddleSet].sort(), [...straight.puddleSet].sort(),
-    'a rollback resim rains the identical rain');
+  assert.equal(g.weatherEnd, straight.weatherEnd);
+  assert.equal(g.rainNextAt, straight.rainNextAt, 'a rollback resim rains the identical rain');
 });
 
 test('weather: a rained-on round replays to the same final state', () => {
@@ -2558,7 +2549,7 @@ test('weather: a rained-on round replays to the same final state', () => {
   assert.equal(r.score, g.score);
   assert.equal(r.deadReason, g.deadReason);
   assert.deepEqual(r.snake, g.snake);
-  assert.deepEqual([...r.puddleSet].sort(), [...g.puddleSet].sort(), 'down to the water on the pitch');
+  assert.equal(r.weather, g.weather, 'down to the sky at full time');
 });
 
 test('weather: an old log without the knob replays dry', () => {
@@ -2569,22 +2560,4 @@ test('weather: an old log without the knob replays dry', () => {
   log.end = 100;
   const r = replay(log);
   assert.equal(r.rainEveryMs, 0, 'absent means dry, the rules it was played by');
-});
-
-test('weather: the warning always precedes the water', () => {
-  const g = createGame({ seed: 60321, rainEveryMs: 1000 });
-  let warnedAt = -1;
-  for (let i = 0; i < 4000; i++) {
-    g.advanceQuanta(1);
-    if (g.weather === 'warn' && warnedAt < 0) {
-      warnedAt = g.clockMs;
-      assert.equal(g.puddleSet.size, 0, 'nothing is wet during the warning');
-    }
-    if (g.puddleSet.size > 0) {
-      assert.ok(warnedAt >= 0 && g.clockMs >= warnedAt + RAIN_WARN_MS,
-        'water only after the full warning, so no committed turn is ambushed');
-      return;
-    }
-  }
-  assert.fail('never rained');
 });

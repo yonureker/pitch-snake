@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 28;  // 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 29;  // 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -106,37 +106,26 @@ export const GHOST_SLOW_MS = 770;  // a slowed ghost's step
 // speed setting, and quantized onto the grid every timing constant lives on.
 export const slowTick = ms => Math.round(ms / 0.65 / SIM_DT) * SIM_DT;
 
-// ---- weather (v28) ----
-// Rain floods parts of the pitch and everything wades: water is TERRAIN, the
-// first thing in this engine that changes pace by where a mover stands. It is
-// deliberately NOT occupancy: food, TNT, windows, walls and ghosts all land
-// on water freely (a wall forming over a puddle simply covers it), because a
-// puddle that blocked spawns would quietly shrink every other system's board.
-// The whole feature rides its own PRNG stream (seed ^ WEATHER_SEED below), so
-// bolting weather onto the engine moved no die roll that already existed.
-// One shower: a warning (the sky says so, nothing is wet yet, so no committed
-// turn is ambushed by terrain), a downpour that grows 2-4 blobs cell by cell,
-// a wet spell where the water just stands (the tactical window, deliberately
-// the longest beat), and a drying that shrinks each blob edge-inward, so the
-// deep middle dries last and nobody has the floor vanish mid-wade in one tick.
-export const RAIN_WARN_MS = 2000;      // sky darkens, streaks start, no water yet
+// ---- weather (v29) ----
+// Rain slows the whole pitch: while it pours, every snake and every ghost
+// takes 25% longer steps. That is the entire mechanic since v29; v28 shipped
+// puddles as terrain and the owner cut them the same day (heavy legs
+// everywhere read better than route-around water, and one global state
+// beats forty cells of it). The feature rides its own PRNG stream
+// (seed ^ 0x9e3779b9), so weather moves no die roll that already existed.
+// One shower: a warning (the sky says so, nothing slows yet, so no committed
+// turn is ambushed by a pace change), then the downpour, then clear skies.
+export const RAIN_WARN_MS = 2000;      // sky darkens, streaks start, full pace
 export const RAIN_MIN_MS = 8000;       // a downpour lasts between these two,
 export const RAIN_MAX_MS = 12000;      //   seeded per shower
-export const PUDDLE_LINGER_MIN_MS = 20000;  // how long the water stands after
-export const PUDDLE_LINGER_MAX_MS = 30000;  //   the rain stops, seeded
-export const PUDDLE_DRY_MS = 4000;     // the shrink, edge-inward, in steps of
-export const PUDDLE_DRY_STEP_MS = 200; //   this many ms
-export const PUDDLE_GROW_MS = 500;     // one new cell per blob while it pours
-export const PUDDLE_MAX_CELLS = 40;    // ~10% of the board; routing never chokes
 export const RAIN_EVERY_MS = 60_000;   // mean shower cadence; each gap is seeded
                                        //   in [0.75, 1.25] of the knob
-// Wading: 35% longer steps for anyone standing in water, snake and ghost
-// alike, quantized onto the grid every timing constant lives on. Factors
-// MULTIPLY: a rival already dragged by a bolt wades slower still, which is
-// the stack the owner asked for by name. Water only ever LENGTHENS a tick,
-// so the index-order food tie-break ("no tick shorter than ten quanta") and
-// the doom window's REDIRECT_MS bounds both hold untouched.
-export const wetTick = ms => Math.round(ms * 1.35 / SIM_DT) * SIM_DT;
+// The downpour's drag: 25% longer steps for everyone, snake and ghost alike,
+// quantized onto the grid every timing constant lives on. Factors MULTIPLY:
+// a rival already dragged by a bolt is slower still in the rain. Rain only
+// ever LENGTHENS a tick, so the index-order food tie-break ("no tick shorter
+// than ten quanta") and the doom window's REDIRECT_MS bounds hold untouched.
+export const rainTick = ms => Math.round(ms * 1.25 / SIM_DT) * SIM_DT;
 
 // The doom window (rule 25): walking into a wall or yourself is not final
 // for this long. The head hangs mid-glide over the fatal cell; one safe
@@ -543,14 +532,11 @@ export function createGame(cfg = {}) {
     portalsUnlocked: 0, portalMarksSpent: 0, portalRetryAt: 0,
     portalExpireAt: 0, portalOpenedAt: 0,
 
-    // The sky and the water. weather walks clear -> warn -> rain -> wet ->
-    // drying -> clear on the hazard clock; puddleSet holds the wet cells by
-    // integer key (rule 9), read per frame by the renderers and per quantum
-    // by the pace resolver. rainBlobs is how many blobs this shower grows;
-    // dryOrder/dryNext exist only while drying. All of it snapshots, or a
-    // rollback would fork the flood.
-    weather: 'clear', weatherEnd: 0, rainNextAt: 0, rainBlobs: 0,
-    puddleSet: new Set(), puddleGrowNext: 0, dryOrder: [], dryNext: 0, dryPer: 0,
+    // The sky. weather walks clear -> warn -> rain -> clear on the hazard
+    // clock; while it is 'rain', every mover's pace resolver reads it and
+    // takes rainTick-long steps. Snapshots whole, or a rollback would fork
+    // the shower.
+    weather: 'clear', weatherEnd: 0, rainNextAt: 0,
 
     // what happened since the caller last drained; renderers turn these into
     // bursts, sprites and DOM updates. Sim state never depends on it.
@@ -749,95 +735,22 @@ export function createGame(cfg = {}) {
     if (p.slowUntil && S.clockMs >= p.slowUntil) p.slowUntil = 0;
   }
 
-  // The one place a snake's tick is decided (v28): the round's base, times
-  // the bolt's drag while it lasts, times the wade while the head's state
-  // cell is under water. Resolved every quantum, because water appears and
-  // dries under a snake between its own steps; setPace's no-op guard makes
-  // the quiet case free, and its rescale keeps the drawn head still when the
-  // answer changes (the sanctioned kind of pace change, rule 14).
+  // The one place a snake's tick is decided (v29): the round's base, times
+  // the bolt's drag while it lasts, times the rain while it pours. Resolved
+  // every quantum, because the sky changes between a snake's own steps;
+  // setPace's no-op guard makes the quiet case free, and its rescale keeps
+  // the drawn head still when the answer changes (the sanctioned kind of
+  // pace change, rule 14).
   function paceFor(p) {
     let t = S.clockMs < p.slowUntil ? slowTick(tickMs) : tickMs;
-    if (S.puddleSet.size && S.puddleSet.has(K(p.snake[0].x, p.snake[0].y))) t = wetTick(t);
+    if (S.weather === 'rain') t = rainTick(t);
     return t;
   }
 
-  // ---- weather (v28) ----
-  // Terrain, never occupancy: nothing below consults cellOccupied and
-  // nothing above consults the water, except the two pace readers. The
-  // renderers hear transitions and floods through events but read the truth
-  // from S.puddleSet per frame, exactly as they read walls.
-  const emitPuddles = () => emit({ t: 'puddles', cells: [...S.puddleSet] });
-
-  function seedBlobs() {
-    S.rainBlobs = 2 + ((wrandom() * 3) | 0);            // 2..4 blobs a shower
-    for (let b = 0; b < S.rainBlobs; b++) {
-      // eight bounded tries for a dry cell; a soaked board just grows fewer
-      // blobs this shower, which is not worth a scan to avoid (rule 10)
-      for (let tries = 0; tries < 8; tries++) {
-        const k = K((wrandom() * GRID) | 0, (wrandom() * GRID) | 0);
-        if (!S.puddleSet.has(k)) { S.puddleSet.add(k); break; }
-      }
-    }
-  }
-
-  // Every dry cell touching water, one bounded sweep over the wet set. The
-  // scan is an event-time cost (a growth pass every PUDDLE_GROW_MS), never
-  // per quantum, and the set is capped at PUDDLE_MAX_CELLS.
-  function puddleFrontier() {
-    const out = [];
-    for (const k of S.puddleSet) {
-      const x = k / GRID | 0, y = k % GRID;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nk = K(wrap(x + dx), wrap(y + dy));
-        if (!S.puddleSet.has(nk) && !out.includes(nk)) out.push(nk);
-      }
-    }
-    return out;
-  }
-
-  function growPuddles() {
-    let grew = false;
-    for (let b = 0; b < S.rainBlobs; b++) {
-      if (S.puddleSet.size >= PUDDLE_MAX_CELLS) break;
-      const frontier = puddleFrontier();
-      if (!frontier.length) break;
-      S.puddleSet.add(frontier[(wrandom() * frontier.length) | 0]);
-      grew = true;
-    }
-    if (grew) emitPuddles();
-  }
-
-  // Edge-inward: fewest wet neighbours dries first, wrandom breaking ties so
-  // the shrink is organic rather than a raster sweep. Computed once at the
-  // start of drying; close enough to a live re-sort to read right, and
-  // deterministic by construction.
-  function buildDryOrder() {
-    const rows = [];
-    // cells removed per pass, fixed from the STARTING size: recomputing it
-    // from the shrinking remainder each pass turned the drain geometric and
-    // stretched a full flood's 4s to ~6s (caught in review, never shipped)
-    S.dryPer = 0;
-    for (const k of S.puddleSet) {
-      const x = k / GRID | 0, y = k % GRID;
-      let wet = 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
-        if (S.puddleSet.has(K(wrap(x + dx), wrap(y + dy)))) wet++;
-      rows.push([k, wet, wrandom()]);
-    }
-    rows.sort((a, b) => (a[1] - b[1]) || (a[2] - b[2]));
-    S.dryOrder = rows.map(r => r[0]);
-    S.dryPer = Math.max(1, Math.ceil(S.dryOrder.length / (PUDDLE_DRY_MS / PUDDLE_DRY_STEP_MS)));
-  }
-
-  function dryPass() {
-    let dried = false;
-    for (let i = 0; i < S.dryPer && S.dryOrder.length; i++) {
-      const k = S.dryOrder.shift();
-      if (S.puddleSet.delete(k)) dried = true;
-    }
-    if (dried) emitPuddles();
-  }
-
+  // ---- weather (v29) ----
+  // Three phases on the hazard clock, nothing else: the renderers hear the
+  // transitions through events and read the truth from S.weather per frame,
+  // and the two pace readers do the same per quantum and per ghost step.
   function updateWeather() {
     if (!rainEveryMs) return;
     if (S.weather === 'clear') {
@@ -848,29 +761,13 @@ export function createGame(cfg = {}) {
     } else if (S.weather === 'warn') {
       if (S.clockMs >= S.weatherEnd) {
         S.weather = 'rain'; S.weatherEnd = S.clockMs + wrand(RAIN_MIN_MS, RAIN_MAX_MS);
-        S.puddleGrowNext = S.clockMs + PUDDLE_GROW_MS;
-        seedBlobs();
         emit({ t: 'weather', phase: 'rain' });
-        emitPuddles();
       }
     } else if (S.weather === 'rain') {
-      if (S.clockMs >= S.puddleGrowNext) { S.puddleGrowNext += PUDDLE_GROW_MS; growPuddles(); }
       if (S.clockMs >= S.weatherEnd) {
-        S.weather = 'wet'; S.weatherEnd = S.clockMs + wrand(PUDDLE_LINGER_MIN_MS, PUDDLE_LINGER_MAX_MS);
-        emit({ t: 'weather', phase: 'wet' });
-      }
-    } else if (S.weather === 'wet') {
-      if (S.clockMs >= S.weatherEnd) {
-        S.weather = 'drying'; buildDryOrder(); S.dryNext = S.clockMs;
-        emit({ t: 'weather', phase: 'drying' });
-      }
-    } else if (S.weather === 'drying') {
-      while (S.clockMs >= S.dryNext && S.dryOrder.length) { dryPass(); S.dryNext += PUDDLE_DRY_STEP_MS; }
-      if (S.puddleSet.size === 0) {
-        S.weather = 'clear'; S.dryOrder.length = 0;
+        S.weather = 'clear';
         S.rainNextAt = S.clockMs + wrand(rainEveryMs * 0.75, rainEveryMs * 1.25);
         emit({ t: 'weather', phase: 'clear' });
-        emitPuddles();
       }
     }
   }
@@ -1278,18 +1175,13 @@ export function createGame(cfg = {}) {
       if (S.ghosts.length > before) emit({ t: 'ghost', n: S.ghosts.length });
     }
     // What changes a ghost's pace: the bolt, earned and running out, and
-    // since v28 the water, worn while a step lands in it (rule 23 as
+    // since v29 the rain, worn by everyone while it pours (rule 23 as
     // amended). The span is stamped on the ghost as it steps, so the
-    // renderers interpolate the glide they are actually watching; a wade is
-    // judged on the DESTINATION cell, the same "standing in water" rule the
-    // snakes' pace resolver reads.
-    const stepMs = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
+    // renderers interpolate the glide they are actually watching.
+    let stepMs = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
+    if (S.weather === 'rain') stepMs = rainTick(stepMs);
     for (const g of S.ghosts) {
-      if (S.clockMs >= g.moveAt) {
-        moveGhost(g);
-        const ms = S.puddleSet.size && S.puddleSet.has(K(g.x, g.y)) ? wetTick(stepMs) : stepMs;
-        g.stepMs = ms; g.moveAt = S.clockMs + ms;
-      }
+      if (S.clockMs >= g.moveAt) { moveGhost(g); g.stepMs = stepMs; g.moveAt = S.clockMs + stepMs; }
     }
   }
 
@@ -1994,12 +1886,10 @@ export function createGame(cfg = {}) {
       portal: S.portal ? { ...S.portal } : null,
       portalsUnlocked: S.portalsUnlocked, portalMarksSpent: S.portalMarksSpent,
       portalRetryAt: S.portalRetryAt, portalExpireAt: S.portalExpireAt, portalOpenedAt: S.portalOpenedAt,
-      // the sky and the water travel whole, wrng included, or a rollback
-      // re-rolls a different shower and the room forks
+      // the sky travels whole, wrng included, or a rollback re-rolls a
+      // different shower and the room forks
       weather: S.weather, weatherEnd: S.weatherEnd, rainNextAt: S.rainNextAt,
-      rainBlobs: S.rainBlobs, wrng: wrngState,
-      puddles: [...S.puddleSet], puddleGrowNext: S.puddleGrowNext,
-      dryOrder: [...S.dryOrder], dryNext: S.dryNext, dryPer: S.dryPer,
+      wrng: wrngState,
       players: players.map(p => ({
         snake: p.snake.map(c => ({ x: c.x, y: c.y })),
         tailFrom: p.tailFrom ? { x: p.tailFrom.x, y: p.tailFrom.y } : null,
@@ -2040,10 +1930,7 @@ export function createGame(cfg = {}) {
     S.portalsUnlocked = s.portalsUnlocked; S.portalMarksSpent = s.portalMarksSpent;
     S.portalRetryAt = s.portalRetryAt; S.portalExpireAt = s.portalExpireAt; S.portalOpenedAt = s.portalOpenedAt;
     S.weather = s.weather; S.weatherEnd = s.weatherEnd; S.rainNextAt = s.rainNextAt;
-    S.rainBlobs = s.rainBlobs; wrngState = s.wrng | 0;
-    S.puddleSet = new Set(s.puddles);
-    S.puddleGrowNext = s.puddleGrowNext;
-    S.dryOrder = [...s.dryOrder]; S.dryNext = s.dryNext; S.dryPer = s.dryPer;
+    wrngState = s.wrng | 0;
     for (let i = 0; i < players.length; i++) {
       const p = players[i], q = s.players[i];
       p.snake.length = 0;
@@ -2128,8 +2015,6 @@ export function createGame(cfg = {}) {
     _updateWalls: updateWalls, _updateBombs: updateBombs,
     _updateGhosts: updateGhosts, _updatePortals: updatePortals, _updateBolt: updateBolt,
     _updateWeather: updateWeather,
-    // flood exact cells, for tests that need water under a known head
-    _flood: cells => { for (const k of cells) S.puddleSet.add(k); },
     _moveGhost: moveGhost, _ghostTarget: ghostTarget, _spawnPortal: spawnPortal, _closePortal: closePortal,
     // the walk a ghost standing at (x, y) sees to (tx, ty): sweep, then read
     _ghostDist: (x, y, tx, ty) => { ghostField({ x, y }, tx, ty); return fieldDist(x, y, tx, ty); },

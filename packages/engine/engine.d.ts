@@ -46,23 +46,17 @@ export declare const GHOST_SLOW_MS: number;
 /** A dragged snake's step, derived from the round's pace and quantized. */
 export declare function slowTick(ms: number): number;
 /**
- * Weather (v28). Rain floods puddles that slow whoever stands in them, snake
- * and ghost alike; water is terrain, never occupancy, and the whole feature
- * rolls its own PRNG stream so a rained-on seed's food and walls land where
- * they always did.
+ * Weather (v29). While it rains, every snake and every ghost takes 25%
+ * longer steps; the warning slows nobody, and the whole feature rolls its
+ * own PRNG stream so a rained-on seed's food and walls land where they
+ * always did. (v28's puddle terrain shipped and was cut the same day.)
  */
 export declare const RAIN_WARN_MS: number;
 export declare const RAIN_MIN_MS: number;
 export declare const RAIN_MAX_MS: number;
-export declare const PUDDLE_LINGER_MIN_MS: number;
-export declare const PUDDLE_LINGER_MAX_MS: number;
-export declare const PUDDLE_DRY_MS: number;
-export declare const PUDDLE_DRY_STEP_MS: number;
-export declare const PUDDLE_GROW_MS: number;
-export declare const PUDDLE_MAX_CELLS: number;
 export declare const RAIN_EVERY_MS: number;
-/** A wading mover's step: 35% longer, quantized; stacks with slowTick. */
-export declare function wetTick(ms: number): number;
+/** A rained-on mover's step: 25% longer, quantized; stacks with slowTick. */
+export declare function rainTick(ms: number): number;
 export declare const PORTAL_FIRST: number;
 export declare const PORTAL_EVERY: number;
 export declare const PORTAL_BONUS: number;
@@ -149,9 +143,7 @@ export type GameEvent = (
   /** A bolt taken: the pack drags until untilMs on the sim clock. */
   | { t: 'zap'; player: number; x: number; y: number; untilMs: number }
   /** The sky changed phase; the renderers tint and start or stop streaks. */
-  | { t: 'weather'; phase: 'warn' | 'rain' | 'wet' | 'drying' | 'clear' }
-  /** The water changed: the wet cells in full, by integer key. */
-  | { t: 'puddles'; cells: number[] }
+  | { t: 'weather'; phase: 'warn' | 'rain' | 'clear' }
   | { t: 'save'; player: number; x: number; y: number }
   /** `segments` is present only when the round continues without this snake
    *  (its body left the board); a round-ending death keeps the body. */
@@ -223,10 +215,9 @@ export interface Game {
   portalMarksSpent: number;
   portalRetryAt: number;
   portalExpireAt: number; portalOpenedAt: number;
-  /** The sky: clear -> warn -> rain -> wet -> drying -> clear, on the hazard clock. */
-  weather: 'clear' | 'warn' | 'rain' | 'wet' | 'drying';
-  /** The water, by integer cell key (x * GRID + y); read it per frame like walls. */
-  puddleSet: Set<number>;
+  /** The sky: clear -> warn -> rain -> clear, on the hazard clock. While it
+   *  is 'rain', every mover's tick is rainTick-long. */
+  weather: 'clear' | 'warn' | 'rain';
   rainEveryMs: number;
   events: GameEvent[]; log: RoundLog;
   /** Steer a snake; the shells that know one snake omit the player index. */
