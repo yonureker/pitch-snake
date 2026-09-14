@@ -4975,9 +4975,10 @@
     // actually moves. Reading the rect on EVERY press forced a synchronous
     // layout at the exact moment a fast player needs the frame budget most.
     if (!padRect) padRect = dpad.getBoundingClientRect();
-    padRecent.push({ x: e.clientX, y: e.clientY, t: performance.now(), by: undefined });
-    if (padRecent.length > 8) padRecent.shift();
     try { dpad.setPointerCapture(e.pointerId); } catch (err) {}
+    // a touch that got here first already played this press
+    if (padCovered('p', e.pointerId, e.clientX, e.clientY)) { traceMark('pD'); return; }
+    padNote('p', e.pointerId, e.clientX, e.clientY);
     const r = padResolve(e);                   // a press always picks a wedge
     firePad(e.pointerId, r.btn, r.assisted ? 'A' : 'p');
   });
@@ -5026,29 +5027,52 @@
   // the first one's receipt, and a genuine double delivery still dedupes,
   // because a real echo has a record of its own to match. The nearest record
   // is the one spent, so with two thumbs down each touch claims its own.
-  function padPointerCame(t) {
+  // Has the OTHER pipeline already delivered this press?
+  //
+  // Symmetric on purpose, and that is the second half of this fix. The order
+  // the two pipelines fire in is the browser's business, not ours: Chrome
+  // sends pointerdown then touchstart, and a browser that sends them the
+  // other way round would have made the backstop fire first and the pointer
+  // pipeline fire again, which is not a lost press but a DOUBLED one, and a
+  // doubled press is just as damaging: two entries where the player made one,
+  // the engine's three-deep queue full a third sooner, and the next real
+  // press dropped at the door. So each pipeline records its own receipt and
+  // claims only the other's, and the pad is correct under either ordering.
+  //
+  // `who` is the pipeline that wrote the receipt, `by` the finger that has
+  // spent it. A receipt serves exactly one finger: without that, one
+  // pointerdown vouched for every touch near it, which is what silently ate
+  // the second thumb of a fast corner (two thumbs land close together, iOS
+  // eats the second pointerdown, and the touch covering for it was mistaken
+  // for the first thumb's). Re-delivery of the SAME finger still matches its
+  // own receipt, so a repeated event cannot double-fire either.
+  function padCovered(who, id, x, y) {
     const now = performance.now();
     let best = -1, bestDist = Infinity;
     for (let i = padRecent.length - 1; i >= 0; i--) {
       const r = padRecent[i];
       if (now - r.t > 120) break;
-      // already vouched for THIS finger: a touch delivered twice still
-      // matches its own receipt, so the backstop cannot double-fire it
-      if (r.by === t.identifier) return true;
-      const dx = Math.abs(r.x - t.clientX), dy = Math.abs(r.y - t.clientY);
-      if (dx >= 44 || dy >= 44) continue;
+      if (r.who === who) continue;           // never claim your own pipeline's
+      if (r.by === id) return true;          // already spent on this finger
       if (r.by !== undefined) continue;      // spoken for by another finger
+      const dx = Math.abs(r.x - x), dy = Math.abs(r.y - y);
+      if (dx >= 44 || dy >= 44) continue;
       if (dx + dy < bestDist) { bestDist = dx + dy; best = i; }
     }
     if (best < 0) return false;
-    padRecent[best].by = t.identifier;       // claimed, and only by this one
+    padRecent[best].by = id;
     return true;
+  }
+  function padNote(who, id, x, y) {
+    padRecent.push({ who, x, y, t: performance.now(), by: undefined });
+    if (padRecent.length > 8) padRecent.shift();
   }
   dpad.addEventListener('touchstart', (e) => {
     e.preventDefault();       // no gesture may form over the pad
     if (!padRect) padRect = dpad.getBoundingClientRect();
     for (const t of e.changedTouches) {
-      if (padPointerCame(t)) continue;
+      if (padCovered('t', 'T' + t.identifier, t.clientX, t.clientY)) continue;
+      padNote('t', 'T' + t.identifier, t.clientX, t.clientY);
       traceMark('tB');        // the backstop caught one the pointer pipeline ate
       const r = padResolve(t);
       firePad('T' + t.identifier, r.btn, r.assisted ? 'A' : 'p');
