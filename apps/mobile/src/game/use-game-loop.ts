@@ -38,6 +38,7 @@ import {
   buildPicture,
   clearParticles,
   clearWallLayer,
+  sceneAnimating,
   spawnBurst,
   spawnFloat,
   stepParticles,
@@ -128,10 +129,6 @@ export interface GameLoop {
   debugDie: () => void;
   /** DEV-only frame meter: "fps avg / worst-frame ms", refreshed each second. */
   perfText: string;
-  /** DEV-only per-round input tally: every press and the engine's verdict
-   *  (ok / R reversal / = repeat / Q queue-full / . countdown / > room), so
-   *  a dropped combo press can be convicted where it actually died. */
-  inputAudit: string;
   pause: () => void;
   /** Direction input from any source; gated on phase like the web page. */
   steer: (x: number, y: number) => void;
@@ -197,8 +194,21 @@ function freshSeed(): number {
 }
 
 interface LoopBox {
-  /** Pictures from the last two frames; [0] may still be replaying natively. */
+  /**
+   * A ring of recently-replaced pictures, freed oldest-first several frames
+   * late so the render thread can never be handed a disposed one. Deeper
+   * than the two it began as: the death screen's re-render congests the UI
+   * thread for a burst of frames, and a shallow pool let a still-drawing
+   * picture be freed under it (the 'disposed object' crash on death).
+   */
   retired: (SkPicture | null)[];
+  /**
+   * Set on any transition into a STATIC state (dead, ready, paused) so the
+   * loop records ONE more picture to show it, then stops republishing while
+   * nothing moves. Consumed after that one publish; sceneAnimating() keeps
+   * the loop alive on its own while the crash dust and floats settle.
+   */
+  repaintOnce: boolean;
   frameCount: number;
   frameWorst: number;
   frameWindowStart: number;
@@ -231,16 +241,6 @@ interface LoopBox {
   lastCount: string;
   /** the last closing-seconds number pushed to state ('' outside them) */
   lastCall: string;
-  /**
-   * The one press the countdown keeps (the web's pre-aim, ported). Presses
-   * during the 3-2-1 used to flow into the engine's three-deep queue and
-   * replay over the opening steps: taps from five seconds before the whistle
-   * steering the round. Only the last press before kickoff means anything
-   * (it is where you want to open), so the count holds exactly that one and
-   * kickoff feeds it in.
-   */
-  /** DEV-only per-round tally of every press and the engine's verdict. */
-  audit: { ok: number; rev: number; rep: number; full: number; sent: number; tail: string[] };
 }
 
 function makeEmptyPicture(): SkPicture {
@@ -263,7 +263,8 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const pocket = useRef<SeedTicket | null>(null);
   const roundTicket = useRef<number | null>(null);
   const boxRef = useRef<LoopBox>({
-    retired: [null, null, null],
+    retired: [null, null, null, null, null, null],
+    repaintOnce: true,
     frameCount: 0,
     frameWorst: 0,
     frameWindowStart: 0,
@@ -287,7 +288,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     lastSeatHash: 0,
     lastCount: '',
     lastCall: '',
-    audit: { ok: 0, rev: 0, rep: 0, full: 0, sent: 0, tail: [] },
   });
   const picture = useSharedValue<SkPicture>(makeEmptyPicture());
 
@@ -317,12 +317,13 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   // accepted press grows it, doom saves included), . is a countdown press
   // (ignored by design: the count holds nothing since 2026-09-13), > went
   // to a room's shared timeline (its verdict lands at apply time).
-  const [inputAudit, setInputAudit] = useState('');
 
   // mirror render props into the loop's box after render, never during it
   useEffect(() => {
     boxRef.current.atlas = atlas;
     boxRef.current.boardPx = boardPx;
+    // a resize or a late-loaded atlas changes what a STATIC field should show
+    boxRef.current.repaintOnce = true;
   }, [atlas, boardPx]);
 
   // the stored personal best arrives once, async, and only ever raises
@@ -542,6 +543,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             setDeadReason(e.reason);
             box.phase = 'dead';
             setPhase('dead');
+            box.repaintOnce = true;
             box.lastCall = '';
             setLastCallText('');
             const finalScore = game.current?.score ?? 0;
@@ -654,6 +656,21 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           box.frameWorst = 0;
         }
       }
+      // Every phase but 'dead' repaints every frame: playing and countdown
+      // move, and ready and paused still shimmer (food pulse, portal spin)
+      // exactly as the web's always-drawing loop does. The DEAD screen is the
+      // one that mounts a heavy re-render (the TOP 100 board, flags, sheets)
+      // and congests the UI thread, and republishing a picture into that
+      // congestion is what let the render thread fall behind and draw a
+      // picture already retired and freed, the 'disposed object' crash on
+      // death. So once dead it records one last picture (the crash pose) and
+      // then only while the burst and floats are still settling; a still
+      // field is left on screen, retained and never freed.
+      const repaint = box.phase !== 'dead' || box.repaintOnce || sceneAnimating();
+      // rAF for the next frame is already scheduled at the top of loop(); a
+      // static dead field simply skips recording a new picture this frame.
+      if (!repaint) return;
+      box.repaintOnce = false;
       const previous = picture.value;
       _rc.boardPx = box.boardPx;
       _rc.atlas = box.atlas;
@@ -681,8 +698,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       // The sound players now prime at mount so that stall is gone, and this
       // holds one extra frame so an ordinary hitch can never reach a picture
       // the render thread has not finished.
-      const stale = box.retired[2];
+      const stale = box.retired[5];
       if (stale !== null && stale !== undefined) stale.dispose();
+      box.retired[5] = box.retired[4] ?? null;
+      box.retired[4] = box.retired[3] ?? null;
+      box.retired[3] = box.retired[2] ?? null;
       box.retired[2] = box.retired[1] ?? null;
       box.retired[1] = box.retired[0] ?? null;
       box.retired[0] = previous;
@@ -731,8 +751,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setCountText('3');
     box.lastCall = '';
     setLastCallText('');
-    box.audit = { ok: 0, rev: 0, rep: 0, full: 0, sent: 0, tail: [] };
-    if (__DEV__) setInputAudit('');
     box.phase = 'countdown';
     setPhase('countdown');
   };
@@ -742,54 +760,15 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     if (box.phase === 'playing') {
       box.phase = 'paused';
       setPhase('paused');
+      box.repaintOnce = true;
     }
-  };
-
-  const ARROW: Record<string, string> = { '0,-1': '↑', '0,1': '↓', '-1,0': '←', '1,0': '→' };
-  const auditNote = (x: number, y: number, mark: string): void => {
-    if (!__DEV__) return;
-    const box = boxRef.current;
-    const a = box.audit;
-    if (mark === '✓') a.ok++;
-    else if (mark === 'R') a.rev++;
-    else if (mark === '=') a.rep++;
-    else if (mark === 'Q') a.full++;
-    else if (mark === '>') a.sent++;
-    a.tail.push(`${ARROW[`${String(x)},${String(y)}`] ?? '?'}${mark === '✓' ? '' : mark}`);
-    if (a.tail.length > 12) a.tail.shift();
-    setInputAudit(
-      `ok${String(a.ok)} R${String(a.rev)} =${String(a.rep)} Q${String(a.full)}` +
-        `${a.sent > 0 ? ` >${String(a.sent)}` : ''} | ${a.tail.join(' ')}`,
-    );
-  };
-  // The engine's verdict on one solo press, read from what setDir DID: an
-  // accepted press grew the log (rule 12 records at press time, doom saves
-  // included), so anything else was refused, and the reason reconstructs
-  // from the same reference setDir filtered against, captured before the
-  // call. Solo only: a room press joins the shared timeline and is judged
-  // when its quantum plays.
-  const auditSolo = (
-    g: Game,
-    x: number,
-    y: number,
-    before: number,
-    refX: number,
-    refY: number,
-    qLen: number,
-  ): void => {
-    if (!__DEV__) return;
-    if (g.log.inputs.length > before) auditNote(x, y, '✓');
-    else if (qLen >= 3) auditNote(x, y, 'Q');
-    else if (x === -refX && y === -refY) auditNote(x, y, 'R');
-    else auditNote(x, y, '=');
   };
 
   const steer = (x: number, y: number): void => {
     const box = boxRef.current;
     if (box.phase !== 'playing' && box.phase !== 'countdown') return;
     if (box.phase === 'countdown') {
-      auditNote(x, y, '.'); // ignored by design: the count holds nothing
-      return;
+      return; // the countdown holds nothing; a press here is ignored by design
     }
     const g = game.current;
     if (g === null) return;
@@ -802,7 +781,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
       // the session stamps the true press time, broadcasts it, and feeds
       // the shared timeline (the web's dirInput, netcode edition)
       box.session.localDir(x, y, nowMs());
-      auditNote(x, y, '>');
       return;
     }
     // Stamp the press at the moment it happened, not at the last frame tick:
@@ -820,11 +798,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         box.lastFrameTs = now;
       }
     }
-    const ref = g.dirQueue[g.dirQueue.length - 1] ?? g.dir;
-    const before = g.log.inputs.length;
-    const qLen = g.dirQueue.length;
     g.setDir(x, y);
-    auditSolo(g, x, y, before, ref.x, ref.y, qLen);
   };
 
   const effectiveHeading = (): { x: number; y: number } | null => {
@@ -864,12 +838,14 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     // kit would otherwise undress the shirt. The web's applyWorn carries the
     // identical guard for the identical reason.
     boxRef.current.worn = { ...boxRef.current.worn, skin, hat };
+    boxRef.current.repaintOnce = true;
   };
 
   // the kit's own door, since it is chosen rather than bought and arrives on
   // its own beat (the profile query, not the wallet)
   const setKit = (kit: Kit): void => {
     boxRef.current.worn = { ...boxRef.current.worn, kit };
+    boxRef.current.repaintOnce = true;
   };
 
   // ---- a room's round (the session drives, this loop renders) ----
@@ -907,8 +883,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setClockText('');
     box.lastCall = '';
     setLastCallText('');
-    box.audit = { ok: 0, rev: 0, rep: 0, full: 0, sent: 0, tail: [] };
-    if (__DEV__) setInputAudit('');
     box.countClock = Math.min(1200, Math.max(0, preElapsedMs));
     box.lastCount = '';
     box.phase = 'countdown';
@@ -928,6 +902,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     if (box.vsIdx < 0) return;
     box.phase = 'dead';
     setPhase('dead');
+    box.repaintOnce = true;
     box.lastCall = '';
     setLastCallText('');
   };
@@ -962,6 +937,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     setScore(0);
     box.phase = 'ready';
     setPhase('ready');
+    box.repaintOnce = true;
   };
 
   // The ruleset for the NEXT round; refused mid-round so a running game can
@@ -1028,7 +1004,6 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     pause,
     steer,
     effectiveHeading,
-    inputAudit,
     debugDie,
     perfText,
     canSubmit,

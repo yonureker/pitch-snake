@@ -23,6 +23,7 @@ import {
   matchFont,
   type SkCanvas,
   type SkColor,
+  type SkHostRect,
   type SkImage,
   type SkPicture,
   type SkRect,
@@ -136,6 +137,22 @@ export function spawnFloat(gx: number, gy: number, cellPx: number, text: string,
   });
 }
 
+/**
+ * True while any transient paint is still moving: the crash/eat bursts and
+ * the +N floats. The loop uses it to know a STATIC scene (a dead field with
+ * the dust settled, a ready field, a paused field) needs no fresh picture, so
+ * it can stop recording and republishing one every frame. That is not just a
+ * saving: the death screen mounts a full re-render (the TOP 100 board, flags,
+ * sheets) that congests the UI thread for several frames, and republishing a
+ * picture into that congestion is what let the render thread fall far enough
+ * behind to draw a picture the loop had already retired and freed, the native
+ * 'Attempted to access a disposed object' crash on death. No new picture in
+ * that window, no picture to outrun.
+ */
+export function sceneAnimating(): boolean {
+  return particles.length > 0 || floats.length > 0;
+}
+
 /** Clear the particle pool (new round). */
 export function clearParticles(): void {
   particles.length = 0;
@@ -218,6 +235,10 @@ const C = {
   snakeOutline: Skia.Color(GameColors.snakeOutline),
   white: Skia.Color('#ffffff'),
   ghostEye: Skia.Color(GameColors.ghostEye),
+  // the bolt-slow dizzy halo, precomputed so the per-ghost per-frame draw
+  // never builds a colour (rule 5)
+  haloRing: Skia.Color('#eaf6ff'),
+  haloSpark: Skia.Color('#fff6c9'),
 } as const;
 const particleColorCache = new Map<string, SkColor>();
 function particleColor(hex: string): SkColor {
@@ -265,10 +286,23 @@ function bake(w: number, h: number, draw: (canvas: SkCanvas) => void): Baked | n
   return { image, w, h, src: Skia.XYWHRect(0, 0, image.width(), image.height()) };
 }
 
+// One reusable destination rect. drawBaked runs up to ~90 times a frame (every
+// segment, ghost and prop), and it used to allocate a fresh SkRect per call:
+// thousands of JSI host objects a second, pure GC food (rule 4), the kind of
+// steady churn that reads as micro-stutter next to the desktop canvas. The
+// recorder copies a rect's VALUES into the picture at record time rather than
+// retaining the object (the same invariant that lets b.src persist across
+// frames), so a single scratch reset per call is recorded correctly and frees
+// the allocation entirely. SkHostRect is mutable through setXYWH.
+const _destinationRect: SkHostRect = Skia.XYWHRect(0, 0, 0, 0);
+// two more scratch rects on the same reasoning: the atlas source for a food
+// blit, and the picture's recording bounds (which only change on resize).
+const _sourceRect: SkHostRect = Skia.XYWHRect(0, 0, 0, 0);
+const _bounds: SkHostRect = Skia.XYWHRect(0, 0, 0, 0);
+
 function drawBaked(canvas: SkCanvas, b: Baked, x: number, y: number, w?: number, h?: number): void {
-  // the destination rect is the one allocation left here; it goes when the
-  // segment runs move to drawAtlas with reused transform buffers
-  canvas.drawImageRect(b.image, b.src, Skia.XYWHRect(x, y, w ?? b.w, h ?? b.h), fillPaint);
+  _destinationRect.setXYWH(x, y, w ?? b.w, h ?? b.h);
+  canvas.drawImageRect(b.image, b.src, _destinationRect, fillPaint);
 }
 
 let bakedCell = 0;
@@ -794,12 +828,13 @@ function drawGhost(
     const ringY = gy - r * 1.35;
     const rx = r * 0.72;
     const ry = r * 0.26;
-    strokePaint.setColor(Skia.Color('#eaf6ff'));
+    strokePaint.setColor(C.haloRing);
     strokePaint.setStrokeWidth(Math.max(1.5, cell * 0.055));
     strokePaint.setAlphaf(0.75 + Math.sin(ph * 1.3) * 0.2);
-    canvas.drawOval(Skia.XYWHRect(gx - rx, ringY - ry, rx * 2, ry * 2), strokePaint);
+    _destinationRect.setXYWH(gx - rx, ringY - ry, rx * 2, ry * 2);
+    canvas.drawOval(_destinationRect, strokePaint);
     strokePaint.setAlphaf(1);
-    fillPaint.setColor(Skia.Color('#fff6c9'));
+    fillPaint.setColor(C.haloSpark);
     for (let k = 0; k < 2; k++) {
       const a = ph * 2.1 + k * Math.PI;
       fillPaint.setAlphaf(0.55 + Math.sin(a) * 0.4);
@@ -840,7 +875,8 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   sweepRetired();
   ensureSprites(rc.boardPx, rc.worn);
   const recorder = Skia.PictureRecorder();
-  const canvas = recorder.beginRecording(Skia.XYWHRect(0, 0, rc.boardPx, rc.boardPx));
+  _bounds.setXYWH(0, 0, rc.boardPx, rc.boardPx);
+  const canvas = recorder.beginRecording(_bounds);
   const cell = rc.boardPx / GRID;
   const now = game.renderNow();
 
@@ -900,12 +936,9 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       const sy = ((kind / ATLAS_COLS) | 0) * ATLAS_CELL;
       const d = cell * 1.02 * pulse;
       fillPaint.setAlphaf(foodAlpha);
-      canvas.drawImageRect(
-        rc.atlas,
-        Skia.XYWHRect(sx, sy, ATLAS_CELL, ATLAS_CELL),
-        Skia.XYWHRect(fx - d / 2, fy - d / 2, d, d),
-        fillPaint,
-      );
+      _sourceRect.setXYWH(sx, sy, ATLAS_CELL, ATLAS_CELL);
+      _destinationRect.setXYWH(fx - d / 2, fy - d / 2, d, d);
+      canvas.drawImageRect(rc.atlas, _sourceRect, _destinationRect, fillPaint);
       fillPaint.setAlphaf(1);
     }
   }

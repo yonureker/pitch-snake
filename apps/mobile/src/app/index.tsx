@@ -587,7 +587,7 @@ export default function Index() {
   // dynamic dimensions live in variables, not literals, so the inline-style
   // rule keeps its teeth for everything that CAN be a StyleSheet entry
   const screenPad = { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 6 };
-  const frameSize = { width: boardPx + 8, height: boardPx + 8 };
+  const frameSize = { width: boardPx, height: boardPx };
   const canvasSize = { width: boardPx, height: boardPx };
 
   return (
@@ -630,7 +630,6 @@ export default function Index() {
       />
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
-      {__DEV__ && loop.inputAudit !== '' && <Text style={styles.perf}>{loop.inputAudit}</Text>}
       {/* the app's stale-build banner, the page's twin: quiet, never
           blocking, and only shown where a restart is safe */}
       {update.ready && menuPhase && (
@@ -1243,7 +1242,19 @@ const styles = StyleSheet.create({
   },
   speedBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
   speedText: { fontFamily: BARLOW_BOLD, fontSize: 12, letterSpacing: 1, color: GameColors.ink },
-  boardWrap: { alignItems: 'center' },
+  boardWrap: {
+    alignItems: 'center',
+    // the web's canvas shadow (box-shadow: 0 14px 30px rgba(33,30,26,0.28)).
+    // It sits on the OUTER view, never the clipping one: overflow:'hidden'
+    // clips a shadow on iOS, so the round-and-clip lives one level in.
+    borderRadius: 9,
+    backgroundColor: GameColors.arena,
+    shadowColor: '#211e1a',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 30,
+    elevation: 12,
+  },
   claimBtn: {
     alignSelf: 'center',
     marginTop: 4,
@@ -1299,11 +1310,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   boardFrame: {
-    borderRadius: 14,
-    padding: 4,
-    backgroundColor: GameColors.ink,
-    borderWidth: 2,
-    borderColor: GameColors.gold,
+    // matches the web canvas: 9px rounded, no border (the gold frame read as a
+    // real wall to players). overflow clips the square-cornered Skia canvas.
+    borderRadius: 9,
+    overflow: 'hidden',
+    backgroundColor: GameColors.arena,
     alignItems: 'center',
     justifyContent: 'center',
   },

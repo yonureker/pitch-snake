@@ -58,17 +58,6 @@ const ZONE_DIRECTION: Record<Zone, PadDirection> = {
 /** How long a press stays lit after the finger leaves, so taps read. */
 const FLASH_MS = 180;
 
-const ZONE_GLYPH: Record<Zone, string> = { up: '↑', down: '↓', left: '←', right: '→' };
-
-// module-scope DEV trace buffer (not a ref: it is diagnostics, not UI state,
-// and the compiler's ref rules rightly stay out of module scope)
-const traceBuffer: string[] = [];
-function pushTrace(tag: string): string {
-  traceBuffer.push(tag);
-  if (traceBuffer.length > 12) traceBuffer.shift();
-  return traceBuffer.join(' ');
-}
-
 // one haptic per press-moment: a two-thumb chord lands as two downs a few
 // ms apart, and two selection ticks that close together feel like a buzz
 let lastHapticAt = 0;
@@ -115,18 +104,6 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lit, setLit] = useState<ReadonlySet<Zone>>(new Set());
   const [padSize, setPadSize] = useState({ w: 0, h: 0 });
-  // DEV-only delivery trace: what actually arrived (t down, a boundary-
-  // assisted down, m slide-fire, e lift, x swallowed echo), with the finger
-  // id and wedge, so a dropped
-  // press is distinguishable from one that never reached JS, a fat-finger
-  // wrong-wedge press shows its real glyph, and an x proves the echo guard
-  // caught a double delivery
-  const [trace, setTrace] = useState('');
-  const note = (tag: string): void => {
-    if (!__DEV__) return;
-    setTrace(pushTrace(tag));
-  };
-
   useEffect(() => {
     return () => {
       if (repaintTimer.current !== null) clearTimeout(repaintTimer.current);
@@ -178,7 +155,7 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   // legitimate input, so the engine cannot dedupe this; only the pad knows
   // what was one touch.)
   const ECHO_MS = 60;
-  const fireDown = (id: number, zone: Zone, tag: string): void => {
+  const fireDown = (id: number, zone: Zone): void => {
     const now = nowMs();
     const last = lastDownAt.current.get(id) ?? -1e9;
     // The zone comparison is load-bearing: an echo is the SAME wedge twice.
@@ -192,7 +169,6 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
       now - last < ECHO_MS &&
       lastFireNo.current.get(id) === fires.current
     ) {
-      note(`x${String(id)}`);
       lastDownAt.current.set(id, now);
       return;
     }
@@ -210,14 +186,13 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
     flashUntil.current[zone] = now + FLASH_MS;
     paint(now);
     hapticOncePerPress(now);
-    note(`${tag}${String(id)}${ZONE_GLYPH[zone]}`);
   };
 
   // a MOVE fires only on zone change: a finger resting in a wedge is one
   // press, not a stream of them
   const fireMove = (id: number, zone: Zone): void => {
     if (fingers.current.get(id) === zone) return;
-    fireDown(id, zone, 'm');
+    fireDown(id, zone);
   };
 
   // The boundary assist. A thumb drilling fast alternations strikes near the
@@ -303,15 +278,14 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
       if (fingers.current.has(t.id)) {
         fireMove(t.id, zoneAt(t.absoluteX, t.absoluteY)); // a slide into a new wedge
       } else {
-        const r = resolveDown(t.absoluteX, t.absoluteY); // a new press; assist may apply
-        fireDown(t.id, r.zone, r.assisted ? 'a' : 't');
+        fireDown(t.id, resolveDown(t.absoluteX, t.absoluteY).zone); // assist may apply
       }
     }
     for (const id of [...fingers.current.keys()]) {
       if (seen.has(id)) continue;
       lastDownAt.current.delete(id);
       lastFireNo.current.delete(id);
-      if (fingers.current.delete(id)) note(`e${String(id)}`);
+      fingers.current.delete(id);
     }
     paint(nowMs());
   };
@@ -350,7 +324,11 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
         reconcileRef.current(e.allTouches);
       })
       .onTouchesUp((e: GestureTouchEvent) => {
-        reconcileRef.current(e.allTouches);
+        // allTouches on an UP still lists the finger going up, so filter the
+        // changedTouches out: otherwise a lifted finger never leaves the held
+        // set and its wedge stays lit until the next touch.
+        const lifting = new Set(e.changedTouches.map((t) => t.id));
+        reconcileRef.current(e.allTouches.filter((t) => !lifting.has(t.id)));
       })
       .onTouchesCancelled(() => {
         clearRef.current();
@@ -449,11 +427,6 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
         >
           →
         </Text>
-        {__DEV__ && trace !== '' && (
-          <Text pointerEvents="none" style={styles.trace}>
-            {trace}
-          </Text>
-        )}
       </View>
     </GestureDetector>
   );
@@ -485,15 +458,6 @@ const styles = StyleSheet.create({
     color: GameColors.ink,
   },
   arrowOn: { color: GameColors.goldBright },
-  trace: {
-    position: 'absolute',
-    bottom: 4,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 10,
-    color: GameColors.muted,
-  },
   up: { top: '8%', left: '50%', transform: [{ translateX: '-50%' }] },
   down: { bottom: '8%', left: '50%', transform: [{ translateX: '-50%' }] },
   left: { left: '5%', top: '50%', transform: [{ translateY: '-50%' }] },
