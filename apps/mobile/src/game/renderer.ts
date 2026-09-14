@@ -25,6 +25,7 @@ import {
   type SkColor,
   type SkImage,
   type SkPicture,
+  type SkRect,
   type SkSurface,
 } from '@shopify/react-native-skia';
 import { buildPath } from './path-build';
@@ -64,12 +65,14 @@ export interface RenderContext {
    * rollback count. The count is here so the paint can absorb a corrected past
    * instead of teleporting through it; see vs-smoothing.ts.
    */
-  vs?: {
-    myIdx: number;
-    names: string[];
-    fits: { skin: string | null; hat: string | null }[];
-    rollbacks: number;
-  };
+  vs:
+    | {
+        myIdx: number;
+        names: string[];
+        fits: { skin: string | null; hat: string | null }[];
+        rollbacks: number;
+      }
+    | undefined;
 }
 
 // A rival is one ghost at one alpha: body, hat and tag fade together and
@@ -237,6 +240,11 @@ interface Baked {
   /** dp width/height the sprite is meant to be drawn at (scale 1). */
   w: number;
   h: number;
+  /** The whole image as a source rect, built ONCE at bake. It never changes
+   *  for the life of the sprite, and drawBaked runs up to ~90 times a frame
+   *  (every segment, ghost and prop goes through it), so allocating it there
+   *  was thousands of JSI host objects a second of pure GC food (rule 4). */
+  src: SkRect;
 }
 
 function bake(w: number, h: number, draw: (canvas: SkCanvas) => void): Baked | null {
@@ -254,20 +262,25 @@ function bake(w: number, h: number, draw: (canvas: SkCanvas) => void): Baked | n
   textureImage.dispose();
   surface.dispose();
   if (image === null) return null;
-  return { image, w, h };
+  return { image, w, h, src: Skia.XYWHRect(0, 0, image.width(), image.height()) };
 }
 
 function drawBaked(canvas: SkCanvas, b: Baked, x: number, y: number, w?: number, h?: number): void {
-  canvas.drawImageRect(
-    b.image,
-    Skia.XYWHRect(0, 0, b.image.width(), b.image.height()),
-    Skia.XYWHRect(x, y, w ?? b.w, h ?? b.h),
-    fillPaint,
-  );
+  // the destination rect is the one allocation left here; it goes when the
+  // segment runs move to drawAtlas with reused transform buffers
+  canvas.drawImageRect(b.image, b.src, Skia.XYWHRect(x, y, w ?? b.w, h ?? b.h), fillPaint);
 }
 
 let bakedCell = 0;
 let bakedBoard = 0;
+// reused per frame (rule 4): ghost render position, the engine's own pattern
+const _gp = { cx: 0, cy: 0 };
+// the kit key and rival tag widths, remembered instead of rebuilt per frame;
+// tagFont never rebuilds and a room holds at most five 5-char names, so the
+// width map cannot grow past a handful of entries
+let _kitKeyFor: Kit | null = null;
+let _kitKeyCached = '';
+const _tagWidths = new Map<string, number>();
 let arenaSprite: Baked | null = null;
 let snakeSprites: (Baked | null)[] = [];
 let ghostSprites: (Baked | null)[] = [];
@@ -554,7 +567,13 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
   const skin = worn?.skin ?? bakedSkin;
   const hatId = worn?.hat ?? bakedHatId;
   const kit = worn?.kit ?? bakedKit;
-  const wantKitKey = kitKey(kit);
+  // kitKey builds a string, and this runs per frame while the kit changes
+  // only at equip time: cache by the object the equip installed (rule 5)
+  if (kit !== _kitKeyFor) {
+    _kitKeyFor = kit;
+    _kitKeyCached = kitKey(kit);
+  }
+  const wantKitKey = _kitKeyCached;
   if (boardPx !== bakedBoard) {
     bakedBoard = boardPx;
     retire(arenaSprite?.image);
@@ -716,6 +735,25 @@ function segRenderPos(pl: Game | Player, i: number, p: number): { cx: number; cy
   return _rp;
 }
 
+function drawPortalEnd(
+  canvas: SkCanvas,
+  sprite: Baked,
+  gx: number,
+  gy: number,
+  angle: number,
+  cell: number,
+  sc: number,
+): void {
+  const px = gx * cell + cell / 2;
+  const py = gy * cell + cell / 2;
+  const d = sprite.w * sc;
+  canvas.save();
+  canvas.translate(px, py);
+  canvas.rotate(angle, 0, 0);
+  drawBaked(canvas, sprite, -d / 2, -d / 2, d, d);
+  canvas.restore();
+}
+
 function drawSegmentSprite(canvas: SkCanvas, sprite: Baked, cx: number, cy: number, cell: number): void {
   const x = cx * cell + cell / 2 - sprite.w / 2;
   const y = cy * cell + cell / 2 - sprite.h / 2;
@@ -834,21 +872,9 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       : 1;
     const sc = open * (1 + Math.sin(rc.pulseMs * 0.0048 * 1.3) * 0.05);
     const spin = ((rc.pulseMs * 0.0048 * 0.5 * 180) / Math.PI) % 360;
-    const ends: [Baked, number, number, number][] = [
-      [portalSpriteA, game.portal.ax, game.portal.ay, spin],
-      [portalSpriteB, game.portal.bx, game.portal.by, -spin],
-    ];
     fillPaint.setAlphaf(dim);
-    for (const [sprite, gx, gy, angle] of ends) {
-      const px = gx * cell + cell / 2;
-      const py = gy * cell + cell / 2;
-      const d = sprite.w * sc;
-      canvas.save();
-      canvas.translate(px, py);
-      canvas.rotate(angle, 0, 0);
-      drawBaked(canvas, sprite, -d / 2, -d / 2, d, d);
-      canvas.restore();
-    }
+    drawPortalEnd(canvas, portalSpriteA, game.portal.ax, game.portal.ay, spin, cell, sc);
+    drawPortalEnd(canvas, portalSpriteB, game.portal.bx, game.portal.by, -spin, cell, sc);
     fillPaint.setAlphaf(1);
   }
 
@@ -907,7 +933,9 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     const blinkOn = nearGone ? ((now / 120) | 0) % 2 === 0 : true;
     const d = tntSprite.w * tntPulse;
     fillPaint.setAlphaf(blinkOn ? 1 : 0.4);
-    for (const b of game.bombs) {
+    for (let i = 0; i < game.bombs.length; i++) {
+      const b = game.bombs[i];
+      if (b === undefined) continue;
       drawBaked(canvas, tntSprite, b.x * cell + (cell - d) / 2, b.y * cell + (cell - d) / 2, d, d);
     }
     fillPaint.setAlphaf(1);
@@ -959,7 +987,13 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       fillPaint.setAlphaf(0.6);
       const name = rc.vs.names[pi] ?? '?';
       if (tagFont === null) continue;
-      const tagW = tagFont.measureText(name).width;
+      // measureText shapes the text and returns a rect, per rival per frame
+      // for a name that is fixed all round: shape once, remember the width
+      let tagW = _tagWidths.get(name);
+      if (tagW === undefined) {
+        tagW = tagFont.measureText(name).width;
+        _tagWidths.set(name, tagW);
+      }
       fillPaint.setColor(particleColor(VS_COLORS[pi % VS_COLORS.length] ?? '#f4ecd8'));
       canvas.drawText(name, hx - tagW / 2, hy - cell * 0.75, fillPaint, tagFont);
       fillPaint.setAlphaf(1);
@@ -1027,11 +1061,10 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
 
   // ghosts: baked body + live pupils, tunnel copies like the web
   const bob = Math.sin(rc.pulseMs * 0.0048 * 1.1) * cell * 0.03;
-  const scratch = { cx: 0, cy: 0 };
   for (let i = 0; i < game.ghosts.length; i++) {
     const gh = game.ghosts[i];
     if (gh === undefined) continue;
-    const pos = ghostRenderPos(gh, now, scratch);
+    const pos = ghostRenderPos(gh, now, _gp);
     const wx =
       pos.cx < 0 ? pos.cx + GRID
       : pos.cx > GRID - 1 ? pos.cx - GRID
@@ -1050,8 +1083,10 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     if (wx !== null && wy !== null) drawGhost(canvas, i, wx, wy, gh.dir, lurch, cell, ph);
   }
 
-  // particles
-  for (const pt of particles) {
+  // particles (indexed: a for...of allocates its iterator per frame)
+  for (let i = 0; i < particles.length; i++) {
+    const pt = particles[i];
+    if (pt === undefined) continue;
     fillPaint.setColor(particleColor(pt.color));
     fillPaint.setAlphaf(Math.max(0, pt.life));
     canvas.drawCircle(pt.x, pt.y, cell * 0.1 * pt.life, fillPaint);

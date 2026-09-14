@@ -41,6 +41,7 @@ import {
   spawnBurst,
   spawnFloat,
   stepParticles,
+  type RenderContext,
 } from './renderer';
 import { resetVsSmoothing } from './vs-smoothing';
 import { playEat, playSfx } from './sfx';
@@ -163,6 +164,25 @@ const LAST_CALL_FROM = 5;
 // module scope: the compiler's purity rule refuses impure calls in component
 // bodies; event handlers reach the clock through this instead
 const nowMs = (): number => performance.now();
+
+// One render context, reused every frame (rule 4). buildPicture reads it
+// synchronously while recording, nothing retains it, so the loop fills the
+// same object instead of building a literal (and, in rooms, a spread) sixty
+// times a second on the thread the stutter lives on.
+const _rcVs = {
+  myIdx: 0,
+  names: [] as string[],
+  fits: [] as { skin: string | null; hat: string | null }[],
+  rollbacks: 0,
+};
+const _rc: RenderContext = {
+  boardPx: 0,
+  atlas: null,
+  pulseMs: 0,
+  playing: false,
+  worn: { skin: null, hat: null, kit: KIT_NONE },
+  vs: undefined,
+};
 
 // M:SS from milliseconds remaining, ceiling seconds so 0:00 only shows at the whistle
 function fmtClock(leftMs: number): string {
@@ -421,7 +441,11 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     const box = boxRef.current;
     game.current ??= createGame({ seed: freshSeed(), tickMs: SPEEDS.normal });
     const handleEvents = (g: Game, events: GameEvent[], cellPx: number): void => {
-      for (const e of events) {
+      // indexed rather than for...of: this runs every frame on the drain,
+      // and an iterator per frame is an allocation per frame (rule 4)
+      for (let evIdx = 0; evIdx < events.length; evIdx++) {
+        const e = events[evIdx];
+        if (e === undefined) continue;
         // the page's mineVol: in a room a rival's sound sits behind yours
         const evPlayer = 'player' in e ? e.player : undefined;
         const mineVol = box.vsIdx < 0 || evPlayer === undefined || evPlayer === box.vsIdx ? 1 : 0.35;
@@ -631,16 +655,22 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         }
       }
       const previous = picture.value;
-      picture.value = buildPicture(g, {
-        boardPx: box.boardPx,
-        atlas: box.atlas,
-        pulseMs: box.pulseMs,
-        playing: box.phase === 'playing',
-        worn: box.worn,
+      _rc.boardPx = box.boardPx;
+      _rc.atlas = box.atlas;
+      _rc.pulseMs = box.pulseMs;
+      _rc.playing = box.phase === 'playing';
+      _rc.worn = box.worn;
+      if (box.vsRc === null) _rc.vs = undefined;
+      else {
+        _rcVs.myIdx = box.vsRc.myIdx;
+        _rcVs.names = box.vsRc.names;
+        _rcVs.fits = box.vsRc.fits;
         // the rollback count rides along so the paint can absorb a corrected
         // past rather than teleport through it; see game/vs-smoothing.ts
-        vs: box.vsRc === null ? undefined : { ...box.vsRc, rollbacks: box.session?.stats.rollbacks ?? 0 },
-      });
+        _rcVs.rollbacks = box.session?.stats.rollbacks ?? 0;
+        _rc.vs = _rcVs;
+      }
+      picture.value = buildPicture(g, _rc);
       // Dispose pictures deterministically, THREE frames late, never to the
       // GC: a finalizer can release the native picture while the canvas is
       // still drawing it, which flickers. Two frames was the original margin
