@@ -92,6 +92,26 @@
     display: flex; flex-wrap: wrap; justify-content: center;
     align-items: center; gap: 8px; width: 100%;
   }
+  /* YOUR RECORD: a compact block of stat rows, each a label on the left and a
+     line of figures on the right. Same sheet tokens as the rest of the sheet. */
+  .prof-stats { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .prof-stats[hidden] { display: none; }
+  .prof-stats .stat-rows { display: flex; flex-direction: column; gap: 5px; }
+  .prof-stats .stat-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    padding: 6px 9px; border-radius: 7px;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-tint-line);
+  }
+  .prof-stats .stat-k {
+    font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
+    font-size: 11px; color: var(--sheet-gold); text-transform: uppercase; white-space: nowrap;
+  }
+  .prof-stats .stat-v {
+    font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 12px;
+    color: var(--sheet-ink); text-align: right; letter-spacing: 0.3px;
+  }
+  .prof-stats .stat-v b { font-family: 'Anton', sans-serif; font-weight: 400; letter-spacing: 0.5px; }
+  .prof-stats .stat-v .dim { color: var(--sheet-muted); }
   .prof-auth {
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     width: 100%; border-top: 1px solid rgba(194,162,90,0.35); padding-top: 12px;

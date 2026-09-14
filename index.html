@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=d0fa06366d">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=c5aa052f85">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=c5aa052f85">
 </head>
 <body>
   <div class="wrap">
@@ -72,7 +72,10 @@
         <div class="tally">
           <div class="label" id="scoreLabel">Score</div>
           <div class="val" id="score">0</div>
-          <div class="best">BEST <span id="best">0</span></div>
+          <div class="bests">
+            <div class="best"><i>SEASON</i> <span id="bestSeason">0</span></div>
+            <div class="best"><i>ALL-TIME</i> <span id="best">0</span></div>
+          </div>
         </div>
         <div class="clock" id="clock" hidden>1:00</div>
       </div>
@@ -362,6 +365,15 @@
         <button class="modal-x" id="profileClose" type="button" aria-label="Close" title="Close">&times;</button>
         <div class="modal-title" id="profTitle">Your account</div>
         <p class="lock-hint" id="profLock" hidden></p>
+        <!-- YOUR RECORD, derived server-side from the rounds already kept, so
+             it needs no account: a signed-out player has solo stats too. Read
+             fresh on open (a rating moves on other people's rounds) and left
+             out entirely when there is nothing to show yet, so a first-time
+             player is not met with a wall of zeroes. -->
+        <div class="prof-stats" id="profStats" hidden>
+          <div class="flabel">Your record</div>
+          <div class="stat-rows" id="statRows"></div>
+        </div>
         <!-- WHO YOU ARE, and it is gated behind a login since 2026-09-08 at the
              owner's call. The reason is the board: pitch_snake_top_scores only
              shows a row once there is an account behind it, so a username's
@@ -515,42 +527,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=d0fa06366d",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=d0fa06366d",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=d0fa06366d",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=d0fa06366d",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=d0fa06366d",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=d0fa06366d",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=d0fa06366d",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=d0fa06366d",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=d0fa06366d",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=d0fa06366d",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=d0fa06366d",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=d0fa06366d",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=d0fa06366d",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=d0fa06366d",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=d0fa06366d",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=d0fa06366d",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=d0fa06366d",
-    "./packages/net/net.js": "./packages/net/net.js?v=d0fa06366d",
-    "@pitch-snake/net": "./packages/net/net.js?v=d0fa06366d",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=d0fa06366d",
-    "./page/build/dom.js": "./page/build/dom.js?v=d0fa06366d",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=d0fa06366d",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=d0fa06366d",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=d0fa06366d",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=d0fa06366d",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=d0fa06366d",
-    "./page/build/shop.js": "./page/build/shop.js?v=d0fa06366d",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=d0fa06366d",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=d0fa06366d",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=d0fa06366d"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=c5aa052f85",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=c5aa052f85",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=c5aa052f85",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=c5aa052f85",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=c5aa052f85",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=c5aa052f85",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=c5aa052f85",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=c5aa052f85",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=c5aa052f85",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=c5aa052f85",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=c5aa052f85",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=c5aa052f85",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=c5aa052f85",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=c5aa052f85",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=c5aa052f85",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=c5aa052f85",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=c5aa052f85",
+    "./packages/net/net.js": "./packages/net/net.js?v=c5aa052f85",
+    "@pitch-snake/net": "./packages/net/net.js?v=c5aa052f85",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=c5aa052f85",
+    "./page/build/dom.js": "./page/build/dom.js?v=c5aa052f85",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=c5aa052f85",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=c5aa052f85",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=c5aa052f85",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=c5aa052f85",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=c5aa052f85",
+    "./page/build/shop.js": "./page/build/shop.js?v=c5aa052f85",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=c5aa052f85",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=c5aa052f85",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=c5aa052f85"
   }
 }
 </script>
@@ -665,6 +677,7 @@
   const startBtn = document.getElementById('startBtn');
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
+  const bestSeasonEl = document.getElementById('bestSeason');
   const entry = document.getElementById('entry');
   const nameInput = document.getElementById('nameInput');
   const saveBtn = document.getElementById('saveBtn');
@@ -753,10 +766,12 @@
   // never do, or browsing the modes would drain the pocket.
   function newRound(forReal) {
     beatBest = false;          // each round earns its own moment
+    beatSeasonBest = false;
     // the number to beat, captured before the round can move it: syncScoreDom
     // raises `best` mid-round, so by the time the result screen reads it the
     // previous best is already gone
     bestAtStart = bestByMode[ruleMode()] || 0;
+    seasonBestAtStart = bestSeasonByMode[ruleMode()] || 0;
     roundTicket = null;
     let seed;
     const ticket = forReal ? takeTicket() : null;
@@ -833,7 +848,9 @@
     // board and would not mean the same thing
     if (!inVs) {
       if (sc > best) { best = sc; bestByMode[ruleMode()] = best; beatBest = true; }
+      if (sc > bestSeason) { bestSeason = sc; bestSeasonByMode[ruleMode()] = bestSeason; beatSeasonBest = true; }
       bestEl.textContent = best;
+      bestSeasonEl.textContent = bestSeason;
     } else {
       syncMpHud();
     }
@@ -1032,7 +1049,12 @@
   function fillResult(score, reason) {
     resTag.textContent = ruleMode() === 'survival' ? 'SECONDS SURVIVED' : 'YOU SCORED';
     resScore.textContent = score;
-    stickBest.hidden = !beatBest;
+    // PB sticker, by tier: an all-time best is necessarily a season best too,
+    // so the higher tier reached is the one worth wearing. askIfItPlaces owns
+    // the world sticker (it has the cutoffs), so it stays hidden here.
+    if (beatBest) { stickBest.textContent = 'NEW BEST'; stickBest.hidden = false; }
+    else if (beatSeasonBest) { stickBest.textContent = 'SEASON BEST'; stickBest.hidden = false; }
+    else stickBest.hidden = true;
     stickTop.hidden = true;
   }
 
@@ -2372,8 +2394,10 @@
   // stops being an offer and becomes furniture, so it shows at most once a
   // session and gives up entirely after NUDGE_LIMIT refusals, remembered
   // across visits. Play is never gated on any of it.
-  let beatBest = false;          // this round passed the standing best
-  let bestAtStart = 0;           // what BEST was before this round started
+  let beatBest = false;          // this round passed the standing all-time best
+  let bestAtStart = 0;           // what all-time BEST was before this round
+  let beatSeasonBest = false;    // this round passed the standing SEASON best
+  let seasonBestAtStart = 0;     // what the season BEST was before this round
   let nudgedThisSession = false;
   const NUDGE_KEY = 'snakeAcctNo';
   const NUDGE_LIMIT = 3;
@@ -2598,20 +2622,33 @@
   async function syncBests() {
     if (!supabaseConfigured() || !sessionToken()) return;
     try {
-      const rows = await supabaseRpc('pitch_snake_my_bests', {});
-      if (!rows || typeof rows !== 'object') return;
+      // lifetime and this season in two calls, merged the same raise-only way
+      const [rows, srows] = await Promise.all([
+        supabaseRpc('pitch_snake_my_bests', {}),
+        supabaseRpc('pitch_snake_my_bests', { p_season: currentSeason() }),
+      ]);
       let raised = false;
-      for (const m of ['classic', 'survival']) {
-        const theirs = parseInt(rows[m], 10);
-        if (Number.isFinite(theirs) && theirs > (bestByMode[m] || 0)) {
-          bestByMode[m] = theirs;
-          raised = true;
+      if (rows && typeof rows === 'object') {
+        for (const m of ['classic', 'survival']) {
+          const theirs = parseInt(rows[m], 10);
+          if (Number.isFinite(theirs) && theirs > (bestByMode[m] || 0)) {
+            bestByMode[m] = theirs;
+            raised = true;
+          }
+        }
+      }
+      if (srows && typeof srows === 'object') {
+        for (const m of ['classic', 'survival']) {
+          const theirs = parseInt(srows[m], 10);
+          if (Number.isFinite(theirs) && theirs > (bestSeasonByMode[m] || 0)) {
+            bestSeasonByMode[m] = theirs;
+            raised = true;
+          }
         }
       }
       if (!raised) return;
       savePersonalBest();
-      best = bestByMode[ruleMode()] || 0;
-      bestEl.textContent = best;
+      refreshBestHud();
     } catch (e) { /* the board is a bonus; a device best is still a best */ }
   }
 
@@ -2824,7 +2861,27 @@
     if (!list) return;                   // a newer render owns the screen
     // The TOP 100 sticker is the entry gate worn on the score, and only the
     // WORLD board awards it: a device list cannot claim a worldwide standing.
-    if (!boardIsLocal && placesOnBoard(list, sc)) stickTop.hidden = false;
+    // Two tiers now, all-time and this-month; the month board is a subset of
+    // the same rows, so its cutoff is lower and an all-time place always beats
+    // a season one. One extra fetch for the season cutoff (death is not the
+    // hot path); the label wears whichever tier the round actually reached.
+    let seasonList = null;
+    if (!boardIsLocal && supabaseConfigured()) {
+      try {
+        seasonList = asList(await supabaseRpc('pitch_snake_top_scores',
+          { limit_count: MAX_ENTRIES, p_mode: ruleMode(), p_season: currentSeason() }))
+          .filter(r => r && typeof r.score === 'number');
+      } catch (e) { /* season badge is a bonus; its absence just shows no tier */ }
+      if (gen !== deathGen || state !== 'dead' || savedThisRound) return;
+    }
+    const stickTopLabel = stickTop.querySelector('i');
+    if (!boardIsLocal && placesOnBoard(list, sc)) {
+      if (stickTopLabel) stickTopLabel.textContent = 'ALL-TIME';
+      stickTop.hidden = false;
+    } else if (seasonList && placesOnBoard(seasonList, sc)) {
+      if (stickTopLabel) stickTopLabel.textContent = 'THIS MONTH';
+      stickTop.hidden = false;
+    }
     if (placesOnBoard(list, sc)) {
       // the round placed: the board earns its screen space, with your row
       boardWanted = true;
@@ -2874,6 +2931,13 @@
   // The pre-modes value migrates into classic the first time this loads.
   const BEST_KEY = 'snakeBestModes';
   let bestByMode = { classic: 0, survival: 0 };
+  // The SEASON best, the same idea on the monthly clock: kept under a key that
+  // carries the season it belongs to, so the reset is free. A stored best from
+  // a past month is simply ignored (the season no longer matches), and the
+  // month's high-water mark starts at zero, exactly as the server's does.
+  const BEST_SEASON_KEY = 'snakeBestSeason';
+  let bestSeasonByMode = { classic: 0, survival: 0 };
+  let bestSeason = 0;
   function loadPersonalBest() {
     try {
       const v = JSON.parse(localStorage.getItem(BEST_KEY));
@@ -2887,11 +2951,31 @@
         bestByMode.classic = parseInt(localStorage.getItem('snakeBest'), 10) || 0;
       }
     } catch (e) {}
-    best = bestByMode[ruleMode()] || 0;
-    bestEl.textContent = best;
+    try {
+      const v = JSON.parse(localStorage.getItem(BEST_SEASON_KEY));
+      // only this season's stored bests survive; a stale month resets to zero
+      if (v && typeof v === 'object' && v.season === currentSeason()) {
+        bestSeasonByMode.classic = parseInt(v.classic, 10) || 0;
+        bestSeasonByMode.survival = parseInt(v.survival, 10) || 0;
+      } else {
+        bestSeasonByMode = { classic: 0, survival: 0 };
+      }
+    } catch (e) {}
+    refreshBestHud();
   }
   function savePersonalBest() {
     try { localStorage.setItem(BEST_KEY, JSON.stringify({ ...bestByMode, sv2: true })); } catch (e) {}
+    try {
+      localStorage.setItem(BEST_SEASON_KEY,
+        JSON.stringify({ season: currentSeason(), ...bestSeasonByMode }));
+    } catch (e) {}
+  }
+  // both HUD numbers for the current mode, written together so they never drift
+  function refreshBestHud() {
+    best = bestByMode[ruleMode()] || 0;
+    bestSeason = bestSeasonByMode[ruleMode()] || 0;
+    bestEl.textContent = best;
+    bestSeasonEl.textContent = bestSeason;
   }
 
   async function submitScore() {
@@ -3229,8 +3313,7 @@
     const vsScreen = modesOpen && tScreen && (mode === 'versus' || mode === 'tourney');
     modesBtn.style.display = (onMenu && !vsScreen && !listScreen) ? '' : 'none';
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
-    best = bestByMode[ruleMode()] || 0;
-    bestEl.textContent = best;
+    refreshBestHud();
     markOverflow();
     rehomeFocus();      // this pass may have hidden whatever held the focus ring
   }
@@ -5773,7 +5856,10 @@
   stickTop.addEventListener('click', () => {
     const rm = ruleMode();
     boardsMode = (rm === 'classic' || rm === 'survival') ? rm : 'classic';
-    boardsWindow = 'all';
+    // open on the board the sticker earned: a THIS MONTH badge lands on the
+    // monthly face, an ALL-TIME one on the all-time face
+    const label = stickTop.querySelector('i');
+    boardsWindow = (label && label.textContent === 'THIS MONTH') ? 'month' : 'all';
     boardsHighlight = savedThisRound ? lastSaveKey : null;
     boardsModal.hidden = false;
     renderBoards();
@@ -5820,11 +5906,76 @@
     return locked;
   }
 
+  // YOUR RECORD, fetched fresh on open (a rating moves on other people's
+  // rounds, and solo stats change every round). All server-derived from rows
+  // already kept; a signed-out player still has solo stats, and the block
+  // stays hidden until there is at least one row worth showing.
+  let statsGen = 0;
+  async function renderProfileStats() {
+    const box = document.getElementById('profStats');
+    const list = document.getElementById('statRows');
+    if (!box || !list) return;
+    const gen = ++statsGen;
+    box.hidden = true;
+    list.innerHTML = '';
+    if (!supabaseConfigured()) return;
+    const season = currentSeason();
+    const signed = !!sessionToken();
+    let classic, survival, mp, rating, rivals;
+    try {
+      [classic, survival, mp, rating, rivals] = await Promise.all([
+        supabaseRpc('pitch_snake_my_stats', { p_mode: 'classic' }),
+        supabaseRpc('pitch_snake_my_stats', { p_mode: 'survival' }),
+        signed ? supabaseRpc('pitch_snake_my_mp_stats', {}) : Promise.resolve(null),
+        signed ? supabaseRpc('pitch_snake_my_rating_season', { p_season: season }) : Promise.resolve(null),
+        signed ? supabaseRpc('pitch_snake_recent_opponents', { p_limit: 3 }) : Promise.resolve(null),
+      ]);
+    } catch (e) { return; }        // stats are a bonus; their absence shows nothing
+    if (gen !== statsGen || profileModal.hidden) return;   // a newer open owns it
+    const add = (k, html) => {
+      const row = document.createElement('div'); row.className = 'stat-row';
+      const kk = document.createElement('span'); kk.className = 'stat-k'; kk.textContent = k;
+      const vv = document.createElement('span'); vv.className = 'stat-v'; vv.innerHTML = html;
+      row.append(kk, vv); list.appendChild(row);
+    };
+    let any = false;
+    const solo = (label, s) => {
+      const games = s ? (+s.games || 0) : 0;
+      if (!games) return;
+      any = true;
+      add(label, '<b>' + games + '</b> games <span class="dim">·</span> avg <b>' + (+s.avg || 0)
+        + '</b> <span class="dim">·</span> best <b>' + (+s.best || 0) + '</b>');
+    };
+    solo('Classic', classic);
+    solo('Survival', survival);
+    if (mp && (+mp.played)) {
+      any = true;
+      add('Multiplayer', '<b>' + (+mp.played) + '</b> played <span class="dim">·</span> <b>'
+        + (+mp.won) + '</b>W <span class="dim">/</span> <b>' + (+mp.lost) + '</b>L');
+    }
+    const own = rating && rating[ROOM_RULES];
+    if (own) {
+      any = true;
+      const gain = (+own.gain) || 0;
+      add('ELO this season', '<b>' + own.rating + '</b> <span class="dim">('
+        + (gain >= 0 ? '+' : '') + gain + ')</span>' + (own.provisional ? ' <span class="dim">P</span>' : ''));
+    }
+    const rivalRows = asList(rivals);
+    for (const r of rivalRows) {
+      if (!r || !r.games) continue;
+      any = true;
+      add('vs ' + (r.name || '?'), '<b>' + (+r.my_wins) + '</b><span class="dim">-</span><b>'
+        + (+r.their_wins) + '</b> <span class="dim">of ' + (+r.games) + '</span>');
+    }
+    if (any) box.hidden = false;
+  }
+
   function openProfile() {
     buildCountries(profCountry);
     refreshProfileSheet(true);
     syncProfileLock();
     profileModal.hidden = false;
+    void renderProfileStats();
     rehomeFocus();
   }
 

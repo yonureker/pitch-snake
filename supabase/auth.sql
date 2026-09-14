@@ -236,19 +236,23 @@ $$;
 -- the page can merge without branching on nulls.
 drop function if exists public.pitch_snake_my_bests();
 
-create or replace function public.pitch_snake_my_bests()
+drop function if exists public.pitch_snake_my_bests(text);
+create or replace function public.pitch_snake_my_bests(p_season text default null)
 returns json
 language sql
 security definer
 set search_path = ''
 stable
 as $$
+  -- p_season null is the lifetime best per mode (unchanged); a 'YYYY-MM'
+  -- windows it to that UTC month, so the same call feeds the season HUD.
   select coalesce(json_object_agg(t.mode, t.best), '{}'::json)
   from (
     select s.mode, max(s.score) as best
     from public.pitch_snake_scores s
     where s.user_id = auth.uid()
       and auth.uid() is not null
+      and (p_season is null or to_char(s.created_at at time zone 'utc', 'YYYY-MM') = p_season)
     group by s.mode
   ) t;
 $$;
@@ -349,8 +353,8 @@ revoke all on function public.pitch_snake_name_taken(text)         from public;
 grant execute on function public.pitch_snake_name_taken(text)      to anon, authenticated;
 
 revoke all on function public.pitch_snake_set_profile(text, text, text, text, integer) from public;
-revoke all on function public.pitch_snake_my_bests()                   from public;
+revoke all on function public.pitch_snake_my_bests(text)               from public;
 
 grant execute on function public.pitch_snake_get_profile()             to anon, authenticated;
 grant execute on function public.pitch_snake_set_profile(text, text, text, text, integer) to anon, authenticated;
-grant execute on function public.pitch_snake_my_bests()                to anon, authenticated;
+grant execute on function public.pitch_snake_my_bests(text)             to anon, authenticated;

@@ -130,7 +130,10 @@
      above its box bottom (screenshot-measured, re-tuned when the column
      grew to 13/48/17px on 2026-09-06) */
   .scores .label { margin-top: -3.5px; }
-  .scores .best { margin-bottom: -1px; }
+  /* two BEST lines now: the season high-water mark (resets on the 1st) over
+     the all-time one. The label is dimmed so the number reads first. */
+  .scores .bests { display: flex; flex-direction: column; margin-bottom: -1px; }
+  .scores .best i { font-style: normal; opacity: 0.62; letter-spacing: 1px; font-size: 0.82em; }
   /* shell tokens, not sheet tokens: these sit on the table and must flip
      with the theme (the nameplate's ink was invisible on the dark table) */
   .hdr-cluster .gear {

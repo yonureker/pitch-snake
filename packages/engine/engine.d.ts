@@ -45,6 +45,24 @@ export declare const BOLT_SLOW_MS: number;
 export declare const GHOST_SLOW_MS: number;
 /** A dragged snake's step, derived from the round's pace and quantized. */
 export declare function slowTick(ms: number): number;
+/**
+ * Weather (v28). Rain floods puddles that slow whoever stands in them, snake
+ * and ghost alike; water is terrain, never occupancy, and the whole feature
+ * rolls its own PRNG stream so a rained-on seed's food and walls land where
+ * they always did.
+ */
+export declare const RAIN_WARN_MS: number;
+export declare const RAIN_MIN_MS: number;
+export declare const RAIN_MAX_MS: number;
+export declare const PUDDLE_LINGER_MIN_MS: number;
+export declare const PUDDLE_LINGER_MAX_MS: number;
+export declare const PUDDLE_DRY_MS: number;
+export declare const PUDDLE_DRY_STEP_MS: number;
+export declare const PUDDLE_GROW_MS: number;
+export declare const PUDDLE_MAX_CELLS: number;
+export declare const RAIN_EVERY_MS: number;
+/** A wading mover's step: 35% longer, quantized; stacks with slowTick. */
+export declare function wetTick(ms: number): number;
 export declare const PORTAL_FIRST: number;
 export declare const PORTAL_EVERY: number;
 export declare const PORTAL_BONUS: number;
@@ -130,6 +148,10 @@ export type GameEvent = (
   | { t: 'bolt'; gone: boolean; x: number; y: number }
   /** A bolt taken: the pack drags until untilMs on the sim clock. */
   | { t: 'zap'; player: number; x: number; y: number; untilMs: number }
+  /** The sky changed phase; the renderers tint and start or stop streaks. */
+  | { t: 'weather'; phase: 'warn' | 'rain' | 'wet' | 'drying' | 'clear' }
+  /** The water changed: the wet cells in full, by integer key. */
+  | { t: 'puddles'; cells: number[] }
   | { t: 'save'; player: number; x: number; y: number }
   /** `segments` is present only when the round continues without this snake
    *  (its body left the board); a round-ending death keeps the body. */
@@ -201,6 +223,11 @@ export interface Game {
   portalMarksSpent: number;
   portalRetryAt: number;
   portalExpireAt: number; portalOpenedAt: number;
+  /** The sky: clear -> warn -> rain -> wet -> drying -> clear, on the hazard clock. */
+  weather: 'clear' | 'warn' | 'rain' | 'wet' | 'drying';
+  /** The water, by integer cell key (x * GRID + y); read it per frame like walls. */
+  puddleSet: Set<number>;
+  rainEveryMs: number;
   events: GameEvent[]; log: RoundLog;
   /** Steer a snake; the shells that know one snake omit the player index. */
   setDir(x: number, y: number, player?: number): void;
@@ -259,6 +286,10 @@ export interface GameConfig {
   ghostEveryMs?: number;
   bombEveryMs?: number;
   boltEveryMs?: number;
+  /** Mean gap between showers; each gap seeded in [0.75, 1.25] of it. 0 is a
+   *  dry round, and the default is RAIN_EVERY_MS (rain is the world's rule
+   *  since v28, classic and survival both; replay defaults old logs to 0). */
+  rainEveryMs?: number;
   /**
    * End the round with deadReason 'won' the moment the score reaches this
    * (levels only; 0 = no goal). Judged at the whistle's spot in the quantum,
