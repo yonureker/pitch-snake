@@ -43,6 +43,7 @@ import {
   stepParticles,
 } from './renderer';
 import { resetVsSmoothing } from './vs-smoothing';
+import { playEat, playSfx } from './sfx';
 
 /** The page-side round phases, mirroring the web version. */
 export type RoundPhase = 'ready' | 'countdown' | 'playing' | 'paused' | 'dead';
@@ -421,11 +422,16 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     game.current ??= createGame({ seed: freshSeed(), tickMs: SPEEDS.normal });
     const handleEvents = (g: Game, events: GameEvent[], cellPx: number): void => {
       for (const e of events) {
+        // the page's mineVol: in a room a rival's sound sits behind yours
+        const evPlayer = 'player' in e ? e.player : undefined;
+        const mineVol = box.vsIdx < 0 || evPlayer === undefined || evPlayer === box.vsIdx ? 1 : 0.35;
         switch (e.t) {
           case 'eat': {
             void Haptics.impactAsync(
               e.bonus ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
             );
+            if (e.bonus) playSfx('bonus', mineVol);
+            else playEat((g.bonusStreak + 4) % 5, mineVol);
             const color = e.bonus ? GameColors.goldBright : GameColors.food;
             spawnBurst(e.x, e.y, cellPx, e.bonus ? 30 : 16, 0.5, cellPx / 14, (cellPx / 14) * 2, () => color);
             if (box.mode !== 'survival' && (box.vsIdx < 0 || e.player === box.vsIdx))
@@ -434,6 +440,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           }
           case 'hop': {
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            playSfx('hop', mineVol);
             const leave = e.fromA ? GameColors.portalA : GameColors.portalB;
             const arrive = e.fromA ? GameColors.portalB : GameColors.portalA;
             spawnBurst(e.fx, e.fy, cellPx, 14, 0.7, (cellPx / 14) * 0.8, (cellPx / 14) * 2.6, () => leave);
@@ -446,6 +453,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           }
           case 'tnt': {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            playSfx('tnt', mineVol);
             for (const t of e.lost) {
               spawnBurst(t.x, t.y, cellPx, 6, 0.9, (cellPx / 14) * 0.5, (cellPx / 14) * 1.7, () => '#f4ecd8');
             }
@@ -457,29 +465,55 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             break;
           }
           case 'wall': {
-            if (e.phase === 'warning') bakeWallLayer(g, box.boardPx, false);
-            else if (e.phase === 'solid') bakeWallLayer(g, box.boardPx, true);
+            if (e.phase === 'warning') {
+              bakeWallLayer(g, box.boardPx, false);
+              playSfx('wallwarn');
+            } else if (e.phase === 'solid') {
+              bakeWallLayer(g, box.boardPx, true);
+              playSfx('wallsolid');
+            }
+            break;
+          }
+          case 'portal': {
+            // a pair falling due shimmers; its closing is silent, like the page
+            if (e.open) playSfx('portalopen');
+            break;
+          }
+          case 'ghost': {
+            playSfx('ghostin');
             break;
           }
           case 'zap': {
             // the bolt landed: the pack drags for five seconds
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            playSfx('zap', mineVol);
             break;
           }
           case 'save': {
             // the doom window paid off: a light tap for the great escape
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            playSfx('save', mineVol);
             break;
           }
           case 'die': {
             // In a room only MY death buzzes, and the round plays on around
             // the fallen: phase 'dead' arrives from the session's onEnd.
             if (box.vsIdx >= 0) {
+              // the page: my clinch flourishes, any other crash sounds (dimmed
+              // for a rival), and a timed end is silent here as there
+              if (e.reason === 'won') {
+                if (e.player === box.vsIdx) playSfx('flourish');
+              } else if (e.reason !== 'time') {
+                playSfx('crash', mineVol);
+              }
               if (e.player === box.vsIdx) {
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
               }
               break;
             }
+            // solo: the full-time whistle on a timed round, the crash otherwise
+            if (e.reason === 'time') playSfx('fulltime');
+            else playSfx('crash', 1);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             setDeadReason(e.reason);
             box.phase = 'dead';
@@ -524,6 +558,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
         if (text !== box.lastCount) {
           box.lastCount = text;
           setCountText(text);
+          // the page's `if (b === 3) sfxKickoff(); else sfxTick()`
+          if (text === 'START!') playSfx('kickoff');
+          else playSfx('tick');
         }
         if (box.countClock >= COUNT_TOTAL) {
           box.lastCount = '';

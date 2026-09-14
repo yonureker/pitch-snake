@@ -8,3 +8,8 @@ declare module '*.m4a' {
   const assetId: number;
   export default assetId;
 }
+// Sound effects ship as bundled asset ids too (assets/sfx/*.wav).
+declare module '*.wav' {
+  const assetId: number;
+  export default assetId;
+}

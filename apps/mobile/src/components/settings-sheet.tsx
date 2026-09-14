@@ -40,6 +40,9 @@ export interface SettingsSheetProps {
   onWalls: (on: boolean) => void;
   /** locked while a round is live, because walls reach the engine */
   wallsLocked: boolean;
+  /** the sfx layer; the page's SOUND toggle, free to change any time */
+  soundOn: boolean;
+  onSound: (on: boolean) => void;
   dark: boolean;
   onClose: () => void;
 }
@@ -53,6 +56,8 @@ export function SettingsSheet({
   wallsOn,
   onWalls,
   wallsLocked,
+  soundOn,
+  onSound,
   dark,
   onClose,
 }: SettingsSheetProps) {
@@ -91,6 +96,18 @@ export function SettingsSheet({
         {wallsLocked && (
           <Text style={[styles.lockHint, dark && darkStyles.label]}>Finish the round to change.</Text>
         )}
+      </View>
+      <View style={styles.row}>
+        <Text style={[styles.label, dark && darkStyles.label]}>SOUND</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            onSound(!soundOn);
+          }}
+          style={chip(soundOn)}
+        >
+          <Text style={chipText(soundOn)}>{soundOn ? 'ON' : 'OFF'}</Text>
+        </Pressable>
       </View>
       <View style={styles.row}>
         <Text style={[styles.label, dark && darkStyles.label]}>CROWD</Text>

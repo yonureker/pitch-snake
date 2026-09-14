@@ -43,6 +43,8 @@ import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';
 import { loadWallsPref, saveWallsPref } from '@/lib/walls-prefs';
+import { loadSfxPref, saveSfxPref } from '@/lib/sfx-prefs';
+import { setSfxEnabled } from '@/game/sfx';
 import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
@@ -287,6 +289,7 @@ export default function Index() {
   // as the page does.
   const [themePref, setThemePref] = useState<ThemePref>('auto');
   const [wallsOn, setWallsOn] = useState(true);
+  const [soundOn, setSoundOn] = useState(true);
   const systemScheme = useColorScheme();
   const dark = themePref === 'dark' || (themePref === 'auto' && systemScheme === 'dark');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -379,6 +382,10 @@ export default function Index() {
     void loadWallsPref().then((on) => {
       setWallsOn(on);
       loop.setWalls(on);
+    });
+    void loadSfxPref().then((on) => {
+      setSoundOn(on);
+      setSfxEnabled(on);
     });
     void loadModePrefs().then((prefs) => {
       setUiMode(prefs.uiMode);
@@ -1151,6 +1158,12 @@ export default function Index() {
                 wallsLocked={
                   loop.phase === 'playing' || loop.phase === 'countdown' || loop.phase === 'paused'
                 }
+                soundOn={soundOn}
+                onSound={(on) => {
+                  setSoundOn(on);
+                  setSfxEnabled(on);
+                  void saveSfxPref(on);
+                }}
                 dark={dark}
                 onClose={() => {
                   setSettingsOpen(false);
