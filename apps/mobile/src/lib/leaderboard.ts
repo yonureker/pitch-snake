@@ -138,6 +138,59 @@ export async function fetchTopScores(limit = 10, mode: RuleMode = 'classic'): Pr
   return out;
 }
 
+// ---- the ladder (ELO) ----
+
+/** One rung of the ladder, as pitch_snake_top_rated describes it. */
+export interface RatingRow {
+  name: string;
+  country: string | null;
+  rating: number;
+  /** fewer than ten rated rounds: listed and marked, the chess convention */
+  provisional: boolean;
+}
+
+/** Your own standing per mode, from pitch_snake_my_rating; {} when unrated. */
+export interface MyRating {
+  rating: number;
+  rounds: number;
+  provisional: boolean;
+}
+
+/**
+ * The world ladder. Rooms play and are rated as classic (ROOM_RULES in the
+ * page), so that is the one pool the sheet asks for.
+ */
+export async function fetchTopRated(limit = 100): Promise<RatingRow[]> {
+  const rows = await rpc('pitch_snake_top_rated', { p_mode: 'classic', p_limit: limit });
+  if (!Array.isArray(rows)) return [];
+  const list: unknown[] = rows;
+  const out: RatingRow[] = [];
+  for (const r of list) {
+    if (!isRecord(r)) continue;
+    const { name, country, rating, provisional } = r;
+    if (typeof name === 'string' && typeof rating === 'number') {
+      out.push({
+        name,
+        country: isCountry(country) ? country.toUpperCase() : null,
+        rating,
+        provisional: provisional === true,
+      });
+    }
+  }
+  return out;
+}
+
+/** Your own rating for rooms, or null when you have never been rated. */
+export async function fetchMyRating(): Promise<MyRating | null> {
+  const got = await rpc('pitch_snake_my_rating', {});
+  if (!isRecord(got)) return null;
+  const mine = got['classic'];
+  if (!isRecord(mine)) return null;
+  const { rating, rounds } = mine;
+  if (typeof rating !== 'number' || typeof rounds !== 'number') return null;
+  return { rating, rounds, provisional: rounds < 10 };
+}
+
 // Submitting a score is no longer a thing any client can do: the server
 // retired the client-score RPCs in favour of validated rounds (a seed from
 // pitch_snake_issue_seed, the finished round's LOG to the validate-score

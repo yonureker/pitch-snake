@@ -38,7 +38,7 @@ import { useSubmitScore } from '@/hooks/queries/use-submit-score';
 import { useSubmitTournamentScore } from '@/hooks/queries/use-submit-tournament-score';
 import { useTopScores } from '@/hooks/queries/use-top-scores';
 import { useTournamentTop } from '@/hooks/queries/use-tournament-top';
-import { BOARD_PLACES, FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
+import { FLAG_COLS, flagIndex, placesOnBoard, type TournamentRow } from '@/lib/leaderboard';
 import { loadWorn, saveWorn } from '@/lib/economy';
 import { loadModePrefs, saveModePrefs } from '@/lib/mode-prefs';
 import { loadThemePref, saveThemePref, type ThemePref } from '@/lib/theme-prefs';
@@ -46,20 +46,57 @@ import type { RuleMode, UiMode } from '@/lib/modes';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
 /**
- * The chooser's four doors, with the page's own one-line descriptions.
- *
- * The app listed bare titles, so the chooser said what each mode is CALLED
- * and never what it IS. The page has always sold them: a mode nobody
- * understands is a mode nobody picks, and SURVIVAL in particular inverts the
- * whole game, which a title cannot say. Wording taken from index.html so the
- * two cannot drift, TOURNAMENTS included, which the app had singular.
+ * The chooser, the page's narrow layout exactly: one accent colour per mode
+ * (a tile with no accent read as disabled next to its coloured siblings, the
+ * page's comment says), the buttons carrying TITLES ONLY, and one paragraph
+ * above them describing the SELECTED mode. The page's wide tiles put blurbs
+ * inside the buttons; its phone layout never does, and the phone is the
+ * layout this screen is.
  */
-const MODE_LABELS: { mode: UiMode; label: string; blurb: string }[] = [
-  { mode: 'classic', label: 'CLASSIC', blurb: 'No time limit. Chase the top 100.' },
-  { mode: 'survival', label: 'SURVIVAL', blurb: 'The clock is the score.' },
-  { mode: 'versus', label: 'MULTIPLAYER', blurb: 'Five snakes, one seed.' },
-  { mode: 'tourney', label: 'TOURNAMENTS', blurb: 'A code, a window, one board.' },
+const MODE_LABELS: { mode: UiMode; label: string }[] = [
+  { mode: 'classic', label: 'CLASSIC' },
+  { mode: 'survival', label: 'SURVIVAL' },
+  { mode: 'versus', label: 'MULTIPLAYER' },
+  { mode: 'tourney', label: 'TOURNAMENTS' },
 ];
+
+/* One static sheet per accent, because no-inline-styles is right that colour
+   belongs in StyleSheet.create; the lookup below is the only indirection. */
+const accentStyles = StyleSheet.create({
+  classicEdge: { borderColor: '#c9a961' },
+  classicFill: { backgroundColor: '#c9a961' },
+  classicInk: { color: '#c9a961' },
+  survivalEdge: { borderColor: '#e2803a' },
+  survivalFill: { backgroundColor: '#e2803a' },
+  survivalInk: { color: '#e2803a' },
+  versusEdge: { borderColor: '#7dbf5c' },
+  versusFill: { backgroundColor: '#7dbf5c' },
+  versusInk: { color: '#7dbf5c' },
+  tourneyEdge: { borderColor: '#a878d8' },
+  tourneyFill: { backgroundColor: '#a878d8' },
+  tourneyInk: { color: '#a878d8' },
+  chosenInk: { color: '#211e1a' },
+});
+const MODE_ACCENT: Record<UiMode, { edge: object; fill: object; ink: object }> = {
+  classic: { edge: accentStyles.classicEdge, fill: accentStyles.classicFill, ink: accentStyles.classicInk },
+  survival: {
+    edge: accentStyles.survivalEdge,
+    fill: accentStyles.survivalFill,
+    ink: accentStyles.survivalInk,
+  },
+  versus: { edge: accentStyles.versusEdge, fill: accentStyles.versusFill, ink: accentStyles.versusInk },
+  tourney: { edge: accentStyles.tourneyEdge, fill: accentStyles.tourneyFill, ink: accentStyles.tourneyInk },
+};
+
+/** The page's MODE_DESC, word for word. */
+const MODE_DESC: Record<UiMode, string> = {
+  classic: 'No time limit. Beat your best, take a top 100 spot, brag about your snake skills.',
+  survival:
+    'Time is the score. Emojis shrink you, TNT feeds you, and every ten seconds the pitch turns meaner.',
+  versus: 'Settle disputes the friendly way. Hunger Games, snake edition.',
+  tourney: 'A private board among friends, so you can bet all your money and lose it.',
+};
+
 /**
  * The strapline per mode, the page's STRAPLINES ported. "Eat to grow" over
  * survival's table, where eating SHRINKS you, contradicted the very rules it
@@ -72,9 +109,7 @@ const STRAPLINE: Record<RuleMode, string> = {
 
 /**
  * The legend per mode, the page's applyLegend ported word for word. Survival
- * inverts what the food and the TNT do and its teleport trip pays nothing, so
- * a fixed classic table on a survival kick-off was telling the player the
- * opposite of the rules they were about to play.
+ * inverts what the food and the TNT do and its teleport trip pays nothing.
  */
 const LEGEND: Record<RuleMode, { text: string; value: string; tone: 'pos' | 'neg' }[]> = {
   classic: [
@@ -417,11 +452,16 @@ export default function Index() {
   // picking a plain ruleset is a complete decision, so the chooser closes on
   // it; picking TOURNAMENT navigates to its own step, where the join/create
   // business fits without stretching the overlay past the board
+  // Selecting only selects, exactly like the page: the description swaps and
+  // START's sub follows. The versus and tournament doors open from START.
   const pickFromList = (m: UiMode): void => {
     pickMode(m);
-    if (m === 'tourney') setTScreen(true);
-    else if (m === 'versus') setVScreen(true);
-    else setShowModes(false);
+  };
+  const startFromModes = (): void => {
+    setShowModes(false);
+    if (uiMode === 'tourney') setTScreen(true);
+    else if (uiMode === 'versus') setVScreen(true);
+    else startRound();
   };
 
   // `chosen` exists for the claim: a name saved a moment ago is not in
@@ -497,8 +537,6 @@ export default function Index() {
   const placed = !worldBoard || topScores.isError || (judged && placesOnBoard(topScores.data, loop.score));
   // what a miss would have had to beat, and null whenever there is nothing to
   // say; a board with room always places, so a miss always has a tenth
-  const tenthScore =
-    wantsEntry && judged && !placed ? (topScores.data[BOARD_PLACES - 1]?.score ?? null) : null;
   const saving = submit.isPending || tSubmit.isPending;
   const menuPhase = loop.phase === 'ready' || dead;
   // a room round actually on the pitch: the header swaps its score block for
@@ -760,7 +798,7 @@ export default function Index() {
                   </>
                 : <>
                     <Text style={styles.overlayTitle}>MODES</Text>
-                    <Text style={styles.overlayText}>Choose your game.</Text>
+                    <Text style={styles.modeDesc}>{MODE_DESC[uiMode]}</Text>
                     <View style={styles.modeList}>
                       {MODE_LABELS.map((m) => (
                         <Pressable
@@ -769,26 +807,38 @@ export default function Index() {
                           onPress={() => {
                             pickFromList(m.mode);
                           }}
-                          style={[styles.modeBtn, uiMode === m.mode && styles.modeBtnOn]}
+                          style={[
+                            styles.modeBtn,
+                            MODE_ACCENT[m.mode].edge,
+                            uiMode === m.mode && MODE_ACCENT[m.mode].fill,
+                          ]}
                         >
-                          <Text style={[styles.modeBtnText, uiMode === m.mode && styles.modeBtnTextOn]}>
+                          <Text
+                            style={[
+                              styles.modeBtnText,
+                              uiMode === m.mode ? accentStyles.chosenInk : MODE_ACCENT[m.mode].ink,
+                            ]}
+                          >
                             {m.label}
-                          </Text>
-                          <Text style={[styles.modeBtnSub, uiMode === m.mode && styles.modeBtnSubOn]}>
-                            {m.blurb}
                           </Text>
                         </Pressable>
                       ))}
                     </View>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setShowModes(false);
-                      }}
-                      style={styles.tGhostBtn}
-                    >
-                      <Text style={styles.tGhostText}>DONE</Text>
-                    </Pressable>
+                    <View style={styles.btnRow}>
+                      <Pressable accessibilityRole="button" onPress={startFromModes} style={styles.startBtn}>
+                        <Text style={styles.startText}>START</Text>
+                        <Text style={styles.startSub}>{RULE_LABEL[ruleMode]}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setShowModes(false);
+                        }}
+                        style={styles.tGhostBtn}
+                      >
+                        <Text style={styles.tGhostText}>BACK</Text>
+                      </Pressable>
+                    </View>
                   </>
 
               : <>
@@ -876,9 +926,6 @@ export default function Index() {
                       </Pressable>
                     </View>
                   )}
-                  {tenthScore !== null && (
-                    <Text style={styles.saveNoteSoft}>Top 10 starts at {tenthScore}.</Text>
-                  )}
                   {dead && (submit.isError || tSubmit.isError) && (
                     <Text style={styles.saveNote}>Could not reach the leaderboard. Try again.</Text>
                   )}
@@ -925,43 +972,41 @@ export default function Index() {
                       }
                     </View>
                   )}
-                  {dead && SUPABASE_CONFIGURED && uiMode !== 'tourney' && uiMode !== 'versus' && (
-                    <View style={styles.standings}>
-                      <Text style={styles.boardHead}>
-                        TOP 10 WORLDWIDE{ruleMode === 'classic' ? '' : ` \u00b7 ${RULE_LABEL[ruleMode]}`}
-                      </Text>
-                      {topScores.isPending ?
-                        <Text style={styles.boardEmpty}>Loading…</Text>
-                      : topScores.isError ?
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => {
-                            void topScores.refetch();
-                          }}
-                        >
-                          <Text style={styles.boardEmpty}>Could not reach the board. Tap to retry.</Text>
-                        </Pressable>
-                      : topScores.data.length === 0 ?
-                        <Text style={styles.boardEmpty}>No scores yet</Text>
-                      : <ScrollView style={styles.boardList}>
-                          {topScores.data.map((row, i) => (
-                            <View key={row.id} style={styles.boardRow}>
-                              <Text style={[styles.boardRank, row.id === submittedId && styles.boardMine]}>
-                                {i + 1}
-                              </Text>
-                              <Flag code={row.country} />
-                              <Text style={[styles.boardName, row.id === submittedId && styles.boardMine]}>
-                                {row.name}
-                              </Text>
-                              <Text style={[styles.boardScore, row.id === submittedId && styles.boardMine]}>
-                                {row.score}
-                              </Text>
-                            </View>
-                          ))}
-                        </ScrollView>
-                      }
-                    </View>
-                  )}
+                  {/* THE BOARD EARNS ITS SCREEN SPACE, the page's rule: it
+                      shows only when this round actually placed on it. The
+                      always-on board was deprecated on the page long ago; the
+                      curious have the trophy. */}
+                  {dead &&
+                    SUPABASE_CONFIGURED &&
+                    uiMode !== 'tourney' &&
+                    uiMode !== 'versus' &&
+                    judged &&
+                    placesOnBoard(topScores.data, loop.score) && (
+                      <View style={styles.standings}>
+                        <Text style={styles.boardHead}>
+                          TOP 10 WORLDWIDE{ruleMode === 'classic' ? '' : ` \u00b7 ${RULE_LABEL[ruleMode]}`}
+                        </Text>
+                        {topScores.data.length === 0 ?
+                          <Text style={styles.boardEmpty}>No scores yet</Text>
+                        : <ScrollView style={styles.boardList}>
+                            {topScores.data.map((row, i) => (
+                              <View key={row.id} style={styles.boardRow}>
+                                <Text style={[styles.boardRank, row.id === submittedId && styles.boardMine]}>
+                                  {i + 1}
+                                </Text>
+                                <Flag code={row.country} />
+                                <Text style={[styles.boardName, row.id === submittedId && styles.boardMine]}>
+                                  {row.name}
+                                </Text>
+                                <Text style={[styles.boardScore, row.id === submittedId && styles.boardMine]}>
+                                  {row.score}
+                                </Text>
+                              </View>
+                            ))}
+                          </ScrollView>
+                        }
+                      </View>
+                    )}
                   {loop.phase === 'ready' && uiMode !== 'versus' && (
                     <View style={styles.legend}>
                       <LegendRow
@@ -1049,7 +1094,6 @@ export default function Index() {
           {boardsOpen && (
             <View style={styles.sheetWrap}>
               <BoardsSheet
-                dark={dark}
                 renderFlag={(code) => <Flag code={code} />}
                 onClose={() => {
                   setBoardsOpen(false);
@@ -1316,22 +1360,27 @@ const styles = StyleSheet.create({
   },
   pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
   modeList: { gap: 8, alignSelf: 'stretch', alignItems: 'center' },
+  /* the page's .stack-choice button: Anton, an accent border, transparent
+     until chosen, filled with its own accent when it is */
   modeBtn: {
-    minWidth: 260,
-    alignItems: 'flex-start',
-    gap: 2,
-    paddingVertical: 10,
-    paddingHorizontal: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(244,236,216,0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(244,236,216,0.25)',
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 18,
+    borderRadius: 4,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
   },
-  modeBtnOn: { backgroundColor: GameColors.gold, borderColor: GameColors.gold },
-  modeBtnText: { fontFamily: BARLOW_BOLD, fontSize: 14, letterSpacing: 1.5, color: '#e9e0cd' },
-  modeBtnTextOn: { color: GameColors.ink },
-  modeBtnSub: { fontFamily: BARLOW, fontSize: 11.5, letterSpacing: 0.3, color: '#b7ac93' },
-  modeBtnSubOn: { color: 'rgba(33,30,26,0.72)' },
+  modeBtnText: { fontFamily: ANTON, fontSize: 16, letterSpacing: 2 },
+  modeDesc: {
+    fontFamily: BARLOW,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: '#cfc6ae',
+    textAlign: 'center',
+    maxWidth: 300,
+    marginBottom: 4,
+  },
   btnRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   modeCaption: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 2, color: '#b7ac93' },
   modesBtn: {
