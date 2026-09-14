@@ -5131,14 +5131,38 @@
   };
   dpad.addEventListener('touchend', padTouchEnd);
   dpad.addEventListener('touchcancel', padTouchEnd);
-  // Safari's proprietary pinch pipeline runs beside touch-action and can
-  // seize the second finger the moment two are down. While a round is live
-  // the fingers belong to the game. No-op on every other browser.
+  // SAFARI'S PINCH PIPELINE, AND WHY THIS IS NO LONGER GATED ON THE ROUND.
+  //
+  // WebKit runs a proprietary gesture recogniser beside touch-action, and it
+  // can seize the second finger the moment two are down: not delay it, take
+  // it, so the pad's handlers never run and the wedge never lights. This used
+  // to be prevented only while a round was live, on the reasoning that the
+  // fingers belong to the game then. That reasoning was wrong twice over.
+  //
+  // It was wrong about WHEN. The pad is the same control between rounds, and
+  // a second thumb was reported going missing on the menu screen, which is
+  // exactly where nothing was preventing the recogniser at all. That report
+  // is what found this.
+  //
+  // And it is wrong about how LATE preventDefault can afford to be. By the
+  // time gesturestart dispatches, the recogniser has already decided it wants
+  // the touch. So the cheaper half is the one that matters: a multi-touch
+  // touchstart is refused outright while the pad already owns a finger, which
+  // stops the gesture forming rather than arguing with it afterwards.
+  //
+  // Both are scoped to the pad (its own subtree, or any moment it holds a
+  // finger) so a sheet can still be scrolled and pinched. Capture phase, so
+  // nothing downstream can consume the event first. No-op off WebKit.
+  const padOwnsAFinger = () => padPointers.size > 0;
+  const killGesture = (e) => {
+    if (dpad.contains(e.target) || padOwnsAFinger()) e.preventDefault();
+  };
   for (const gev of ['gesturestart', 'gesturechange', 'gestureend']) {
-    document.addEventListener(gev, (e) => {
-      if (state === 'playing' || state === 'countdown') e.preventDefault();
-    }, { passive: false });
+    document.addEventListener(gev, killGesture, { passive: false, capture: true });
   }
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1 && (dpad.contains(e.target) || padOwnsAFinger())) e.preventDefault();
+  }, { passive: false, capture: true });
   // The other way a tap dies unseen: it lands OUTSIDE the pad. The pad's own
   // presses trace themselves through dirInput, so anything arriving here
   // during a round that is not the pad's is a miss worth naming: !pit is the
