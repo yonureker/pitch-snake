@@ -28,7 +28,13 @@
  */
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  type GestureTouchEvent,
+  type TouchData,
+} from 'react-native-gesture-handler';
 
 import { DarkShell, GameColors } from '@/game/theme';
 
@@ -283,20 +289,24 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   // correctness; the pure poll a native controller enjoys is not reachable
   // from JS (touch state exists only inside these callbacks), but reconciling
   // the authoritative set on every event is as close as RN allows.
-  const reconcile = (e: GestureResponderEvent): void => {
-    const active = e.nativeEvent.touches;
+  // Reconcile the native recognizer's authoritative touch set against what we
+  // hold. allTouches carries EVERY finger on the pad on every touch phase,
+  // delivered from gesture-handler's UI-thread recognizer rather than RN's
+  // JS-thread responder, so a finger's arrival is never folded away: this is
+  // the controller-style state read, sourced natively. absoluteX/absoluteY are
+  // window coordinates, the same frame measureInWindow gives, so zoneAt and
+  // resolveDown are unchanged.
+  const reconcileTouches = (all: readonly TouchData[]): void => {
     const seen = new Set<number>();
-    for (const t of active) {
-      const id = Number(t.identifier);
-      seen.add(id);
-      if (fingers.current.has(id)) {
-        fireMove(id, zoneAt(t.pageX, t.pageY)); // a slide into a new wedge
+    for (const t of all) {
+      seen.add(t.id);
+      if (fingers.current.has(t.id)) {
+        fireMove(t.id, zoneAt(t.absoluteX, t.absoluteY)); // a slide into a new wedge
       } else {
-        const r = resolveDown(t.pageX, t.pageY); // a new press; assist may apply
-        fireDown(id, r.zone, r.assisted ? 'a' : 't');
+        const r = resolveDown(t.absoluteX, t.absoluteY); // a new press; assist may apply
+        fireDown(t.id, r.zone, r.assisted ? 'a' : 't');
       }
     }
-    // any finger we still hold that is no longer down has lifted
     for (const id of [...fingers.current.keys()]) {
       if (seen.has(id)) continue;
       lastDownAt.current.delete(id);
@@ -305,26 +315,48 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
     }
     paint(nowMs());
   };
-
-  const onTouchStart = (e: GestureResponderEvent): void => {
-    measure(); // layout can shift; refresh before resolving a new press
-    reconcile(e);
-  };
-  const onTouchMove = (e: GestureResponderEvent): void => {
-    reconcile(e);
-  };
-  const onTouchEnd = (e: GestureResponderEvent): void => {
-    reconcile(e);
-  };
-
-  // onTouchCancel: the system took the gesture (call, control center). Its
-  // `touches` may be empty or stale, so clear everything rather than reconcile.
-  const onTerminate = (): void => {
+  // the latest reconcile, behind a ref so the gesture is built ONCE (below)
+  // yet always calls the current closure (onDir/heading change identity).
+  // Updated in an effect, never during render (the compiler's ref rule).
+  const reconcileRef = useRef(reconcileTouches);
+  const clearAll = (): void => {
     fingers.current.clear();
     lastDownAt.current.clear();
     lastFireNo.current.clear();
     paint(nowMs());
   };
+  const clearRef = useRef(clearAll);
+  useEffect(() => {
+    reconcileRef.current = reconcileTouches;
+    clearRef.current = clearAll;
+  });
+
+  // Built once. A Manual gesture never tries to "win" the touch, so it
+  // observes every finger without responder negotiation; runOnJS keeps the
+  // callbacks on the JS thread, where fireDown touches React state and calls
+  // onDir. onTouchesDown/Move/Up all carry the full allTouches set, so any of
+  // them reconciles; a cancel (call, control center) clears.
+  // The ref reads below sit inside TOUCH CALLBACKS that fire long after this
+  // once-run initializer; that is exactly where refs belong. The rule cannot
+  // see the deferral, so it is disabled across the build-once gesture.
+  /* eslint-disable react-hooks/refs -- deferred event-handler ref access */
+  const [gesture] = useState(() =>
+    Gesture.Manual()
+      .runOnJS(true)
+      .onTouchesDown((e: GestureTouchEvent) => {
+        reconcileRef.current(e.allTouches);
+      })
+      .onTouchesMove((e: GestureTouchEvent) => {
+        reconcileRef.current(e.allTouches);
+      })
+      .onTouchesUp((e: GestureTouchEvent) => {
+        reconcileRef.current(e.allTouches);
+      })
+      .onTouchesCancelled(() => {
+        clearRef.current();
+      }),
+  );
+  /* eslint-enable react-hooks/refs */
 
   const onLayout = (): void => {
     measure();
@@ -369,67 +401,61 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   };
 
   return (
-    <View
-      ref={padRef}
-      style={[styles.pad, dark && darkStyles.pad]}
-      onLayout={onLayout}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      onTouchCancel={onTerminate}
-    >
-      {padSize.w > 0 && (
-        <>
-          <View
-            pointerEvents="none"
-            style={[styles.wedge, styles.wedgeTop, wedgeUp, lit.has('up') && styles.wedgeOn]}
-          />
-          <View
-            pointerEvents="none"
-            style={[styles.wedge, styles.wedgeBottom, wedgeDown, lit.has('down') && styles.wedgeOn]}
-          />
-          <View
-            pointerEvents="none"
-            style={[styles.wedge, styles.wedgeTop, wedgeLeft, lit.has('left') && styles.wedgeOn]}
-          />
-          <View
-            pointerEvents="none"
-            style={[styles.wedge, styles.wedgeRightPos, wedgeRight, lit.has('right') && styles.wedgeOn]}
-          />
-        </>
-      )}
-      <View pointerEvents="none" style={[styles.diagA, dark && darkStyles.diag]} />
-      <View pointerEvents="none" style={[styles.diagB, dark && darkStyles.diag]} />
-      <Text
-        pointerEvents="none"
-        style={[styles.arrow, dark && darkStyles.arrow, styles.up, lit.has('up') && styles.arrowOn]}
-      >
-        ↑
-      </Text>
-      <Text
-        pointerEvents="none"
-        style={[styles.arrow, dark && darkStyles.arrow, styles.down, lit.has('down') && styles.arrowOn]}
-      >
-        ↓
-      </Text>
-      <Text
-        pointerEvents="none"
-        style={[styles.arrow, dark && darkStyles.arrow, styles.left, lit.has('left') && styles.arrowOn]}
-      >
-        ←
-      </Text>
-      <Text
-        pointerEvents="none"
-        style={[styles.arrow, dark && darkStyles.arrow, styles.right, lit.has('right') && styles.arrowOn]}
-      >
-        →
-      </Text>
-      {__DEV__ && trace !== '' && (
-        <Text pointerEvents="none" style={styles.trace}>
-          {trace}
+    <GestureDetector gesture={gesture}>
+      <View ref={padRef} style={[styles.pad, dark && darkStyles.pad]} onLayout={onLayout} collapsable={false}>
+        {padSize.w > 0 && (
+          <>
+            <View
+              pointerEvents="none"
+              style={[styles.wedge, styles.wedgeTop, wedgeUp, lit.has('up') && styles.wedgeOn]}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.wedge, styles.wedgeBottom, wedgeDown, lit.has('down') && styles.wedgeOn]}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.wedge, styles.wedgeTop, wedgeLeft, lit.has('left') && styles.wedgeOn]}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.wedge, styles.wedgeRightPos, wedgeRight, lit.has('right') && styles.wedgeOn]}
+            />
+          </>
+        )}
+        <View pointerEvents="none" style={[styles.diagA, dark && darkStyles.diag]} />
+        <View pointerEvents="none" style={[styles.diagB, dark && darkStyles.diag]} />
+        <Text
+          pointerEvents="none"
+          style={[styles.arrow, dark && darkStyles.arrow, styles.up, lit.has('up') && styles.arrowOn]}
+        >
+          ↑
         </Text>
-      )}
-    </View>
+        <Text
+          pointerEvents="none"
+          style={[styles.arrow, dark && darkStyles.arrow, styles.down, lit.has('down') && styles.arrowOn]}
+        >
+          ↓
+        </Text>
+        <Text
+          pointerEvents="none"
+          style={[styles.arrow, dark && darkStyles.arrow, styles.left, lit.has('left') && styles.arrowOn]}
+        >
+          ←
+        </Text>
+        <Text
+          pointerEvents="none"
+          style={[styles.arrow, dark && darkStyles.arrow, styles.right, lit.has('right') && styles.arrowOn]}
+        >
+          →
+        </Text>
+        {__DEV__ && trace !== '' && (
+          <Text pointerEvents="none" style={styles.trace}>
+            {trace}
+          </Text>
+        )}
+      </View>
+    </GestureDetector>
   );
 }
 
