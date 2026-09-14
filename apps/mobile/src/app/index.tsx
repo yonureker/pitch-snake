@@ -22,6 +22,7 @@ import { Dpad } from '@/components/dpad';
 import { GameHeader } from '@/components/game-header';
 import { RoomPanel } from '@/components/room-panel';
 import { ProfileSheet } from '@/components/profile-sheet';
+import { BoardsSheet } from '@/components/boards-sheet';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { ShopSheet } from '@/components/shop-sheet';
 import { DarkShell, GameColors } from '@/game/theme';
@@ -50,6 +51,37 @@ const MODE_LABELS: { mode: UiMode; label: string }[] = [
   { mode: 'versus', label: 'MULTIPLAYER' },
   { mode: 'tourney', label: 'TOURNAMENT' },
 ];
+/**
+ * The strapline per mode, the page's STRAPLINES ported. "Eat to grow" over
+ * survival's table, where eating SHRINKS you, contradicted the very rules it
+ * sat above.
+ */
+const STRAPLINE: Record<RuleMode, string> = {
+  classic: 'Eat to grow. Survive the pitch.',
+  survival: 'Stay short. The clock is your score.',
+};
+
+/**
+ * The legend per mode, the page's applyLegend ported word for word. Survival
+ * inverts what the food and the TNT do and its teleport trip pays nothing, so
+ * a fixed classic table on a survival kick-off was telling the player the
+ * opposite of the rules they were about to play.
+ */
+const LEGEND: Record<RuleMode, { text: string; value: string; tone: 'pos' | 'neg' }[]> = {
+  classic: [
+    { text: 'Ball', value: '+1', tone: 'pos' },
+    { text: 'Ball with a ring', value: '+5', tone: 'pos' },
+    { text: 'TNT block, 5 longer', value: '-5', tone: 'neg' },
+    { text: 'Teleport, five longer', value: '+5', tone: 'pos' },
+  ],
+  survival: [
+    { text: 'Ball, one shorter', value: '-1', tone: 'pos' },
+    { text: 'Ball with a ring, 5 shorter', value: '-5', tone: 'pos' },
+    { text: 'TNT block, 5 LONGER', value: '+5', tone: 'neg' },
+    { text: 'Teleport, 5 shorter', value: '-5', tone: 'pos' },
+  ],
+};
+
 const RULE_LABEL: Record<RuleMode, string> = {
   classic: 'CLASSIC',
   survival: 'SURVIVAL',
@@ -189,6 +221,7 @@ export default function Index() {
   const [tCreating, setTCreating] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [boardsOpen, setBoardsOpen] = useState(false);
   // The table's theme: AUTO follows the system, the chips can force one
   // (the web's THEME setting, ported). What swaps is the shell: the screen,
   // the header ink, the pad and the sheets. The pitch, the overlay card and
@@ -499,11 +532,15 @@ export default function Index() {
         onShop={() => {
           setShopOpen(true);
         }}
+        onBoards={() => {
+          setBoardsOpen(true);
+        }}
         onSettings={() => {
           setSettingsOpen(true);
         }}
         score={loop.score}
         best={loop.best}
+        scoreLabel={ruleMode === 'survival' ? 'SECONDS' : 'SCORE'}
         clockText={loop.clockText}
         onScoreTap={onScoreTap}
         inRoom={inRoundRoom}
@@ -764,7 +801,7 @@ export default function Index() {
                     </Text>
                   : loop.phase === 'paused' ?
                     <Text style={styles.overlayText}>Take a breather.</Text>
-                  : <Text style={styles.overlayText}>Eat to grow. Survive the pitch.</Text>}
+                  : <Text style={styles.overlayText}>{STRAPLINE[ruleMode]}</Text>}
                   {dead && uiMode !== 'versus' && loop.score > prevBest ?
                     <Text style={styles.stickerText}>
                       {prevBest > 0 ? 'New personal best.' : 'Your first best.'}
@@ -915,16 +952,21 @@ export default function Index() {
                   )}
                   {loop.phase === 'ready' && uiMode !== 'versus' && (
                     <View style={styles.legend}>
-                      <LegendRow icon={<BallIcon size={22} />} text="Ball" value="+1" valueTone="pos" />
+                      <LegendRow
+                        icon={<BallIcon size={22} />}
+                        text={LEGEND[ruleMode][0]?.text ?? ''}
+                        value={LEGEND[ruleMode][0]?.value ?? ''}
+                        valueTone={LEGEND[ruleMode][0]?.tone ?? 'pos'}
+                      />
                       <LegendRow
                         icon={
                           <View style={styles.lgRing}>
                             <BallIcon size={15} />
                           </View>
                         }
-                        text="Ball with a ring"
-                        value="+5"
-                        valueTone="pos"
+                        text={LEGEND[ruleMode][1]?.text ?? ''}
+                        value={LEGEND[ruleMode][1]?.value ?? ''}
+                        valueTone={LEGEND[ruleMode][1]?.tone ?? 'pos'}
                       />
                       <LegendRow
                         icon={
@@ -932,9 +974,9 @@ export default function Index() {
                             <View style={styles.lgTntBand} />
                           </View>
                         }
-                        text="TNT block, 5 longer"
-                        value="-5"
-                        valueTone="neg"
+                        text={LEGEND[ruleMode][2]?.text ?? ''}
+                        value={LEGEND[ruleMode][2]?.value ?? ''}
+                        valueTone={LEGEND[ruleMode][2]?.tone ?? 'neg'}
                       />
                       <LegendRow
                         icon={
@@ -942,9 +984,9 @@ export default function Index() {
                             <View style={styles.lgPortalCore} />
                           </View>
                         }
-                        text="Teleport, one trip"
-                        value="+5"
-                        valueTone="pos"
+                        text={LEGEND[ruleMode][3]?.text ?? ''}
+                        value={LEGEND[ruleMode][3]?.value ?? ''}
+                        valueTone={LEGEND[ruleMode][3]?.tone ?? 'pos'}
                       />
                       <LegendRow
                         icon={<Image source={skullIcon} style={styles.lgImage} />}
@@ -990,6 +1032,17 @@ export default function Index() {
                   </View>
                 </>
               }
+            </View>
+          )}
+          {boardsOpen && (
+            <View style={styles.sheetWrap}>
+              <BoardsSheet
+                dark={dark}
+                renderFlag={(code) => <Flag code={code} />}
+                onClose={() => {
+                  setBoardsOpen(false);
+                }}
+              />
             </View>
           )}
           {settingsOpen && (

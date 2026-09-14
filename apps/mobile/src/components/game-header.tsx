@@ -112,9 +112,13 @@ export interface GameHeaderProps {
   coins: number | null;
   onProfile: () => void;
   onShop: () => void;
+  /** the world boards, behind the trophy: the page's third tray button */
+  onBoards: () => void;
   onSettings: () => void;
   score: number;
   best: number;
+  /** SECONDS in survival, SCORE elsewhere: in survival the clock IS the score */
+  scoreLabel: string;
   clockText: string;
   onScoreTap: () => void;
   /** a live room round: the strip replaces the score block and the exit appears */
@@ -140,9 +144,11 @@ export function GameHeader({
   coins,
   onProfile,
   onShop,
+  onBoards,
   onSettings,
   score,
   best,
+  scoreLabel,
   clockText,
   onScoreTap,
   inRoom,
@@ -201,22 +207,39 @@ export function GameHeader({
                   <Flag code={country} />
                   <Text style={[styles.whoText, dark && darkStyles.whoText]}>{profileName ?? 'PLAYER'}</Text>
                 </Pressable>
-                {coins !== null && (
-                  <Pressable accessibilityRole="button" onPress={onShop} style={styles.purse}>
-                    <View style={styles.purseCoin} />
-                    <Text style={[styles.purseText, dark && darkStyles.purseText]}>
-                      {coins} {'·'} SHOP
-                    </Text>
+                {/* ONE TRAY, not three chips. The page joins the purse, the
+                    boards and the gear into a single pill divided by hairlines,
+                    and reads as one object because it is one: three doors to
+                    the same drawer of chrome. The app had them loose and the
+                    two headers stopped looking like the same game. */}
+                <View style={[styles.tray, dark && darkStyles.tray]}>
+                  {coins !== null && (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={onShop}
+                      style={[styles.trayBtn, styles.trayPurse]}
+                    >
+                      <View style={styles.purseCoin} />
+                      <Text style={[styles.purseText, dark && darkStyles.purseText]}>{coins}</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Top ten boards"
+                    onPress={onBoards}
+                    style={[styles.trayBtn, coins !== null && styles.trayDivided]}
+                  >
+                    <Text style={[styles.trayIcon, dark && darkStyles.trayIcon]}>{'🏆'}</Text>
                   </Pressable>
-                )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Settings"
-                  onPress={onSettings}
-                  style={styles.gearBtn}
-                >
-                  <Text style={[styles.gearText, dark && darkStyles.gearText]}>{'⚙︎'}</Text>
-                </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Settings"
+                    onPress={onSettings}
+                    style={[styles.trayBtn, styles.trayDivided]}
+                  >
+                    <Text style={[styles.trayIcon, dark && darkStyles.trayIcon]}>{'⚙︎'}</Text>
+                  </Pressable>
+                </View>
               </>
             )}
           </View>
@@ -265,7 +288,7 @@ export function GameHeader({
 
       {!inRoom && (
         <Pressable accessibilityRole="button" onPress={onScoreTap} style={styles.scores}>
-          <Text style={[styles.scoreLabel, dark && darkStyles.scoreLabel]}>SCORE</Text>
+          <Text style={[styles.scoreLabel, dark && darkStyles.scoreLabel]}>{scoreLabel}</Text>
           <Text style={[styles.scoreValue, dark && darkStyles.scoreValue]}>{score}</Text>
           <Text style={styles.bestValue}>BEST {best}</Text>
           {clockText !== '' && (
@@ -301,16 +324,21 @@ const styles = StyleSheet.create({
   chromeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chips: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center' },
   seatRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  gearBtn: {
-    width: 26,
+  /* the tray: one bordered pill, its buttons separated by hairlines rather
+     than by gaps, so the three read as one control the way the page's does */
+  tray: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     height: 26,
     borderRadius: 13,
     borderWidth: 1.5,
     borderColor: GameColors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  gearText: { fontSize: 13, color: GameColors.ink },
+  trayBtn: { paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+  trayPurse: { gap: 5 },
+  trayDivided: { borderLeftWidth: 1, borderLeftColor: 'rgba(194,162,90,0.45)' },
+  trayIcon: { fontSize: 12, color: GameColors.ink },
   whoChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,16 +350,6 @@ const styles = StyleSheet.create({
     borderColor: GameColors.gold,
   },
   whoText: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 1.4, color: GameColors.ink },
-  purse: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    height: 26,
-    paddingHorizontal: 9,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: GameColors.gold,
-  },
   purseCoin: {
     width: 11,
     height: 11,
@@ -340,7 +358,21 @@ const styles = StyleSheet.create({
     borderColor: GameColors.gold,
   },
   purseText: { fontFamily: BARLOW_BOLD, fontSize: 11, letterSpacing: 1, color: GameColors.ink },
-  flag: { width: FLAG_W, height: FLAG_H, overflow: 'hidden', borderRadius: 2, alignSelf: 'center' },
+  /* The sprite sheet is 16 flags wide and 16 tall, positioned by negative
+     margins, so anything short of a hard clip paints the WHOLE sheet across
+     the chip: on a phone the name pill came out solid red, which is simply
+     the sheet's first column. overflow alone was not holding it, so the
+     window states its size on both axes and clips on both. */
+  flag: {
+    width: FLAG_W,
+    height: FLAG_H,
+    maxWidth: FLAG_W,
+    maxHeight: FLAG_H,
+    overflow: 'hidden',
+    borderRadius: 2,
+    alignSelf: 'center',
+    flexShrink: 0,
+  },
   flagSheet: { width: FLAG_W * FLAG_COLS, height: FLAG_H * 16 },
 
   /* The strip stays DARK in both themes on purpose: the seat colours were
@@ -431,7 +463,8 @@ const darkStyles = StyleSheet.create({
   title: { color: DarkShell.ink, textShadowColor: GameColors.gold },
   whoText: { color: DarkShell.ink },
   purseText: { color: DarkShell.ink },
-  gearText: { color: DarkShell.ink },
+  tray: { borderColor: DarkShell.padRing },
+  trayIcon: { color: DarkShell.ink },
   scoreLabel: { color: DarkShell.muted },
   scoreValue: { color: DarkShell.ink },
   clockText: { color: DarkShell.ink },
