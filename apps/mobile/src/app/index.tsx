@@ -78,6 +78,19 @@ const accentStyles = StyleSheet.create({
   tourneyInk: { color: '#a878d8' },
   chosenInk: { color: '#211e1a' },
 });
+/* the CONFIGURE button's fill per mode that needs a step (the page's
+   --go-fill): a raised ledge in the mode's own colour, red left to START */
+const configureStyles = StyleSheet.create({
+  versus: { backgroundColor: '#7dbf5c', shadowColor: '#4e7d38' },
+  tourney: { backgroundColor: '#a878d8', shadowColor: '#6d4a90' },
+});
+/** the CONFIGURE fill for a room mode, null for the modes that just START */
+const CONFIGURE_FILL: Record<UiMode, object | null> = {
+  classic: null,
+  survival: null,
+  versus: configureStyles.versus,
+  tourney: configureStyles.tourney,
+};
 const MODE_ACCENT: Record<UiMode, { edge: object; fill: object; ink: object }> = {
   classic: { edge: accentStyles.classicEdge, fill: accentStyles.classicFill, ink: accentStyles.classicInk },
   survival: {
@@ -463,6 +476,7 @@ export default function Index() {
   const pickFromList = (m: UiMode): void => {
     pickMode(m);
   };
+  const modeNeedsStep = uiMode === 'versus' || uiMode === 'tourney';
   const startFromModes = (): void => {
     setShowModes(false);
     if (uiMode === 'tourney') setTScreen(true);
@@ -831,9 +845,19 @@ export default function Index() {
                       ))}
                     </View>
                     <View style={styles.btnRow}>
-                      <Pressable accessibilityRole="button" onPress={startFromModes} style={styles.startBtn}>
-                        <Text style={styles.startText}>START</Text>
-                        <Text style={styles.startSub}>{RULE_LABEL[ruleMode]}</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={startFromModes}
+                        style={[styles.startBtn, modeNeedsStep && CONFIGURE_FILL[uiMode]]}
+                      >
+                        <Text style={styles.startText}>{modeNeedsStep ? 'CONFIGURE' : 'START'}</Text>
+                        <Text style={styles.startSub}>
+                          {uiMode === 'versus' ?
+                            'MULTIPLAYER'
+                          : uiMode === 'tourney' ?
+                            'TOURNAMENTS'
+                          : RULE_LABEL[ruleMode]}
+                        </Text>
                       </Pressable>
                       <Pressable
                         accessibilityRole="button"
