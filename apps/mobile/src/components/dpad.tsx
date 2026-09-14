@@ -21,7 +21,10 @@
  * a tap within a thumb's width of a wedge boundary that would request the
  * axis the snake already moves on (a repeat or a reversal, both dead on
  * arrival in the engine) fires the live neighbor wedge instead, because
- * that is what the finger meant. See resolveDown.
+ * that is what the finger meant. See resolveDown - and note the assist
+ * stands down entirely while a second finger is on the pad, the page's
+ * 2026-09-13 lesson: with two thumbs an invented turn becomes the heading
+ * the other thumb's real press is refused against.
  */
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
@@ -107,6 +110,15 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   const frame = useRef({ x: 0, y: 0, w: 1, h: 1 });
   const fingers = useRef(new Map<number, Zone>());
   const lastDownAt = useRef(new Map<number, number>());
+  // How many presses this pad has dispatched, and the count each finger saw
+  // at its own last down. An echo is a re-delivery with NOTHING in between;
+  // if another finger got a turn in, the second delivery is a real press
+  // however fast it came. Ported from the page (2026-09-13): without this
+  // clause the window could still swallow the third press of a
+  // right-down-right drill played inside 60ms, the one case a fast player
+  // would notice.
+  const fires = useRef(0);
+  const lastFireNo = useRef(new Map<number, number>());
   const flashUntil = useRef<Record<Zone, number>>({ up: 0, down: 0, left: 0, right: 0 });
   const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lit, setLit] = useState<ReadonlySet<Zone>>(new Set());
@@ -183,19 +195,30 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
     // drawn, and the second turn of an up-then-left snapped inside 60ms
     // silently died here. Turns a millisecond apart are legitimate input;
     // only the same wedge re-delivered is not.
-    if (fingers.current.get(id) === zone && now - last < ECHO_MS) {
+    if (
+      fingers.current.get(id) === zone &&
+      now - last < ECHO_MS &&
+      lastFireNo.current.get(id) === fires.current
+    ) {
       note(`x${String(id)}`);
       lastDownAt.current.set(id, now);
       return;
     }
-    note(`${tag}${String(id)}${ZONE_GLYPH[zone]}`);
+    fires.current++;
+    lastFireNo.current.set(id, fires.current);
     fingers.current.set(id, zone);
     lastDownAt.current.set(id, now);
-    flashUntil.current[zone] = now + FLASH_MS;
-    paint(now);
+    // THE GAME HEARS FIRST, THEN THE PIXELS MOVE. The page measured its own
+    // paint at a tenth of a millisecond, so this was never the delay anyone
+    // felt, but a control judged on latency has no business making the press
+    // wait behind a style invalidation on a phone whose renderer is already
+    // behind. Nothing downstream of onDir needs the wedge lit.
     const d = ZONE_DIRECTION[zone];
     onDir(d.x, d.y);
+    flashUntil.current[zone] = now + FLASH_MS;
+    paint(now);
     hapticOncePerPress(now);
+    note(`${tag}${String(id)}${ZONE_GLYPH[zone]}`);
   };
 
   // a MOVE fires only on zone change: a finger resting in a wedge is one
@@ -219,6 +242,19 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   const ASSIST_PT = 24; // half a thumb pad; the one dial, in screen points
   const resolveDown = (pageX: number, pageY: number): { zone: Zone; assisted: boolean } => {
     const primary = zoneAt(pageX, pageY);
+    // NEVER WHILE ANOTHER FINGER IS DOWN (the page's fix, 2026-09-13). The
+    // assist's whole licence is that the literal reading would be DEAD, so
+    // firing the neighbour across the seam beats firing nothing; the
+    // neighbour is chosen by which side of the pad's centre the thumb landed
+    // on, which means it can fire a direction the player did not press. With
+    // one thumb that is a fair trade. With two it is worse than nothing,
+    // demonstrated on the page: heading right, thumb inside RIGHT near the
+    // up/right seam, the pad fired UP, and the other thumb's real DOWN was
+    // then refused as a reversal of a turn nobody asked for. A quick
+    // two-thumb corner losing one press in a handful of tries is exactly
+    // that shape. The assist keeps the case it earned and loses the one it
+    // never had.
+    if (fingers.current.size > 0) return { zone: primary, assisted: false };
     const h = heading?.() ?? null;
     if (h === null) return { zone: primary, assisted: false };
     const pd = ZONE_DIRECTION[primary];
@@ -263,13 +299,18 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   // the gesture (incoming call, control center). Both must clean up.
   const onTouchUp = (e: GestureResponderEvent): void => {
     for (const t of touchesOf(e)) {
-      if (fingers.current.delete(Number(t.identifier))) note(`e${String(t.identifier)}`);
+      const id = Number(t.identifier);
+      lastDownAt.current.delete(id);
+      lastFireNo.current.delete(id);
+      if (fingers.current.delete(id)) note(`e${String(t.identifier)}`);
     }
     paint(nowMs());
   };
 
   const onTerminate = (): void => {
     fingers.current.clear();
+    lastDownAt.current.clear();
+    lastFireNo.current.clear();
     paint(nowMs());
   };
 
