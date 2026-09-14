@@ -52,33 +52,40 @@ const FLAG_H = 15;
  */
 const LOGO_SIZE = 21;
 /**
- * The VISUAL gap between the two logo lines, as a fraction of the font size,
- * matching the web's 0.92. It is not the lineHeight, and that distinction is
- * the whole of this fix: iOS CLIPS a glyph whose lineHeight is smaller than
- * its font size, where CSS simply lets the ink overflow the line box. Setting
- * lineHeight to 0.92 therefore reproduced the web's leading on the web and
- * sliced the top off PITCH on a phone.
+ * Anton's own vertical metrics, measured off the loaded font (ascent 29px and
+ * descent 8px at a 24.28px em). Everything below derives from these two
+ * numbers, and they are the second attempt at this, so the failure is worth
+ * recording in full.
  *
- * So each line keeps a line box tall enough to hold its own ink, and the
- * second line is pulled up by the difference instead. Same picture, no
- * clipping.
+ * iOS lays a glyph into its line box and CLIPS whatever does not fit, where
+ * CSS lets ink overflow freely. The first fix assumed a line box equal to the
+ * font size was enough. It is not, and nowhere near: Anton wants 1.52 times
+ * its size, so lineHeight 21 on a 21px logo still sliced the top off PITCH,
+ * and the score's 26 on 24px sliced its digits, which is what gave the game
+ * away. The rule on iOS is give Anton its FULL box or none at all, and take
+ * the layout space back with negative margins, which move the box and never
+ * touch the ink.
  */
-const LOGO_LEADING = 0.92;
-/** a full line box, so nothing is cut off */
-const LOGO_LINE = LOGO_SIZE;
-/** and the second line rides up to restore the tight leading */
-const LOGO_TIGHTEN = LOGO_SIZE * (LOGO_LEADING - 1);
-/**
- * How far the logo's box falls below SNAKE's baseline, in pixels.
- *
- * (lineHeight - ascent + descent) / 2, with Anton's own metrics measured off
- * the live font: ascent 1.173em, descent 0.327em. Pulling the logo down by
- * exactly this puts its BASELINE on the band's floor instead of its box, so
- * the strip's bottom edge and the bottom of the letters are one line by
- * construction. The gold drop shadow still falls below both, which is what a
- * shadow is for.
- */
-const LOGO_SLACK = ((LOGO_LINE / LOGO_SIZE - 1.173 + 0.327) / 2) * LOGO_SIZE;
+const ANTON_ASCENT = 1.194;
+const ANTON_DESCENT = 0.329;
+/** the smallest line box iOS will not clip, plus a pixel of air */
+const antonBox = (size: number): number => Math.ceil(size * (ANTON_ASCENT + ANTON_DESCENT) + 1);
+/** how far a box of height `box` hangs below its baseline */
+const antonSlack = (size: number, box: number): number =>
+  (box - size * ANTON_ASCENT + size * ANTON_DESCENT) / 2;
+
+/** the full, unclipped box each logo line paints in */
+const LOGO_LINE = antonBox(LOGO_SIZE);
+/** the web's tight 0.92 leading, restored by pulling the second line up */
+const LOGO_TIGHTEN = LOGO_SIZE * 0.92 - LOGO_LINE;
+/** pull the logo down by its own under-baseline slack, so SNAKE's baseline
+ *  sits on the band's floor next to the seat strip's bottom edge */
+const LOGO_SLACK = antonSlack(LOGO_SIZE, LOGO_LINE);
+
+/** the score digits: full box, then squeezed back to the old 26px footprint */
+const SCORE_SIZE = 24;
+const SCORE_LINE = antonBox(SCORE_SIZE);
+const SCORE_SQUEEZE = -(SCORE_LINE - 26) / 2;
 
 /** How long FORFEIT stays armed before it forgets it was pressed. */
 const ARM_MS = 2600;
@@ -452,7 +459,13 @@ const styles = StyleSheet.create({
 
   scores: { alignItems: 'flex-end' },
   scoreLabel: { fontFamily: BARLOW, fontSize: 10, letterSpacing: 2, color: GameColors.muted },
-  scoreValue: { fontFamily: ANTON, fontSize: 24, color: GameColors.ink, lineHeight: 26 },
+  scoreValue: {
+    fontFamily: ANTON,
+    fontSize: SCORE_SIZE,
+    color: GameColors.ink,
+    lineHeight: SCORE_LINE,
+    marginVertical: SCORE_SQUEEZE,
+  },
   bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
   clockText: { fontFamily: ANTON, fontSize: 15, color: GameColors.ink, letterSpacing: 1 },
 });
