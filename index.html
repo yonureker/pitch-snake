@@ -51,17 +51,17 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=21d603014a">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=21d603014a">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=d0fa06366d">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=d0fa06366d">
 </head>
 <body>
   <div class="wrap">
@@ -485,6 +485,13 @@
           <button data-bmode="survival">SURVIVAL</button>
           <button data-bmode="ladder">ELO</button>
         </div>
+        <!-- The second axis: each board has an all-time face and a this-month
+             face. ELO's month is the SEASON ladder, which resets on the 1st;
+             the score boards' month is simply the rows posted this month. -->
+        <div class="board-window" id="boardWindow">
+          <button data-bwin="all" class="active">ALL TIME</button>
+          <button data-bwin="month">THIS MONTH</button>
+        </div>
         <ol class="boards-list" id="boardsList"></ol>
         <p class="save-note soft" id="boardsNote" hidden></p>
         <button class="btn small" id="boardsClose">DONE</button>
@@ -508,42 +515,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=21d603014a",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=21d603014a",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=21d603014a",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=21d603014a",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=21d603014a",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=21d603014a",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=21d603014a",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=21d603014a",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=21d603014a",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=21d603014a",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=21d603014a",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=21d603014a",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=21d603014a",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=21d603014a",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=21d603014a",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=21d603014a",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=21d603014a",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=21d603014a",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=21d603014a",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=21d603014a",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=21d603014a",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=21d603014a",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=21d603014a",
-    "./packages/net/net.js": "./packages/net/net.js?v=21d603014a",
-    "@pitch-snake/net": "./packages/net/net.js?v=21d603014a",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=21d603014a",
-    "./page/build/dom.js": "./page/build/dom.js?v=21d603014a",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=21d603014a",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=21d603014a",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=21d603014a",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=21d603014a",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=21d603014a",
-    "./page/build/shop.js": "./page/build/shop.js?v=21d603014a",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=21d603014a",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=21d603014a",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=21d603014a"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=d0fa06366d",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=d0fa06366d",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=d0fa06366d",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=d0fa06366d",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=d0fa06366d",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=d0fa06366d",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=d0fa06366d",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=d0fa06366d",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=d0fa06366d",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=d0fa06366d",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=d0fa06366d",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=d0fa06366d",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=d0fa06366d",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=d0fa06366d",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=d0fa06366d",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=d0fa06366d",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=d0fa06366d",
+    "./packages/net/net.js": "./packages/net/net.js?v=d0fa06366d",
+    "@pitch-snake/net": "./packages/net/net.js?v=d0fa06366d",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=d0fa06366d",
+    "./page/build/dom.js": "./page/build/dom.js?v=d0fa06366d",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=d0fa06366d",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=d0fa06366d",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=d0fa06366d",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=d0fa06366d",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=d0fa06366d",
+    "./page/build/shop.js": "./page/build/shop.js?v=d0fa06366d",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=d0fa06366d",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=d0fa06366d",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=d0fa06366d"
   }
 }
 </script>
@@ -5591,11 +5598,29 @@
   const boardsTitle = document.getElementById('boardsTitle');
   const boardsNote = document.getElementById('boardsNote');
   const boardChips = document.getElementById('boardChips');
+  const boardWindow = document.getElementById('boardWindow');
   const boardsBtn = document.getElementById('boardsBtn');
   const boardsClose = document.getElementById('boardsClose');
   const claimBtn = document.getElementById('claimBtn');
   claimBtn.addEventListener('click', openProfile);
   let boardsMode = 'classic';
+  // the second axis: 'all' (lifetime) or 'month' (this UTC calendar month, the
+  // same key the server seasons on). null p_season means all-time server-side.
+  let boardsWindow = 'all';
+  function currentSeason() {
+    const d = new Date();
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+  }
+  // "SEPTEMBER" from '2026-09', for the sheet title's this-month face
+  function seasonLabel() {
+    const months = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY',
+                    'AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+    return months[new Date().getUTCMonth()];
+  }
+  // monthly boards are fetched fresh and cached only for the session, keyed by
+  // mode+season, never mixed into railTops (which the chooser rail shares and
+  // which is all-time only)
+  const monthTops = {};
   function localListFor(rm) {
     try {
       const key = rm === 'classic' ? 'snakeStandings' : 'snakeStandings.' + rm;
@@ -5616,11 +5641,19 @@
     boardsList.appendChild(waiting);
     let board = null;
     let mine = null;
+    const month = boardsWindow === 'month';
+    const season = currentSeason();
     if (supabaseConfigured()) {
       try {
         [board, mine] = await Promise.all([
-          supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: MAX_ENTRIES }),
-          sessionToken() ? supabaseRpc('pitch_snake_my_rating', {}) : Promise.resolve(null),
+          month
+            ? supabaseRpc('pitch_snake_top_rated_season', { p_mode: ROOM_RULES, p_season: season, p_limit: MAX_ENTRIES })
+            : supabaseRpc('pitch_snake_top_rated', { p_mode: ROOM_RULES, p_limit: MAX_ENTRIES }),
+          sessionToken()
+            ? (month
+                ? supabaseRpc('pitch_snake_my_rating_season', { p_season: season })
+                : supabaseRpc('pitch_snake_my_rating', {}))
+            : Promise.resolve(null),
         ]);
       } catch (e) { /* offline, or no board tier: the note below says so */ }
     }
@@ -5631,18 +5664,19 @@
     if (!rows.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = board ? 'No rated rounds yet' : 'Elo unavailable';
+      li.textContent = board ? (month ? 'No rated rounds this season' : 'No rated rounds yet') : 'Elo unavailable';
       boardsList.appendChild(li);
     }
     rows.forEach((r, i) => { boardsList.appendChild(ladderRow(r, i)); });
     // Your own standing goes in the note rather than the list, because the
     // list is who is BEST and you are usually not in the visible part of it.
     const own = mine && mine[ROOM_RULES];
+    const span = month ? ' this season' : '';
     boardsNote.textContent = own
       ? 'You are rated ' + own.rating + (own.provisional ? ' P' : '')
-        + ' over ' + own.rounds + (own.rounds === 1 ? ' rated round' : ' rated rounds')
+        + ' over ' + own.rounds + (own.rounds === 1 ? ' rated round' : ' rated rounds') + span
         + (own.provisional ? '. P means under ten. ' : '. ') + 'Only quick match is rated.'
-      : 'Only quick match is rated. Play one to get a rating.';
+      : 'Only quick match is rated. Play one to get a rating' + (month ? ' this season.' : '.');
     boardsNote.hidden = false;
   }
 
@@ -5650,12 +5684,23 @@
     for (const b of boardChips.querySelectorAll('button')) {
       b.classList.toggle('active', b.dataset.bmode === boardsMode);
     }
+    for (const b of boardWindow.querySelectorAll('button')) {
+      b.classList.toggle('active', b.dataset.bwin === boardsWindow);
+    }
+    const month = boardsWindow === 'month';
     // a rating board is not a score board, and the title should not claim it is
-    boardsTitle.textContent = boardsMode === 'ladder' ? 'ELO \u00b7 TOP 100' : 'TOP 100 WORLDWIDE';
+    boardsTitle.textContent =
+      boardsMode === 'ladder'
+        ? (month ? 'ELO \u00b7 ' + seasonLabel() : 'ELO \u00b7 TOP 100')
+        : (month ? 'TOP 100 \u00b7 ' + seasonLabel() : 'TOP 100 WORLDWIDE');
     if (boardsMode === 'ladder') { await renderLadder(); return; }
     const rm = boardsMode;
     boardsNote.hidden = true;
-    let rows = railTops[rm];
+    // all-time reuses the chooser's per-mode rail cache; this-month has its own
+    // session cache keyed by mode+season, never mixed into railTops
+    const season = currentSeason();
+    const monthKey = rm + ':' + season;
+    let rows = month ? monthTops[monthKey] : railTops[rm];
     if (!Array.isArray(rows)) {
       boardsList.innerHTML = '';
       const li = document.createElement('li');
@@ -5664,24 +5709,32 @@
       boardsList.appendChild(li);
       if (supabaseConfigured()) {
         try {
-          const got = await supabaseRpc('pitch_snake_top_scores', { limit_count: MAX_ENTRIES, p_mode: rm });
+          const got = await supabaseRpc('pitch_snake_top_scores',
+            month ? { limit_count: MAX_ENTRIES, p_mode: rm, p_season: season }
+                  : { limit_count: MAX_ENTRIES, p_mode: rm });
           rows = asList(got).filter(r => r && typeof r.score === 'number');
-          railTops[rm] = rows;
+          if (month) monthTops[monthKey] = rows; else railTops[rm] = rows;
         } catch (e) { rows = null; }
       }
       // the sheet moved on while this was in the air: its render owns the list
-      if (boardsMode !== rm || boardsModal.hidden) return;
+      if (boardsMode !== rm || boardsWindow !== (month ? 'month' : 'all') || boardsModal.hidden) return;
     }
     boardsList.innerHTML = '';
     let note = '';
     if (!Array.isArray(rows)) {
-      rows = localListFor(rm).slice(0, MAX_ENTRIES);
-      note = 'Could not reach the world board. Showing this device.';
+      // the device list is all-time only, so it stands in for the all-time
+      // board but never the monthly one; a month with no reach shows empty
+      if (month) { rows = []; note = 'Could not reach the world board.'; }
+      else {
+        rows = localListFor(rm).slice(0, MAX_ENTRIES);
+        note = 'Could not reach the world board. Showing this device.';
+      }
     }
     if (!rows.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = 'No scores yet. The board has room.';
+      li.textContent = month ? 'No scores this month yet. The board has room.'
+                             : 'No scores yet. The board has room.';
       boardsList.appendChild(li);
     }
     rows.forEach((e, i) => {
@@ -5706,6 +5759,7 @@
   boardsBtn.addEventListener('click', () => {
     const rm = ruleMode();
     boardsMode = (rm === 'classic' || rm === 'survival') ? rm : 'classic';
+    boardsWindow = 'all';
     boardsHighlight = null;          // browsing, not arriving from a save
     boardsModal.hidden = false;
     renderBoards();
@@ -5719,6 +5773,7 @@
   stickTop.addEventListener('click', () => {
     const rm = ruleMode();
     boardsMode = (rm === 'classic' || rm === 'survival') ? rm : 'classic';
+    boardsWindow = 'all';
     boardsHighlight = savedThisRound ? lastSaveKey : null;
     boardsModal.hidden = false;
     renderBoards();
@@ -5727,6 +5782,12 @@
     const b = e.target.closest('button');
     if (!b) return;
     boardsMode = b.dataset.bmode;
+    renderBoards();
+  });
+  boardWindow.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    boardsWindow = b.dataset.bwin;
     renderBoards();
   });
   boardsClose.addEventListener('click', () => { boardsModal.hidden = true; });

@@ -52,6 +52,15 @@
     color: var(--sheet-ink);
   }
   .board-chips button.active { background: var(--gold); border-color: var(--gold); color: #211e1a; }
+  /* the all-time/this-month axis: smaller pills under the mode chips, so the
+     two axes never read as one row of equal buttons */
+  .board-window { display: flex; gap: 6px; justify-content: center; margin-top: -2px; }
+  .board-window button {
+    font-family: 'Barlow', sans-serif; font-weight: 700; letter-spacing: 1px;
+    font-size: 10px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+    background: var(--sheet-tint); border: 1px solid var(--sheet-line); color: var(--sheet-ink);
+  }
+  .board-window button.active { background: var(--gold); border-color: var(--gold); color: #211e1a; }
   .boards-list { list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
   .boards-list li {
     display: flex; align-items: center; gap: 9px;
