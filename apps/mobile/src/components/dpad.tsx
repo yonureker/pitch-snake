@@ -284,6 +284,7 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
       const r = resolveDown(t.pageX, t.pageY);
       fireDown(Number(t.identifier), r.zone, r.assisted ? 'a' : 't');
     }
+    sweepActive(e);
   };
   const onDownRaw = (e: GestureResponderEvent): void => {
     handleDown(e);
@@ -292,6 +293,33 @@ export function Dpad({ onDir, heading, dark = false }: DpadProps) {
   const onTouchMove = (e: GestureResponderEvent): void => {
     for (const t of touchesOf(e)) {
       fireMove(Number(t.identifier), zoneAt(t.pageX, t.pageY));
+    }
+    sweepActive(e);
+  };
+
+  // THE SECOND FINGER, HOWEVER IT ARRIVES.
+  //
+  // The whole pipeline is `changedTouches`, on the stated assumption that iOS
+  // delivers each finger its own touchstart. Two thumbs landing a few
+  // milliseconds apart break that assumption: the reported failure is a
+  // down+left corner where the two presses are ~5ms apart, works at 0ms and
+  // works slowly, fails ~90% at 5ms. The engine accepts down+left at every
+  // gap (proven), so the lost press is one WebKit folded into another event,
+  // or into a move, and never surfaced in a changedTouches this pad read.
+  //
+  // So after every touch event, sweep `touches` (every finger currently down)
+  // and fire any that sit in a wedge this pad has not yet registered. It can
+  // only ADD a press a real finger is genuinely making: a finger already
+  // registered is skipped, the echo and reversal guards downstream still
+  // hold, and a finger resting between wedges (no definite zone) is ignored.
+  // Whichever event the second finger rode in on, this catches it.
+  const sweepActive = (e: GestureResponderEvent): void => {
+    const active = e.nativeEvent.touches;
+    if (active.length < 2) return; // one finger needs no rescue
+    for (const t of active) {
+      const id = Number(t.identifier);
+      if (fingers.current.has(id)) continue; // already firing this finger
+      fireDown(id, zoneAt(t.pageX, t.pageY), 's');
     }
   };
 
