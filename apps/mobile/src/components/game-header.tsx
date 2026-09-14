@@ -37,7 +37,7 @@ import type { SeatRow } from '@/game/use-game-loop';
 import { FLAG_COLS, flagIndex } from '@/lib/leaderboard';
 import { CupIcon, GearIcon } from '@/components/tray-icons';
 
-const ANTON = 'Anton_400Regular';
+const ANTON_FONT = 'Anton_400Regular';
 const BARLOW = 'Barlow_600SemiBold';
 const BARLOW_BOLD = 'Barlow_700Bold';
 
@@ -50,42 +50,58 @@ const FLAG_H = 15;
  * this screen used to carry, which is most of why the two logos read
  * differently at the same size.
  */
-const LOGO_SIZE = 21;
 /**
- * Anton's own vertical metrics, measured off the loaded font (ascent 29px and
- * descent 8px at a 24.28px em). Everything below derives from these two
- * numbers, and they are the second attempt at this, so the failure is worth
- * recording in full.
+ * THE HEADER'S VERTICAL CONTRACT, the page's, stated once and then derived.
  *
- * iOS lays a glyph into its line box and CLIPS whatever does not fit, where
- * CSS lets ink overflow freely. The first fix assumed a line box equal to the
- * font size was enough. It is not, and nowhere near: Anton wants 1.52 times
- * its size, so lineHeight 21 on a 21px logo still sliced the top off PITCH,
- * and the score's 26 on 24px sliced its digits, which is what gave the game
- * away. The rule on iOS is give Anton its FULL box or none at all, and take
- * the layout space back with negative margins, which move the box and never
- * touch the ink.
+ *   - PITCH's cap line is the band's top; the pills and SCORE start on it.
+ *   - SNAKE's baseline is the band's floor; BEST ends on it, and in a room
+ *     the seat strip's bottom edge sits on it.
+ *
+ * The page does this with measured pixel nudges and says so in its own CSS.
+ * Here every offset is derived from the two fonts' measured metrics instead,
+ * because iOS also CLIPS anything whose line box is smaller than ascent plus
+ * descent, so the boxes must be full-size and the layout must claw the air
+ * back with margins. A margin moves the box and never touches the ink, which
+ * makes it the one safe tool for this on a platform that clips.
+ *
+ * Anton: ascent 1.18, descent 0.33, caps 0.867 of the em.
+ * Barlow: ascent 1.00, descent 0.20, caps 0.708.
+ * Both measured off the loaded fonts, not read from a spec sheet.
  */
-const ANTON_ASCENT = 1.194;
-const ANTON_DESCENT = 0.329;
+const ANTON = { asc: 1.18, desc: 0.33, cap: 0.867 };
+const BARLOW_M = { asc: 1.0, desc: 0.2, cap: 0.708 };
+type FontMetrics = typeof ANTON;
+
 /** the smallest line box iOS will not clip, plus a pixel of air */
-const antonBox = (size: number): number => Math.ceil(size * (ANTON_ASCENT + ANTON_DESCENT) + 1);
-/** how far a box of height `box` hangs below its baseline */
-const antonSlack = (size: number, box: number): number =>
-  (box - size * ANTON_ASCENT + size * ANTON_DESCENT) / 2;
+const box = (f: FontMetrics, size: number): number => Math.ceil(size * (f.asc + f.desc) + 1);
+/** air between a line box's top and the capitals' ink */
+const airAboveCap = (f: FontMetrics, size: number, line: number): number =>
+  (line - size * (f.asc + f.desc)) / 2 + size * (f.asc - f.cap);
+/** air between the baseline and the line box's bottom */
+const airBelowBase = (f: FontMetrics, size: number, line: number): number =>
+  line - ((line - size * (f.asc + f.desc)) / 2 + size * f.asc);
 
-/** the full, unclipped box each logo line paints in */
-const LOGO_LINE = antonBox(LOGO_SIZE);
-/** the web's tight 0.92 leading, restored by pulling the second line up */
+/** 24, which is what the page's own clamp serves a 420px phone */
+const LOGO_SIZE = 24;
+const LOGO_LINE = box(ANTON, LOGO_SIZE);
+/** the page's tight 0.92 leading, restored by pulling SNAKE up */
 const LOGO_TIGHTEN = LOGO_SIZE * 0.92 - LOGO_LINE;
-/** pull the logo down by its own under-baseline slack, so SNAKE's baseline
- *  sits on the band's floor next to the seat strip's bottom edge */
-const LOGO_SLACK = antonSlack(LOGO_SIZE, LOGO_LINE);
+/** trims that make the logo's margin box exactly its INK, cap to baseline,
+ *  so the whole band can align to it with plain flexbox */
+const LOGO_TRIM_TOP = -airAboveCap(ANTON, LOGO_SIZE, LOGO_LINE);
+const LOGO_TRIM_BOTTOM = -airBelowBase(ANTON, LOGO_SIZE, LOGO_LINE);
 
-/** the score digits: full box, then squeezed back to the old 26px footprint */
-const SCORE_SIZE = 24;
-const SCORE_LINE = antonBox(SCORE_SIZE);
-const SCORE_SQUEEZE = -(SCORE_LINE - 26) / 2;
+/** the score column, in the page's own mobile proportions (8 / 21 / 9 under
+ *  a 24px logo), each with a full box and a metric trim */
+const LABEL_SIZE = 8;
+const LABEL_LINE = box(BARLOW_M, LABEL_SIZE);
+const LABEL_TRIM = -airAboveCap(BARLOW_M, LABEL_SIZE, LABEL_LINE);
+const SCORE_SIZE = 21;
+const SCORE_LINE = box(ANTON, SCORE_SIZE);
+const SCORE_SQUEEZE = -(SCORE_LINE - SCORE_SIZE) / 2;
+const BEST_SIZE = 9;
+const BEST_LINE = box(BARLOW_M, BEST_SIZE);
+const BEST_TRIM = -airBelowBase(BARLOW_M, BEST_SIZE, BEST_LINE);
 
 /** How long FORFEIT stays armed before it forgets it was pressed. */
 const ARM_MS = 2600;
@@ -199,7 +215,7 @@ export function GameHeader({
   return (
     <View style={styles.header}>
       {/* the logo spans both lines and hangs from the bottom; see LOGO_SLACK */}
-      <View style={styles.logo}>
+      <View style={[styles.logo, inRoom && styles.logoRoom]}>
         <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
         <Text style={[styles.title, styles.titleSecond, dark && darkStyles.title]}>SNAKE</Text>
       </View>
@@ -311,13 +327,19 @@ export function GameHeader({
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'stretch',
     paddingHorizontal: 4,
     gap: 8,
   },
-  logo: { marginBottom: -LOGO_SLACK },
+  logo: { marginTop: LOGO_TRIM_TOP, marginBottom: LOGO_TRIM_BOTTOM, alignSelf: 'flex-start' },
+  /* In a room the two pill rows outgrow the logo's ink, so both ends cannot
+     pin at once. The page resolves it the same way: the logo hangs from the
+     floor, SNAKE's baseline stays on the seat strip's bottom edge, and the
+     cap-line contract belongs to the solo header where the scores column
+     fits inside the logo. */
+  logoRoom: { alignSelf: 'flex-end' },
   title: {
-    fontFamily: ANTON,
+    fontFamily: ANTON_FONT,
     fontSize: LOGO_SIZE,
     lineHeight: LOGO_LINE,
     letterSpacing: 1,
@@ -327,8 +349,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 0,
   },
   titleSecond: { marginTop: LOGO_TIGHTEN },
-  /** the two lines to the logo's right: chrome above, the room below */
-  column: { flex: 1, gap: 4 },
+  /** the two lines to the logo's right: chrome pinned to the cap line above,
+   *  the seat strip pinned to SNAKE's baseline below */
+  column: { flex: 1, gap: 4, justifyContent: 'space-between' },
   chromeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chips: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center' },
   seatRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -407,7 +430,7 @@ const styles = StyleSheet.create({
   cellDead: { opacity: 0.5 },
   seatName: { fontFamily: BARLOW_BOLD, fontSize: 9.5, letterSpacing: 0.9 },
   /** the number never shrinks: it is the thing the strip exists to show */
-  seatScore: { fontFamily: ANTON, fontSize: 13, color: '#f4ecd8', flexShrink: 0 },
+  seatScore: { fontFamily: ANTON_FONT, fontSize: 13, color: '#f4ecd8', flexShrink: 0 },
   struck: { textDecorationLine: 'line-through' },
   mine: {
     position: 'absolute',
@@ -457,17 +480,33 @@ const styles = StyleSheet.create({
   },
   exitTextArmed: { color: '#ffffff' },
 
-  scores: { alignItems: 'flex-end' },
-  scoreLabel: { fontFamily: BARLOW, fontSize: 10, letterSpacing: 2, color: GameColors.muted },
+  /* stretched to the logo's ink box and spread: SCORE starts on PITCH's cap
+     line, BEST ends on SNAKE's baseline, the number rides between */
+  scores: { alignItems: 'flex-end', justifyContent: 'space-between' },
+  scoreLabel: {
+    fontFamily: BARLOW,
+    fontSize: LABEL_SIZE,
+    lineHeight: LABEL_LINE,
+    marginTop: LABEL_TRIM,
+    letterSpacing: 1.6,
+    color: GameColors.muted,
+  },
   scoreValue: {
-    fontFamily: ANTON,
+    fontFamily: ANTON_FONT,
     fontSize: SCORE_SIZE,
     color: GameColors.ink,
     lineHeight: SCORE_LINE,
     marginVertical: SCORE_SQUEEZE,
   },
-  bestValue: { fontFamily: BARLOW_BOLD, fontSize: 12, color: GameColors.gold, letterSpacing: 1 },
-  clockText: { fontFamily: ANTON, fontSize: 15, color: GameColors.ink, letterSpacing: 1 },
+  bestValue: {
+    fontFamily: BARLOW_BOLD,
+    fontSize: BEST_SIZE,
+    lineHeight: BEST_LINE,
+    marginBottom: BEST_TRIM,
+    color: GameColors.gold,
+    letterSpacing: 1,
+  },
+  clockText: { fontFamily: ANTON_FONT, fontSize: 15, color: GameColors.ink, letterSpacing: 1 },
 });
 
 /* the shell's own dark tokens, not literals: these sit on the table and must
