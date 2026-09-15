@@ -12,7 +12,12 @@
  * here in the single block they came from. Add a rule where it belongs in
  * that order, never appended for tidiness.
  */
-  @import url('https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&display=swap');
+  /* The webfont is NOT imported here any more (2026-09-15). An @import inside
+     a stylesheet is the slowest way to load one: the browser has to fetch and
+     parse THIS file before it even discovers the font URL, then fetch that
+     CSS, then the faces, three round trips deep on a phone. It is a <link>
+     with a preconnect in index.html's head instead, which starts all of it in
+     the first round trip. */
 
   :root {
     --bg: #efe6d0;

@@ -51,19 +51,69 @@
 <!-- The stylesheet lives in styles/, split by what each file owns and
      linked IN THE ORDER the cascade needs. Every file opens with a block
      saying what it owns and what it must never do. -->
-<link rel="stylesheet" href="./styles/theme-colors.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=7b4b6e3371">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=7b4b6e3371">
+<!-- The webfont, started in the FIRST round trip. It used to be an @import
+     inside theme-colors.css, which meant the browser could not even see this
+     URL until that file had been fetched and parsed: three sequential trips
+     before a character could render in Anton, and every label visibly
+     reflowing when it finally did. preconnect opens the two connections
+     while the HTML is still arriving. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&display=swap">
+<script>
+  /* The stored THEME, applied before the first paint, and inline for exactly
+     that reason. setTheme() further down does the same two toggles, but it
+     runs from the module script, which lands after the whole module graph:
+     until 2026-09-15 a player who had chosen DARK watched a cream page turn
+     dark every single load. The logic mirrors setTheme exactly (AUTO wears no
+     class and lets the media query decide), so the two can never disagree. */
+  try {
+    var v = localStorage.getItem('snakeTheme');
+    var m = v === 'dark' || v === 'light' ? v : 'auto';
+    document.documentElement.classList.toggle('theme-dark', m === 'dark');
+    document.documentElement.classList.toggle('theme-light', m === 'light');
+  } catch (e) { /* private mode: AUTO, which is the default anyway */ }
+</script>
+<style>
+  /* The boot splash, and the ONE piece of CSS that lives inline rather than
+     in styles/. It has to be styled on the very first paint, before any
+     stylesheet has arrived, or the thing covering up the flash of unstyled
+     content is itself a flash of unstyled content. Its colours mirror --bg's
+     three cases by hand, because tokens are in a file it cannot wait for.
+
+     It fades itself out after three seconds WITHOUT any script. That is not
+     decoration: if the module graph fails to load, the splash must not leave
+     a player staring at an empty ground for ever. Script removes it far
+     sooner, the moment the page is actually ready. */
+  #boot { position: fixed; inset: 0; z-index: 99; display: grid; place-items: center;
+          background: #efe6d0; animation: bootSafety .3s ease-out 3s forwards; }
+  @media (prefers-color-scheme: dark) { html:not(.theme-light) #boot { background: #12160e; } }
+  html.theme-dark #boot { background: #12160e; }
+  #boot span { font-size: 15vmin; line-height: 1; animation: bootPulse 1.1s ease-in-out infinite; }
+  #boot.gone { animation: none; opacity: 0; visibility: hidden;
+               transition: opacity .22s ease-out, visibility 0s .22s; }
+  @keyframes bootSafety { to { opacity: 0; visibility: hidden; } }
+  @keyframes bootPulse { 50% { transform: scale(1.12); } }
+  @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
+</style>
+<link rel="stylesheet" href="./styles/theme-colors.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=c2931264ab">
 </head>
 <body>
+  <!-- Covered until the page is ready. Everything the shell needs is local
+       and fast except the font, and Anton is condensed enough that its
+       fallback is far wider: letting it swap in front of the player moved
+       every label on screen. One reveal instead of four visible waves. -->
+  <div id="boot" aria-hidden="true"><span>&#9917;</span></div>
   <div class="wrap">
     <header>
       <h1>PITCH<br> SNAKE</h1>
@@ -527,42 +577,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=7b4b6e3371",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=7b4b6e3371",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=7b4b6e3371",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=7b4b6e3371",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=7b4b6e3371",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=7b4b6e3371",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=7b4b6e3371",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=7b4b6e3371",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=7b4b6e3371",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=7b4b6e3371",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=7b4b6e3371",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=7b4b6e3371",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=7b4b6e3371",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=7b4b6e3371",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=7b4b6e3371",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=7b4b6e3371",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=7b4b6e3371",
-    "./packages/net/net.js": "./packages/net/net.js?v=7b4b6e3371",
-    "@pitch-snake/net": "./packages/net/net.js?v=7b4b6e3371",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=7b4b6e3371",
-    "./page/build/dom.js": "./page/build/dom.js?v=7b4b6e3371",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=7b4b6e3371",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=7b4b6e3371",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=7b4b6e3371",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=7b4b6e3371",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=7b4b6e3371",
-    "./page/build/shop.js": "./page/build/shop.js?v=7b4b6e3371",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=7b4b6e3371",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=7b4b6e3371",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=7b4b6e3371"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=c2931264ab",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=c2931264ab",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=c2931264ab",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=c2931264ab",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=c2931264ab",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=c2931264ab",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=c2931264ab",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=c2931264ab",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=c2931264ab",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=c2931264ab",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=c2931264ab",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=c2931264ab",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=c2931264ab",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=c2931264ab",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=c2931264ab",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=c2931264ab",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=c2931264ab",
+    "./packages/net/net.js": "./packages/net/net.js?v=c2931264ab",
+    "@pitch-snake/net": "./packages/net/net.js?v=c2931264ab",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=c2931264ab",
+    "./page/build/dom.js": "./page/build/dom.js?v=c2931264ab",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=c2931264ab",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=c2931264ab",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=c2931264ab",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=c2931264ab",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=c2931264ab",
+    "./page/build/shop.js": "./page/build/shop.js?v=c2931264ab",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=c2931264ab",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=c2931264ab",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=c2931264ab"
   }
 }
 </script>
@@ -6384,8 +6434,33 @@
   // Inert until a DSN is set in page/error-reporting.ts, and incapable of
   // failing loudly either way: the game plays identically if it never loads.
   initErrorReporting();
+  // ---- the reveal ----
+  // Everything above this line is local and synchronous: stored state, the
+  // canvas, the chrome, the outfit. The FONT is the one slow thing left, and
+  // the one that moves layout when it lands, so the splash waits for it.
+  // Capped, because a font that never arrives must not hold the game: at the
+  // cap the page reveals anyway and the swap, if it ever comes, is the old
+  // behaviour rather than a hostage situation. Nothing here waits on the
+  // NETWORK tier (auth, boards, wallet): those fill in behind the reveal,
+  // exactly as the rule that nothing may gate play requires.
+  let revealed = false;
+  function revealApp() {
+    if (revealed) return;
+    revealed = true;
+    const boot = document.getElementById('boot');
+    if (!boot) return;
+    boot.classList.add('gone');
+    setTimeout(() => boot.remove(), 300);
+  }
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => buildTntSprite());   // redo the TNT face once Barlow arrives
+    const cap = setTimeout(revealApp, 1200);
+    document.fonts.ready.then(() => {
+      clearTimeout(cap);
+      buildTntSprite();      // redo the TNT face once Barlow arrives
+      revealApp();
+    }).catch(() => revealApp());
+  } else {
+    revealApp();
   }
 
 
