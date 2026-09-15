@@ -780,21 +780,14 @@ $$;
 
 -- Head to head against one opponent: rated rounds you both played, and who
 -- finished ahead. Both sides come from seats, so it needs no new storage.
+
+
+-- RETIRED 2026-09-15: pitch_snake_h2h(uuid) was a per-opponent head-to-head
+-- read that nothing ever called; recent_opponents already returns the record
+-- against each rival, which is what both clients show. The seats it read are
+-- untouched, so it can come back as a function alone if a rival screen wants
+-- it. The drop keeps any file-run order converging on gone.
 drop function if exists public.pitch_snake_h2h(uuid);
-create or replace function public.pitch_snake_h2h(p_opponent uuid)
-returns json language sql security definer set search_path = '' stable
-as $$
-  select json_build_object(
-    'games',      count(*),
-    'my_wins',    count(*) filter (where me.place < opp.place),
-    'their_wins', count(*) filter (where me.place > opp.place),
-    'draws',      count(*) filter (where me.place = opp.place))
-  from public.pitch_snake_seats me
-  join public.pitch_snake_seats opp
-    on opp.round_id = me.round_id and opp.user_id = p_opponent
-  where me.user_id = auth.uid() and auth.uid() is not null
-    and me.place is not null and opp.place is not null;
-$$;
 
 -- Who you have played, most recent first, with the record against each. This
 -- is how a client offers an opponent to inspect, since names are display and
@@ -862,10 +855,8 @@ grant execute on function public.pitch_snake_round_ratings(text, integer)       
 revoke all on function public.pitch_snake_top_rated_season(text, text, integer)       from public;
 revoke all on function public.pitch_snake_my_rating_season(text)                      from public;
 revoke all on function public.pitch_snake_my_mp_stats(text)                           from public;
-revoke all on function public.pitch_snake_h2h(uuid)                                   from public;
 revoke all on function public.pitch_snake_recent_opponents(integer)                   from public;
 grant execute on function public.pitch_snake_top_rated_season(text, text, integer)    to anon, authenticated;
 grant execute on function public.pitch_snake_my_rating_season(text)                   to anon, authenticated;
 grant execute on function public.pitch_snake_my_mp_stats(text)                        to anon, authenticated;
-grant execute on function public.pitch_snake_h2h(uuid)                                to anon, authenticated;
 grant execute on function public.pitch_snake_recent_opponents(integer)               to anon, authenticated;

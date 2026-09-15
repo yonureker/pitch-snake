@@ -167,20 +167,6 @@ create index if not exists pitch_snake_achievements_user_idx
 alter table public.pitch_snake_achievements enable row level security;
 revoke all on table public.pitch_snake_achievements from anon, authenticated;
 
-drop function if exists public.pitch_snake_my_achievements();
-
-create or replace function public.pitch_snake_my_achievements()
-returns json
-language sql
-security definer
-set search_path = ''
-stable
-as $$
-  select coalesce(json_agg(json_build_object(
-           'id', a.achievement, 'at', a.earned_at) order by a.earned_at), '[]'::json)
-  from public.pitch_snake_achievements a
-  where a.user_id = auth.uid() and auth.uid() is not null;
-$$;
 
 -- ------------------------------------------------- the catalogue mirror ----
 -- What each badge IS, so a player can see the ones they have NOT earned:
@@ -218,31 +204,18 @@ as $$
     set name = excluded.name, note = excluded.note, sort = excluded.sort;
 $$;
 
--- Every badge, with the date on the ones this player has. Ordered by the
--- catalogue's own order so the shelf reads the way the validator lists them.
-drop function if exists public.pitch_snake_my_achievements();
-
-create or replace function public.pitch_snake_my_achievements()
-returns json
-language sql
-security definer
-set search_path = ''
-stable
-as $$
-  select coalesce(json_agg(json_build_object(
-           'id', c.id, 'name', c.name, 'note', c.note, 'at', a.earned_at
-         ) order by c.sort, c.id), '[]'::json)
-  from public.pitch_snake_achievement_catalogue c
-  left join public.pitch_snake_achievements a
-         on a.achievement = c.id and a.user_id = auth.uid() and auth.uid() is not null;
-$$;
-
-revoke all on function public.pitch_snake_my_achievements()      from public;
 revoke all on function public.pitch_snake_sync_achievements(jsonb) from public;
-grant execute on function public.pitch_snake_my_achievements()   to anon, authenticated;
 -- Sync belongs to the validator's service role and to nobody else. Revoking
 -- from PUBLIC does not achieve that on its own: Supabase grants anon and
 -- authenticated separately, so a browser holding the publishable key could
 -- otherwise rewrite every badge's name and note.
 revoke execute on function public.pitch_snake_sync_achievements(jsonb) from anon, authenticated;
 grant  execute on function public.pitch_snake_sync_achievements(jsonb) to service_role;
+
+-- RETIRED 2026-09-15: pitch_snake_my_achievements() was the badge shelf's
+-- read, and achievements were withdrawn on 2026-09-07 (to return as daily
+-- challenges). It had been defined THREE times across this file and
+-- telemetry.sql, so whichever ran last won, which is its own reason to be
+-- rid of it. The achievements tables keep their history untouched and
+-- reason='achievement' stays a legal ledger row; only the dead door goes.
+drop function if exists public.pitch_snake_my_achievements();

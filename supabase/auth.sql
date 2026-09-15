@@ -93,6 +93,12 @@ alter table public.pitch_snake_profiles enable row level security;
 -- and TRUNCATE is not filtered by RLS at all. The RPCs are the door.
 revoke all on table public.pitch_snake_profiles from anon, authenticated;
 
+-- RETIRED 2026-09-15: pitch_snake_set_levels(text[]) wrote onboarding level
+-- progress, and levels were retired from the page on 2026-09-05. The profiles
+-- `levels` column STAYS (old progress is kept in case lessons return); only
+-- the client door goes, since nothing has called it since the retirement.
+drop function if exists public.pitch_snake_set_levels(text[]);
+
 -- ------------------------------------------------- profile read / write ----
 -- get returns the caller's row as one json object, or null: exactly what a
 -- client wants to branch on, and a signed-out caller just gets null rather
@@ -271,45 +277,10 @@ $$;
 comment on column public.pitch_snake_profiles.levels is
   'Finished onboarding level ids. Client-reported on purpose: levels pay nothing, so there is nothing to forge. If a level ever awards coins this must move to the validator.';
 
-drop function if exists public.pitch_snake_set_levels(text[]);
 
 -- Merges rather than replaces, so two devices that each finished different
 -- lessons end up with both instead of whichever one synced last.
-create or replace function public.pitch_snake_set_levels(p_levels text[])
-returns json
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  merged text[];
-begin
-  if auth.uid() is null then
-    return '[]'::json;
-  end if;
-  select array(
-    select distinct x from unnest(
-      coalesce((select p.levels from public.pitch_snake_profiles p where p.user_id = auth.uid()), '{}')
-      || coalesce(p_levels, '{}')
-    ) as x
-    where x ~ '^[a-z0-9-]{1,40}$'          -- an id, not an essay
-    limit 200
-  ) into merged;
 
-  -- Upsert, not update. A profile row is only created when a name is set, and
-  -- a player can finish the lessons before ever typing one: a plain UPDATE
-  -- matched nothing and the progress went nowhere, silently.
-  insert into public.pitch_snake_profiles (user_id, name, levels)
-  values (auth.uid(), 'YOU', merged)
-  on conflict (user_id) do update
-    set levels = merged, updated_at = now();
-
-  return coalesce(array_to_json(merged), '[]'::json);
-end;
-$$;
-
-revoke all on function public.pitch_snake_set_levels(text[]) from public;
-grant execute on function public.pitch_snake_set_levels(text[]) to anon, authenticated;
 
 -- -------------------------------------- the boards learn whose score it is ----
 -- RETIRED: this file used to redefine the two submit functions so rows

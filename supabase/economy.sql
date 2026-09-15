@@ -344,23 +344,10 @@ revoke all     on function public.pitch_snake_sync_achievements(jsonb) from publ
 revoke execute on function public.pitch_snake_sync_achievements(jsonb) from anon, authenticated;
 grant  execute on function public.pitch_snake_sync_achievements(jsonb) to service_role;
 
+-- RETIRED 2026-09-15: pitch_snake_my_achievements() was the badge shelf's
+-- read, and achievements were withdrawn on 2026-09-07 (to return as daily
+-- challenges). It had been defined THREE times across this file and
+-- telemetry.sql, so whichever ran last won, which is its own reason to be
+-- rid of it. The achievements tables keep their history untouched and
+-- reason='achievement' stays a legal ledger row; only the dead door goes.
 drop function if exists public.pitch_snake_my_achievements();
-
-create or replace function public.pitch_snake_my_achievements()
-returns json
-language sql
-security definer
-set search_path = ''
-stable
-as $$
-  select coalesce(json_agg(json_build_object(
-           'id', c.id, 'name', c.name, 'note', c.note, 'coins', c.coins,
-           'at', a.earned_at
-         ) order by c.sort, c.id), '[]'::json)
-  from public.pitch_snake_achievement_catalogue c
-  left join public.pitch_snake_achievements a
-         on a.achievement = c.id and a.user_id = auth.uid() and auth.uid() is not null;
-$$;
-
-revoke all on function public.pitch_snake_my_achievements() from public;
-grant execute on function public.pitch_snake_my_achievements() to anon, authenticated;
