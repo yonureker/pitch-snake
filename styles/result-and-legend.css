@@ -120,12 +120,34 @@
        column put KICK OFF lower on the panel than it had ever sat. The body
        gives back a slice of its reserved height so the whole group rides up
        again, which is where the title belongs on this screen. */
-    .ov-body.kick-grid { min-height: 0; justify-content: flex-start; padding-top: clamp(4px, 1.5cqw, 16px); }
-    /* and the group rides a little above dead centre. Padding at the FOOT is
-       the honest lever: the title, the tiles and the buttons stay one block
-       and only the axis they sit on moves, where pinning the buttons to the
-       bottom would have stranded them a hand's width below the tiles. */
-    .overlay:has(.ov-body.kick-grid) { padding-bottom: clamp(18px, 6cqw, 60px); }
+    /* NOTHING HERE MAY TARGET `.overlay` ITSELF. It is the container this
+       query asks about, and a container query can only style the container's
+       DESCENDANTS: a rule whose subject is `.overlay` inside this block never
+       applies, silently. A `padding-bottom` lift written that way sat here
+       dead for a day looking exactly like a lift that was too small. Every
+       spacing lever below is therefore a margin on a CHILD, which composes
+       with the overlay's own 8px column gap. */
+    .ov-body.kick-grid {
+      min-height: 0; justify-content: flex-start;
+      /* equal margins, so the space above the tiles is the space below them
+         by construction rather than by two numbers kept in step */
+      margin-block: clamp(2px, 1.2cqw, 12px);
+      padding-top: 0;
+    }
+    /* The title's own line box carried about 19px of leading under the glyphs
+       and the buttons carry none, so two equal BOX gaps read as one wide space
+       and one tight one. Hugging the glyphs is what makes the two measured
+       gaps the two seen gaps. */
+    .overlay:has(.ov-body.kick-grid) .ov-head h2 { line-height: 1; }
+    /* and the group rides above dead centre: height added under the foot is
+       shared by a centred column, so the whole block lifts by half of it and
+       the title, the tiles and the buttons keep their spacing exactly. */
+    .ov-body.kick-grid ~ .ov-foot { margin-bottom: clamp(24px, 11cqw, 110px); }
+    /* The kickoff says the one thing it is for and nothing else (the owner's
+       call, 2026-09-15). The strapline and HOW IT SCORES were both labels on
+       what the tiles already show, and a screen that opens with two lines of
+       preamble reads as a page rather than a whistle. */
+    .overlay:has(.ov-body.kick-grid) #overlayText { display: none; }
     .ov-body.kick-grid > .legend {
       width: min(100%, 560px);
       max-width: none; margin: 0;
@@ -136,14 +158,6 @@
       justify-content: center;
       gap: 8px;
       text-align: center;
-    }
-    /* a pseudo-element so applyLegend's children indexing stays untouched */
-    .ov-body.kick-grid .legend::before {
-      content: 'HOW IT SCORES';
-      flex: 0 0 100%; width: 100%; text-align: center;
-      font-family: 'Barlow', sans-serif; font-weight: 700;
-      font-size: 11px; letter-spacing: 3px; color: var(--gold);
-      margin-bottom: clamp(2px, 0.6cqw, 6px);
     }
     .ov-body.kick-grid .lg-row {
       /* four across: four bases plus three 8px gaps make exactly 100%. A
