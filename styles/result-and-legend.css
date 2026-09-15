@@ -159,26 +159,40 @@
       background: rgba(246,239,222,0.03);
       text-align: center;
     }
+    /* THE THING AND WHAT IT DOES, and nothing else (the owner's call): no
+       name under the icon, no sentence under the name. A tile that has to be
+       read is a tile nobody reads, and the icon already says which thing it
+       is, which is the whole reason it is a picture. The icon grows into the
+       room the words gave back. .lg-sub survives as a SHORT qualifier, never
+       prose: the one thing a number cannot carry on its own is who it
+       happens to, which is what separates the bolt from the rain. */
     .ov-body.kick-grid .lg-ic {
-      width: clamp(24px, 4.2cqw, 36px); height: clamp(24px, 4.2cqw, 36px);
-      font-size: clamp(17px, 2.9cqw, 25px);
+      width: clamp(32px, 5.6cqw, 48px); height: clamp(32px, 5.6cqw, 48px);
+      font-size: clamp(23px, 4cqw, 34px);
     }
-    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(14px, 2.3cqw, 19px); }
-    .ov-body.kick-grid .lg-ic.tnt { font-size: clamp(7px, 1.2cqw, 10px); }
+    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(18px, 3.1cqw, 26px); }
+    .ov-body.kick-grid .lg-ic.tnt { font-size: clamp(9px, 1.6cqw, 13px); }
     .ov-body.kick-grid .lg-txt { display: none; }
     .ov-body.kick-grid .lg-two {
-      display: flex; flex-direction: column; gap: 1px;
+      display: flex; flex-direction: column; gap: 0;
       align-items: center; min-width: 0; text-align: center;
     }
-    .lg-name {
-      font-size: clamp(11px, 1.7cqw, 14px); font-weight: 600; color: #e9e0cd;
-      line-height: 1.15;
-    }
+    .ov-body.kick-grid .lg-name { display: none; }
+    /* The headline effect comes first and the qualifier hangs under it. In
+       source order the pair sits the other way round (it is the wide list's
+       name-and-sentence slot), which put "+5 LONGER" above TNT's "-5" and
+       read as the smaller number being the point of the tile. */
+    .ov-body.kick-grid .lg-val { order: 2; }
+    .ov-body.kick-grid .lg-two { order: 3; }
     .lg-sub {
-      font-size: clamp(9px, 1.35cqw, 11px); font-weight: 500;
-      color: #8e8672; letter-spacing: 0.1px; line-height: 1.2;
+      font-size: clamp(8.5px, 1.25cqw, 10.5px); font-weight: 600;
+      color: #8e8672; letter-spacing: 0.3px; line-height: 1.2;
+      text-transform: uppercase;
     }
-    .ov-body.kick-grid .lg-val { font-size: clamp(14px, 2.3cqw, 19px); min-width: 0; }
+    /* an empty qualifier must take no room at all, or the tiles that have
+       one sit a hair lower than the tiles that do not */
+    .ov-body.kick-grid .lg-sub:empty { display: none; }
+    .ov-body.kick-grid .lg-val { font-size: clamp(17px, 2.9cqw, 24px); min-width: 0; }
     /* SLOW is a word where the others are numbers: it needs to sit at the
        same optical weight without stealing the tile */
     .ov-body.kick-grid .lg-val.pos, .ov-body.kick-grid .lg-val.neg,
