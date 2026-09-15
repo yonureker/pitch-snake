@@ -14,7 +14,7 @@ import {
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
   BOLT_EVERY, BOLT_LIFE_MS, BOLT_SLOW_MS, GHOST_SLOW_MS, ghostProgress, slowTick,
   CLINCH_GRACE_MS, CLINCH_GHOST_MS,
-  rainTick, RAIN_WARN_MS,
+  rainTick, RAIN_WARN_MS, WALL_MAX_CELLS,
 } from './engine.js';
 
 const FRAME = 1000 / 60;
@@ -2023,6 +2023,10 @@ test('a level round replays to the identical end', () => {
 // v33 moved all three again (5/824, 4/925, 17/1255) when five new
 // hand-drawn shapes joined: same cause as v31, a wider catalogue changing
 // which shape every draw picks.
+// v34 put them back once more (5/1006, 4/1415, 20/1565) when those five
+// were withdrawn. The catalogue has now been widened and narrowed twice and
+// the pins have followed it exactly both ways, which is the contract
+// working rather than a fixture being fragile.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -2588,12 +2592,16 @@ test('weather: an old log without the knob replays dry', () => {
 // space is measured under the WRAP, because the board is a torus.
 //
 // This walks real rounds rather than reaching into the pattern list, so it
-// proves what a PLAYER can actually meet. Twelve shapes as of v33: seven
-// derived and five drawn by hand. The check is worth keeping whatever the
-// catalogue holds, because it is the mistake no other test would notice.
+// proves what a PLAYER can actually meet. Seven shapes as of v34, all
+// derived; the check is worth keeping whatever the catalogue holds, because
+// a sealed pocket is the mistake no other test would notice.
+//
+// It also weighs them. WALL_MAX_CELLS is a real ceiling: a shape past it
+// crowds the pitch into a maze, and unlike a shape's LOOK, its weight is
+// not a matter of taste.
 test('every wall shape leaves the pitch in one connected piece', () => {
   const shapes = new Map();
-  for (let seed = 1; seed <= 12000 && shapes.size < 12; seed++) {
+  for (let seed = 1; seed <= 8000 && shapes.size < 7; seed++) {
     const g = createGame({ seed });
     for (let q = 0; q < 2000; q++) {
       g.advanceQuanta(1);
@@ -2603,7 +2611,7 @@ test('every wall shape leaves the pitch in one connected piece', () => {
       break;
     }
   }
-  assert.equal(shapes.size, 12, 'all twelve shapes are reachable in play');
+  assert.equal(shapes.size, 7, 'all seven shapes are reachable in play');
 
   for (const [, walls] of shapes) {
     // flood one free cell and count what it reaches
@@ -2624,7 +2632,7 @@ test('every wall shape leaves the pitch in one connected piece', () => {
     const free = GRID * GRID - walls.size;
     assert.equal(seen.size, free,
       `a shape of ${walls.size} walls sealed off ${free - seen.size} cells`);
-    // and it must leave room to actually play in
-    assert.ok(free >= 280, `a shape of ${walls.size} walls left only ${free} free cells`);
+    assert.ok(walls.size <= WALL_MAX_CELLS,
+      `a shape takes ${walls.size} cells, past the ${WALL_MAX_CELLS} ceiling`);
   }
 });
