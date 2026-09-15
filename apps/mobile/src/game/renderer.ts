@@ -1205,20 +1205,24 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
     }
   }
 
-  // the sky is nearest the camera: shade and streaks over everything while
-  // it pours. Alpha steps with the phase rather than fading (the page eases;
-  // here a tween would need per-frame state, and the warn phase already
-  // reads as the ramp). Positions are closed-form on the clock: no state.
+  // The sky is nearest the camera, and it says two different things. The
+  // SHADE is the warning: it darkens for two seconds before a drop falls,
+  // which is the only notice a pace change gets. The STREAKS are the rule,
+  // and they start and stop WITH the slowdown, which the engine applies on
+  // the very quantum the weather flips; showing rain while a snake runs at
+  // full pace is the game lying about its own rules. Positions are
+  // closed-form on the clock: no state.
   const sky = game.weather;
   if (sky === 'warn' || sky === 'rain') {
-    const alpha = sky === 'rain' ? 1 : 0.35;
     fillPaint.setColor(C.rainShade);
-    fillPaint.setAlphaf(0.12 * alpha);
+    fillPaint.setAlphaf(sky === 'rain' ? 0.12 : 0.072);
     canvas.drawRect(_bounds, fillPaint);
     fillPaint.setAlphaf(1);
+  }
+  if (sky === 'rain') {
     strokePaint.setColor(C.rainStreak);
     strokePaint.setStrokeWidth(Math.max(1, cell * 0.045));
-    strokePaint.setAlphaf(0.45 * alpha);
+    strokePaint.setAlphaf(0.45);
     const H = rc.boardPx,
       fall = H / 900;
     for (let i = 0; i < RAIN_N; i++) {

@@ -1795,12 +1795,30 @@
   const RAIN_N = 90;
   const rainX = new Float32Array(RAIN_N), rainY = new Float32Array(RAIN_N);
   const rainV = new Float32Array(RAIN_N), rainL = new Float32Array(RAIN_N);
-  let rainSeeded = false, rainAlpha = 0;
+  let rainSeeded = false, rainAlpha = 0, rainShade = 0;
   function drawRain(dt) {
+    // TWO layers, because they say two different things and used to say them
+    // at the wrong times. The SHADE is the warning: the sky darkens for two
+    // seconds before a drop falls, which is the only notice a pace change
+    // gets. The STREAKS are the rule itself, and they now start and stop
+    // WITH the slowdown, which the engine applies on the very quantum the
+    // weather flips. They used to begin during the warning and linger more
+    // than a second after the sky cleared, so the screen showed rain while
+    // the snake ran at full pace and showed clear skies while it waded. The
+    // game was lying about its own rules; these are the eases that stop it.
     const w = g.weather;
-    const target = w === 'rain' ? 1 : w === 'warn' ? 0.35 : 0;
-    rainAlpha += (target - rainAlpha) * Math.min(1, dt / 350);
-    if (rainAlpha < 0.02) { rainAlpha = target ? rainAlpha : 0; if (rainAlpha < 0.02) return; }
+    const shadeTo = w === 'rain' ? 1 : w === 'warn' ? 0.6 : 0;
+    const streakTo = w === 'rain' ? 1 : 0;
+    rainShade += (shadeTo - rainShade) * Math.min(1, dt / 300);
+    // ~90ms: four frames, which reads as instant and still never pops
+    rainAlpha += (streakTo - rainAlpha) * Math.min(1, dt / 90);
+    if (rainShade < 0.01) { rainShade = 0; if (rainAlpha < 0.01) { rainAlpha = 0; return; } }
+    if (rainShade > 0.01) {
+      ctx.globalAlpha = 0.12 * rainShade;
+      ctx.fillStyle = '#101812';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    if (rainAlpha < 0.01) { rainAlpha = 0; ctx.globalAlpha = 1; return; }
     if (!rainSeeded) {
       rainSeeded = true;
       for (let i = 0; i < RAIN_N; i++) {
@@ -1810,11 +1828,7 @@
         rainL[i] = cell * (0.5 + Math.random() * 0.5);
       }
     }
-    // a breath of shade over the whole pitch while it pours
-    ctx.globalAlpha = 0.12 * rainAlpha;
-    ctx.fillStyle = '#101812';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // then the streaks, slanted, wrapping top to bottom
+    // the streaks, slanted, wrapping top to bottom
     ctx.globalAlpha = 0.45 * rainAlpha;
     ctx.strokeStyle = '#cfe3ee';
     ctx.lineWidth = Math.max(1, cell * 0.045);

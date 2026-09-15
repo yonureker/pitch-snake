@@ -329,6 +329,23 @@ module.exports = defineConfig([
     },
   },
   {
+    // TypeScript resolves its own imports, and does it properly: it reads the
+    // workspace packages' "exports" maps, which is how '@pitch-snake/net/
+    // vs-smoothing' and '@pitch-snake/cosmetics/kit' are spelled. This rule's
+    // resolver does not, and worse, it STACK-OVERFLOWS trying: the workspace
+    // symlinks (node_modules/@pitch-snake/mobile points back at apps/mobile)
+    // send fileExistsWithCaseSync recursing until the process dies, on every
+    // file importing a shared package.
+    //
+    // The crash was invisible for a day because --cache had those files
+    // marked clean and never re-linted them; clearing the cache is what
+    // surfaced it. `tsc --noEmit` is the authority on whether an import
+    // resolves and it runs on every commit beside this, so the rule is off
+    // rather than fed a second resolver to disagree with TypeScript.
+    files: ['src/**/*.{ts,tsx}'],
+    rules: { 'import/no-unresolved': 'off' },
+  },
+  {
     // Client code: service-role bans and gameplay-randomness bans everywhere.
     files: ['src/**/*.{ts,tsx}'],
     rules: {
