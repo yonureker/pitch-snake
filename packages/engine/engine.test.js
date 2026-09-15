@@ -2507,7 +2507,7 @@ test('weather: the downpour drags every snake, and stacks with the bolt', () => 
   assert.equal(p.tickMs, base, 'clear skies hand the base tick back');
 });
 
-test('weather: a ghost steps rainTick-long while it pours', () => {
+test('weather: the pack keeps its pace through a downpour (v35)', () => {
   // the sky's clocks are poked directly, like every hazard clock in this
   // suite: waiting for a natural shower gambles on an unsteered snake
   // surviving the walk, and a dead round freezes the sim mid-warning
@@ -2519,9 +2519,40 @@ test('weather: a ghost steps rainTick-long while it pours', () => {
   g.advanceQuanta(1);
   assert.equal(g.weather, 'rain');
   g.weatherEnd = g.clockMs + 100000;   // hold the downpour open for the step
-  g.advanceQuanta(rainTick(GHOST_MS) / SIM_DT + 2);
-  assert.equal(g.ghosts[0].stepMs, rainTick(GHOST_MS), 'the stamped span carries the rain');
-  assert.ok(g.ghosts[0].stepMs % SIM_DT === 0);
+  g.advanceQuanta(GHOST_MS / SIM_DT + 2);
+  assert.equal(g.ghosts[0].stepMs, GHOST_MS,
+    'rain drags the snakes and not the pack');
+  // and the snake IS dragged in the same round, or the rule means nothing
+  assert.equal(g.players[0].tickMs, rainTick(SPEEDS.normal));
+});
+
+// The invariant the owner asked about when rain came off the ghosts: with
+// the pack at its own pace and the snakes slowed, can a ghost ever outrun a
+// snake? No, and not by a whisker either. This walks every combination the
+// game can produce rather than trusting the arithmetic in a comment,
+// because the margin is what makes lifting rain off the pack safe, and a
+// later tuning change (a heavier rain factor, a slower speed setting, a
+// stronger bolt) is exactly the kind of edit that would spend it without
+// anybody noticing.
+test('a ghost is never faster than a snake, in any weather, at any speed', () => {
+  for (const [name, tick] of Object.entries(SPEEDS)) {
+    for (const raining of [false, true]) {
+      for (const dragged of [false, true]) {
+        let t = dragged ? slowTick(tick) : tick;
+        if (raining) t = rainTick(t);
+        // a ghost needs GHOST_MS per cell, or GHOST_SLOW_MS while a bolt
+        // drags it, and a bolt drags the pack and the rivals together, so
+        // the honest comparison is the ghost at its FASTEST
+        assert.ok(t < GHOST_MS,
+          `${name}${raining ? ' raining' : ''}${dragged ? ' bolt-dragged' : ''}: ` +
+          `snake ${t}ms/cell against a ghost's ${GHOST_MS}ms`);
+      }
+    }
+  }
+  // the worst case named explicitly, so the margin is on the record
+  const worst = rainTick(slowTick(SPEEDS.slow));
+  assert.equal(worst, 390, 'the slowest a snake can ever be');
+  assert.ok(GHOST_MS / worst > 1.25, 'and the pack is still comfortably behind it');
 });
 
 test('weather: warn, pour, clear, and the warning never slows anyone', () => {

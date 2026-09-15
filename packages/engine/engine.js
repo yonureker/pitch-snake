@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 34;  // 34: the five hand-drawn shapes are withdrawn and WALL_MAX_CELLS caps any shape at eighty cells; 33: five hand-drawn wall shapes join the rotation (twelve in all), carried as ASCII art so the source shows the pitch; 32: the seven hand-drawn shapes are withdrawn (owner's call, the day after they landed); the rotation is the seven derived shapes again; 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 35;  // 35: rain drags the SNAKES only, the ghosts keep their pace (a snake is still 1.28x faster than a ghost at its own worst); 34: the five hand-drawn shapes are withdrawn and WALL_MAX_CELLS caps any shape at eighty cells; 33: five hand-drawn wall shapes join the rotation (twelve in all), carried as ASCII art so the source shows the pitch; 32: the seven hand-drawn shapes are withdrawn (owner's call, the day after they landed); the rotation is the seven derived shapes again; 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -117,8 +117,9 @@ export const GHOST_SLOW_MS = 770;  // a slowed ghost's step
 export const slowTick = ms => Math.round(ms / 0.65 / SIM_DT) * SIM_DT;
 
 // ---- weather (v29) ----
-// Rain slows the whole pitch: while it pours, every snake and every ghost
-// takes 25% longer steps. That is the entire mechanic since v29; v28 shipped
+// Rain slows the snakes: while it pours, every snake takes 25% longer steps
+// and the ghosts keep their own pace (v35; v29 to v34 dragged the pack too,
+// which made a storm change nothing about the chase). That is the mechanic; v28 shipped
 // puddles as terrain and the owner cut them the same day (heavy legs
 // everywhere read better than route-around water, and one global state
 // beats forty cells of it). The feature rides its own PRNG stream
@@ -130,11 +131,13 @@ export const RAIN_MIN_MS = 8000;       // a downpour lasts between these two,
 export const RAIN_MAX_MS = 12000;      //   seeded per shower
 export const RAIN_EVERY_MS = 60_000;   // mean shower cadence; each gap is seeded
                                        //   in [0.75, 1.25] of the knob
-// The downpour's drag: 25% longer steps for everyone, snake and ghost alike,
-// quantized onto the grid every timing constant lives on. Factors MULTIPLY:
-// a rival already dragged by a bolt is slower still in the rain. Rain only
-// ever LENGTHENS a tick, so the index-order food tie-break ("no tick shorter
-// than ten quanta") and the doom window's REDIRECT_MS bounds hold untouched.
+// The downpour's drag: 25% longer steps for the SNAKES, and since v35 for
+// the snakes alone. The pack keeps its pace, because weather that slowed
+// everyone equally changed nothing about the chase. Quantized onto the grid
+// every timing constant lives on, and factors MULTIPLY: a rival already
+// dragged by a bolt is slower still in the rain. Rain only ever LENGTHENS a
+// tick, so the index-order food tie-break ("no tick shorter than ten
+// quanta") and the doom window's REDIRECT_MS bounds hold untouched.
 export const rainTick = ms => Math.round(ms * 1.25 / SIM_DT) * SIM_DT;
 
 // The doom window (rule 25): walking into a wall or yourself is not final
@@ -1195,12 +1198,17 @@ export function createGame(cfg = {}) {
       spawnGhost();
       if (S.ghosts.length > before) emit({ t: 'ghost', n: S.ghosts.length });
     }
-    // What changes a ghost's pace: the bolt, earned and running out, and
-    // since v29 the rain, worn by everyone while it pours (rule 23 as
-    // amended). The span is stamped on the ghost as it steps, so the
-    // renderers interpolate the glide they are actually watching.
-    let stepMs = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
-    if (S.weather === 'rain') stepMs = rainTick(stepMs);
+    // The ONE thing that changes a ghost's pace, and it is earned and it runs
+    // out: the bolt (rule 23). Rain drags the snakes and NOT the pack, the
+    // owner's call on 2026-09-15: weather that slowed everyone equally
+    // changed nothing about the chase, which is the only reason to have it.
+    // The gap can take it. A ghost needs GHOST_MS per cell and the SLOWEST a
+    // snake can ever be is the slow setting, raining, with a rival's bolt
+    // dragging it, which is 390ms against the ghost's 500: still a 1.28x
+    // margin, and the suite pins that so a later tuning change cannot quietly
+    // hand the pack the advantage. The span is stamped on the ghost as it
+    // steps, so the renderers interpolate the glide they are watching.
+    const stepMs = S.clockMs < S.slowUntil ? GHOST_SLOW_MS : GHOST_MS;
     for (const g of S.ghosts) {
       if (S.clockMs >= g.moveAt) { moveGhost(g); g.stepMs = stepMs; g.moveAt = S.clockMs + stepMs; }
     }
