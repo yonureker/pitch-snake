@@ -2015,6 +2015,11 @@ test('a level round replays to the identical end', () => {
 // THREE for the same reason, only harder: the rotation went from seven
 // shapes to fourteen, so every wall draw in every fixture picks a different
 // shape, and all three pilots now end on a wall (5/837, 4/965, 17/1255).
+// v32 put all three back EXACTLY where v30 had them (5/1006, 4/1415,
+// 20/1565), because withdrawing those seven shapes restores the v30
+// rotation cell for cell: the same seven shapes in the same order draw the
+// same dice. A fixture returning to an older pin is the cleanest possible
+// evidence that a revert really reverted.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -2580,10 +2585,12 @@ test('weather: an old log without the knob replays dry', () => {
 // space is measured under the WRAP, because the board is a torus.
 //
 // This walks real rounds rather than reaching into the pattern list, so it
-// proves what a PLAYER can actually meet. Fourteen shapes as of v31.
+// proves what a PLAYER can actually meet. Seven shapes as of v32, when the
+// hand-drawn seven were withdrawn; the check is worth keeping whatever the
+// catalogue holds, because it is the mistake no other test would notice.
 test('every wall shape leaves the pitch in one connected piece', () => {
   const shapes = new Map();
-  for (let seed = 1; seed <= 8000 && shapes.size < 14; seed++) {
+  for (let seed = 1; seed <= 8000 && shapes.size < 7; seed++) {
     const g = createGame({ seed });
     for (let q = 0; q < 2000; q++) {
       g.advanceQuanta(1);
@@ -2593,7 +2600,7 @@ test('every wall shape leaves the pitch in one connected piece', () => {
       break;
     }
   }
-  assert.equal(shapes.size, 14, 'all fourteen shapes are reachable in play');
+  assert.equal(shapes.size, 7, 'all seven shapes are reachable in play');
 
   for (const [, walls] of shapes) {
     // flood one free cell and count what it reaches
