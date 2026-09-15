@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 32;  // 32: the seven hand-drawn shapes are withdrawn (owner's call, the day after they landed); the rotation is the seven derived shapes again; 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 33;  // 33: five hand-drawn wall shapes join the rotation (twelve in all), carried as ASCII art so the source shows the pitch; 32: the seven hand-drawn shapes are withdrawn (owner's call, the day after they landed); the rotation is the seven derived shapes again; 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -223,6 +223,28 @@ function borderSeeds(solidTo) {
   return c;
 }
 
+// A hand-drawn shape: one string per row, '#' a wall cell, so the SOURCE
+// SHOWS the pattern the way it stands on the pitch. The two builders above
+// derive their shapes from a rule and a mirror; the ones at the end of the
+// list were drawn by eye, and three hundred coordinate pairs nobody can
+// picture is the wrong way to carry a drawing. Rows are y and columns are
+// x, the same way the board is painted, so editing the art edits the pitch.
+//
+// Every shape is checked before it enters this list: the free cells must
+// form ONE connected region under the wrap, which the suite asserts by
+// walking real rounds. A pattern that sealed a pocket would let a snake be
+// closed in with nowhere to steer, the death every wall rule here exists to
+// prevent, and nothing else would notice: the round still runs and the art
+// still looks right.
+const shape = (...rows) => {
+  const s = new Set();
+  for (let y = 0; y < rows.length; y++) {
+    const row = rows[y];
+    for (let x = 0; x < row.length; x++) if (row[x] === '#') s.add(K(x, y));
+  }
+  return s;
+};
+
 const WALL_PATTERNS = [
   () => {                                   // thick plus / cross through center
     const c = [];
@@ -259,6 +281,121 @@ const WALL_PATTERNS = [
     for (let x = 5; x <= 6; x++) for (let y = 5; y <= 6; y++) c.push([x, y]);
     return sym4(c);
   },
+
+  // The owner's own, drawn by hand on 2026-09-14. More architectural than
+  // the derived shapes above, and heavier: 50 to 108 wall cells against the
+  // derived ones' 18 to 76, which is the point of them. Each leaves the
+  // pitch in a single connected piece.
+  () => shape(                              // goal boxes top and bottom, side stands, a centre block
+    '.....##########.....',
+    '.....##########.....',
+    '....................',
+    '....................',
+    '##................##',
+    '##................##',
+    '##................##',
+    '##................##',
+    '##......####......##',
+    '##......####......##',
+    '##......####......##',
+    '##......####......##',
+    '##................##',
+    '##................##',
+    '##................##',
+    '....................',
+    '....................',
+    '....................',
+    '.....##########.....',
+    '.....##########.....',
+  ),
+  () => shape(                              // the arrowhead, with two wing blocks
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+    '.........##.........',
+    '........####........',
+    '.......######.......',
+    '.......######.......',
+    '..#...########...#..',
+    '.###..########..###.',
+    '.###..########..###.',
+    '..#...########...#..',
+    '.......######.......',
+    '.......######.......',
+    '........####........',
+    '.........##.........',
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+  ),
+  () => shape(                              // the diamond, shouldered
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+    '......#......#......',
+    '.....###....###.....',
+    '......###..###......',
+    '.......######.......',
+    '........####........',
+    '........####........',
+    '........####........',
+    '........####........',
+    '.......######.......',
+    '......###..###......',
+    '.....###....###.....',
+    '......#......#......',
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+  ),
+  () => shape(                              // the spiral: one way in, one way round
+    '....................',
+    '....................',
+    '....................',
+    '...#############....',
+    '...#############....',
+    '...##...............',
+    '...##...............',
+    '...##...########....',
+    '...##...########....',
+    '...##.........##....',
+    '...##.........##....',
+    '...##...########....',
+    '...##...########....',
+    '...##...............',
+    '...##...............',
+    '...#############....',
+    '...#############....',
+    '....................',
+    '....................',
+    '....................',
+  ),
+  () => shape(                              // two brackets over a low bar
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+    '.....####..####.....',
+    '.....###....###.....',
+    '.....##......##.....',
+    '.....##......##.....',
+    '.....#........#.....',
+    '....................',
+    '.........##.........',
+    '.........##.........',
+    '.....##########.....',
+    '......########......',
+    '........####........',
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+  ),
 ];
 
 // 0..1 progress through a ghost's current glide between cells, at sim time now

@@ -2020,6 +2020,9 @@ test('a level round replays to the identical end', () => {
 // rotation cell for cell: the same seven shapes in the same order draw the
 // same dice. A fixture returning to an older pin is the cleanest possible
 // evidence that a revert really reverted.
+// v33 moved all three again (5/824, 4/925, 17/1255) when five new
+// hand-drawn shapes joined: same cause as v31, a wider catalogue changing
+// which shape every draw picks.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -2585,12 +2588,12 @@ test('weather: an old log without the knob replays dry', () => {
 // space is measured under the WRAP, because the board is a torus.
 //
 // This walks real rounds rather than reaching into the pattern list, so it
-// proves what a PLAYER can actually meet. Seven shapes as of v32, when the
-// hand-drawn seven were withdrawn; the check is worth keeping whatever the
+// proves what a PLAYER can actually meet. Twelve shapes as of v33: seven
+// derived and five drawn by hand. The check is worth keeping whatever the
 // catalogue holds, because it is the mistake no other test would notice.
 test('every wall shape leaves the pitch in one connected piece', () => {
   const shapes = new Map();
-  for (let seed = 1; seed <= 8000 && shapes.size < 7; seed++) {
+  for (let seed = 1; seed <= 12000 && shapes.size < 12; seed++) {
     const g = createGame({ seed });
     for (let q = 0; q < 2000; q++) {
       g.advanceQuanta(1);
@@ -2600,7 +2603,7 @@ test('every wall shape leaves the pitch in one connected piece', () => {
       break;
     }
   }
-  assert.equal(shapes.size, 7, 'all seven shapes are reachable in play');
+  assert.equal(shapes.size, 12, 'all twelve shapes are reachable in play');
 
   for (const [, walls] of shapes) {
     // flood one free cell and count what it reaches
