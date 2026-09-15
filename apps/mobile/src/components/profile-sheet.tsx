@@ -19,6 +19,7 @@ import flagSheet from '@/assets/flags.png';
 import { authWho, sendEmailCode, signOutToAnon, verifyEmailCode } from '@/lib/auth';
 import { FLAG_CODES, FLAG_COLS, flagIndex } from '@pitch-snake/flags';
 import { useSaveProfile } from '@/hooks/queries/use-save-profile';
+import { StatsPanel } from './stats-panel';
 import { kitOf } from '@pitch-snake/cosmetics/kit';
 import type { Profile } from '@/lib/profile';
 import { DarkShell, GameColors } from '@/game/theme';
@@ -222,6 +223,7 @@ export function ProfileSheet({ profile, locked, dark = false, onSaved, onClose }
       </Pressable>
       <Text style={[styles.title, dark && darkStyles.ink]}>YOUR ACCOUNT</Text>
       {locked && <Text style={styles.lock}>{'Finish the round to change your profile.'}</Text>}
+      <StatsPanel />
 
       {who.anonymous ?
         <>

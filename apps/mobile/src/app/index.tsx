@@ -48,6 +48,7 @@ import { loadWallsPref, saveWallsPref } from '@/lib/walls-prefs';
 import { loadSfxPref, saveSfxPref } from '@/lib/sfx-prefs';
 import { primeSfx, setSfxEnabled } from '@/game/sfx';
 import type { RuleMode, UiMode } from '@/lib/modes';
+import { currentSeason } from '@/lib/season';
 import { SUPABASE_CONFIGURED } from '@/lib/supabase-config';
 
 /**
@@ -296,6 +297,7 @@ export default function Index() {
   const dark = themePref === 'dark' || (themePref === 'auto' && systemScheme === 'dark');
   const [profileOpen, setProfileOpen] = useState(false);
   const [prevBest, setPrevBest] = useState(0);
+  const [prevBestSeason, setPrevBestSeason] = useState(0);
   const [joinCode, setJoinCode] = useState('');
   const [createTitle, setCreateTitle] = useState('');
   const [createMode, setCreateMode] = useState<RuleMode>('classic');
@@ -307,6 +309,12 @@ export default function Index() {
   // the fixture identity: a REMATCH is only a rematch of this exact thing
   const runKey = (uiMode === 'tourney' && tourney !== null ? `T:${tourney.code}:` : '') + ruleMode;
   const topScores = useTopScores(dead && uiMode !== 'tourney' && SUPABASE_CONFIGURED, ruleMode);
+  // the same board windowed to this month, for the death screen's season tier
+  const monthScores = useTopScores(
+    dead && uiMode !== 'tourney' && SUPABASE_CONFIGURED,
+    ruleMode,
+    currentSeason(),
+  );
   const tourneyTop = useTournamentTop(tourney?.code ?? null, dead && uiMode === 'tourney');
   const submit = useSubmitScore();
   const tSubmit = useSubmitTournamentScore();
@@ -473,6 +481,7 @@ export default function Index() {
     setShowModes(false);
     setShopOpen(false);
     setPrevBest(loop.best); // the number to beat, captured before the round moves it
+    setPrevBestSeason(loop.bestSeason); // the season number to beat, likewise
     setEntryName('');
     setSubmittedId(null);
     setSubmittedName(null);
@@ -568,6 +577,13 @@ export default function Index() {
   // benefit of the doubt, and the validator has the last word regardless.
   const judged = worldBoard && topScores.isSuccess && !topScores.isFetching;
   const placed = !worldBoard || topScores.isError || (judged && placesOnBoard(topScores.data, loop.score));
+  // the season tier: placing on THIS MONTH's board is a lesser badge than the
+  // all-time one (the month board is a subset, so its cutoff is lower and an
+  // all-time place always beats it). Shown only when the all-time board was
+  // reached-for and missed, mirroring the web's TOP 100 · THIS MONTH sticker.
+  const judgedSeason = worldBoard && monthScores.isSuccess && !monthScores.isFetching;
+  const placedAllTime = judged && placesOnBoard(topScores.data, loop.score);
+  const placedSeason = judgedSeason && placesOnBoard(monthScores.data, loop.score);
   // what a miss would have had to beat, and null whenever there is nothing to
   // say; a board with room always places, so a miss always has a tenth
   const saving = submit.isPending || tSubmit.isPending;
@@ -620,6 +636,7 @@ export default function Index() {
         }}
         score={loop.score}
         best={loop.best}
+        bestSeason={loop.bestSeason}
         scoreLabel={ruleMode === 'survival' ? 'SECONDS' : 'SCORE'}
         clockText={loop.clockText}
         onScoreTap={onScoreTap}
@@ -911,6 +928,10 @@ export default function Index() {
                     <Text style={styles.stickerText}>
                       {prevBest > 0 ? 'New personal best.' : 'Your first best.'}
                     </Text>
+                  : dead && uiMode !== 'versus' && loop.score > prevBestSeason ?
+                    // beat this month's best but not the all-time one: the
+                    // season tier, matching the web's SEASON BEST sticker
+                    <Text style={styles.stickerText}>New season best.</Text>
                   : dead && uiMode !== 'versus' && prevBest > 0 ?
                     <Text style={styles.saveNoteSoft}>
                       {loop.score === prevBest ?
@@ -918,6 +939,9 @@ export default function Index() {
                       : `${String(prevBest - loop.score)} off your best.`}
                     </Text>
                   : null}
+                  {dead && uiMode !== 'versus' && SUPABASE_CONFIGURED && placedSeason && !placedAllTime && (
+                    <Text style={styles.stickerText}>Top 100 this month.</Text>
+                  )}
                   {/* The round-pay line was retired on 2026-09-11 with the
                       page's, at the owner's call: it announced what the purse
                       already says, since the coin count ticks up on its own.

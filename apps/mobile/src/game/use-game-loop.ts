@@ -29,7 +29,13 @@ import type { NetSession } from '@pitch-snake/net';
 import { type Kit, KIT_NONE } from '@pitch-snake/cosmetics/kit';
 import type { RuleMode } from '@/lib/modes';
 
-import { loadPersonalBest, savePersonalBest } from '@/lib/personal-best';
+import {
+  loadPersonalBest,
+  loadPersonalBestSeason,
+  savePersonalBest,
+  savePersonalBestSeason,
+} from '@/lib/personal-best';
+import { currentSeason } from '@/lib/season';
 import { issueSeed, type SeedTicket } from '@/lib/validate';
 
 import { GameColors } from './theme';
@@ -72,6 +78,8 @@ export interface GameLoop {
   phase: RoundPhase;
   score: number;
   best: number;
+  /** this UTC month's best for the current mode, the HUD's SEASON line */
+  bestSeason: number;
   /** Dress the snake (skin id, hat id); null wears classic. Menu-time only.
    *  Leaves the kit alone: that is chosen, not bought, and has its own door. */
   setWorn: (skin: string | null, hat: string | null) => void;
@@ -304,6 +312,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   const [seats, setSeats] = useState<SeatRow[]>([]);
   const [seatNote, setSeatNote] = useState('');
   const [best, setBest] = useState(0);
+  const [bestSeason, setBestSeason] = useState(0);
   const [countText, setCountText] = useState('');
   const [deadReason, setDeadReason] = useState('');
   const [mode, setModeState] = useState<RuleMode>('classic');
@@ -330,6 +339,9 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
   useEffect(() => {
     void loadPersonalBest('classic').then((stored) => {
       setBest((current) => (stored > current ? stored : current));
+    });
+    void loadPersonalBestSeason('classic', currentSeason()).then((stored) => {
+      setBestSeason((current) => (stored > current ? stored : current));
     });
   }, []);
 
@@ -554,6 +566,13 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
               }
               return current;
             });
+            setBestSeason((current) => {
+              if (finalScore > current) {
+                void savePersonalBestSeason(box.mode, currentSeason(), finalScore);
+                return finalScore;
+              }
+              return current;
+            });
             break;
           }
           default:
@@ -628,7 +647,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           box.lastScore = myScore;
           setScore(myScore);
           // BEST is a solo statistic; a room's score rides its own board
-          if (box.vsIdx < 0) setBest((b) => (myScore > b ? myScore : b));
+          if (box.vsIdx < 0) {
+            setBest((b) => (myScore > b ? myScore : b));
+            setBestSeason((b) => (myScore > b ? myScore : b));
+          }
         }
         const clock = g.durationMs > 0 ? fmtClock(g.durationMs - g.clockMs) : '';
         if (clock !== box.lastClock) {
@@ -956,8 +978,12 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     box.mode = m;
     setModeState(m);
     setBest(0);
+    setBestSeason(0);
     void loadPersonalBest(m).then((stored) => {
       if (boxRef.current.mode === m) setBest((current) => (stored > current ? stored : current));
+    });
+    void loadPersonalBestSeason(m, currentSeason()).then((stored) => {
+      if (boxRef.current.mode === m) setBestSeason((current) => (stored > current ? stored : current));
     });
   };
 
@@ -993,6 +1019,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
     leaveVersus,
     score,
     best,
+    bestSeason,
     countText,
     deadReason,
     mode,

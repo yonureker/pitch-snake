@@ -141,6 +141,8 @@ export interface GameHeaderProps {
   onSettings: () => void;
   score: number;
   best: number;
+  /** this UTC month's best, the HUD's SEASON line above the all-time one */
+  bestSeason: number;
   /** SECONDS in survival, SCORE elsewhere: in survival the clock IS the score */
   scoreLabel: string;
   clockText: string;
@@ -172,6 +174,7 @@ export function GameHeader({
   onSettings,
   score,
   best,
+  bestSeason,
   scoreLabel,
   clockText,
   onScoreTap,
@@ -314,7 +317,10 @@ export function GameHeader({
         <Pressable accessibilityRole="button" onPress={onScoreTap} style={styles.scores}>
           <Text style={[styles.scoreLabel, dark && darkStyles.scoreLabel]}>{scoreLabel}</Text>
           <Text style={[styles.scoreValue, dark && darkStyles.scoreValue]}>{score}</Text>
-          <Text style={styles.bestValue}>BEST {best}</Text>
+          <View style={styles.bests}>
+            <Text style={styles.bestValueTop}>SEASON {bestSeason}</Text>
+            <Text style={styles.bestValue}>ALL-TIME {best}</Text>
+          </View>
           {clockText !== '' && (
             <Text style={[styles.clockText, dark && darkStyles.clockText]}>{clockText}</Text>
           )}
@@ -497,6 +503,14 @@ const styles = StyleSheet.create({
     color: GameColors.ink,
     lineHeight: SCORE_LINE,
     marginVertical: SCORE_SQUEEZE,
+  },
+  bests: { alignItems: 'flex-end' },
+  bestValueTop: {
+    fontFamily: BARLOW_BOLD,
+    fontSize: BEST_SIZE,
+    lineHeight: BEST_LINE,
+    color: GameColors.gold,
+    letterSpacing: 1,
   },
   bestValue: {
     fontFamily: BARLOW_BOLD,

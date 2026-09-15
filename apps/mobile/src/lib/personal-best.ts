@@ -33,3 +33,29 @@ export async function savePersonalBest(mode: RuleMode, score: number): Promise<v
     // storage being unavailable must not surface into the game
   }
 }
+
+// The SEASON best, the same idea on the monthly clock. The key carries the
+// season it belongs to, so a new month simply reads a key that does not exist
+// yet and starts at zero, which is the reset (the server's season resets the
+// same way). Keyed by mode AND season so classic and survival never mix.
+const seasonKey = (mode: RuleMode, season: string): string => `pitchSnakeBestSeason.${mode}.${season}`;
+
+/** Read this season's stored best for one mode; 0 when unset or a new month. */
+export async function loadPersonalBestSeason(mode: RuleMode, season: string): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(seasonKey(mode, season));
+    const n = raw === null ? 0 : Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Persist this season's best; swallowed on failure like the all-time save. */
+export async function savePersonalBestSeason(mode: RuleMode, season: string, score: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(seasonKey(mode, season), String(score));
+  } catch {
+    // storage being unavailable must not surface into the game
+  }
+}
