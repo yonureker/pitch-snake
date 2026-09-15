@@ -150,6 +150,11 @@ create index if not exists pitch_snake_ratings_season_board_idx
   on public.pitch_snake_ratings_season (mode, season, rating desc);
 
 alter table public.pitch_snake_ratings_season enable row level security;
+-- BOTH halves of leaderboard.sql rule 1: RLS on with no policies AND no grants.
+-- Enabling RLS alone leaves Supabase's default grants in place, so the table
+-- answers the Data API (an empty array, not a 401) and anon keeps a TRUNCATE
+-- that RLS does not filter at all. Shipped wrong once here, on 2026-09-14.
+revoke all on table public.pitch_snake_ratings_season from anon, authenticated;
 
 -- The season registry: one row per season that has ever hosted a rated round,
 -- keyed by the same 'YYYY-MM' string every season-scoped column already joins
@@ -169,6 +174,7 @@ create table if not exists public.pitch_snake_seasons (
 );
 
 alter table public.pitch_snake_seasons enable row level security;
+revoke all on table public.pitch_snake_seasons from anon, authenticated;
 revoke all on table public.pitch_snake_ratings from anon, authenticated;
 
 -- ------------------------------------------------------- take your seat ----
@@ -741,15 +747,35 @@ drop function if exists public.pitch_snake_my_mp_stats(text);
 create or replace function public.pitch_snake_my_mp_stats(p_season text default null)
 returns json language sql security definer set search_path = '' stable
 as $$
-  select json_build_object(
-    'played', count(*),
-    'won',    count(*) filter (where s.place = 1),
-    'lost',   count(*) filter (where s.place > 1),
-    'delta',  coalesce(sum(s.delta), 0))
-  from public.pitch_snake_seats s
-  where s.user_id = auth.uid() and auth.uid() is not null and s.place is not null
-    and (p_season is null
-         or to_char(s.claimed_at at time zone 'utc', 'YYYY-MM') = p_season);
+  select case when p_season is null then
+    -- LIFETIME comes from the ratings row, never from seats. Rounds are swept
+    -- at 90 days (the cron below) and seats CASCADE with them, so counting
+    -- seats would quietly turn a lifetime record into "the last 90 days" while
+    -- still calling itself lifetime. The ladder already keeps the lifetime
+    -- totals and they never expire; the net move is rating - base.
+    coalesce((
+      select json_build_object(
+        'played', rt.rounds,
+        'won',    rt.wins,
+        'lost',   greatest(rt.rounds - rt.wins, 0),
+        'delta',  rt.rating - 1000)
+      from public.pitch_snake_ratings rt
+      where rt.user_id = auth.uid() and auth.uid() is not null and rt.mode = 'classic'
+    ), json_build_object('played', 0, 'won', 0, 'lost', 0, 'delta', 0))
+  else
+    -- A SEASON is at most a month, comfortably inside the sweep, so the seats
+    -- ledger is the right (and only) source for a windowed record.
+    coalesce((
+      select json_build_object(
+        'played', count(*),
+        'won',    count(*) filter (where s.place = 1),
+        'lost',   count(*) filter (where s.place > 1),
+        'delta',  coalesce(sum(s.delta), 0))
+      from public.pitch_snake_seats s
+      where s.user_id = auth.uid() and auth.uid() is not null and s.place is not null
+        and to_char(s.claimed_at at time zone 'utc', 'YYYY-MM') = p_season
+    ), json_build_object('played', 0, 'won', 0, 'lost', 0, 'delta', 0))
+  end;
 $$;
 
 -- Head to head against one opponent: rated rounds you both played, and who

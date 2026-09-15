@@ -125,6 +125,11 @@ create table if not exists public.pitch_snake_inventory (
   primary key (user_id, item_id)   -- owned once; cosmetics do not stack
 );
 
+-- the FK's covering index: without it every referential check and any
+-- lookup by item scans the table (flagged by the performance advisor)
+create index if not exists pitch_snake_inventory_item_idx
+  on public.pitch_snake_inventory (item_id);
+
 alter table public.pitch_snake_inventory enable row level security;
 revoke all on table public.pitch_snake_inventory from anon, authenticated;
 
