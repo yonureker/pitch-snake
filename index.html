@@ -1389,10 +1389,13 @@
   // warning-to-solid flip, and on resize.
   const wallLayer = document.createElement('canvas');
   const wallLayerCtx = wallLayer.getContext('2d');
-  // The wall block, from the owner's own CSS: a chalk tile inset a hair from
-  // its cell so neighbours never merge into one slab, a grey edge drawn
-  // INSIDE that tile, and a corner radius small enough that it still reads
-  // as a square. The CSS was written at a 26px cell, so every number here is
+  // The wall block, from the owner's own CSS: a tile inset a hair from its
+  // cell so neighbours never merge into one slab, a darker edge drawn INSIDE
+  // that tile, and a corner radius small enough that it still reads as a
+  // square. The face is the game's danger red, which a lethal thing should
+  // wear and which the snake's cream body can never be mistaken for; the
+  // edge is that red darkened, so a block reads as one material rather than
+  // a panel in a frame. The CSS was written at a 26px cell, so every number here is
   // that measurement as a FRACTION of the cell and holds at any board size,
   // with a one pixel floor so the edge never vanishes on a phone.
   //
@@ -1403,7 +1406,7 @@
   // Two paths and two draws for the whole shape, not two per cell: every
   // tile is identical, so they batch (performance rule 6). This is bake
   // time either way, run on a wall event and blitted per frame.
-  const WALL_CHALK = '#eef3ea', WALL_EDGE = '#6b7570';
+  const WALL_FACE = '#e6402a', WALL_EDGE = '#8c2417';
   function rebuildWallLayer() {
     wallLayer.width = canvas.width; wallLayer.height = canvas.height;
     const c = wallLayerCtx;
@@ -1411,7 +1414,7 @@
     const side = cell - inset * 2;
     const rad = Math.max(1, cell * 0.038);
     const bw = Math.max(1, cell * 0.058);
-    c.fillStyle = WALL_CHALK;
+    c.fillStyle = WALL_FACE;
     c.beginPath();
     for (const w of g.wallCells) c.roundRect(w.x * cell + inset, w.y * cell + inset, side, side, rad);
     c.fill();

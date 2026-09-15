@@ -227,7 +227,6 @@ const C = {
   arena: Skia.Color(GameColors.arena),
   gridLine: Skia.Color(GameColors.gridLine),
   wall: Skia.Color(GameColors.wall),
-  wallChalk: Skia.Color(GameColors.wallChalk),
   wallEdge: Skia.Color(GameColors.wallEdge),
   goldBright: Skia.Color(GameColors.goldBright),
   tntBody: Skia.Color(GameColors.tntBody),
@@ -708,7 +707,7 @@ export function bakeWallLayer(game: Game, boardPx: number): void {
   ensureSprites(boardPx);
   const cell = boardPx / GRID;
   retire(wallSprite?.image);
-  // The page's chalk tile, number for number (see index.html's
+  // The page's tile, number for number (see index.html's
   // rebuildWallLayer for where the fractions come from): inset a hair so
   // neighbours never merge, a grey edge drawn INSIDE the tile, a corner
   // radius small enough to still read as a square. One path and one draw per
@@ -723,7 +722,7 @@ export function bakeWallLayer(game: Game, boardPx: number): void {
         b.addRRect(Skia.RRectXY(Skia.XYWHRect(w.x * cell + inset, w.y * cell + inset, side, side), rad, rad));
       }
     });
-    fillPaint.setColor(C.wallChalk);
+    fillPaint.setColor(C.wall);
     c.drawPath(face, fillPaint);
     face.dispose();
 
