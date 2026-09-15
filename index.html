@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=8cf7794e52">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=8cf7794e52">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=2e17d13c16">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=2e17d13c16">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -293,7 +293,7 @@
                after the four scoring rows it rewrites by index. -->
           <div class="lg-row"><span class="lg-ic">⚡</span><span class="lg-txt">Thunderbolt, ghosts slow</span><span class="lg-two"><span class="lg-name">Thunderbolt</span><span class="lg-sub">ghosts</span></span><span class="lg-val pos">SLOW</span></div>
           <div class="lg-row"><span class="lg-ic">🌧️</span><span class="lg-txt">Rain, you slow</span><span class="lg-two"><span class="lg-name">Rain</span><span class="lg-sub">you</span></span><span class="lg-val neg">SLOW</span></div>
-          <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-two"><span class="lg-name">Walls, ghosts, yourself</span><span class="lg-sub"></span></span><span class="lg-val die">DIE</span></div>
+          <div class="lg-row"><span class="lg-ic trio" role="img" aria-label="a wall, a ghost, your own body"><i class="d-wall"></i><i class="d-ghost"></i><i class="d-self"></i></span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-two"><span class="lg-name">Walls, ghosts, yourself</span><span class="lg-sub">wall · ghost · you</span></span><span class="lg-val die">DIE</span></div>
         </div>
         <!-- The left column of the wide result screen. `display: contents`
              by default, so on a narrow panel this wrapper does not exist as
@@ -584,42 +584,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=8cf7794e52",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=8cf7794e52",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=8cf7794e52",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=8cf7794e52",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=8cf7794e52",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=8cf7794e52",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=8cf7794e52",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=8cf7794e52",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=8cf7794e52",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=8cf7794e52",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=8cf7794e52",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=8cf7794e52",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=8cf7794e52",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=8cf7794e52",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=8cf7794e52",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=8cf7794e52",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=8cf7794e52",
-    "./packages/net/net.js": "./packages/net/net.js?v=8cf7794e52",
-    "@pitch-snake/net": "./packages/net/net.js?v=8cf7794e52",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=8cf7794e52",
-    "./page/build/dom.js": "./page/build/dom.js?v=8cf7794e52",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=8cf7794e52",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=8cf7794e52",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=8cf7794e52",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=8cf7794e52",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=8cf7794e52",
-    "./page/build/shop.js": "./page/build/shop.js?v=8cf7794e52",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=8cf7794e52",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=8cf7794e52",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=8cf7794e52"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=2e17d13c16",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=2e17d13c16",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=2e17d13c16",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=2e17d13c16",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=2e17d13c16",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=2e17d13c16",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=2e17d13c16",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=2e17d13c16",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=2e17d13c16",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=2e17d13c16",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=2e17d13c16",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=2e17d13c16",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=2e17d13c16",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=2e17d13c16",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=2e17d13c16",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=2e17d13c16",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=2e17d13c16",
+    "./packages/net/net.js": "./packages/net/net.js?v=2e17d13c16",
+    "@pitch-snake/net": "./packages/net/net.js?v=2e17d13c16",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=2e17d13c16",
+    "./page/build/dom.js": "./page/build/dom.js?v=2e17d13c16",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=2e17d13c16",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=2e17d13c16",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=2e17d13c16",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=2e17d13c16",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=2e17d13c16",
+    "./page/build/shop.js": "./page/build/shop.js?v=2e17d13c16",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=2e17d13c16",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=2e17d13c16",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=2e17d13c16"
   }
 }
 </script>

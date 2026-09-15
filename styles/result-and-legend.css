@@ -166,12 +166,46 @@
        room the words gave back. .lg-sub survives as a SHORT qualifier, never
        prose: the one thing a number cannot carry on its own is who it
        happens to, which is what separates the bolt from the rain. */
+    /* ONE icon box, and every mark scaled to sit inside it. The box height
+       is fixed for all seven, which is what puts the numbers under them on a
+       single line: a taller TNT block used to push its own -5 higher than
+       the +1 beside it. Where a mark needs to be smaller than the box it is
+       SCALED, never resized, because a transform paints smaller without
+       telling layout, and layout is the thing holding the row together. */
+    .ov-body.kick-grid .lg-row { --ic: clamp(32px, 5.4cqw, 46px); }
     .ov-body.kick-grid .lg-ic {
-      width: clamp(32px, 5.6cqw, 48px); height: clamp(32px, 5.6cqw, 48px);
-      font-size: clamp(23px, 4cqw, 34px);
+      width: var(--ic); height: var(--ic);
+      font-size: calc(var(--ic) * 0.86);
     }
-    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(18px, 3.1cqw, 26px); }
-    .ov-body.kick-grid .lg-ic.tnt { font-size: clamp(9px, 1.6cqw, 13px); }
+    /* The multipliers below were set against a MEASURED screenshot rather
+       than by eye: an emoji glyph inks about 0.89 of its font size, a
+       bordered circle inks its whole box, so the same number in both places
+       is what made the ring read a third bigger than the ball beside it.
+       Each mark is aimed at the same ~0.78 of the box. */
+    .ov-body.kick-grid .lg-ic.ring {
+      transform: scale(0.78);
+      font-size: calc(var(--ic) * 0.5);
+    }
+    .ov-body.kick-grid .lg-ic.tnt {
+      transform: scale(0.8, 0.66);
+      font-size: calc(var(--ic) * 0.3);
+    }
+    /* the window is a fixed 17px swatch built for the narrow list, which
+       left it the smallest mark here by a distance */
+    .ov-body.kick-grid .lg-ic .tp {
+      width: calc(var(--ic) * 0.78); height: calc(var(--ic) * 0.78);
+      border-width: calc(var(--ic) * 0.12);
+    }
+    /* Three marks in a box built for one, so the box is allowed to run wide
+       here: the tile has the room and the height is what the row is aligned
+       on, not the width. */
+    .ov-body.kick-grid .lg-ic.trio {
+      width: auto; gap: calc(var(--ic) * 0.1);
+    }
+    .ov-body.kick-grid .lg-ic.trio i {
+      width: calc(var(--ic) * 0.42); height: calc(var(--ic) * 0.52);
+      border-radius: calc(var(--ic) * 0.08);
+    }
     .ov-body.kick-grid .lg-txt { display: none; }
     .ov-body.kick-grid .lg-two {
       display: flex; flex-direction: column; gap: 0;
@@ -189,9 +223,10 @@
       color: #8e8672; letter-spacing: 0.3px; line-height: 1.2;
       text-transform: uppercase;
     }
-    /* an empty qualifier must take no room at all, or the tiles that have
-       one sit a hair lower than the tiles that do not */
-    .ov-body.kick-grid .lg-sub:empty { display: none; }
+    /* the qualifier keeps its line whether or not it has words: collapsing
+       the empty ones was what let each tile choose its own height, and a
+       column of numbers that do not line up reads as a broken table */
+    .ov-body.kick-grid .lg-sub { min-height: 1.15em; }
     .ov-body.kick-grid .lg-val { font-size: clamp(17px, 2.9cqw, 24px); min-width: 0; }
     /* SLOW is a word where the others are numbers: it needs to sit at the
        same optical weight without stealing the tile */
@@ -329,6 +364,32 @@
     color: #111; border-radius: 2px;
     font-family: Barlow, "Arial Black", sans-serif; font-weight: 700; font-size: 7px;
   }
+  /* What kills you, shown rather than named: the wall in its own red, a
+     ghost, and a segment of your own body in the classic kit. These live in
+     the BASE block and not in the wide kickoff's, because the narrow list
+     shows the same row and shipped it as an empty square for one build. */
+  .lg-ic.trio { display: flex; align-items: center; justify-content: center; gap: 1.5px; }
+  .lg-ic.trio i { display: block; flex: none; width: 5px; height: 9px; border-radius: 1px; }
+  .lg-ic.trio .d-wall { background: #e6402a; box-shadow: inset 0 0 0 1px #8c2417; }
+  .lg-ic.trio .d-self { background: rgb(244, 236, 216); }
+  /* The ghost is CUT to the silhouette the pitch actually draws (dome, straight
+     sides, a four-notch skirt, white eyes) rather than approximated with a
+     border-radius: a rounded pink rectangle beside a red one and a cream one
+     reads as three swatches, and the whole point of this mark is that the
+     player recognises the thing that killed them. Colour is the fourth ghost's
+     pink from GHOST_COLORS, because the first ghost's red is the wall's. */
+  .lg-ic.trio .d-ghost {
+    position: relative; background: #f57ec3; border-radius: 0;
+    clip-path: polygon(
+      0% 42%, 6% 20%, 20% 6%, 38% 0%, 62% 0%, 80% 6%, 94% 20%, 100% 42%,
+      100% 100%, 83% 80%, 67% 100%, 50% 80%, 33% 100%, 17% 80%, 0% 100%);
+  }
+  .lg-ic.trio .d-ghost::before, .lg-ic.trio .d-ghost::after {
+    content: ''; position: absolute; top: 30%;
+    width: 24%; height: 26%; border-radius: 50%; background: #fff;
+  }
+  .lg-ic.trio .d-ghost::before { left: 20%; }
+  .lg-ic.trio .d-ghost::after { right: 20%; }
   .lg-txt { flex: 1; text-align: left; }
   .lg-val {
     font-family: 'Anton', sans-serif; font-size: 14px;
