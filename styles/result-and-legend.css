@@ -110,45 +110,79 @@
      numbers moved behind the trophy, because play testing put them in a
      right rail first and the half empty column read as clutter. */
   @container ov (min-width: 520px) {
+    /* TILES, not a table (2026-09-15, the owner's layout). Four across, the
+       rest centred under them, each a square with the thing on top and what
+       it does underneath. A list made every row the same weight; a grid says
+       at a glance that the top four are the things you EAT and the row below
+       is what the pitch does to you. flex-wrap rather than grid so the short
+       last row centres itself instead of hugging the left edge. */
+    /* The tile block is shorter than the list it replaced, and a centred
+       column put KICK OFF lower on the panel than it had ever sat. The body
+       gives back a slice of its reserved height so the whole group rides up
+       again, which is where the title belongs on this screen. */
+    .ov-body.kick-grid { min-height: 0; justify-content: flex-start; padding-top: clamp(4px, 1.5cqw, 16px); }
+    /* and the group rides a little above dead centre. Padding at the FOOT is
+       the honest lever: the title, the tiles and the buttons stay one block
+       and only the axis they sit on moves, where pinning the buttons to the
+       bottom would have stranded them a hand's width below the tiles. */
+    .overlay:has(.ov-body.kick-grid) { padding-bottom: clamp(18px, 6cqw, 60px); }
     .ov-body.kick-grid > .legend {
-      /* the chooser's compact column, not a table across the panel: at
-         520px the values sat a hand's width from the words they price */
-      width: min(100%, 360px);
-      max-width: none; margin: 0; gap: 0;
-      text-align: left;
+      width: min(100%, 560px);
+      max-width: none; margin: 0;
+      /* flex-direction is RESET here on purpose: the base .legend is a
+         COLUMN, and inheriting that made the tiles wrap into columns rather
+         than rows, two abreast and twice as tall as they should be. */
+      display: flex; flex-direction: row; flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
     }
     /* a pseudo-element so applyLegend's children indexing stays untouched */
     .ov-body.kick-grid .legend::before {
       content: 'HOW IT SCORES';
-      align-self: center;
+      flex: 0 0 100%; width: 100%; text-align: center;
       font-family: 'Barlow', sans-serif; font-weight: 700;
       font-size: 11px; letter-spacing: 3px; color: var(--gold);
-      margin-bottom: clamp(6px, 1.2cqw, 12px);
+      margin-bottom: clamp(2px, 0.6cqw, 6px);
     }
     .ov-body.kick-grid .lg-row {
-      gap: clamp(12px, 2cqw, 18px);
-      padding: clamp(8px, 1.7cqw, 15px) 0;
-      border-bottom: 1px solid rgba(194,162,90,0.15);
+      /* four across: four bases plus three 8px gaps make exactly 100%. A
+         literal rather than a custom property inside calc, which is the
+         fragile form in a flex shorthand. */
+      flex: 0 0 calc(25% - 6px);
+      aspect-ratio: 1;
+      flex-direction: column; justify-content: center; align-items: center;
+      gap: clamp(2px, 0.5cqw, 5px);
+      padding: clamp(4px, 0.9cqw, 9px);
+      border: 1px solid rgba(194,162,90,0.18);
+      border-radius: clamp(8px, 1.6cqw, 14px);
+      background: rgba(246,239,222,0.03);
+      text-align: center;
     }
     .ov-body.kick-grid .lg-ic {
-      width: clamp(28px, 4.6cqw, 40px); height: clamp(28px, 4.6cqw, 40px);
-      font-size: clamp(18px, 3cqw, 26px);
+      width: clamp(24px, 4.2cqw, 36px); height: clamp(24px, 4.2cqw, 36px);
+      font-size: clamp(17px, 2.9cqw, 25px);
     }
-    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(15px, 2.4cqw, 20px); }
+    .ov-body.kick-grid .lg-ic.ring { font-size: clamp(14px, 2.3cqw, 19px); }
     .ov-body.kick-grid .lg-ic.tnt { font-size: clamp(7px, 1.2cqw, 10px); }
     .ov-body.kick-grid .lg-txt { display: none; }
     .ov-body.kick-grid .lg-two {
-      display: flex; flex-direction: column; gap: 2px;
-      flex: 1; min-width: 0; text-align: left;
+      display: flex; flex-direction: column; gap: 1px;
+      align-items: center; min-width: 0; text-align: center;
     }
     .lg-name {
-      font-size: clamp(13px, 2cqw, 17px); font-weight: 600; color: #e9e0cd;
+      font-size: clamp(11px, 1.7cqw, 14px); font-weight: 600; color: #e9e0cd;
+      line-height: 1.15;
     }
     .lg-sub {
-      font-size: clamp(10.5px, 1.7cqw, 13px); font-weight: 500;
-      color: #8e8672; letter-spacing: 0.2px; line-height: 1.3;
+      font-size: clamp(9px, 1.35cqw, 11px); font-weight: 500;
+      color: #8e8672; letter-spacing: 0.1px; line-height: 1.2;
     }
-    .ov-body.kick-grid .lg-val { font-size: clamp(17px, 2.8cqw, 22px); }
+    .ov-body.kick-grid .lg-val { font-size: clamp(14px, 2.3cqw, 19px); min-width: 0; }
+    /* SLOW is a word where the others are numbers: it needs to sit at the
+       same optical weight without stealing the tile */
+    .ov-body.kick-grid .lg-val.pos, .ov-body.kick-grid .lg-val.neg,
+    .ov-body.kick-grid .lg-val.die { letter-spacing: 0.5px; }
   }
   /* ---- the wide multiplayer doors ----
      Same split, fourth screen: the three ways in become cards (quick match
@@ -258,20 +292,24 @@
   }
 
   /* scoring legend on the intro screen */
+  /* Seven rows since the thunderbolt and the rain joined, where there were
+     five: the row metrics came down with them so the list still lands inside
+     a phone's panel rather than scrolling the last one (the one that says
+     DIE) under the fold. */
   .legend {
-    display: flex; flex-direction: column; gap: 6px;
-    width: 286px; max-width: 82%; margin: 2px 0;
+    display: flex; flex-direction: column; gap: 1px;
+    width: 286px; max-width: 84%; margin: 0;
   }
   .lg-row {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 13px; color: #e9e0cd; font-weight: 600; letter-spacing: 0.3px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: #e9e0cd; font-weight: 600; letter-spacing: 0.3px;
   }
   .lg-ic {
-    width: 28px; height: 28px; flex-shrink: 0; box-sizing: border-box;
+    width: 20px; height: 20px; flex-shrink: 0; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px; line-height: 1;
+    font-size: 14px; line-height: 1;
   }
-  .lg-ic.ring { border: 2px solid var(--gold-bright); border-radius: 50%; font-size: 15px; }
+  .lg-ic.ring { border: 2px solid var(--gold-bright); border-radius: 50%; font-size: 11px; }
   .lg-ic.tnt {
     background: linear-gradient(#d8461f 0 32%, #dadad8 32% 58%, #a9a9a7 58% 66%, #d8461f 66% 100%);
     color: #111; border-radius: 2px;
@@ -279,8 +317,8 @@
   }
   .lg-txt { flex: 1; text-align: left; }
   .lg-val {
-    font-family: 'Anton', sans-serif; font-size: 17px;
-    min-width: 36px; text-align: right;
+    font-family: 'Anton', sans-serif; font-size: 14px;
+    min-width: 32px; text-align: right;
   }
   /* the two teleport windows, as legend swatches */
   .tp {
@@ -299,4 +337,4 @@
   .kick-rail { display: none; }
   .lg-val.pos { color: var(--gold-bright); }
   .lg-val.neg { color: var(--food); }
-  .lg-val.die { color: var(--food); font-size: 13px; letter-spacing: 1px; }
+  .lg-val.die { color: var(--food); font-size: 11px; letter-spacing: 0.8px; }

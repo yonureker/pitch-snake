@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=c2931264ab">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=c2931264ab">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=44fbf03b5c">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=44fbf03b5c">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -286,6 +286,13 @@
           <div class="lg-row"><span class="lg-ic ring">⚽</span><span class="lg-txt">Ball with a ring</span><span class="lg-two"><span class="lg-name">Ringed ball</span><span class="lg-sub">every sixth one, worth five</span></span><span class="lg-val pos">+5</span></div>
           <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 longer</span><span class="lg-two"><span class="lg-name">TNT</span><span class="lg-sub">five points gone, five longer</span></span><span class="lg-val neg">-5</span></div>
           <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, five longer</span><span class="lg-two"><span class="lg-name">Teleport window</span><span class="lg-sub">jump across the pitch, and five longer</span></span><span class="lg-val pos">+5</span></div>
+          <!-- The two the pitch throws at everyone, in the order a player
+               meets them. They are mode-INDEPENDENT (the bolt drags the pack
+               and the rain drags the snakes in classic and survival alike),
+               which is why applyLegend never touches them and why they sit
+               after the four scoring rows it rewrites by index. -->
+          <div class="lg-row"><span class="lg-ic">⚡</span><span class="lg-txt">Thunderbolt, ghosts slow</span><span class="lg-two"><span class="lg-name">Thunderbolt</span><span class="lg-sub">the ghosts wade, you do not</span></span><span class="lg-val pos">SLOW</span></div>
+          <div class="lg-row"><span class="lg-ic">🌧️</span><span class="lg-txt">Rain, you slow</span><span class="lg-two"><span class="lg-name">Rain</span><span class="lg-sub">you wade, the ghosts do not</span></span><span class="lg-val neg">SLOW</span></div>
           <div class="lg-row"><span class="lg-ic">💀</span><span class="lg-txt">Walls, ghosts or yourself</span><span class="lg-two"><span class="lg-name">Walls, ghosts, yourself</span><span class="lg-sub">the pitch bites back</span></span><span class="lg-val die">DIE</span></div>
         </div>
         <!-- The left column of the wide result screen. `display: contents`
@@ -577,42 +584,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=c2931264ab",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=c2931264ab",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=c2931264ab",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=c2931264ab",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=c2931264ab",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=c2931264ab",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=c2931264ab",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=c2931264ab",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=c2931264ab",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=c2931264ab",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=c2931264ab",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=c2931264ab",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=c2931264ab",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=c2931264ab",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=c2931264ab",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=c2931264ab",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=c2931264ab",
-    "./packages/net/net.js": "./packages/net/net.js?v=c2931264ab",
-    "@pitch-snake/net": "./packages/net/net.js?v=c2931264ab",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=c2931264ab",
-    "./page/build/dom.js": "./page/build/dom.js?v=c2931264ab",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=c2931264ab",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=c2931264ab",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=c2931264ab",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=c2931264ab",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=c2931264ab",
-    "./page/build/shop.js": "./page/build/shop.js?v=c2931264ab",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=c2931264ab",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=c2931264ab",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=c2931264ab"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=44fbf03b5c",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=44fbf03b5c",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=44fbf03b5c",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=44fbf03b5c",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=44fbf03b5c",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=44fbf03b5c",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=44fbf03b5c",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=44fbf03b5c",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=44fbf03b5c",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=44fbf03b5c",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=44fbf03b5c",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=44fbf03b5c",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=44fbf03b5c",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=44fbf03b5c",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=44fbf03b5c",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=44fbf03b5c",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=44fbf03b5c",
+    "./packages/net/net.js": "./packages/net/net.js?v=44fbf03b5c",
+    "@pitch-snake/net": "./packages/net/net.js?v=44fbf03b5c",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=44fbf03b5c",
+    "./page/build/dom.js": "./page/build/dom.js?v=44fbf03b5c",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=44fbf03b5c",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=44fbf03b5c",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=44fbf03b5c",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=44fbf03b5c",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=44fbf03b5c",
+    "./page/build/shop.js": "./page/build/shop.js?v=44fbf03b5c",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=44fbf03b5c",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=44fbf03b5c",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=44fbf03b5c"
   }
 }
 </script>
