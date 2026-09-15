@@ -1006,8 +1006,8 @@
         if (mineVol === 1 && ruleMode() !== 'survival') spawnFloat(e.x, e.y, '-5', false);
       } else if (e.t === 'wall') {
         // the layer mirror must apply even on a rollback replay; the sound only once
-        if (e.phase === 'warning') { rebuildWallLayer(false); if (!replayed) sfxWallWarn(); }
-        else if (e.phase === 'solid') { rebuildWallLayer(true); if (!replayed) sfxWallSolid(); }
+        if (e.phase === 'warning') { rebuildWallLayer(); if (!replayed) sfxWallWarn(); }
+        else if (e.phase === 'solid') { rebuildWallLayer(); if (!replayed) sfxWallSolid(); }
       } else if (e.t === 'portal') {
         if (e.open && !replayed) sfxPortalOpen();
       } else if (e.t === 'ghost') {
@@ -1186,7 +1186,7 @@
     vsRefit();                  // rival hats bake at cell size too
     syncMpBar();                // the docked bar follows the board's width
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
-    if (g && g.wallCells.length) rebuildWallLayer(g.wallState === 'solid');
+    if (g && g.wallCells.length) rebuildWallLayer();
   }
 
   // Name the color-emoji fonts explicitly: generic "serif" doesn't map to the
@@ -1389,25 +1389,40 @@
   // warning-to-solid flip, and on resize.
   const wallLayer = document.createElement('canvas');
   const wallLayerCtx = wallLayer.getContext('2d');
-  function rebuildWallLayer(bevel) {
+  // The wall block, from the owner's own CSS: a chalk tile inset a hair from
+  // its cell so neighbours never merge into one slab, a grey edge drawn
+  // INSIDE that tile, and a corner radius small enough that it still reads
+  // as a square. The CSS was written at a 26px cell, so every number here is
+  // that measurement as a FRACTION of the cell and holds at any board size,
+  // with a one pixel floor so the edge never vanishes on a phone.
+  //
+  // The edge is inset by half the line width because a canvas stroke
+  // straddles its own path: stroked on the tile's own rectangle, half of it
+  // would hang outside and the gap between neighbours would close up again.
+  //
+  // Two paths and two draws for the whole shape, not two per cell: every
+  // tile is identical, so they batch (performance rule 6). This is bake
+  // time either way, run on a wall event and blitted per frame.
+  const WALL_CHALK = '#eef3ea', WALL_EDGE = '#6b7570';
+  function rebuildWallLayer() {
     wallLayer.width = canvas.width; wallLayer.height = canvas.height;
     const c = wallLayerCtx;
-    const pad = cell * 0.05, rad = cell * 0.3;
-    c.fillStyle = '#e6402a';
+    const inset = Math.max(1, cell * 0.038);
+    const side = cell - inset * 2;
+    const rad = Math.max(1, cell * 0.038);
+    const bw = Math.max(1, cell * 0.058);
+    c.fillStyle = WALL_CHALK;
+    c.beginPath();
+    for (const w of g.wallCells) c.roundRect(w.x * cell + inset, w.y * cell + inset, side, side, rad);
+    c.fill();
+    c.strokeStyle = WALL_EDGE;
+    c.lineWidth = bw;
+    c.beginPath();
     for (const w of g.wallCells) {
-      roundRectOn(c, w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2, rad);
-      c.fill();
+      c.roundRect(w.x * cell + inset + bw / 2, w.y * cell + inset + bw / 2,
+        side - bw, side - bw, Math.max(0.5, rad - bw / 2));
     }
-    if (bevel) {  // beveled inner highlight, only once the walls are live
-      c.globalAlpha = 0.22;
-      c.fillStyle = '#ffd9d0';
-      const ip = cell * 0.28;
-      for (const w of g.wallCells) {
-        roundRectOn(c, w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2, cell * 0.14);
-        c.fill();
-      }
-      c.globalAlpha = 1;
-    }
+    c.stroke();
   }
 
   // interior wall blocks: per frame a single blit of the prebuilt layer

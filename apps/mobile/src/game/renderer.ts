@@ -227,7 +227,8 @@ const C = {
   arena: Skia.Color(GameColors.arena),
   gridLine: Skia.Color(GameColors.gridLine),
   wall: Skia.Color(GameColors.wall),
-  wallBevel: Skia.Color(GameColors.wallBevel),
+  wallChalk: Skia.Color(GameColors.wallChalk),
+  wallEdge: Skia.Color(GameColors.wallEdge),
   goldBright: Skia.Color(GameColors.goldBright),
   tntBody: Skia.Color(GameColors.tntBody),
   tntBandLight: Skia.Color(GameColors.tntBandLight),
@@ -703,40 +704,46 @@ function ensureSprites(boardPx: number, worn?: RenderContext['worn']): void {
  * forms, bevel=true when it turns solid. Nothing draws when the state is
  * 'off', so clearing is implicit.
  */
-export function bakeWallLayer(game: Game, boardPx: number, bevel: boolean): void {
+export function bakeWallLayer(game: Game, boardPx: number): void {
   ensureSprites(boardPx);
   const cell = boardPx / GRID;
   retire(wallSprite?.image);
+  // The page's chalk tile, number for number (see index.html's
+  // rebuildWallLayer for where the fractions come from): inset a hair so
+  // neighbours never merge, a grey edge drawn INSIDE the tile, a corner
+  // radius small enough to still read as a square. One path and one draw per
+  // pass, because every tile is identical.
+  const inset = Math.max(1, cell * 0.038);
+  const side = cell - inset * 2;
+  const rad = Math.max(1, cell * 0.038);
+  const bw = Math.max(1, cell * 0.058);
   wallSprite = bake(boardPx, boardPx, (c) => {
-    const pad = cell * 0.05;
-    const rad = cell * 0.3;
-    fillPaint.setColor(C.wall);
-    for (const w of game.wallCells) {
-      c.drawRRect(
-        Skia.RRectXY(
-          Skia.XYWHRect(w.x * cell + pad, w.y * cell + pad, cell - pad * 2, cell - pad * 2),
-          rad,
-          rad,
-        ),
-        fillPaint,
-      );
-    }
-    if (bevel) {
-      const ip = cell * 0.28;
-      fillPaint.setColor(C.wallBevel);
-      fillPaint.setAlphaf(0.22);
+    const face = buildPath((b) => {
       for (const w of game.wallCells) {
-        c.drawRRect(
+        b.addRRect(Skia.RRectXY(Skia.XYWHRect(w.x * cell + inset, w.y * cell + inset, side, side), rad, rad));
+      }
+    });
+    fillPaint.setColor(C.wallChalk);
+    c.drawPath(face, fillPaint);
+    face.dispose();
+
+    // stroked on its own inset rectangle: a stroke straddles its path, so
+    // half of it would otherwise hang outside the tile and close the gap
+    const edge = buildPath((b) => {
+      for (const w of game.wallCells) {
+        b.addRRect(
           Skia.RRectXY(
-            Skia.XYWHRect(w.x * cell + ip, w.y * cell + ip, cell - ip * 2, cell - ip * 2),
-            cell * 0.14,
-            cell * 0.14,
+            Skia.XYWHRect(w.x * cell + inset + bw / 2, w.y * cell + inset + bw / 2, side - bw, side - bw),
+            Math.max(0.5, rad - bw / 2),
+            Math.max(0.5, rad - bw / 2),
           ),
-          fillPaint,
         );
       }
-      fillPaint.setAlphaf(1);
-    }
+    });
+    strokePaint.setColor(C.wallEdge);
+    strokePaint.setStrokeWidth(bw);
+    c.drawPath(edge, strokePaint);
+    edge.dispose();
   });
 }
 

@@ -26,8 +26,14 @@ export const GameColors = {
   arena: '#24321b',
   arenaEdge: '#1b2614',
   gridLine: 'rgba(244,236,216,0.06)',
+  // The wall block: chalk marked out on the pitch, with a grey edge. Taken
+  // from the owner's CSS and shared with the page, which draws the same two
+  // colours; the two must not drift.
+  wallChalk: '#eef3ea',
+  wallEdge: '#6b7570',
+  // NOT the wall any more: this is the danger red, still worn by the TNT
+  // burst and by a negative score float, both of which always used it.
   wall: '#e6402a',
-  wallBevel: '#ffd9d0',
   tntBody: '#d8461f',
   tntBandLight: '#dadad8',
   tntBandDark: '#a9a9a7',

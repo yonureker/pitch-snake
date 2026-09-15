@@ -503,10 +503,10 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
           }
           case 'wall': {
             if (e.phase === 'warning') {
-              bakeWallLayer(g, box.boardPx, false);
+              bakeWallLayer(g, box.boardPx);
               playSfx('wallwarn');
             } else if (e.phase === 'solid') {
-              bakeWallLayer(g, box.boardPx, true);
+              bakeWallLayer(g, box.boardPx);
               playSfx('wallsolid');
             }
             break;
