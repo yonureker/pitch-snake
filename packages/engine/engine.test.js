@@ -2006,7 +2006,12 @@ test('a level round replays to the identical end', () => {
 // by design rather than luck: replay defaults a knob-less log to a dry
 // round, and the rain rolls its own PRNG stream, so an old seed's food and
 // walls land where they always did. v29 (rain drags the pitch, puddles
-// cut) moved nothing for the same reason.
+// cut) moved nothing for the same reason. v30 moved CLASSIC and nothing
+// else: a seventh wall pattern (the sealed ring) changes which shape a
+// given draw picks, and the scripted pilot, playing a fixed script blind,
+// walked into a wall that was not there before. 15/ghost/2451 became
+// 5/wall/1006. That is divergence, not difficulty, and it is the clearest
+// possible proof the new pattern is really in the rotation.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);

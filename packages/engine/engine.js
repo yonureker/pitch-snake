@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 29;  // 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 30;  // 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -243,6 +243,17 @@ const WALL_PATTERNS = [
   },
   () => sym4(borderSeeds(6)),               // full frame, a gate mid each side
   () => sym4(borderSeeds(3)),               // corner brackets, wide gates
+  // The sealed stadium (v30): a complete ring, no gate anywhere, so the
+  // TUNNELS CLOSE for one solid phase and the pitch is briefly a box. It
+  // completes the border family the other two started (brackets, gated
+  // frame, sealed) and it is the only pattern that takes a core mechanic
+  // away rather than adding an obstacle, which is exactly why it reads.
+  // Fair because every wall is: the shape stands flashing for WARN_MS
+  // before it bites, which is fourteen-odd cells of walking at the normal
+  // pace, and a snake running the edge line has that long to turn inward.
+  // Once solid it is the same wall as any other, so the doom window's 50ms
+  // pardon and every other rule apply unchanged.
+  () => sym4(borderSeeds(9)),               // sealed ring: no tunnel this phase
   () => {                                   // frame plus four inner pillars
     const c = borderSeeds(6);
     for (let x = 5; x <= 6; x++) for (let y = 5; y <= 6; y++) c.push([x, y]);
