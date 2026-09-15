@@ -196,9 +196,16 @@
        bordered circle inks its whole box, so the same number in both places
        is what made the ring read a third bigger than the ball beside it.
        Each mark is aimed at the same ~0.78 of the box. */
+    /* The ring is the pitch's own bonus mark and it is drawn there as a hoop
+       the ball nearly fills: `ringR = cell * 0.5` around a glyph set at
+       `cell * 0.78`, so the ball inks about two thirds of the hoop's outer
+       width and the stroke is 8% of it. This copy was letting the ball rattle
+       around inside at barely half, which read as a ring with a pea in it.
+       Both numbers are now the pitch's. */
     .ov-body.kick-grid .lg-ic.ring {
       transform: scale(0.78);
-      font-size: calc(var(--ic) * 0.5);
+      font-size: calc(var(--ic) * 0.62);
+      border-width: calc(var(--ic) * 0.075);
     }
     .ov-body.kick-grid .lg-ic.tnt {
       transform: scale(0.8, 0.66);
@@ -216,10 +223,30 @@
     .ov-body.kick-grid .lg-ic.trio {
       width: auto; gap: calc(var(--ic) * 0.1);
     }
-    .ov-body.kick-grid .lg-ic.trio i {
-      width: calc(var(--ic) * 0.42); height: calc(var(--ic) * 0.52);
-      border-radius: calc(var(--ic) * 0.08);
+    .ov-body.kick-grid .lg-ic.trio > * {
+      width: calc(var(--ic) * 0.56); height: calc(var(--ic) * 0.56);
+      border-radius: calc(var(--ic) * 0.07);
     }
+    /* A wall is CELLS, never a swatch: one flat red rectangle was the thing
+       that read as a colour sample rather than as the thing on the pitch, so
+       here it is the four squares a shape is actually built from, mortared in
+       the wall's own edge colour. Four is the smallest count that still says
+       "these are tiles" at this size. */
+    .ov-body.kick-grid .lg-ic.trio .d-wall {
+      background-color: #8c2417;
+      background-image:
+        linear-gradient(#e6402a 0 0), linear-gradient(#e6402a 0 0),
+        linear-gradient(#e6402a 0 0), linear-gradient(#e6402a 0 0);
+      background-repeat: no-repeat;
+      background-size: calc(50% - 1px) calc(50% - 1px);
+      background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+      box-shadow: none;
+    }
+    /* and the third death is the snake closing a loop on itself, drawn rather
+       than implied: an empty cream square said nothing at all, and "yourself"
+       is the one of the three that has no obvious picture until you show the
+       head arriving back at its own tail. */
+    .ov-body.kick-grid .lg-ic.trio .d-self { border-radius: 0; }
     .ov-body.kick-grid .lg-txt { display: none; }
     .ov-body.kick-grid .lg-two {
       display: flex; flex-direction: column; gap: 0;
@@ -242,6 +269,14 @@
        column of numbers that do not line up reads as a broken table */
     .ov-body.kick-grid .lg-sub { min-height: 1.15em; }
     .ov-body.kick-grid .lg-val { font-size: clamp(17px, 2.9cqw, 24px); min-width: 0; }
+    /* The unit is printed from the attribute rather than sitting in the text,
+       so the narrow list's 32px value column never has to carry it. It is set
+       smaller than the number on purpose: the figure is what the tile is for
+       and PTS is only what it is counted in. */
+    .ov-body.kick-grid .lg-val[data-unit]::after {
+      content: ' ' attr(data-unit);
+      font-size: 0.52em; letter-spacing: 0.5px;
+    }
     /* SLOW is a word where the others are numbers: it needs to sit at the
        same optical weight without stealing the tile */
     .ov-body.kick-grid .lg-val.pos, .ov-body.kick-grid .lg-val.neg,
@@ -383,9 +418,12 @@
      the BASE block and not in the wide kickoff's, because the narrow list
      shows the same row and shipped it as an empty square for one build. */
   .lg-ic.trio { display: flex; align-items: center; justify-content: center; gap: 1.5px; }
-  .lg-ic.trio i { display: block; flex: none; width: 5px; height: 9px; border-radius: 1px; }
+  .lg-ic.trio > * { display: block; flex: none; width: 5px; height: 9px; border-radius: 1px; }
   .lg-ic.trio .d-wall { background: #e6402a; box-shadow: inset 0 0 0 1px #8c2417; }
-  .lg-ic.trio .d-self { background: rgb(244, 236, 216); }
+  /* The snake is an SVG and paints itself from currentColor, so it takes a
+     colour and never a background. Its viewBox lets the same drawing serve
+     the wide tile and this five-pixel pip, where it reads as a cream dot. */
+  .lg-ic.trio .d-self { color: rgb(244, 236, 216); overflow: visible; }
   /* The ghost is CUT to the silhouette the pitch actually draws (dome, straight
      sides, a four-notch skirt, white eyes) rather than approximated with a
      border-radius: a rounded pink rectangle beside a red one and a cream one
