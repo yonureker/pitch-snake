@@ -2011,7 +2011,10 @@ test('a level round replays to the identical end', () => {
 // given draw picks, and the scripted pilot, playing a fixed script blind,
 // walked into a wall that was not there before. 15/ghost/2451 became
 // 5/wall/1006. That is divergence, not difficulty, and it is the clearest
-// possible proof the new pattern is really in the rotation.
+// possible proof the new pattern is really in the rotation. v31 moved ALL
+// THREE for the same reason, only harder: the rotation went from seven
+// shapes to fourteen, so every wall draw in every fixture picks a different
+// shape, and all three pilots now end on a wall (5/837, 4/965, 17/1255).
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);
@@ -2565,4 +2568,53 @@ test('weather: an old log without the knob replays dry', () => {
   log.end = 100;
   const r = replay(log);
   assert.equal(r.rainEveryMs, 0, 'absent means dry, the rules it was played by');
+});
+
+// ------------------------------------------------------------ wall shapes
+// Every pattern in the rotation has to leave the pitch in ONE piece. A shape
+// that seals a pocket would let a snake be closed in with nowhere to steer,
+// which is the death the doom window, the ghost hold and the wall warning
+// all exist to prevent, and it is the one mistake a hand-drawn shape can
+// make that no other test would notice: the round still runs, the art still
+// looks right, and a player simply dies for no reason they could see. Free
+// space is measured under the WRAP, because the board is a torus.
+//
+// This walks real rounds rather than reaching into the pattern list, so it
+// proves what a PLAYER can actually meet. Fourteen shapes as of v31.
+test('every wall shape leaves the pitch in one connected piece', () => {
+  const shapes = new Map();
+  for (let seed = 1; seed <= 8000 && shapes.size < 14; seed++) {
+    const g = createGame({ seed });
+    for (let q = 0; q < 2000; q++) {
+      g.advanceQuanta(1);
+      if (g.wallState === 'off' || !g.wallLookup.size) continue;
+      const key = [...g.wallLookup].sort((a, b) => a - b).join(',');
+      if (!shapes.has(key)) shapes.set(key, new Set(g.wallLookup));
+      break;
+    }
+  }
+  assert.equal(shapes.size, 14, 'all fourteen shapes are reachable in play');
+
+  for (const [, walls] of shapes) {
+    // flood one free cell and count what it reaches
+    let start = -1;
+    for (let k = 0; k < GRID * GRID && start < 0; k++) if (!walls.has(k)) start = k;
+    const seen = new Set([start]);
+    const stack = [start];
+    while (stack.length) {
+      const k = stack.pop();
+      const x = (k / GRID) | 0, y = k % GRID;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nk = K(wrap(x + dx), wrap(y + dy));
+        if (walls.has(nk) || seen.has(nk)) continue;
+        seen.add(nk);
+        stack.push(nk);
+      }
+    }
+    const free = GRID * GRID - walls.size;
+    assert.equal(seen.size, free,
+      `a shape of ${walls.size} walls sealed off ${free - seen.size} cells`);
+    // and it must leave room to actually play in
+    assert.ok(free >= 280, `a shape of ${walls.size} walls left only ${free} free cells`);
+  }
 });
