@@ -1,0 +1,13 @@
+{
+  "id": "com.pitchsnake.app",
+  "title": "Pitch Snake",
+  "type": "web",
+  "main": "index.html",
+  "icon": "icon.png",
+  "largeIcon": "largeicon.png",
+  "vendor": "Onur Eker",
+  "version": "1.0.0",
+  "appDescription": "Snake on a football pitch.",
+  "bgColor": "#12160e",
+  "iconColor": "#12160e"
+}

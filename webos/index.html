@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pitch Snake</title>
+<style>
+  /* The TV paints this for the half second before the game's own page takes
+     over. The colour is index.html's dark theme-color, so the handover is
+     invisible rather than a white flash on a dark set. */
+  html, body { margin: 0; height: 100%; background: #12160e; }
+</style>
+<script>
+  // This app is four files and a redirect ON PURPOSE. See webos/README.md:
+  // a packaged copy of the game would be a second deploy target that goes
+  // stale, and a stale ENGINE_VERSION is refused from every room.
+  //
+  // `replace`, not `href`: BACK must leave the app from the game's own first
+  // screen, not step back onto this blank one.
+  //
+  // `?tv=1` is belt and braces. The page already recognises a television by
+  // its user agent, but a redirect crosses into another origin and nothing
+  // guarantees what survives that, so the one thing the wrapper can still say
+  // for certain is said here in the URL.
+  location.replace('https://pitchsnake.com/?tv=1');
+</script>

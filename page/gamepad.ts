@@ -2,14 +2,15 @@
  * Gamepads: one more device, never a second set of rules.
  *
  * OWNS the polling of the Gamepad API, the stick's dead and release bands,
- * the menu repeat, and the spatial focus ring that lets the whole page be
- * driven with four directions and a button.
+ * the menu repeat, and the mapping from this hardware's buttons to the
+ * page's four verbs.
  *
- * MUST NEVER decide what a direction means. Everything this produces goes
- * exactly where a key or a thumb goes: a direction through the shell's one
- * input gate (rule 12), a menu press through the same `click()` the pointer
- * fires. That is what makes a DualShock on an iPhone, an Xbox pad on a Steam
- * machine and a TV remote all one input.
+ * MUST NEVER decide what a direction means, and must not own the focus ring
+ * either. Everything this produces goes exactly where a key or a thumb goes:
+ * a direction through the shell's one input gate (rule 12), a menu press
+ * through the same `click()` the pointer fires. That is what makes a
+ * DualShock on an iPhone, an Xbox pad on a Steam machine and a TV remote all
+ * one input, and the ring that serves all three lives in `menu-nav.ts`.
  *
  * The point is not only the pad. It is that a screen you cannot reach
  * without a pointer is a screen that does not ship to a television or a
@@ -22,7 +23,7 @@
  *
  * @module
  */
-import { mustGetElement } from './dom.js';
+import { back, confirm, moveFocus, inRound, rehomeFocus, start, steerOrMove } from './menu-nav.js';
 
 const PAD_DEAD = 0.55; // stick past this is a direction
 const PAD_RELEASE = 0.3; // and back under this before it counts again
@@ -31,15 +32,6 @@ const PAD_REPEAT_MS = 140; // and then repeats at this rate
 
 /** What the pad needs the shell to do; it reaches for none of it itself. */
 export interface GamepadPorts {
-  /**
-   * Turn the snake. Rule 12: every input source goes through the one gate,
-   * which owns the playing-state check and the reversal filter.
-   */
-  steer: (dx: number, dy: number) => void;
-  /** The round's phase right now, read fresh on every poll. */
-  phase: () => string;
-  /** Half time, or back from it. */
-  togglePause: () => void;
   /**
    * Ask the shell to rebuild the canvas next frame.
    *
@@ -51,14 +43,6 @@ export interface GamepadPorts {
 }
 
 let ports: GamepadPorts | null = null;
-let overlay: HTMLElement | null = null;
-let settingsModal: HTMLElement | null = null;
-let profileModal: HTMLElement | null = null;
-let settingsClose: HTMLElement | null = null;
-/** Tried in order for the primary of whatever screen is up. */
-let primaries: HTMLElement[] = [];
-/** Tried in order when B backs out of a screen. */
-let backButtons: HTMLElement[] = [];
 
 let dpadPrevious = 0;
 let buttonsPrevious = 0;
@@ -68,7 +52,6 @@ let repeatAt = 0;
 // the two is non-zero, so a sentinel says it as well as a null did and
 // spares every reader a null check.
 let held = { x: 0, y: 0 };
-let menuWasUp = false;
 
 // Whether a pad has ever announced itself this page-load. Until one does, the
 // frame loop's poll returns immediately: navigator.getGamepads() builds its
@@ -79,154 +62,6 @@ let menuWasUp = false;
 // always polled: a disconnect that lapses is cheaper than a reconnect missed.
 let padEverSeen = false;
 
-function inRound(): boolean {
-  const phase = ports?.phase();
-  return phase === 'playing' || phase === 'countdown';
-}
-
-function isDisabled(element: HTMLElement): boolean {
-  return (
-    (element instanceof HTMLButtonElement ||
-      element instanceof HTMLInputElement ||
-      element instanceof HTMLSelectElement) &&
-    element.disabled
-  );
-}
-
-// visible, enabled and actually laid out; the wedges are the snake's, never
-// the menu's, and a hidden panel's buttons are not on this screen
-function usable(element: Element | null): element is HTMLElement {
-  if (element === null || !(element instanceof HTMLElement)) return false;
-  if (isDisabled(element) || element.hidden || element.classList.contains('wedge')) return false;
-  const box = element.getBoundingClientRect();
-  return box.width > 0 && box.height > 0;
-}
-
-// whatever surface is on top owns the focus ring: a modal, else the overlay
-function scope(): HTMLElement | null {
-  if (settingsModal !== null && !settingsModal.hidden) return settingsModal;
-  if (profileModal !== null && !profileModal.hidden) return profileModal;
-  if (overlay === null || overlay.classList.contains('hidden')) return null;
-  return overlay;
-}
-
-function controls(): HTMLElement[] {
-  const root = scope();
-  if (root === null) return [];
-  const out: HTMLElement[] = [];
-  // [tabindex] as well as the tags: focusable non-controls (list rows and
-  // their kin) must stay reachable to a pad, or the pointer-free work on a TV
-  // or a handheld quietly loses screens
-  for (const element of root.querySelectorAll('button, input, [tabindex]')) {
-    if (usable(element)) out.push(element);
-  }
-  return out;
-}
-
-// The primary of whatever screen is up, so a pad always has somewhere to
-// land. Scope first: mid-round the overlay is only visually hidden, so its
-// buttons still measure and would otherwise look like live targets.
-function primary(): HTMLElement | null {
-  if (scope() === null) return null;
-  for (const button of primaries) if (usable(button)) return button;
-  return controls()[0] ?? null;
-}
-
-/**
- * Put the focus ring somewhere real.
- *
- * Opening a panel hides whatever held the ring and focus falls to `<body>`,
- * which no direction can move off, so every UI change re-homes it. Safe to
- * call from anywhere: the class it gates on is only ever set once a pad has
- * actually announced itself.
- */
-export function rehomeFocus(): void {
-  if (!document.documentElement.classList.contains('padded')) return;
-  const list = controls();
-  if (list.length === 0) return;
-  const active = document.activeElement;
-  if (active instanceof HTMLElement && list.includes(active)) return;
-  primary()?.focus();
-}
-
-// Spatial, not tab order: score every candidate by how far it lies in the
-// pressed direction plus a heavy penalty for drifting off that axis, so
-// straight ahead beats diagonally near. Reads layout, but only on a press.
-function moveFocus(dx: number, dy: number): void {
-  const list = controls();
-  if (list.length === 0) return;
-  const active = document.activeElement;
-  // nothing focused yet: the first press spends itself landing on the
-  // primary, which is where a pad user wanted to be anyway
-  if (!(active instanceof HTMLElement) || !list.includes(active)) {
-    (primary() ?? list[0])?.focus();
-    return;
-  }
-  const from = active.getBoundingClientRect();
-  const fromX = from.left + from.width / 2;
-  const fromY = from.top + from.height / 2;
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
-  for (const element of list) {
-    if (element === active) continue;
-    const box = element.getBoundingClientRect();
-    const toX = box.left + box.width / 2 - fromX;
-    const toY = box.top + box.height / 2 - fromY;
-    const along = dx === 0 ? toY * dy : toX * dx;
-    if (along <= 1) continue; // not the way we are going
-    const off = dx === 0 ? Math.abs(toX) : Math.abs(toY);
-    const score = along + off * 3;
-    if (score < bestScore) {
-      bestScore = score;
-      best = element;
-    }
-  }
-  best?.focus();
-}
-
-// A round takes turns; anything else takes focus. One funnel, one gate.
-function steerOrMove(x: number, y: number): void {
-  if (inRound()) ports?.steer(x, y);
-  else moveFocus(x, y);
-}
-
-function confirm(): void {
-  if (inRound()) return;
-  const active = document.activeElement;
-  if (usable(active) && controls().includes(active)) {
-    if (active instanceof HTMLInputElement) active.focus();
-    else active.click();
-    return;
-  }
-  primary()?.focus();
-}
-
-function back(): void {
-  if (ports?.phase() === 'playing') {
-    ports.togglePause();
-    return;
-  }
-  if (settingsModal !== null && !settingsModal.hidden) {
-    settingsClose?.click();
-    return;
-  }
-  for (const button of backButtons) {
-    if (usable(button)) {
-      button.click();
-      return;
-    }
-  }
-}
-
-function start(): void {
-  const phase = ports?.phase();
-  if (phase === 'playing' || phase === 'paused') {
-    ports?.togglePause();
-    return;
-  }
-  primary()?.click();
-}
-
 /**
  * Read every connected pad once. Call from the frame loop, before the sim, so
  * a press lands on this frame rather than the next.
@@ -235,19 +70,9 @@ function start(): void {
  */
 export function pollGamepads(now: number): void {
   if (!padEverSeen) return;
-  // A screen arriving with nothing focused strands a pad: no direction can
-  // move off <body>. Rather than chase every place that shows the overlay,
-  // watch the transition here. Both reads are properties, not layout, so the
-  // steady-state cost is nil and the measuring only happens on the edge.
-  const menuUp =
-    (overlay !== null && !overlay.classList.contains('hidden')) ||
-    (settingsModal !== null && !settingsModal.hidden) ||
-    (profileModal !== null && !profileModal.hidden);
-  if (menuUp !== menuWasUp) {
-    menuWasUp = menuUp;
-    if (menuUp) rehomeFocus();
-  }
-
+  // Nothing here watches for a screen change any more: menu-nav observes the
+  // panels directly and re-homes the ring itself, which a remote needs (it
+  // has no frame loop to ride) and which takes a layout read off this path.
   const pads = navigator.getGamepads();
   let pad: Gamepad | null = null;
   for (const candidate of pads) {
@@ -330,27 +155,16 @@ export function pollGamepads(now: number): void {
 function announce(present: boolean): void {
   document.documentElement.classList.toggle('padded', present);
   ports?.requestResize();
-  // membership, not usability: with nothing focused the active element is
-  // <body>, which is perfectly usable and not a control, so testing usability
-  // alone would decide the ring already had a home and skip this
-  const active = document.activeElement;
-  if (!present || (active instanceof HTMLElement && controls().includes(active))) return;
-  primary()?.focus();
+  if (present) rehomeFocus();
 }
 
 /**
- * Wire the pad to the page's own screens. Call once at boot.
+ * Wire the pad to the page. Call once at boot, after `initMenuNav`.
  *
- * @param shellPorts - the four things the pad needs the shell to do.
+ * @param shellPorts - the one thing the pad needs the shell to do.
  */
 export function initGamepads(shellPorts: GamepadPorts): void {
   ports = shellPorts;
-  overlay = mustGetElement('overlay');
-  settingsModal = mustGetElement('settingsModal');
-  profileModal = mustGetElement('profileModal');
-  settingsClose = mustGetElement('settingsClose');
-  primaries = ['modeGoBtn', 'vsCreateBtn', 'settingsClose', 'startBtn'].map((id) => mustGetElement(id));
-  backButtons = ['modeBackBtn', 'vsBackBtn', 'tBackBtn'].map((id) => mustGetElement(id));
   window.addEventListener('gamepadconnected', () => {
     padEverSeen = true;
     announce(true);

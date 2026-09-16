@@ -81,6 +81,14 @@
     outline-offset: 3px;
     border-radius: 4px;
   }
+
+  /* A television is `padded` too: it is a pointerless controller and wants
+     the same ring and the same missing d-pad. The only thing it does not
+     want is the pad's vocabulary, because a remote has no stick, no ① and
+     no START. So `tv` changes the words and nothing else. */
+  .tv-only { display: none; }
+  html.tv .tv-only { display: inline; }
+  html.tv .pad-only, html.tv .kb-only, html.tv .touch-only { display: none; }
   /* and for anyone arriving by keyboard, on any device: a page with no focus
      ring at all was only ever navigable by pointer */
   button:focus-visible, input:focus-visible {

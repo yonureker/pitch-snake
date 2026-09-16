@@ -57,15 +57,27 @@
       padding: clamp(5px, 1cqw, 10px) clamp(12px, 2.2cqw, 20px);
       border-radius: 9px;
       background: rgba(33,30,26,0.34);
+      /* The plain declaration before each color-mix() below is not a
+         duplicate: color-mix() is Chromium 111 and a 2024 LG TV is Chromium
+         108, where the whole declaration is invalid and dropped. Without a
+         predecessor the tiles lose their slab entirely and read as flat
+         labels on a television. The fallback is the dark END of the mix,
+         which is what these mixes are mostly made of anyway (see the slab
+         note further down), so the loss is the accent tint and never the
+         depth. --accent changes per mode, so no single value can be the
+         mix itself; it can only be the floor under it. */
+      box-shadow: 0 4px 0 #12180f;
       box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 55%, #12180f);
     }
     .ov-body.modes-grid .stack-choice button:not(.active):hover {
+      background: rgba(246,239,222,0.10);
       background: color-mix(in srgb, var(--accent, var(--gold)) 14%, transparent);
     }
     /* restated because the tile rule above outranks the narrow list's
        .active fill; without this the lit tile went dark-on-dark */
     .ov-body.modes-grid .stack-choice button.active {
       background: var(--accent, var(--gold));
+      box-shadow: 0 4px 0 #12180f;
       box-shadow: 0 4px 0 color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
     }
     /* no glyph chips any more: the name and its one line, centered, carry
@@ -87,6 +99,7 @@
       font-size: clamp(14px, 2.5cqw, 21px);
       letter-spacing: 1.2px; line-height: 1.05;
       color: #f6efde;
+      text-shadow: clamp(1px, 0.16cqw, 2px) clamp(1px, 0.16cqw, 2px) 0 #12180f;
       text-shadow: clamp(1px, 0.16cqw, 2px) clamp(1px, 0.16cqw, 2px) 0
                    color-mix(in srgb, var(--accent, var(--gold)) 45%, #12180f);
     }

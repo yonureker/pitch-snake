@@ -16,7 +16,8 @@
     "build:page": "tsc -p page/tsconfig.json && node scripts/minify-page.mjs",
     "build:packages": "tsc -p packages/net/tsconfig.json && tsc -p packages/flags/tsconfig.json && tsc -p packages/cosmetics/tsconfig.json",
     "stamp": "node scripts/stamp-assets.mjs",
-    "stamp:check": "node scripts/stamp-assets.mjs --check"
+    "stamp:check": "node scripts/stamp-assets.mjs --check",
+    "webos:package": "sh scripts/webos-package.sh"
   },
   "overrides": {
     "eslint-plugin-react-hooks": "^7.1.1"

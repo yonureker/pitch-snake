@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=3a781ab933">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=3a781ab933">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=0bc7e915d2">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -402,6 +402,9 @@
       <span class="pad-only"><b>&#9312;</b> select</span>
       <span class="pad-only"><b>&#9313;</b> back</span>
       <span class="pad-only"><b>START</b> pause</span>
+      <span class="tv-only"><b>&uarr;&darr;&larr;&rarr;</b> move</span>
+      <span class="tv-only"><b>OK</b> select &amp; pause</span>
+      <span class="tv-only"><b>BACK</b> back</span>
       <span><b>&#9881;&#xFE0E;</b> for settings</span>
     </div>
 
@@ -632,42 +635,44 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=3a781ab933",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=3a781ab933",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=3a781ab933",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=3a781ab933",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=3a781ab933",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=3a781ab933",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=3a781ab933",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=3a781ab933",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=3a781ab933",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=3a781ab933",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=3a781ab933",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=3a781ab933",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=3a781ab933",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=3a781ab933",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=3a781ab933",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=3a781ab933",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=3a781ab933",
-    "./packages/net/net.js": "./packages/net/net.js?v=3a781ab933",
-    "@pitch-snake/net": "./packages/net/net.js?v=3a781ab933",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=3a781ab933",
-    "./page/build/dom.js": "./page/build/dom.js?v=3a781ab933",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=3a781ab933",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=3a781ab933",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=3a781ab933",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=3a781ab933",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=3a781ab933",
-    "./page/build/shop.js": "./page/build/shop.js?v=3a781ab933",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=3a781ab933",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=3a781ab933",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=3a781ab933"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=0bc7e915d2",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=0bc7e915d2",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=0bc7e915d2",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=0bc7e915d2",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=0bc7e915d2",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=0bc7e915d2",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=0bc7e915d2",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=0bc7e915d2",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=0bc7e915d2",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=0bc7e915d2",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=0bc7e915d2",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=0bc7e915d2",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=0bc7e915d2",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=0bc7e915d2",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=0bc7e915d2",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=0bc7e915d2",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=0bc7e915d2",
+    "./packages/net/net.js": "./packages/net/net.js?v=0bc7e915d2",
+    "@pitch-snake/net": "./packages/net/net.js?v=0bc7e915d2",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=0bc7e915d2",
+    "./page/build/dom.js": "./page/build/dom.js?v=0bc7e915d2",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=0bc7e915d2",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=0bc7e915d2",
+    "./page/build/menu-nav.js": "./page/build/menu-nav.js?v=0bc7e915d2",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=0bc7e915d2",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=0bc7e915d2",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=0bc7e915d2",
+    "./page/build/shop.js": "./page/build/shop.js?v=0bc7e915d2",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=0bc7e915d2",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=0bc7e915d2",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=0bc7e915d2",
+    "./page/build/tv-remote.js": "./page/build/tv-remote.js?v=0bc7e915d2"
   }
 }
 </script>
@@ -1052,7 +1057,9 @@
   // One more device, never a second set of rules: a pad's directions go
   // through the same gate a key does, and its menu presses through the same
   // click() the pointer fires. See page/gamepad.ts.
-  import { initGamepads, pollGamepads, rehomeFocus } from './page/build/gamepad.js';
+  import { initGamepads, pollGamepads } from './page/build/gamepad.js';
+  import { initMenuNav, rehomeFocus } from './page/build/menu-nav.js';
+  import { initTvRemote, isTelevision } from './page/build/tv-remote.js';
   import { initErrorReporting, reportIssue } from './page/build/error-reporting.js';
   import {
     audioHook, audioWake, crowdPulse, crowdSync, crowdVerdict,
@@ -5739,10 +5746,12 @@
   // A pad is polled out of loop(); everything it produces goes through the
   // shell's own doors, which is what keeps it one input rather than a second
   // set of rules.
-  initGamepads({
+  initMenuNav({
     steer: (x, y) => dirInput(x, y, 'g'),
     phase: () => state,
     togglePause,
+  });
+  initGamepads({
     requestResize: () => { resizeQueued = true; },
   });
 
@@ -6655,18 +6664,30 @@
 
   refreshWho();
 
+  // A television, which is the one screen the media query below cannot
+  // recognise: a Magic Remote is a pointer and may call itself either fine or
+  // coarse, and neither answer is the truth about a room with a sofa in it.
+  // So this asks the one question a user agent can honestly answer, and the
+  // pointer dialect below defers to it. Must run before the first resize: it
+  // decides whether the touch d-pad is on screen, and the column is measured
+  // from what is left.
+  const onTelevision = initTvRemote();
+
   // desktop web, mobile web, or the app: the app is its own build, and the
-  // two webs split by what the PRIMARY pointer is, never by user agent
+  // two webs split by what the PRIMARY pointer is, never by user agent (the
+  // television above is the sole exception, and says why)
   const coarseMq = window.matchMedia('(pointer: coarse)');
   function applyPointerClass() {
-    document.documentElement.classList.toggle('touch', coarseMq.matches);
-    document.documentElement.classList.toggle('touchless', !coarseMq.matches);
+    const touch = coarseMq.matches && !isTelevision();
+    document.documentElement.classList.toggle('touch', touch);
+    document.documentElement.classList.toggle('touchless', !touch);
     resizeQueued = true;         // the class changes the column width
     placeChrome();               // and the chrome's home rides the same signal
   }
   applyPointerClass();
   coarseMq.addEventListener('change', applyPointerClass);
   window.addEventListener('touchstart', () => {
+    if (onTelevision) return;    // a touchscreen laptop driving ?tv=1 is still a TV
     document.documentElement.classList.add('touch');
     document.documentElement.classList.remove('touchless');
     resizeQueued = true;
