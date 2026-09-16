@@ -28,15 +28,17 @@ import type { HatArt } from './pitch-art';
 type HatSurface = Parameters<HatArt['draw']>[0];
 
 /**
- * Draw one hat onto a Skia canvas through the shared dialect, and clean up
- * every native object the drawing created.
+ * Run one shared-art draw against a Skia canvas wearing the Canvas2D
+ * dialect, then clean up every native object the drawing created.
+ *
+ * Extracted from the hat path on 2026-09-16 when the skin TEXTURES arrived:
+ * they draw through the same dialect (skin-texture.ts), and the adapter is
+ * one wrapper however many kinds of art speak through it.
  *
  * @param c - the canvas of the sprite being baked.
- * @param art - the hat, from `hatFor`.
- * @param w - sprite width in pixels.
- * @param h - sprite height in pixels.
+ * @param draw - the shared art's draw call, handed the dialect surface.
  */
-export function drawHatOn(c: SkCanvas, art: HatArt, w: number, h: number): void {
+export function withHatSurface(c: SkCanvas, draw: (surface: HatSurface) => void): void {
   const fillPaint = Skia.Paint();
   const strokePaint = Skia.Paint();
   strokePaint.setStyle(PaintStyle.Stroke);
@@ -122,9 +124,23 @@ export function drawHatOn(c: SkCanvas, art: HatArt, w: number, h: number): void 
     },
   };
 
-  art.draw(surface, w, h);
+  draw(surface);
   dropPath();
   dropBuilder();
   fillPaint.dispose();
   strokePaint.dispose();
+}
+
+/**
+ * Draw one hat onto a Skia canvas through the shared dialect.
+ *
+ * @param c - the canvas of the sprite being baked.
+ * @param art - the hat, from `hatFor`.
+ * @param w - sprite width in pixels.
+ * @param h - sprite height in pixels.
+ */
+export function drawHatOn(c: SkCanvas, art: HatArt, w: number, h: number): void {
+  withHatSurface(c, (surface) => {
+    art.draw(surface, w, h);
+  });
 }

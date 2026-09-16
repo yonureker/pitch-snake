@@ -22,156 +22,43 @@
  *
  * ART IS NOT RULES. None of this crosses into packages/engine: a cosmetic in
  * the engine would chain every new hat to an ENGINE_VERSION bump and a
- * validator re-pin, which is absurd for content. The mobile app carries the
- * same catalogue ported to Skia in apps/mobile/src/game/pitch-art.ts, because
- * only the numbers are shared: `quadraticCurveTo` on a 2D context and a
- * `Skia.Path` are different enough that a common drawing language would cost
- * more than the duplicated coordinates.
+ * validator re-pin, which is absurd for content. The catalogues themselves
+ * (hats, skins, textures, jersey) live in the shared cosmetics package and
+ * are re-exported here, so both clients draw one set of numbers.
  *
  * @module pitch-art
  */
 
-/** One skin's colour ramp, outline, and the crest that some skins carry. */
-export interface SkinArt {
-  /** The head's colour, as r/g/b in 0..255. */
-  head: readonly number[];
-  /** The tail's colour; every segment interpolates between the two. */
-  tail: readonly number[];
-  /** The outline that rides every segment. */
-  line: string;
-  /** The crest's colour, or null for a skin that wears none. */
-  spikes: string | null;
-  /** The crest's second colour, alternating tooth by tooth. */
-  spikesAlt: string | null;
-  /**
-   * A patterned body: colour stops cycled head to tail instead of the plain
-   * two-colour ramp. `cycles` is how many times the whole stop sequence
-   * repeats along the body, hard-edged rings unless `soft`, which
-   * cross-fades between stops (an ember glow rather than a band). The
-   * pattern rides the body FRACTION, not the segment index, which is what a
-   * real snake's rings do: growing stretches them, it never mints more.
-   */
-  pattern?: { colors: readonly (readonly number[])[]; cycles: number; soft?: boolean };
-}
-
-// The hats grew past this file's ceiling, moved to their own module, and
-// on 2026-09-14 moved again into the shared cosmetics package, where both
-// clients draw them; the re-export keeps every existing import working.
+// The skins moved to the shared cosmetics package on 2026-09-16, the hats'
+// own move applied to the body: the table lived here and again in the app's
+// theme.ts, and the pattern drop would have doubled a duplicated table. The
+// re-exports keep every existing import working; the ramp + ring math lives
+// once in shadeRgbFor, and buildLutFor below is now the page's thin wrapper
+// turning those numbers into the CSS strings its frame loop reads (rule 5).
+// The hats made the move first (2026-09-14); these keep their imports whole.
 export { HATS, hatFor } from '@pitch-snake/cosmetics/hat-art';
 export type { HatArt } from '@pitch-snake/cosmetics/hat-art';
-
-/**
- * The skins.
- *
- * `classic` is the bare snake and `viper` stays the blue curio with the crest
- * that ?skin=viper has always summoned; the `skin-` ids are what the shop
- * sells. Rival BODIES wear this clothing too, so these ramps are not the local
- * player's alone; VS_COLORS in the page survive as name tags and roster dots,
- * which are identity rather than clothing.
- */
-export const SKINS = {
-  classic:      { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)',
-                  spikes: null, spikesAlt: null },
-  viper:        { head: [ 88, 168, 246], tail: [ 24,  74, 150], line: 'rgba(150,110,235,0.75)',
-                  spikes: '#9a5cf0', spikesAlt: '#7b3fd6' },
-  'skin-away':  { head: [248, 248, 252], tail: [172, 194, 222], line: 'rgba(70,110,180,0.65)',
-                  spikes: null, spikesAlt: null },
-  'skin-volt':  { head: [250, 240, 104], tail: [172, 142, 24],  line: 'rgba(64,60,36,0.6)',
-                  spikes: null, spikesAlt: null },
-  'skin-rosa':  { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)',
-                  spikes: null, spikesAlt: null },
-  'skin-night': { head: [226, 231, 241], tail: [ 36,  42,  56], line: 'rgba(122,132,160,0.55)',
-                  spikes: null, spikesAlt: null },
-  'skin-gilt':  { head: [252, 232, 152], tail: [194, 150, 56],  line: 'rgba(140,100,30,0.7)',
-                  spikes: null, spikesAlt: null },
-  // The template drop, 2026-09-10: seven patterned bodies, the owner's call
-  // that a skin is a TEMPLATE and not a recolour. Each is a stop sequence
-  // cycled along the body (see `pattern`); head/tail still name the ends so
-  // everything that samples a ramp (swatches, fallbacks) keeps working.
-  // Crestless on purpose: the app does not draw the viper's spikes, and a
-  // skin that looks different per platform would lie in a room.
-  'skin-ocean':   { head: [223, 238, 244], tail: [ 23,  57,  74], line: 'rgba(90,190,210,0.6)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[223, 238, 244], [23, 57, 74]], cycles: 5 } },
-  'skin-copper':  { head: [217, 154,  94], tail: [ 94,  58,  28], line: 'rgba(150,92,44,0.65)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[217, 154, 94], [94, 58, 28]], cycles: 6 } },
-  'skin-frost':   { head: [235, 248, 255], tail: [122, 168, 204], line: 'rgba(150,200,235,0.6)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[235, 248, 255], [122, 168, 204]], cycles: 5, soft: true } },
-  'skin-cherry':  { head: [212,  58,  47], tail: [ 38,  35,  43], line: 'rgba(200,60,70,0.6)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[212, 58, 47], [242, 197, 61], [38, 35, 43], [242, 197, 61]], cycles: 2 } },
-  'skin-violet':  { head: [201, 162, 255], tail: [ 91,  42, 168], line: 'rgba(160,110,240,0.6)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[201, 162, 255], [91, 42, 168]], cycles: 4 } },
-  'skin-royal':   { head: [125, 162, 255], tail: [240, 244, 252], line: 'rgba(120,150,240,0.65)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[125, 162, 255], [240, 244, 252]], cycles: 6 } },
-  'skin-inferno': { head: [255, 170,  80], tail: [179,  32,  19], line: 'rgba(230,120,50,0.6)',
-                    spikes: null, spikesAlt: null,
-                    pattern: { colors: [[255, 170, 80], [179, 32, 19]], cycles: 4, soft: true } },
-} as const satisfies Record<string, SkinArt>;
-
-
-// The catalogues are authored as literals so their keys stay literal, and read
-// through these widened views so an id from the server (or from a rival's
-// presence payload, or a URL) can be looked up without a cast. Under
-// noUncheckedIndexedAccess an unknown id reads as undefined, which is exactly
-// the fallback the economy asks for.
-const SKIN_BY_ID: Record<string, SkinArt> = SKINS;
-
-/**
- * The skin an id resolves to. Unknown, null and empty all wear classic.
- *
- * @param id A `pitch_snake_items` id, or null for "nothing equipped".
- * @returns Always a skin: this never fails, because a client that has not heard
- *   of next month's item still has to draw a snake.
- */
-export function skinFor(id: string | null | undefined): SkinArt {
-  return (id ? SKIN_BY_ID[id] : undefined) ?? SKINS.classic;
-}
-
-
-/**
- * How many shades a body ramp holds.
- *
- * Exported because the renderer indexes the ramp by it: how long the table is
- * belongs to whoever builds the table.
- */
-export const SNAKE_SHADES = 64;
+export { SKINS, skinFor, SNAKE_SHADES, shadeRgbFor } from '@pitch-snake/cosmetics/skin-art';
+export type { SkinArt } from '@pitch-snake/cosmetics/skin-art';
+export { SKIN_TEXTURES, textureFor } from '@pitch-snake/cosmetics/skin-texture';
+export type { SkinTexturePainter } from '@pitch-snake/cosmetics/skin-texture';
+import { SNAKE_SHADES, shadeRgbFor, type SkinArt } from '@pitch-snake/cosmetics/skin-art';
 
 /**
  * The body's shades from head to tail, as ready-made fill strings.
  *
- * Performance rule 5: the per-segment loop reads this table and never builds a
- * `rgb(...)` string, so it is computed once per change of skin and never in a
- * frame.
+ * Performance rule 5: the per-segment loop reads this table and never builds
+ * a `rgb(...)` string, so it is computed once per change of skin and never in
+ * a frame. The numbers come from the shared shadeRgbFor, so the app's Skia
+ * colours and these strings can never drift apart.
  *
  * @param skin The skin to ramp.
  * @returns `SNAKE_SHADES` fill styles, head first.
  */
 export function buildLutFor(skin: SkinArt): string[] {
   return Array.from({ length: SNAKE_SHADES }, (_, i) => {
-    const t = i / (SNAKE_SHADES - 1);
-    const p = skin.pattern;
-    if (p) {
-      // a template: the stop sequence cycled along the body, hard rings by
-      // default, cross-faded when soft. Same table, same zero frame cost.
-      const u = t * p.cycles * p.colors.length;
-      const a = p.colors[Math.trunc(u) % p.colors.length] ?? skin.head;
-      const bStop = p.colors[(Math.trunc(u) + 1) % p.colors.length] ?? skin.tail;
-      const f = p.soft ? u - Math.trunc(u) : 0;
-      const r = (a[0] ?? 0) + ((bStop[0] ?? 0) - (a[0] ?? 0)) * f;
-      const g = (a[1] ?? 0) + ((bStop[1] ?? 0) - (a[1] ?? 0)) * f;
-      const b2 = (a[2] ?? 0) + ((bStop[2] ?? 0) - (a[2] ?? 0)) * f;
-      return `rgb(${Math.trunc(r)}, ${Math.trunc(g)}, ${Math.trunc(b2)})`;
-    }
-    const h = skin.head, l = skin.tail;
-    const r = (h[0] ?? 0) + ((l[0] ?? 0) - (h[0] ?? 0)) * t;
-    const g = (h[1] ?? 0) + ((l[1] ?? 0) - (h[1] ?? 0)) * t;
-    const b = (h[2] ?? 0) + ((l[2] ?? 0) - (h[2] ?? 0)) * t;
-    return `rgb(${Math.trunc(r)}, ${Math.trunc(g)}, ${Math.trunc(b)})`;
+    const [r, g, b] = shadeRgbFor(skin, i / (SNAKE_SHADES - 1));
+    return `rgb(${r}, ${g}, ${b})`;
   });
 }
 

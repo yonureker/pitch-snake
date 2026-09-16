@@ -112,7 +112,26 @@ insert into public.pitch_snake_items (id, kind, name, price, sort) values
   ('skin-cherry',  'skin', 'CORAL SNAKE',   350, 38),
   ('skin-violet',  'skin', 'PYTHON',        350, 39),
   ('skin-royal',   'skin', 'ROYAL STRIPES', 400, 40),
-  ('skin-inferno', 'skin', 'INFERNO',       400, 41)
+  ('skin-inferno', 'skin', 'INFERNO',       400, 41),
+
+  -- The pattern drop, 2026-09-16, the owner's call after the ring skins
+  -- still read as recolours: real 2D textures on the body, drawn by the
+  -- shared painters in packages/cosmetics/src/skin-texture.ts. Two tiers by
+  -- the owner's pricing: geometric motifs sit beside the ring skins,
+  -- ornamental ones open a prestige shelf above GILDED, because a texture is
+  -- more drawing per square and the shop should say so in coins.
+  ('skin-spot',        'skin', 'SPOT KICK',   350, 42),
+  ('skin-pinstripe',   'skin', 'PINSTRIPE',   350, 43),
+  ('skin-crosshatch',  'skin', 'CROSSHATCH',  350, 44),
+  ('skin-zigzag',      'skin', 'ZIGZAG',      400, 45),
+  ('skin-chequer',     'skin', 'CHEQUERED',   400, 46),
+  ('skin-roundel',     'skin', 'ROUNDEL',     450, 47),
+  ('skin-argyle',      'skin', 'ARGYLE',      450, 48),
+  ('skin-scale',       'skin', 'DRAGONSCALE', 750, 49),
+  ('skin-wave',        'skin', 'RIPTIDE',     800, 50),
+  ('skin-ocelli',      'skin', 'PEACOCK',     800, 51),
+  ('skin-diamondback', 'skin', 'DIAMONDBACK', 850, 52),
+  ('skin-mosaic',      'skin', 'MOSAICO',     900, 53)
 on conflict (id) do update
   set kind = excluded.kind, name = excluded.name,
       price = excluded.price, sort = excluded.sort;

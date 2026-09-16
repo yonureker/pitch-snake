@@ -19,6 +19,7 @@
 import {
   PaintStyle,
   Skia,
+  ClipOp,
   StrokeCap,
   matchFont,
   type SkCanvas,
@@ -47,7 +48,9 @@ import {
 import { smoothDepth, smoothX, smoothY, updateVsSmoothing } from '@pitch-snake/net/vs-smoothing';
 
 import { type Kit, KIT_NONE, kitKey } from '@pitch-snake/cosmetics/kit';
-import { drawHatOn } from './hat-canvas';
+import { textureFor } from '@pitch-snake/cosmetics/skin-texture';
+
+import { drawHatOn, withHatSurface } from './hat-canvas';
 import { hatFor, paintBolt, paintJersey, paintPitch } from './pitch-art';
 import { GameColors, GhostColors, SNAKE_SHADES, VS_COLORS, skinRamp, snakeShadeFor } from './theme';
 
@@ -444,26 +447,8 @@ function bakeBolt(cell: number): Baked | null {
 }
 
 function bakeSnakeCells(cell: number, skin: string | null): void {
-  const r = cell * 0.42;
-  const rad = cell * 0.32;
-  const lw = Math.max(1, cell * 0.05);
-  const s = r * 2 + lw + 2;
-  const outline = Skia.Color(skinRamp(skin).line);
   for (const old of snakeSprites) retire(old?.image);
-  snakeSprites = [];
-  for (let i = 0; i < SNAKE_SHADES; i++) {
-    const color = Skia.Color(snakeShadeFor(skin, i));
-    snakeSprites.push(
-      bake(s, s, (c) => {
-        const rect = Skia.RRectXY(Skia.XYWHRect(s / 2 - r, s / 2 - r, r * 2, r * 2), rad, rad);
-        fillPaint.setColor(color);
-        c.drawRRect(rect, fillPaint);
-        strokePaint.setColor(outline);
-        strokePaint.setStrokeWidth(lw);
-        c.drawRRect(rect, strokePaint);
-      }),
-    );
-  }
+  snakeSprites = bakeSkinSet(cell, skin);
 }
 
 function bakeOutfit(cell: number, hatId: string | null, kit: Kit): void {
@@ -490,12 +475,20 @@ const rivalSkinSprites = new Map<string, (Baked | null)[]>();
 const rivalHatSprites = new Map<string, { sprite: Baked | null; dy: number }>();
 let rivalBakedCell = 0;
 
+// One bake for every body, mine and a rival's alike. A skin with a TEXTURE
+// (the pattern drop, 2026-09-16) has its motif drawn into each shade sprite
+// here, through the same Canvas2D dialect the hats draw through, clipped to
+// the rounded cell so the motif ends where the segment does. Bake time only:
+// a patterned body still costs exactly what a plain ramp costs per frame.
 function bakeSkinSet(cell: number, skin: string | null): (Baked | null)[] {
   const r = cell * 0.42;
   const rad = cell * 0.32;
   const lw = Math.max(1, cell * 0.05);
   const s = r * 2 + lw + 2;
-  const outline = Skia.Color(skinRamp(skin).line);
+  const art = skinRamp(skin);
+  const outline = Skia.Color(art.line);
+  const texInfo = art.texture;
+  const painter = texInfo === undefined ? null : textureFor(texInfo.id);
   const out: (Baked | null)[] = [];
   for (let i = 0; i < SNAKE_SHADES; i++) {
     const color = Skia.Color(snakeShadeFor(skin, i));
@@ -504,6 +497,15 @@ function bakeSkinSet(cell: number, skin: string | null): (Baked | null)[] {
         const rect = Skia.RRectXY(Skia.XYWHRect(s / 2 - r, s / 2 - r, r * 2, r * 2), rad, rad);
         fillPaint.setColor(color);
         c.drawRRect(rect, fillPaint);
+        if (painter !== null && texInfo !== undefined) {
+          c.save();
+          c.clipRRect(rect, ClipOp.Intersect, true);
+          c.translate(s / 2 - r, s / 2 - r);
+          withHatSurface(c, (surface) => {
+            painter(surface, r * 2, texInfo.ink, texInfo.ink2 ?? null);
+          });
+          c.restore();
+        }
         strokePaint.setColor(outline);
         strokePaint.setStrokeWidth(lw);
         c.drawRRect(rect, strokePaint);

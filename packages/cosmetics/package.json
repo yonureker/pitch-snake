@@ -15,6 +15,14 @@
     "./jersey": {
       "types": "./build/jersey.d.ts",
       "default": "./build/jersey.js"
+    },
+    "./skin-art": {
+      "types": "./build/skin-art.d.ts",
+      "default": "./build/skin-art.js"
+    },
+    "./skin-texture": {
+      "types": "./build/skin-texture.d.ts",
+      "default": "./build/skin-texture.js"
     }
   },
   "scripts": {

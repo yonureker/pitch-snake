@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=0bc7e915d2">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=0bc7e915d2">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=6b9203be80">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=6b9203be80">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -635,44 +635,48 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=0bc7e915d2",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=0bc7e915d2",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=0bc7e915d2",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=0bc7e915d2",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=0bc7e915d2",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=0bc7e915d2",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=0bc7e915d2",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=0bc7e915d2",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=0bc7e915d2",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=0bc7e915d2",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=0bc7e915d2",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=0bc7e915d2",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=0bc7e915d2",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=0bc7e915d2",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=0bc7e915d2",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=0bc7e915d2",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=0bc7e915d2",
-    "./packages/net/net.js": "./packages/net/net.js?v=0bc7e915d2",
-    "@pitch-snake/net": "./packages/net/net.js?v=0bc7e915d2",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=0bc7e915d2",
-    "./page/build/dom.js": "./page/build/dom.js?v=0bc7e915d2",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=0bc7e915d2",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=0bc7e915d2",
-    "./page/build/menu-nav.js": "./page/build/menu-nav.js?v=0bc7e915d2",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=0bc7e915d2",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=0bc7e915d2",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=0bc7e915d2",
-    "./page/build/shop.js": "./page/build/shop.js?v=0bc7e915d2",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=0bc7e915d2",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=0bc7e915d2",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=0bc7e915d2",
-    "./page/build/tv-remote.js": "./page/build/tv-remote.js?v=0bc7e915d2"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=6b9203be80",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=6b9203be80",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=6b9203be80",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=6b9203be80",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=6b9203be80",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=6b9203be80",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=6b9203be80",
+    "./packages/cosmetics/build/skin-art.js": "./packages/cosmetics/build/skin-art.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/skin-art": "./packages/cosmetics/build/skin-art.js?v=6b9203be80",
+    "./packages/cosmetics/build/skin-texture.js": "./packages/cosmetics/build/skin-texture.js?v=6b9203be80",
+    "@pitch-snake/cosmetics/skin-texture": "./packages/cosmetics/build/skin-texture.js?v=6b9203be80",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=6b9203be80",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=6b9203be80",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=6b9203be80",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=6b9203be80",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=6b9203be80",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=6b9203be80",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=6b9203be80",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=6b9203be80",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=6b9203be80",
+    "./packages/net/net.js": "./packages/net/net.js?v=6b9203be80",
+    "@pitch-snake/net": "./packages/net/net.js?v=6b9203be80",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=6b9203be80",
+    "./page/build/dom.js": "./page/build/dom.js?v=6b9203be80",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=6b9203be80",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=6b9203be80",
+    "./page/build/menu-nav.js": "./page/build/menu-nav.js?v=6b9203be80",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=6b9203be80",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=6b9203be80",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=6b9203be80",
+    "./page/build/shop.js": "./page/build/shop.js?v=6b9203be80",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=6b9203be80",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=6b9203be80",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=6b9203be80",
+    "./page/build/tv-remote.js": "./page/build/tv-remote.js?v=6b9203be80"
   }
 }
 </script>
@@ -1028,7 +1032,7 @@
   // preview drifting from the snake. See page/pitch-art.ts.
   import {
     buildLutFor, drawCrest, hatFor, JERSEY_LEFT_DEFAULT, JERSEY_RIGHT_DEFAULT,
-    JERSEY_SOLO_NUM, paintJersey, roundRectOn, SKINS, skinFor, SNAKE_SHADES,
+    JERSEY_SOLO_NUM, paintJersey, roundRectOn, SKINS, skinFor, SNAKE_SHADES, textureFor,
     VS_NUMS,
   } from './page/build/pitch-art.js';
   // What a kit IS, as opposed to what it looks like: the wash that keeps a
@@ -1297,6 +1301,7 @@
     buildHatSprite();
     buildSpikeSprite();
     buildJerseySprite();
+    buildBodySprites();         // a textured skin rebakes its segments too
     vsRefit();                  // rival hats bake at cell size too
     syncMpBar();                // the docked bar follows the board's width
     vsTagFont = `700 ${Math.max(9, (cell * 0.42) | 0)}px Barlow, sans-serif`;
@@ -1967,12 +1972,20 @@
     const r = cell * 0.42, rad = cell * 0.32, denom = Math.max(1, me.snake.length - 1);
     ctx.lineWidth = Math.max(1, cell * 0.05);
     ctx.strokeStyle = SKIN.line;
-    let lastShade = -1;
-    for (let i = me.snake.length - 1; i >= 0; i--) {
-      const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
-      if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
-      const rp = segRenderPos(me, i, p);
-      drawBodyCell(rp.cx + smoothOffX(mi, i), rp.cy + smoothOffY(mi, i), r, rad);
+    if (bodySprites) {
+      for (let i = me.snake.length - 1; i >= 0; i--) {
+        const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
+        const rp = segRenderPos(me, i, p);
+        blitBodyCell(bodySprites, shade, rp.cx + smoothOffX(mi, i), rp.cy + smoothOffY(mi, i));
+      }
+    } else {
+      let lastShade = -1;
+      for (let i = me.snake.length - 1; i >= 0; i--) {
+        const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
+        if (shade !== lastShade) { ctx.fillStyle = SNAKE_LUT[shade]; lastShade = shade; }
+        const rp = segRenderPos(me, i, p);
+        drawBodyCell(rp.cx + smoothOffX(mi, i), rp.cy + smoothOffY(mi, i), r, rad);
+      }
     }
 
     drawJersey(me, mi, p);      // the shirt sits over the square behind the head
@@ -2129,6 +2142,62 @@
     if (wx !== null && wy !== null) fillRoundCell(wx, wy, r, rad, stroke);
   }
 
+  // ---- textured bodies (the pattern drop, 2026-09-16) ----
+  // A skin with a `texture` cannot be a fillStyle: its motif is art on every
+  // segment. Those skins pre-render their 64 shades into small canvases once
+  // per resize or change of clothes (rule 7, the TNT and ghost precedent
+  // exactly) and the body loop blits them; an untextured skin keeps the fill
+  // path byte for byte, which is what keeps the canvas baseline honest and
+  // the common case unchanged. The motif is clipped to the rounded cell and
+  // painted through the same shared painters the app bakes with
+  // (packages/cosmetics/src/skin-texture.ts), so one skin is one look.
+  function makeBodySprites(skin, r, rad, stroke) {
+    const tex = skin.texture ? textureFor(skin.texture.id) : null;
+    if (!tex) return null;
+    const lut = buildLutFor(skin);
+    const lw = Math.max(1, cell * 0.05);
+    const pad = Math.ceil(lw / 2) + 1;
+    const size = Math.ceil(r * 2 + pad * 2);
+    const sprites = new Array(SNAKE_SHADES);
+    for (let i = 0; i < SNAKE_SHADES; i++) {
+      const cnv = document.createElement('canvas');
+      cnv.width = size; cnv.height = size;
+      const c = cnv.getContext('2d');
+      roundRectOn(c, pad, pad, r * 2, r * 2, rad);
+      c.fillStyle = lut[i];
+      c.fill();
+      // the path survives the fill, so the clip takes the cell just traced;
+      // the painter calls beginPath, so the stroke re-traces afterwards
+      c.save();
+      c.clip();
+      c.translate(pad, pad);
+      tex(c, r * 2, skin.texture.ink, skin.texture.ink2 || null);
+      c.restore();
+      if (stroke) {
+        roundRectOn(c, pad, pad, r * 2, r * 2, rad);
+        c.strokeStyle = skin.line;
+        c.lineWidth = lw;
+        c.stroke();
+      }
+      sprites[i] = cnv;
+    }
+    return { sprites, half: size / 2 };
+  }
+  let bodySprites = null;    // my own skin's textured set, or null for the fill path
+  function buildBodySprites() {
+    bodySprites = cell > 0 ? makeBodySprites(SKIN, cell * 0.42, cell * 0.32, true) : null;
+  }
+  // the sprite twin of drawBodyCell: one blit, plus wrapped copies in tunnels
+  function blitBodyCell(set, shade, cx, cy) {
+    const spr = set.sprites[shade], h = set.half;
+    ctx.drawImage(spr, cx * cell + cell / 2 - h, cy * cell + cell / 2 - h);
+    const wx = cx < 0 ? cx + GRID : cx > GRID - 1 ? cx - GRID : null;
+    const wy = cy < 0 ? cy + GRID : cy > GRID - 1 ? cy - GRID : null;
+    if (wx !== null) ctx.drawImage(spr, wx * cell + cell / 2 - h, cy * cell + cell / 2 - h);
+    if (wy !== null) ctx.drawImage(spr, cx * cell + cell / 2 - h, wy * cell + cell / 2 - h);
+    if (wx !== null && wy !== null) ctx.drawImage(spr, wx * cell + cell / 2 - h, wy * cell + cell / 2 - h);
+  }
+
   // ---- versus rendering: the rivals, ghosted, with small name tags ----
   // One flat colour per player index, drawn well under full alpha so they
   // never crowd your own snake off the field.
@@ -2173,14 +2242,24 @@
       // segRenderPos a second time; only segments past the smoothed depth fall
       // back. No stroke: a ghosted outline is transparent, so it painted nothing.
       ctx.globalAlpha = VS_RIVAL_ALPHA;
-      let lastShade = -1;
-      for (let i = pl.snake.length - 1; i >= 0; i--) {
-        const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
-        if (shade !== lastShade) { ctx.fillStyle = lut[shade]; lastShade = shade; }
-        let cx, cy;
-        if (i < nSmooth) { cx = smoothX(pi, i); cy = smoothY(pi, i); }
-        else { const rp = segRenderPos(pl, i, prog); cx = rp.cx; cy = rp.cy; }
-        drawBodyCell(cx, cy, r, rad, false);
+      if (fit && fit.body) {
+        for (let i = pl.snake.length - 1; i >= 0; i--) {
+          const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
+          let cx, cy;
+          if (i < nSmooth) { cx = smoothX(pi, i); cy = smoothY(pi, i); }
+          else { const rp = segRenderPos(pl, i, prog); cx = rp.cx; cy = rp.cy; }
+          blitBodyCell(fit.body, shade, cx, cy);
+        }
+      } else {
+        let lastShade = -1;
+        for (let i = pl.snake.length - 1; i >= 0; i--) {
+          const shade = (i * (SNAKE_SHADES - 1) / denom) | 0;
+          if (shade !== lastShade) { ctx.fillStyle = lut[shade]; lastShade = shade; }
+          let cx, cy;
+          if (i < nSmooth) { cx = smoothX(pi, i); cy = smoothY(pi, i); }
+          else { const rp = segRenderPos(pl, i, prog); cx = rp.cx; cy = rp.cy; }
+          drawBodyCell(cx, cy, r, rad, false);
+        }
       }
       // jersey on the second segment, hat on the head, at the body's own
       // alpha: still legible as an outfit, never mistaken for your own
@@ -2257,7 +2336,8 @@
       const src = (vs.present || []).find(x => x.ref === ref) || vs.roster[i];
       const sk = skinFor(src.skin);
       const hd = hatFor(src.hat);
-      const fit = { lut: buildLutFor(sk), hatCanvas: null, hatW: 0, dy: 0 };
+      const fit = { lut: buildLutFor(sk), body: makeBodySprites(sk, cell * 0.38, cell * 0.3, false),
+                    hatCanvas: null, hatW: 0, dy: 0 };
       if (hatOn) {
         const hw = Math.ceil(cell * hd.wf), hh = Math.ceil(cell * hd.hf);
         const cnv = document.createElement('canvas');
@@ -2286,7 +2366,7 @@
     if (!(skinParam && SKINS[skinParam])) SKIN = skinFor(worn.skin);
     HAT = hatFor(worn.hat);
     SNAKE_LUT = buildLutFor(SKIN);
-    if (cell > 0) { buildHatSprite(); buildSpikeSprite(); }
+    if (cell > 0) { buildHatSprite(); buildSpikeSprite(); buildBodySprites(); }
   }
   // The kit's own door, the shape applyWorn has for the wardrobe. Separate
   // because a kit is not bought and does not come from the shop: it arrives

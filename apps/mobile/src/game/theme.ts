@@ -3,6 +3,7 @@
  * properties so both renderers read as the same game.
  * @module
  */
+import { SNAKE_SHADES, shadeRgbFor, skinFor, type SkinArt } from '@pitch-snake/cosmetics/skin-art';
 
 /**
  * Rival seat colours, the web's VS_COLORS: identity for tags, not clothing.
@@ -120,157 +121,22 @@ export const GhostColors = [
   { body: '#25c7d9', edge: '#1592a0' },
 ] as const;
 
-/** Head-to-tail body shades, precomputed like the web LUT (64 steps). */
-export const SNAKE_SHADES = 64;
+// The skin table moved to the shared cosmetics package on 2026-09-16 (the
+// hats' own move applied to the body): it lived here and again in the page's
+// pitch-art.ts, kept value-for-value by hand, and the pattern drop would
+// have doubled a duplicated table. These wrappers keep every import in the
+// app working while the numbers live once, in shadeRgbFor.
 
-/**
- * The purchasable skins, ramps straight from the web page's SKINS table:
- * head colour, tail colour, and the outline that rides every segment. Keyed
- * by pitch_snake_items ids like the web, so the server sells ids and this
- * client owns the art; an id this table has never heard of renders classic,
- * which is what lets the catalogue grow by SQL without stranding old builds.
- */
-export const SKIN_RAMPS = {
-  classic: { head: [244, 236, 216], tail: [214, 196, 158], line: 'rgba(194,162,90,0.65)' },
-  viper: { head: [88, 168, 246], tail: [24, 74, 150], line: 'rgba(150,110,235,0.75)' },
-  'skin-away': { head: [248, 248, 252], tail: [172, 194, 222], line: 'rgba(70,110,180,0.65)' },
-  'skin-volt': { head: [250, 240, 104], tail: [172, 142, 24], line: 'rgba(64,60,36,0.6)' },
-  'skin-rosa': { head: [252, 186, 208], tail: [212, 106, 148], line: 'rgba(214,80,130,0.6)' },
-  'skin-night': { head: [226, 231, 241], tail: [36, 42, 56], line: 'rgba(122,132,160,0.55)' },
-  'skin-gilt': { head: [252, 232, 152], tail: [194, 150, 56], line: 'rgba(140,100,30,0.7)' },
-  // the template drop, 2026-09-10, value for value with the page's SKINS:
-  // a pattern is the stop sequence cycled along the body fraction, hard
-  // rings unless soft (a cross-fade). See the page's buildLutFor.
-  'skin-ocean': {
-    head: [223, 238, 244],
-    tail: [23, 57, 74],
-    line: 'rgba(90,190,210,0.6)',
-    pattern: {
-      colors: [
-        [223, 238, 244],
-        [23, 57, 74],
-      ],
-      cycles: 5,
-    },
-  },
-  'skin-copper': {
-    head: [217, 154, 94],
-    tail: [94, 58, 28],
-    line: 'rgba(150,92,44,0.65)',
-    pattern: {
-      colors: [
-        [217, 154, 94],
-        [94, 58, 28],
-      ],
-      cycles: 6,
-    },
-  },
-  'skin-frost': {
-    head: [235, 248, 255],
-    tail: [122, 168, 204],
-    line: 'rgba(150,200,235,0.6)',
-    pattern: {
-      colors: [
-        [235, 248, 255],
-        [122, 168, 204],
-      ],
-      cycles: 5,
-      soft: true,
-    },
-  },
-  'skin-cherry': {
-    head: [212, 58, 47],
-    tail: [38, 35, 43],
-    line: 'rgba(200,60,70,0.6)',
-    pattern: {
-      colors: [
-        [212, 58, 47],
-        [242, 197, 61],
-        [38, 35, 43],
-        [242, 197, 61],
-      ],
-      cycles: 2,
-    },
-  },
-  'skin-violet': {
-    head: [201, 162, 255],
-    tail: [91, 42, 168],
-    line: 'rgba(160,110,240,0.6)',
-    pattern: {
-      colors: [
-        [201, 162, 255],
-        [91, 42, 168],
-      ],
-      cycles: 4,
-    },
-  },
-  'skin-royal': {
-    head: [125, 162, 255],
-    tail: [240, 244, 252],
-    line: 'rgba(120,150,240,0.65)',
-    pattern: {
-      colors: [
-        [125, 162, 255],
-        [240, 244, 252],
-      ],
-      cycles: 6,
-    },
-  },
-  'skin-inferno': {
-    head: [255, 170, 80],
-    tail: [179, 32, 19],
-    line: 'rgba(230,120,50,0.6)',
-    pattern: {
-      colors: [
-        [255, 170, 80],
-        [179, 32, 19],
-      ],
-      cycles: 4,
-      soft: true,
-    },
-  },
-} as const satisfies Record<
-  string,
-  {
-    head: number[];
-    tail: number[];
-    line: string;
-    pattern?: { colors: number[][]; cycles: number; soft?: boolean };
-  }
->;
-
-function isSkinId(v: string): v is keyof typeof SKIN_RAMPS {
-  return Object.hasOwn(SKIN_RAMPS, v);
-}
+export { SNAKE_SHADES };
+export type { SkinArt };
 
 /** The skin a wallet id resolves to; unknown ids and null wear classic. */
-export function skinRamp(id: string | null): (typeof SKIN_RAMPS)[keyof typeof SKIN_RAMPS] {
-  return id !== null && isSkinId(id) ? SKIN_RAMPS[id] : SKIN_RAMPS.classic;
+export function skinRamp(id: string | null): SkinArt {
+  return skinFor(id);
 }
 
 /** rgb() string for body shade i of SNAKE_SHADES under one skin's ramp. */
 export function snakeShadeFor(skin: string | null, i: number): string {
-  const ramp = skinRamp(skin);
-  const t = i / (SNAKE_SHADES - 1);
-  // widened on assignment (never a cast): the literal tuples would make
-  // every fallback below read as unnecessary, and the fallbacks are the
-  // contract under noUncheckedIndexedAccess
-  const p: { colors: readonly (readonly number[])[]; cycles: number; soft?: boolean } | undefined =
-    'pattern' in ramp ? ramp.pattern : undefined;
-  if (p !== undefined) {
-    // a template: the stop sequence cycled along the body, hard rings by
-    // default, cross-faded when soft (the page's buildLutFor, ported)
-    const u = t * p.cycles * p.colors.length;
-    const a = p.colors[Math.trunc(u) % p.colors.length] ?? ramp.head;
-    const next = p.colors[(Math.trunc(u) + 1) % p.colors.length] ?? ramp.tail;
-    const f = p.soft === true ? u - Math.trunc(u) : 0;
-    const pr = (a[0] ?? 0) + ((next[0] ?? 0) - (a[0] ?? 0)) * f;
-    const pg = (a[1] ?? 0) + ((next[1] ?? 0) - (a[1] ?? 0)) * f;
-    const pb = (a[2] ?? 0) + ((next[2] ?? 0) - (a[2] ?? 0)) * f;
-    return `rgb(${String(Math.trunc(pr))}, ${String(Math.trunc(pg))}, ${String(Math.trunc(pb))})`;
-  }
-  const r = ramp.head[0] + (ramp.tail[0] - ramp.head[0]) * t;
-  const g = ramp.head[1] + (ramp.tail[1] - ramp.head[1]) * t;
-  const b = ramp.head[2] + (ramp.tail[2] - ramp.head[2]) * t;
-  return `rgb(${String(r | 0)}, ${String(g | 0)}, ${String(b | 0)})`;
+  const [r, g, b] = shadeRgbFor(skinFor(skin), i / (SNAKE_SHADES - 1));
+  return `rgb(${String(r)}, ${String(g)}, ${String(b)})`;
 }

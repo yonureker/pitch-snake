@@ -21,7 +21,7 @@
  */
 import type { Kit } from '@pitch-snake/cosmetics/kit';
 import {
-  buildLutFor, drawCrest, JERSEY_SOLO_NUM, paintJersey, roundRectOn,
+  buildLutFor, drawCrest, JERSEY_SOLO_NUM, paintJersey, roundRectOn, textureFor,
   type HatArt, type SkinArt, SNAKE_SHADES,
 } from './pitch-art.js';
 
@@ -141,12 +141,26 @@ export function paintSnakePreview(
   context.strokeStyle = skin.line;
   // Tail first, so each cell sits over the one behind it exactly as on the
   // pitch, and the shade walks the ramp the same way the body does.
+  // a textured skin previews its texture, through the same shared painters
+  // the pitch bakes with, so the shelf shows exactly what the money buys
+  const texInfo = skin.texture;
+  const painter = texInfo === undefined ? null : textureFor(texInfo.id);
   for (let i = cells - 1; i >= 0; i--) {
     const shade = Math.round((i / (cells - 1)) * (SNAKE_SHADES - 1));
     context.fillStyle = ramp[shade] ?? '#f4ecd8';
     const x = headX - step * i;
     roundRectOn(context, x - half, centreY - half, half * 2, half * 2, radius);
     context.fill();
+    if (painter !== null && texInfo !== undefined) {
+      // the path survives its fill, so the clip takes the cell just traced;
+      // the painter opens paths of its own, so the stroke re-traces after
+      context.save();
+      context.clip();
+      context.translate(x - half, centreY - half);
+      painter(context, half * 2, texInfo.ink, texInfo.ink2 ?? null);
+      context.restore();
+      roundRectOn(context, x - half, centreY - half, half * 2, half * 2, radius);
+    }
     context.stroke();
   }
 
