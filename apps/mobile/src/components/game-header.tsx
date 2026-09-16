@@ -7,6 +7,7 @@
  * shape either side of the divide:
  *
  *   solo   logo | chrome chips | SCORE / BEST
+ *   solo   logo | pause | chrome chips | SCORE / BEST     (a round in play)
  *   room   logo | chrome chips + exit
  *          logo | the live seat strip
  *
@@ -155,7 +156,7 @@ export interface GameHeaderProps {
   onForfeit: () => void;
   onLeave: () => void;
   /** a live SOLO round: half time is on offer, and this band is where the
-   *  page puts the door to it, on the line a room gives to its seats */
+   *  page puts the door to it, beside the logo and hung off SNAKE's baseline */
   showPause: boolean;
   /** which face it wears: the two bars, or the triangle that resumes */
   paused: boolean;
@@ -231,6 +232,26 @@ export function GameHeader({
         <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
         <Text style={[styles.title, styles.titleSecond, dark && darkStyles.title]}>SNAKE</Text>
       </View>
+
+      {/* Half time, beside the logo and hanging off SNAKE's baseline, which
+          is the page's own arrangement. LOGO_TRIM_BOTTOM already pulls the
+          logo's outer edge onto that baseline, so `alignSelf: flex-end` puts
+          the two bottoms on one line without a nudge. It sat on the pitch's
+          top right corner before, a control on the playing surface; a second
+          header ROW was tried in between and cost the band its height. */}
+      {!inRoom && showPause && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={paused ? 'Resume' : 'Pause'}
+          onPress={onPause}
+          hitSlop={10}
+          style={styles.pause}
+        >
+          {paused ?
+            <PlayIcon size={14} color={GameColors.goldBright} />
+          : <PauseIcon size={14} color={GameColors.goldBright} />}
+        </Pressable>
+      )}
 
       <View style={styles.column}>
         <View style={styles.chromeRow}>
@@ -318,27 +339,6 @@ export function GameHeader({
                 </Text>
               </View>
             )}
-          </View>
-        )}
-
-        {/* The page's own arrangement: the band's second line belongs to the
-            seats in a room and to the pause button outside one, so the header
-            reads the same shape whichever round you are in. It used to float
-            over the pitch's top right corner, which put a control on the
-            playing surface and gave the two clients different headers. */}
-        {!inRoom && showPause && (
-          <View style={styles.seatRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={paused ? 'Resume' : 'Pause'}
-              onPress={onPause}
-              hitSlop={10}
-              style={styles.pause}
-            >
-              {paused ?
-                <PlayIcon size={14} color={GameColors.goldBright} />
-              : <PauseIcon size={14} color={GameColors.goldBright} />}
-            </Pressable>
           </View>
         )}
       </View>
@@ -458,6 +458,7 @@ const styles = StyleSheet.create({
      than the page's: the two headers are the same design at two scales, and
      a button that matched the page's 34 would tower over the tray beside it */
   pause: {
+    alignSelf: 'flex-end',
     width: 38,
     height: 27,
     borderRadius: 14,

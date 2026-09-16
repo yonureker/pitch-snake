@@ -67,12 +67,6 @@
      wasting space. Being wrong by two pixels of margin is the safe side. */
   .wrap.mp-open { --mp-h: 14px; }
   html.touchless .wrap.mp-open { --mp-h: 0px; }
-  /* A solo round opens the same row for its pause button and so costs the
-     same height, by the same measurement. There is no touchless twin of
-     this line, unlike the room's above: that button is offered to TOUCH
-     shells only, since a keyboard already pauses with SPACE, so this class
-     never reaches a desktop in the first place. */
-  .wrap.solo-bar { --mp-h: 14px; }
 
   header {
     width: 100%;
