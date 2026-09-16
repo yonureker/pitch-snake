@@ -35,31 +35,76 @@ The redirect targets **pitchsnake.com** and not the `github.io` origin on
 purpose: the localStorage migration in `index.html` fires on the old host and
 would bounce the app through a hand-off it has no reason to make.
 
-## Building and installing it
+## Turning the TV on
 
-Install LG's CLI once, and put it in TV mode (it ships in Open Source Edition
-mode and will otherwise talk to the wrong profile):
+Both routes below need this first, and only this is done on the television.
+
+**LG Content Store → search "Developer Mode" → install → open → sign in with
+your LG developer account → Developer Mode ON.** The app then shows the TV's
+IP address, and a **Key Server** button that displays a passphrase. Leave that
+on screen while you register the device; the passphrase is case sensitive.
+
+The numbers a TV wants are not the SSH defaults, and LG's own older extension
+guide still prints the wrong ones:
+
+| | |
+|---|---|
+| port | **9922**, not 22 |
+| username | **prisoner**, not root |
+
+## Route A: webOS Studio in VS Code
+
+The extension does NOT bundle LG's CLI; it installs the same global packages
+this repo's script calls, so the two routes are the same tools with different
+buttons and either can be used at any time.
+
+1. **`webOS: Install Global Packages`** from the command palette, which runs
+   `npm install -g @enact/cli @webos-tools/cli patch-package`.
+2. **`webOS: Set Device Profile`** → TV. (It is the default, but it is the
+   setting that decides whether `ares-*` talks to a TV or to Open Source
+   Edition, so it is worth confirming rather than assuming.)
+3. Open **this repository's root** as the workspace, not `webos/`. webOS
+   Studio allows only one workspace at a time, and the TV's actual behaviour
+   lives in `page/tv-remote.ts` out here, not in the four files in there.
+   Then add the app with the **import** button in **APPS IN WORKSPACE** and
+   point it at `webos/`. The `+` button beside it generates a NEW app from a
+   template, which is not what this is.
+4. Add the TV in **KNOWN DEVICE** with the `+` button: a name, the IP, port
+   9922, username `prisoner`.
+5. Press **Key Server** on the TV, then run **`webOS TV: Set Up SSH Key`** and
+   type the passphrase it is showing.
+6. **Run App** packages, installs and launches in one go.
+
+## Route B: the command line
 
 ```sh
-npm install -g @webos-tools/cli
-ares-config --profile tv
+npm install -g @webos-tools/cli          # the same package the extension installs
+ares-config --profile tv                 # the same setting as Set Device Profile
 ```
-
-On the TV: **LG Content Store → search "Developer Mode" → install → open →
-sign in with your LG developer account → Developer Mode ON**. The app shows
-the TV's IP address and a passphrase; leave it on screen.
 
 Then, from the repository root:
 
 ```sh
 npm run webos:package                     # writes webos/build/com.pitchsnake.app_1.0.0_all.ipk
-ares-setup-device                         # add the TV once: its IP, port 9922, the passphrase
+ares-setup-device                         # add the TV once: IP, port 9922, user prisoner
+ares-novacom --device tv --getkey         # then type the Key Server passphrase
 ares-install --device tv webos/build/com.pitchsnake.app_1.0.0_all.ipk
 ares-launch --device tv com.pitchsnake.app
 ```
 
+`--getkey` prompts `input passphrase [default: webos]`. **Do not press enter
+there.** The default in the square brackets is not your passphrase, it is a
+placeholder, and accepting it fails later as an unhelpful SSH error rather
+than as a wrong password. Type the six-ish characters the TV's Key Server
+panel is showing.
+
 `ares-setup-device --list` confirms the TV is registered, and
 `ares-install --device tv --list` confirms the app landed.
+
+Neither route needs an emulator or a simulator, and on an Apple Silicon Mac
+the **Emulator does not run at all** (the Simulator does, from webOS TV 25,
+and is ARM64 only). None of that matters with a real television on the
+network, which is the only thing this app has ever been tested against.
 
 ## The thing that will catch you out
 
