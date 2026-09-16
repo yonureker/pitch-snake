@@ -67,6 +67,14 @@
      wasting space. Being wrong by two pixels of margin is the safe side. */
   .wrap.mp-open { --mp-h: 14px; }
   html.touchless .wrap.mp-open { --mp-h: 0px; }
+  /* A SOLO round's pause button now takes the same second header row the
+     seats pill takes (owner's call 2026-09-16), so it costs the same height
+     and must be budgeted the same way: measured 2026-09-16, the touch header
+     grows 49px to 62px while the button is up. Without this the pad and the
+     board would go on dividing a screen the header had quietly taken 13px of,
+     which on a short phone is the pad hanging off the bottom. Pause is a
+     touch-only control, so there is no touchless case to zero out. */
+  .wrap.pause-open { --mp-h: 14px; }
 
   header {
     width: 100%;

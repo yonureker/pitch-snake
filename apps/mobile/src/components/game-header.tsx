@@ -7,7 +7,8 @@
  * shape either side of the divide:
  *
  *   solo   logo | chrome chips | SCORE / BEST
- *   solo   logo | pause | chrome chips | SCORE / BEST     (a round in play)
+ *   solo   logo | chrome chips | SCORE / BEST             (a round in play)
+ *          logo | pause                                   (under the chips)
  *   room   logo | chrome chips + exit
  *          logo | the live seat strip
  *
@@ -156,7 +157,8 @@ export interface GameHeaderProps {
   onForfeit: () => void;
   onLeave: () => void;
   /** a live SOLO round: half time is on offer, and this band is where the
-   *  page puts the door to it, beside the logo and hung off SNAKE's baseline */
+   *  page puts the door to it, on the second row under the player chip,
+   *  which is the seat strip's own place in a room */
   showPause: boolean;
   /** which face it wears: the two bars, or the triangle that resumes */
   paused: boolean;
@@ -228,30 +230,10 @@ export function GameHeader({
   return (
     <View style={styles.header}>
       {/* the logo spans both lines and hangs from the bottom; see LOGO_SLACK */}
-      <View style={[styles.logo, inRoom && styles.logoRoom]}>
+      <View style={[styles.logo, (inRoom || showPause) && styles.logoRoom]}>
         <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
         <Text style={[styles.title, styles.titleSecond, dark && darkStyles.title]}>SNAKE</Text>
       </View>
-
-      {/* Half time, beside the logo and hanging off SNAKE's baseline, which
-          is the page's own arrangement. LOGO_TRIM_BOTTOM already pulls the
-          logo's outer edge onto that baseline, so `alignSelf: flex-end` puts
-          the two bottoms on one line without a nudge. It sat on the pitch's
-          top right corner before, a control on the playing surface; a second
-          header ROW was tried in between and cost the band its height. */}
-      {!inRoom && showPause && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={paused ? 'Resume' : 'Pause'}
-          onPress={onPause}
-          hitSlop={10}
-          style={styles.pause}
-        >
-          {paused ?
-            <PlayIcon size={14} color={GameColors.goldBright} />
-          : <PauseIcon size={14} color={GameColors.goldBright} />}
-        </Pressable>
-      )}
 
       <View style={styles.column}>
         <View style={styles.chromeRow}>
@@ -302,6 +284,29 @@ export function GameHeader({
           </View>
           {exit}
         </View>
+
+        {/* Half time, on the column's SECOND row, directly under the player
+            chip: the seats pill's own seat, taken by the pause button when
+            there is no room to fill it (owner's call 2026-09-16, and the
+            page does exactly this). One header, one place for "what this
+            round is doing", whichever round is being played. It hung off
+            SNAKE's baseline beside the logo before, and sat on the pitch
+            itself before that. */}
+        {!inRoom && showPause && (
+          <View style={styles.pauseRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={paused ? 'Resume' : 'Pause'}
+              onPress={onPause}
+              hitSlop={10}
+              style={styles.pause}
+            >
+              {paused ?
+                <PlayIcon size={14} color={GameColors.goldBright} />
+              : <PauseIcon size={14} color={GameColors.goldBright} />}
+            </Pressable>
+          </View>
+        )}
 
         {inRoom && seats.length > 0 && (
           <View style={styles.seatRow}>
@@ -368,11 +373,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logo: { marginTop: LOGO_TRIM_TOP, marginBottom: LOGO_TRIM_BOTTOM, alignSelf: 'flex-start' },
-  /* In a room the two pill rows outgrow the logo's ink, so both ends cannot
-     pin at once. The page resolves it the same way: the logo hangs from the
-     floor, SNAKE's baseline stays on the seat strip's bottom edge, and the
-     cap-line contract belongs to the solo header where the scores column
-     fits inside the logo. */
+  /* Whenever the band carries a SECOND ROW its two rows outgrow the logo's
+     ink, so both ends cannot pin at once. That is a room with its pill rows,
+     and since 2026-09-16 a solo round with its pause button too. The page
+     resolves it the same way: the logo hangs from the floor, SNAKE's baseline
+     stays on the second row's bottom edge, and the cap-line contract belongs
+     to the one-row header where the scores column fits inside the logo. */
   logoRoom: { alignSelf: 'flex-end' },
   title: {
     fontFamily: ANTON_FONT,
@@ -457,8 +463,10 @@ const styles = StyleSheet.create({
   /* the seats pill's shell exactly, at the app's own chrome height rather
      than the page's: the two headers are the same design at two scales, and
      a button that matched the page's 34 would tower over the tray beside it */
+  /* the second row's own line, matching seatRow so the button starts exactly
+     where the seats pill would, which is under the player chip */
+  pauseRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   pause: {
-    alignSelf: 'flex-end',
     width: 38,
     height: 27,
     borderRadius: 14,

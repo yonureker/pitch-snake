@@ -205,13 +205,33 @@
   }
   /* The solo pause button borrows the seats pill's shell exactly: same
      height, same gold rim, same fill, so the two rounds' chrome matches.
-     It is a HEADER ITEM and it hangs from the bottom, which is the whole
-     point: `align-self: flex-end` against a header whose h1 is the tallest
-     thing in the row puts the button's bottom edge on SNAKE's, and nothing
-     else in the row moves by a pixel. It was a second header ROW for one
-     build, borrowed from the seats, and that cost 44px of logo: the room's
-     grid hangs the logo off the bottom of BOTH rows, which is right when
-     two pill rows outgrow it and wrong for a single 34px button. */
+     It also borrows the seats pill's SEAT, at the owner's call on
+     2026-09-16: it sits on the header's second row, under the chrome, which
+     is precisely where a room puts its live scores. One header, one place
+     for "what this round is doing", whichever round you are playing.
+     An earlier build hung it off SNAKE's baseline as a plain flex item
+     beside the logo, to avoid a second row costing 44px of logo. That cost
+     is not real here: the logo is already two lines tall, so row 2 is space
+     the header has spent either way, and the button is shorter than the
+     line it sits on. The grid below is the room's own, minus the room. */
+  .wrap.pause-open header {
+    display: grid; align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: min(22px, max(7px, 2.4vw)); row-gap: min(7px, max(3px, 0.9vw));
+  }
+  /* the same bottom-hung logo the room uses, so SNAKE's baseline stays the
+     band's floor and the button's row hangs off it rather than under it */
+  .wrap.pause-open header h1 {
+    grid-row: 1 / span 2; grid-column: 1; align-self: end; margin-bottom: -0.027em;
+  }
+  .wrap.pause-open .hdr-cluster { grid-row: 1; grid-column: 2; align-self: start; }
+  /* row 2, column 2: directly under the account chip, the seats pill's slot */
+  .wrap.pause-open .solo-pause {
+    grid-row: 2; grid-column: 2; align-self: start; justify-self: start;
+  }
+  /* the score block keeps its own column and both rows, so the tally's
+     label / number / bests still spread across the band's full height */
+  .wrap.pause-open .scores { grid-row: 1 / span 2; grid-column: 3; align-self: stretch; }
   .solo-pause {
     display: inline-flex; align-items: center; justify-content: center;
     align-self: flex-end;
