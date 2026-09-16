@@ -210,19 +210,34 @@
      is precisely where a room puts its live scores. One header, one place
      for "what this round is doing", whichever round you are playing.
      An earlier build hung it off SNAKE's baseline as a plain flex item
-     beside the logo, to avoid a second row costing 44px of logo. That cost
-     is not real here: the logo is already two lines tall, so row 2 is space
-     the header has spent either way, and the button is shorter than the
-     line it sits on. The grid below is the room's own, minus the room. */
+     beside the logo, after a second row was measured costing 44px of logo.
+     That number was real for what it measured: the ROOM's grid applied
+     unchanged to solo, which hangs the logo off the floor of both rows. The
+     grid below is the room's minus the room, and the one thing it changes is
+     the very thing that caused the 44 (see the h1 rule): the logo is anchored
+     to the band's TOP, so row 2 opens downward and the logo does not move at
+     all. The band still grows 13px, which is space two lines of logo were
+     already spending. */
   .wrap.pause-open header {
     display: grid; align-items: center;
     grid-template-columns: auto minmax(0, 1fr) auto;
     column-gap: min(22px, max(7px, 2.4vw)); row-gap: min(7px, max(3px, 0.9vw));
   }
-  /* the same bottom-hung logo the room uses, so SNAKE's baseline stays the
-     band's floor and the button's row hangs off it rather than under it */
+  /* THE LOGO DOES NOT MOVE. It is anchored to the band's TOP, not its floor,
+     which is the one thing that separates this from the room's grid.
+     A room hangs the logo off the floor so SNAKE's baseline meets the seat
+     strip, and that is right there: a room is a screen you chose to enter, so
+     the band settling into its taller shape is part of arriving. A solo round
+     starts under the player's hands, and the owner's standing objection is
+     exactly this (2026-09-15: "the logo shouldnt mover at all"). Hanging from
+     the floor moves it, because the floor itself drops when row 2 opens:
+     measured at 21px on a 390 screen and 23px at 375. Anchoring the top
+     instead leaves the logo where it was at rest and lets row 2 grow
+     downward under it, which costs the band the same 13px either way.
+     No baseline nudge here: the -0.027em the room uses exists to put SNAKE's
+     baseline on the grid floor, and this logo is not hung from the floor. */
   .wrap.pause-open header h1 {
-    grid-row: 1 / span 2; grid-column: 1; align-self: end; margin-bottom: -0.027em;
+    grid-row: 1 / span 2; grid-column: 1; align-self: start;
   }
   .wrap.pause-open .hdr-cluster { grid-row: 1; grid-column: 2; align-self: start; }
   /* row 2, column 2: directly under the account chip, the seats pill's slot */

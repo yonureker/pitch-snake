@@ -230,7 +230,7 @@ export function GameHeader({
   return (
     <View style={styles.header}>
       {/* the logo spans both lines and hangs from the bottom; see LOGO_SLACK */}
-      <View style={[styles.logo, (inRoom || showPause) && styles.logoRoom]}>
+      <View style={[styles.logo, inRoom && styles.logoRoom]}>
         <Text style={[styles.title, dark && darkStyles.title]}>PITCH</Text>
         <Text style={[styles.title, styles.titleSecond, dark && darkStyles.title]}>SNAKE</Text>
       </View>
@@ -373,12 +373,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logo: { marginTop: LOGO_TRIM_TOP, marginBottom: LOGO_TRIM_BOTTOM, alignSelf: 'flex-start' },
-  /* Whenever the band carries a SECOND ROW its two rows outgrow the logo's
-     ink, so both ends cannot pin at once. That is a room with its pill rows,
-     and since 2026-09-16 a solo round with its pause button too. The page
-     resolves it the same way: the logo hangs from the floor, SNAKE's baseline
-     stays on the second row's bottom edge, and the cap-line contract belongs
-     to the one-row header where the scores column fits inside the logo. */
+  /* A ROOM ONLY, and deliberately not a solo round with its pause row. In a
+     room the two pill rows outgrow the logo's ink, so both ends cannot pin at
+     once, and a room is a screen you chose to enter: the band settling into
+     its taller shape is part of arriving. A solo round starts under the
+     player's hands, so its logo stays anchored at the cap line and row 2
+     grows downward under it (the page does the same; hanging it from the
+     floor moved the logo 21px, which is the owner's standing objection). */
   logoRoom: { alignSelf: 'flex-end' },
   title: {
     fontFamily: ANTON_FONT,
