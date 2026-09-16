@@ -646,6 +646,17 @@ export default function Index() {
         canForfeit={loop.canForfeit}
         onForfeit={loop.forfeit}
         onLeave={room.leave}
+        /* The page's rule verbatim: offered exactly while pausing is LEGAL,
+           which a shared round never is, and it stays on screen THROUGH the
+           pause so the same button that stopped the round starts it again.
+           Keyed on being in no room AT ALL rather than on inRoundRoom, which
+           is the same distinction the page draws between vsView and
+           vsInRound: inRoundRoom goes false the moment room.over lands, and
+           the phase is not 'dead' on that same render, so it would flash the
+           button on over a room whose round has just been settled. */
+        showPause={room.status === 'idle' && (loop.phase === 'playing' || loop.phase === 'paused')}
+        paused={loop.phase === 'paused'}
+        onPause={loop.phase === 'paused' ? loop.start : loop.pause}
       />
 
       {__DEV__ && loop.perfText !== '' && <Text style={styles.perf}>{loop.perfText}</Text>}
@@ -1235,11 +1246,6 @@ export default function Index() {
               void saveWorn(skin, hat);
             }}
           />
-          {loop.phase === 'playing' && (
-            <Pressable accessibilityRole="button" onPress={loop.pause} style={styles.pauseBtn} hitSlop={10}>
-              <Text style={styles.pauseText}>II</Text>
-            </Pressable>
-          )}
         </View>
       </View>
 
@@ -1439,20 +1445,6 @@ const styles = StyleSheet.create({
   },
   startText: { fontFamily: ANTON, color: '#ffffff', fontSize: 17, letterSpacing: 2 },
   startSub: { fontFamily: BARLOW_BOLD, color: 'rgba(255,255,255,0.85)', fontSize: 10, letterSpacing: 1.5 },
-  pauseBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(33,30,26,0.55)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(194,162,90,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pauseText: { fontFamily: BARLOW_BOLD, color: GameColors.goldBright, fontSize: 12, letterSpacing: 1 },
   modeList: { gap: 8, alignSelf: 'stretch', alignItems: 'center' },
   /* the page's .stack-choice button: Anton, an accent border, transparent
      until chosen, filled with its own accent when it is */

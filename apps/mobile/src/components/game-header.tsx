@@ -35,7 +35,7 @@ import { DarkShell, GameColors, VS_COLORS } from '@/game/theme';
 
 import type { SeatRow } from '@/game/use-game-loop';
 import { FLAG_COLS, flagIndex } from '@pitch-snake/flags';
-import { CupIcon, GearIcon } from '@/components/tray-icons';
+import { CupIcon, GearIcon, PauseIcon, PlayIcon } from '@/components/tray-icons';
 
 const ANTON_FONT = 'Anton_400Regular';
 const BARLOW = 'Barlow_600SemiBold';
@@ -154,6 +154,12 @@ export interface GameHeaderProps {
   canForfeit: boolean;
   onForfeit: () => void;
   onLeave: () => void;
+  /** a live SOLO round: half time is on offer, and this band is where the
+   *  page puts the door to it, on the line a room gives to its seats */
+  showPause: boolean;
+  /** which face it wears: the two bars, or the triangle that resumes */
+  paused: boolean;
+  onPause: () => void;
 }
 
 /**
@@ -184,6 +190,9 @@ export function GameHeader({
   canForfeit,
   onForfeit,
   onLeave,
+  showPause,
+  paused,
+  onPause,
 }: GameHeaderProps) {
   const [armed, setArmed] = useState(false);
 
@@ -311,6 +320,27 @@ export function GameHeader({
             )}
           </View>
         )}
+
+        {/* The page's own arrangement: the band's second line belongs to the
+            seats in a room and to the pause button outside one, so the header
+            reads the same shape whichever round you are in. It used to float
+            over the pitch's top right corner, which put a control on the
+            playing surface and gave the two clients different headers. */}
+        {!inRoom && showPause && (
+          <View style={styles.seatRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={paused ? 'Resume' : 'Pause'}
+              onPress={onPause}
+              hitSlop={10}
+              style={styles.pause}
+            >
+              {paused ?
+                <PlayIcon size={14} color={GameColors.goldBright} />
+              : <PauseIcon size={14} color={GameColors.goldBright} />}
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {!inRoom && (
@@ -423,6 +453,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#24321b',
     overflow: 'hidden',
     flexShrink: 1,
+  },
+  /* the seats pill's shell exactly, at the app's own chrome height rather
+     than the page's: the two headers are the same design at two scales, and
+     a button that matched the page's 34 would tower over the tray beside it */
+  pause: {
+    width: 38,
+    height: 27,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: GameColors.gold,
+    backgroundColor: '#24321b',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   /* THE NOTE GIVES WAY FIRST, not the seats. Five named seats and a status
      chip together want more than a 420px phone has, and the first attempt let

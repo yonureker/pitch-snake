@@ -136,6 +136,59 @@ export function CupIcon({ size, color }: TrayIconProps) {
   );
 }
 
+/**
+ * The half-time pair, and the page's own numbers again.
+ *
+ * The page draws these as two `<rect rx="1.4">` and a triangle. A rect is not
+ * a path, so the bars are written out here as the path that rect describes
+ * (left 6.6 and 13.1, width 4.3, height 14.8, corner 1.4, in the same 24 box)
+ * rather than re-invented at some other size. Anything else and the two
+ * clients start drifting on a control that is meant to read as the same
+ * button in both.
+ */
+const PAUSE_L =
+  'M8.0 4.6L9.5 4.6A1.4 1.4 0 0 1 10.9 6.0L10.9 18.0A1.4 1.4 0 0 1 9.5 19.4L8.0 19.4A1.4 1.4 0 0 1 6.6 18.0L6.6 6.0A1.4 1.4 0 0 1 8.0 4.6Z';
+const PAUSE_R =
+  'M14.5 4.6L16.0 4.6A1.4 1.4 0 0 1 17.4 6.0L17.4 18.0A1.4 1.4 0 0 1 16.0 19.4L14.5 19.4A1.4 1.4 0 0 1 13.1 18.0L13.1 6.0A1.4 1.4 0 0 1 14.5 4.6Z';
+const PLAY_D = 'M7.8 4.8L19.3 12L7.8 19.2Z';
+const pauseLeft = svg(PAUSE_L);
+const pauseRight = svg(PAUSE_R);
+const playPath = svg(PLAY_D);
+
+/**
+ * The two bars: pause.
+ *
+ * @param props - the drawn size in points, and the ink.
+ */
+export function PauseIcon({ size, color }: TrayIconProps) {
+  const t = [{ scale: size / BOX }];
+  return (
+    <View style={[styles.box, { width: size, height: size }]} pointerEvents="none">
+      <Canvas style={StyleSheet.absoluteFill}>
+        {pauseLeft !== null && <Path path={pauseLeft} color={color} style="fill" transform={t} />}
+        {pauseRight !== null && <Path path={pauseRight} color={color} style="fill" transform={t} />}
+      </Canvas>
+    </View>
+  );
+}
+
+/**
+ * The triangle: resume.
+ *
+ * @param props - the drawn size in points, and the ink.
+ */
+export function PlayIcon({ size, color }: TrayIconProps) {
+  return (
+    <View style={[styles.box, { width: size, height: size }]} pointerEvents="none">
+      <Canvas style={StyleSheet.absoluteFill}>
+        {playPath !== null && (
+          <Path path={playPath} color={color} style="fill" transform={[{ scale: size / BOX }]} />
+        )}
+      </Canvas>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   box: { alignItems: 'center', justifyContent: 'center' },
 });
