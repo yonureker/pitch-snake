@@ -109,6 +109,12 @@
      thing IS (the narrow rows keep their single line untouched); your
      numbers moved behind the trophy, because play testing put them in a
      right rail first and the half empty column read as clutter. */
+  /* The ready screen's body is empty since the scoring rows moved into the
+     HOW TO PLAY sheet, so it gives back the height it was reserving to keep
+     the title from wandering: that reserve had become a hole between the
+     strapline and the buttons. Outside the container query on purpose, since
+     it is true at every width. */
+  .ov-body.kick-bare { min-height: 0; }
   @container ov (min-width: 520px) {
     /* TILES, not a table (2026-09-15, the owner's layout). Four across, the
        rest centred under them, each a square with the thing on top and what

@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=991d4562a6">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=991d4562a6">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=95c57cb612">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -173,6 +173,11 @@
       <button class="gear boards" id="boardsBtn" aria-label="Top ten boards" title="Top ten">
         <svg class="cup-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.3 2.8L17.7 2.8L17.15 9.4C16.75 13.2 14.6 15.3 12 15.3C9.4 15.3 7.25 13.2 6.85 9.4Z"/><path fill="currentColor" d="M10.5 15.0L13.5 15.0L13.5 18.0L10.5 18.0Z"/><path fill="currentColor" d="M7.6 17.8L16.4 17.8L17.6 21.3L6.4 21.3Z"/><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" d="M6.5 4.4C3.7 4.5 2.5 6.0 2.9 7.9C3.3 9.8 4.9 10.8 7.25 11.1M17.5 4.4C20.3 4.5 21.5 6.0 21.1 7.9C20.7 9.8 19.1 10.8 16.75 11.1"/></svg>
       </button>
+      <!-- The question mark closes the loop the chooser opened: the front
+           door now SELLS four modes, and a player who does not know what
+           they are had nowhere to find out. It sits in the tray rather than
+           on a screen because the question outlives the screen you are on. -->
+      <button class="gear help" id="helpBtn" aria-label="How to play" title="How to play">?</button>
       <!-- The chip row: the player chip and the purse side by side, one
            flex row so the purse rides the chip's width whatever the name.
            Coins stopped being a section buried in the profile sheet because
@@ -277,6 +282,12 @@
           <div class="save-note" id="tNote" hidden></div>
           <button class="btn small ghostbtn" id="tBackBtn">BACK</button>
         </div>
+        <!-- The scoring rows. They are authored here, inside the overlay,
+             and MOVED into the HOW TO PLAY sheet at boot by one line in the
+             sheet's setup: the sheet is where they belong now, but the wide
+             tile layout they wore on the ready screen is a container query
+             on .overlay, so leaving the markup in place is what keeps that
+             layout one line from coming back rather than deleted. -->
         <div class="legend" id="legend">
           <!-- Each row carries two forms of the same fact: lg-txt is the
                single line the narrow screens have always shown, lg-two is
@@ -567,6 +578,30 @@
       </div>
     </div>
 
+    <!-- HOW TO PLAY: one pill per mode, because "how do I play" has four
+         different answers here and a single page of them would be a wall.
+         Same sheet shape as the boards, the same pills, opened from the
+         tray rather than from any one screen. The scoring rows live in
+         here now: they used to sit on the ready screen, which only ever
+         showed the mode you had already picked. -->
+    <div class="modal-backdrop" id="howModal" hidden>
+      <div class="modal how">
+        <div class="modal-title">HOW TO PLAY</div>
+        <div class="board-chips" id="howChips">
+          <button data-hmode="classic" class="active">CLASSIC</button>
+          <button data-hmode="survival">SURVIVAL</button>
+          <button data-hmode="versus">MULTIPLAYER</button>
+          <button data-hmode="tourney">TOURNAMENTS</button>
+        </div>
+        <div class="how-body" id="howBody">
+          <p class="how-lead" id="howLead"></p>
+          <ul class="how-points" id="howPoints"></ul>
+          <div class="how-rows" id="howRows" hidden></div>
+        </div>
+        <button class="btn small" id="howClose">DONE</button>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="shopModal" hidden>
       <div class="modal shop">
         <div class="modal-title">SHOP</div>
@@ -584,42 +619,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=991d4562a6",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=991d4562a6",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=991d4562a6",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=991d4562a6",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=991d4562a6",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=991d4562a6",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=991d4562a6",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=991d4562a6",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=991d4562a6",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=991d4562a6",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=991d4562a6",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=991d4562a6",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=991d4562a6",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=991d4562a6",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=991d4562a6",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=991d4562a6",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=991d4562a6",
-    "./packages/net/net.js": "./packages/net/net.js?v=991d4562a6",
-    "@pitch-snake/net": "./packages/net/net.js?v=991d4562a6",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=991d4562a6",
-    "./page/build/dom.js": "./page/build/dom.js?v=991d4562a6",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=991d4562a6",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=991d4562a6",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=991d4562a6",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=991d4562a6",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=991d4562a6",
-    "./page/build/shop.js": "./page/build/shop.js?v=991d4562a6",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=991d4562a6",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=991d4562a6",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=991d4562a6"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=95c57cb612",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=95c57cb612",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=95c57cb612",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=95c57cb612",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=95c57cb612",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=95c57cb612",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=95c57cb612",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=95c57cb612",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=95c57cb612",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=95c57cb612",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=95c57cb612",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=95c57cb612",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=95c57cb612",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=95c57cb612",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=95c57cb612",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=95c57cb612",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=95c57cb612",
+    "./packages/net/net.js": "./packages/net/net.js?v=95c57cb612",
+    "@pitch-snake/net": "./packages/net/net.js?v=95c57cb612",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=95c57cb612",
+    "./page/build/dom.js": "./page/build/dom.js?v=95c57cb612",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=95c57cb612",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=95c57cb612",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=95c57cb612",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=95c57cb612",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=95c57cb612",
+    "./page/build/shop.js": "./page/build/shop.js?v=95c57cb612",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=95c57cb612",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=95c57cb612",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=95c57cb612"
   }
 }
 </script>
@@ -3194,7 +3229,13 @@
   const startSub = document.getElementById('startSub');
   let tCreating = false;
   let tBusy = false;
-  let showModes = false;
+  // THE FRONT DOOR IS THE CHOOSER (2026-09-15, the owner's call). The game
+  // opens on the four modes rather than on one of them, and it costs nothing
+  // to do so: the chooser's own primary already reads START / CLASSIC and
+  // begins the round, so a player who wants the default still presses one
+  // button. What it buys is that the other three modes exist on screen
+  // instead of behind a button most players never pressed.
+  let showModes = true;
   let titleBehindModes = null;   // [text, className] parked while the chooser titles itself
   let lastRunKey = null;     // which fixture the finished round belonged to
   let tScreen = false;       // inside the chooser: the tournament step instead of the list
@@ -3223,7 +3264,11 @@
 
   // The legend tells the truth per mode: survival inverts what the food and
   // the TNT do, and its teleport trip pays nothing. Menu-time DOM writes only.
-  function applyLegend() {
+  // `rm` is the RULESET the rows should describe. It is a parameter rather
+  // than a read of ruleMode() because the rows live in the HOW TO PLAY sheet
+  // now, where the pill the reader is on decides the answer, and that is not
+  // the mode they happen to have selected.
+  function applyLegend(rm) {
     const rows = legend.children;
     // txt is the narrow single line, unchanged for years; name and sub are
     // the wide kickoff's pair, where there is room to say what a thing IS
@@ -3249,7 +3294,7 @@
     // costs or buys is the qualifier under it: the growth knobs are the
     // engine's own (eatGrowth 1, bonusGrowth 5, tntGrowth 5, portalGrowth 5),
     // so a ball is +1 longer and the other three are +5.
-    if (ruleMode() === 'survival') {
+    if (rm === 'survival') {
       set(0, 'Ball, one shorter', '-1', 'pos', 'Ball', '');
       set(1, 'Ball with a ring, 5 shorter', '-5', 'pos', 'Ringed ball', '');
       set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', '');
@@ -3266,6 +3311,11 @@
   // MODES view), the ready screen's legend, the death screen's board and
   // entry, the caption, and both buttons. Everything else just flips state
   // and calls this.
+  // The titles the MENUS own, spelled with a plain space: every comparison
+  // below normalises before asking, so the markup's non-breaking space and
+  // newRound's ordinary one are the same title as far as this set is
+  // concerned. Anything NOT in here is the round's own title and gets parked.
+  const MENU_TITLES = new Set(['KICK OFF', 'MULTIPLAYER', 'TOURNAMENTS']);
   function refreshModeUI() {
     // every state transition repaints the surfaces through here, which
     // makes it the crowd's heartbeat: kickoff, pause, resume, full time
@@ -3283,13 +3333,18 @@
     // name is the round's truth and re-parks, because vsLeave and its kin
     // write it directly underneath an open menu. The multiplayer title stays
     // ready-only so a room's FULL TIME result keeps its whistle.
-    const menuTitle = listScreen ? 'MODES'
+    const menuTitle = listScreen ? 'KICK OFF'
       : (modesOpen && tScreen && mode === 'versus' && state === 'ready') ? 'MULTIPLAYER'
       : (modesOpen && tScreen && mode === 'tourney' && state === 'ready') ? 'TOURNAMENTS'
       : null;
     if (menuTitle) {
-      const cur = overlayTitle.textContent;
-      if (cur !== 'MODES' && cur !== 'MULTIPLAYER' && cur !== 'TOURNAMENTS') titleBehindModes = [cur, overlayTitle.className];
+      // Compared with the space NORMALISED, because this one title is written
+      // three ways: the markup holds a non-breaking space to keep it off two
+      // lines, newRound writes a plain one, and the chooser now writes it as
+      // well. Matching the literal would have parked the chooser's own title
+      // on the very first paint, and FULL TIME would never have come back.
+      const cur = overlayTitle.textContent.replace(/ /g, ' ');
+      if (!MENU_TITLES.has(cur)) titleBehindModes = [cur, overlayTitle.className];
       overlayTitle.textContent = menuTitle;
       overlayTitle.className = '';
     } else if (titleBehindModes) {
@@ -3302,18 +3357,23 @@
     // whether it is on screen at all
     modeRow.style.display = listScreen ? '' : 'none';
     ovBody.classList.toggle('modes-grid', listScreen);
-    // the kickoff's own dress, solo board modes only: a tournament's ready
-    // screen has its caption and card, and a room has its steps
+    // The kickoff's own dress, solo board modes only: a tournament's ready
+    // screen has its caption and card, and a room has its steps. The
+    // `kick-grid` class this used to add is deliberately NOT added any more:
+    // it laid out the scoring tiles, and the scoring rows moved into the HOW
+    // TO PLAY sheet. Its rules stay in the stylesheet, dormant, because the
+    // class is the only thing standing between here and having them back.
+    // The strapline comes back with them gone: it is now the only line on
+    // this screen saying what the chosen mode actually is.
     const kickScreen = state === 'ready' && !modesOpen &&
       (mode === 'classic' || mode === 'survival');
-    ovBody.classList.toggle('kick-grid', kickScreen);
+    // with the rows gone this screen's body holds nothing, and the height it
+    // reserves to keep the title from wandering became a hole between the
+    // strapline and the buttons
+    ovBody.classList.toggle('kick-bare', kickScreen);
     if (kickScreen) {
-      // the strapline tells the selected mode's truth: "Eat to grow" above
-      // survival's table, where eating shrinks you, contradicted the very
-      // rules it sat over. The WIDE kickoff hides it in CSS (the tiles say
-      // it better than a sentence does), so this now only dresses the narrow
-      // list; it is still written either way, because the class that decides
-      // which layout is on screen belongs to the stylesheet, not here
+      // "Eat to grow" above survival's rules, where eating shrinks you,
+      // contradicted the very thing it sat over; the line is per mode
       overlayText.textContent = STRAPLINES[mode] || STRAPLINES.classic;
     }
     // Chrome by home. On the board frame (narrow), the trophy and purse
@@ -3364,8 +3424,9 @@
     // the strapline belongs to the round, not to a chooser: the title holds
     // its place either way, and the list gets the room back
     overlayText.style.display = modesOpen ? 'none' : '';
-    legend.style.display = (state === 'ready' && !modesOpen) ? '' : 'none';
-    applyLegend();
+    // the rows live in the HOW TO PLAY sheet now, so this only keeps them
+    // true to the round's own ruleset while that sheet is shut
+    if (howModal.hidden) applyLegend(ruleMode());
     // survival counts seconds, everything else counts points; the tally
     // says which it is holding
     document.getElementById('scoreLabel').textContent = ruleMode() === 'survival' ? 'Seconds' : 'Score';
@@ -5815,7 +5876,7 @@
   const chromeWide = true;
   function placeChrome() {
     hdrCluster.insertBefore(whoBtn, hdrTray);
-    hdrTray.append(purseBtn, boardsBtn, gearBtn);
+    hdrTray.append(purseBtn, boardsBtn, gearBtn, helpBtn);
     // the room bar is the header's own second line, level with SNAKE, and
     // the exit is a header item so it can take the score block's corner
     const hd = document.querySelector('header');
@@ -6035,6 +6096,103 @@
   boardsClose.addEventListener('click', () => { boardsModal.hidden = true; });
   // the backdrop is a door too, exactly like the settings sheet's
   boardsModal.addEventListener('click', (e) => { if (e.target === boardsModal) boardsModal.hidden = true; });
+
+  // ---- HOW TO PLAY ----
+  // Four modes, four answers, one pill each. The copy is deliberately plain
+  // and short: this sheet is read by someone who does not yet know what any
+  // of these words mean, so it says what a round IS and how it ends, and
+  // leaves the machinery (seeds, rollback, validation) out of it entirely.
+  // Every claim here is the engine's or the SQL's, never a guess: the
+  // growth and score numbers come from createGame's knobs, the clinch and
+  // the rating rules from ROOM_RULES and RATING_RULES.
+  const HOW = {
+    classic: {
+      lead: 'No time limit. Eat, grow, and climb the world top 100.',
+      points: [
+        'Steer with the arrows, WASD, or a thumb on the pad.',
+        'Every ball makes you longer, and longer is harder to steer.',
+        'Walls build themselves mid-round. They flash before they bite.',
+        'Your round ends when you hit a wall, a ghost, or yourself.',
+      ],
+      rows: 'classic',
+    },
+    survival: {
+      lead: 'The clock is the score. Every second you stay alive is a point.',
+      points: [
+        'Nothing else pays. Food and TNT change your length, never your score.',
+        'You start at full length with the ghosts already on the pitch.',
+        'Eating makes you SHORTER here, and TNT is what feeds you.',
+        'More ghosts and more TNT arrive every ten seconds, for ever.',
+      ],
+      rows: 'survival',
+    },
+    versus: {
+      lead: 'Up to five snakes on one pitch, all playing the identical round.',
+      points: [
+        'Open a room and share the code, or take a quick match against strangers.',
+        'Snakes pass straight through each other. The ghosts still kill.',
+        'It ends the moment nobody left alive can still catch the leader.',
+        'FORFEIT gives up the round and keeps your seat. LEAVE gives up the room.',
+        'Quick matches move your ELO. Rooms you opened yourself do not.',
+      ],
+      rows: 'classic',
+    },
+    tourney: {
+      lead: 'A code, a window of time, and one board everybody shares.',
+      points: [
+        'Anyone can start one: pick the rules and how long it runs.',
+        'Share the code. Everyone who has it plays into the same board.',
+        'Play as often as you like inside the window; your best score counts.',
+        'It plays by the rules of the mode it was made with.',
+      ],
+      rows: null,
+    },
+  };
+  const howModal = document.getElementById('howModal');
+  const howChips = document.getElementById('howChips');
+  const howLead = document.getElementById('howLead');
+  const howPoints = document.getElementById('howPoints');
+  const howRows = document.getElementById('howRows');
+  const howClose = document.getElementById('howClose');
+  const helpBtn = document.getElementById('helpBtn');
+  // The scoring rows are authored in the overlay and live here. One move, at
+  // boot, so the markup stays where its wide tile layout can still find it.
+  howRows.appendChild(legend);
+  legend.style.display = '';
+  let howMode = 'classic';
+  function renderHow() {
+    const h = HOW[howMode] || HOW.classic;
+    for (const b of howChips.querySelectorAll('button')) {
+      b.classList.toggle('active', b.dataset.hmode === howMode);
+    }
+    howLead.textContent = h.lead;
+    howPoints.replaceChildren(...h.points.map((t) => {
+      const li = document.createElement('li');
+      li.textContent = t;
+      return li;
+    }));
+    howRows.hidden = !h.rows;
+    // a room plays by classic's rules, so its pill borrows classic's rows
+    if (h.rows) applyLegend(h.rows);
+  }
+  helpBtn.addEventListener('click', () => {
+    // open on the mode the player is looking at, not always on classic
+    howMode = HOW[mode] ? mode : 'classic';
+    howModal.hidden = false;
+    renderHow();
+    rehomeFocus();
+  });
+  howChips.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    howMode = b.dataset.hmode;
+    renderHow();
+  });
+  // closing puts the rows back on the round's own ruleset, so nothing else
+  // that reads them inherits whichever pill was last open
+  const closeHow = () => { howModal.hidden = true; applyLegend(ruleMode()); };
+  howClose.addEventListener('click', closeHow);
+  howModal.addEventListener('click', (e) => { if (e.target === howModal) closeHow(); });
 
   // Identity freezes while competition is live: during any round, and for
   // as long as a seat in a room is held, because the series tally is keyed

@@ -75,6 +75,49 @@
   .boards-list li.me { border: 1px solid var(--gold); }
   .boards-list li.me .rk, .boards-list li.me .nm, .boards-list li.me .sc { color: var(--sheet-gold); font-weight: 700; }
 
+  /* ---- how to play ---- */
+  /* The boards sheet's shape, one pill per mode, because "how do I play" has
+     four answers here. It scrolls its BODY for the same reason the boards
+     scroll their list: the sheet caps below the screen so the chips and DONE
+     stay put however long a mode's answer runs. */
+  .modal.how { max-height: 86vh; width: min(390px, 92vw); }
+  /* Four pills go two by two rather than three-then-one: TOURNAMENTS is
+     nearly twice the width of CLASSIC, so a plain wrap leaves one pill
+     stranded on its own line looking like a different kind of control. */
+  .modal.how .board-chips button { flex: 1 1 calc(50% - 3px); }
+  .modal.how .how-body {
+    overflow-y: auto; min-height: 0; flex: 1 1 auto;
+    width: 100%; text-align: left;
+  }
+  .how-lead {
+    font-family: 'Barlow', sans-serif; font-size: 13.5px; font-weight: 600;
+    line-height: 1.45; color: var(--sheet-ink); margin: 2px 0 10px;
+  }
+  /* Ticks rather than bullets: every line here is something the pitch DOES,
+     and a disc reads as an item in a list where a tick reads as a fact. */
+  .how-points { list-style: none; margin: 0 0 12px; padding: 0; }
+  .how-points li {
+    position: relative; padding-left: 18px; margin-bottom: 7px;
+    font-family: 'Barlow', sans-serif; font-size: 12.5px; line-height: 1.45;
+    color: var(--sheet-muted);
+  }
+  .how-points li::before {
+    content: ''; position: absolute; left: 3px; top: 5px;
+    width: 4px; height: 8px; border: solid var(--sheet-gold);
+    border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  /* The scoring rows keep the legend's own metrics and are RECOLOURED, which
+     is the whole cost of moving them here: every colour in them was picked
+     for the dark overlay, and the sheet is light. Cream text on a cream
+     sheet is invisible, and the snake's own cream head mark vanished
+     completely, so it borrows the outline the pitch gives it instead. */
+  .how-rows { width: 100%; border-top: 1px solid var(--sheet-line); padding-top: 10px; }
+  .how-rows .legend { width: 100%; max-width: none; gap: 3px; }
+  .how-rows .lg-row { color: var(--sheet-ink); }
+  .how-rows .lg-val.pos { color: var(--sheet-gold); }
+  .how-rows .lg-ic.trio .d-self { box-shadow: inset 0 0 0 1px rgba(33,30,26,0.55); }
+  .how-rows .lg-ic.ring { border-color: var(--sheet-gold); }
+
   /* ---- the shop ---- */
   /* The boards sheet's own remedy, inherited the day the world tour pushed
      the shelf to twenty-nine hats: the sheet caps below the screen and the

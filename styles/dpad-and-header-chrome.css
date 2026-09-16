@@ -157,6 +157,16 @@
   .hdr-tray .gear .cup-ico { width: 21px; height: 21px; }
   .hdr-tray .gear + .gear { border-left: 1px solid rgba(194,162,90,0.45); }
   .hdr-tray .gear.purse { width: auto; padding: 0 12px; }
+  /* The question mark is TYPE where its neighbours are drawn paths, which is
+     the one case where a glyph is the honest answer: a question mark is a
+     letterform and every platform has the same one, unlike the cog that had
+     to be drawn because U+2699 was a different weight everywhere. Anton, so
+     it carries the same voice as the score and the titles. */
+  .gear.help {
+    font-family: 'Anton', sans-serif; font-size: 20px; line-height: 1;
+    padding-bottom: 2px;
+  }
+  .hdr-tray .gear.help { font-size: 19px; }
   .sleeping { opacity: 0.42; pointer-events: none; }
   
   /* Narrow desktop windows: EVERYTHING scales, and the row never breaks.
