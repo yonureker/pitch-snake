@@ -141,7 +141,11 @@
      which is true at no width in particular; hanging them from the bottom is
      true at every width, and the bottom is the line the eye actually reads
      these two objects against. */
-  .wrap.mp-open header {
+  /* The same two-row header serves a solo round, because the pause button
+     wants exactly the slot the seats want. What it must NOT inherit is the
+     rule below that hides the score block: a room has the seats pill to
+     carry its numbers and a solo round has only that block. */
+  .wrap.mp-open header, .wrap.solo-bar header {
     display: grid; align-items: center;
     grid-template-columns: auto minmax(0, 1fr) auto;
     column-gap: min(22px, max(7px, 2.4vw)); row-gap: min(7px, max(3px, 0.9vw));
@@ -160,11 +164,15 @@
      luck, at every one of the sizes the logo scales through.
      In em, so it tracks the responsive font-size on its own. The gold drop
      shadow still falls below both, which is what a shadow is for. */
-  .wrap.mp-open header h1 {
+  .wrap.mp-open header h1, .wrap.solo-bar header h1 {
     grid-row: 1 / span 2; grid-column: 1; align-self: end; margin-bottom: -0.027em;
   }
-  .wrap.mp-open .hdr-cluster { grid-row: 1; grid-column: 2; align-self: start; }
-  .wrap.mp-open header > .mp-bar { grid-row: 2; grid-column: 2 / span 2; align-self: end; }
+  .wrap.mp-open .hdr-cluster,
+  .wrap.solo-bar .hdr-cluster { grid-row: 1; grid-column: 2; align-self: start; }
+  .wrap.mp-open header > .mp-bar,
+  .wrap.solo-bar header > .mp-bar { grid-row: 2; grid-column: 2 / span 2; align-self: end; }
+  /* the score block keeps the corner the exit takes in a room */
+  .wrap.solo-bar .scores { grid-row: 1; grid-column: 3; justify-self: end; align-self: start; }
   /* IN A ROOM THE SEATS PILL IS THE SCOREBOARD, so the block goes.
      It was already gone for most of a round: seat-out hid it, and seat-out
      is set whenever LEAVE is offered, which is every moment of a live room
@@ -203,6 +211,22 @@
        which is the squeeze this was avoiding and the cheaper of the two. */
     flex-wrap: nowrap;
   }
+  /* The solo pause button borrows the seats pill's shell exactly: same
+     height, same gold rim, same fill, so the header's second line looks like
+     one object whichever tenant is in it. */
+  .solo-pause {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: none; width: 46px; height: 34px; padding: 0;
+    border: 1.5px solid var(--gold); border-radius: 17px;
+    background: #24321b; color: var(--gold-bright); cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .solo-pause[hidden] { display: none; }
+  .solo-pause:active { transform: scale(0.94); }
+  .solo-pause svg { width: 16px; height: 16px; display: block; fill: currentColor; }
+  .solo-pause .ic-play { display: none; }
+  .solo-pause.paused .ic-pause { display: none; }
+  .solo-pause.paused .ic-play { display: block; }
   .wrap .mp-hud {
     display: inline-flex; align-items: stretch; gap: 0; padding: 0;
     height: 34px; border: 1.5px solid var(--gold); border-radius: 17px;

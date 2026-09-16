@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=95c57cb612">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=95c57cb612">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=10bc4393ba">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=10bc4393ba">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -137,6 +137,18 @@
       <button class="btn small" id="buildReload">RELOAD</button>
     </div>
     <div class="mp-bar" id="mpBar" hidden>
+      <!-- Solo rounds put a pause button where a room puts its seats, which
+           is the one line of header that is empty on every screen but a
+           room's. It matters most on a phone, where there is no SPACE bar to
+           press and pausing had no door at all. It carries both faces and
+           swaps them, because a button that pauses and then sits dead while
+           the round is paused is the worse half of a toggle. -->
+      <button class="solo-pause" id="pauseBtn" hidden aria-label="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <g class="ic-pause"><rect x="6.6" y="4.6" width="4.3" height="14.8" rx="1.4"/><rect x="13.1" y="4.6" width="4.3" height="14.8" rx="1.4"/></g>
+          <path class="ic-play" d="M7.8 4.8L19.3 12L7.8 19.2Z"/>
+        </svg>
+      </button>
       <div class="mp-hud" id="mpHud" hidden></div>
       <div class="mp-notes" id="mpNotes" hidden></div>
       <button class="mp-quit" id="mpGiveBtn" hidden>FORFEIT</button>
@@ -619,42 +631,42 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=95c57cb612",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=95c57cb612",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=95c57cb612",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=95c57cb612",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=95c57cb612",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=95c57cb612",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=95c57cb612",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=95c57cb612",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=95c57cb612",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=95c57cb612",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=95c57cb612",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=95c57cb612",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=95c57cb612",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=95c57cb612",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=95c57cb612",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=95c57cb612",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=95c57cb612",
-    "./packages/net/net.js": "./packages/net/net.js?v=95c57cb612",
-    "@pitch-snake/net": "./packages/net/net.js?v=95c57cb612",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=95c57cb612",
-    "./page/build/dom.js": "./page/build/dom.js?v=95c57cb612",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=95c57cb612",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=95c57cb612",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=95c57cb612",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=95c57cb612",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=95c57cb612",
-    "./page/build/shop.js": "./page/build/shop.js?v=95c57cb612",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=95c57cb612",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=95c57cb612",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=95c57cb612"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=10bc4393ba",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=10bc4393ba",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=10bc4393ba",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=10bc4393ba",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=10bc4393ba",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=10bc4393ba",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=10bc4393ba",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=10bc4393ba",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=10bc4393ba",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=10bc4393ba",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=10bc4393ba",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=10bc4393ba",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=10bc4393ba",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=10bc4393ba",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=10bc4393ba",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=10bc4393ba",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=10bc4393ba",
+    "./packages/net/net.js": "./packages/net/net.js?v=10bc4393ba",
+    "@pitch-snake/net": "./packages/net/net.js?v=10bc4393ba",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=10bc4393ba",
+    "./page/build/dom.js": "./page/build/dom.js?v=10bc4393ba",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=10bc4393ba",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=10bc4393ba",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=10bc4393ba",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=10bc4393ba",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=10bc4393ba",
+    "./page/build/shop.js": "./page/build/shop.js?v=10bc4393ba",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=10bc4393ba",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=10bc4393ba",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=10bc4393ba"
   }
 }
 </script>
@@ -782,6 +794,8 @@
   const acctGo = document.getElementById('acctGo');
   const acctLater = document.getElementById('acctLater');
   const legend = document.getElementById('legend');
+  // read early: syncMpBar reaches for it, and that runs from the resize path
+  const pauseBtn = document.getElementById('pauseBtn');
 
   let cell = 20;
   let DPR = window.devicePixelRatio || 1;
@@ -2513,6 +2527,7 @@
       countClock += dt;
       if (countClock >= COUNT_TOTAL) {
         state = 'playing';   // kick off, on the start heading: the count held nothing
+        syncSoloPause();     // the whistle is where the pause button earns its place
       }
     }
     if (state === 'playing') {
@@ -3532,6 +3547,7 @@
     modesBtn.textContent = modesOpen ? 'DONE' : 'MODES';
     refreshBestHud();
     markOverflow();
+    syncSoloPause();    // pause, resume, full time and every menu land here
     rehomeFocus();      // this pass may have hidden whatever held the focus ring
   }
 
@@ -3828,14 +3844,51 @@
   // takes a slice of the column's height (--mp-h), so the board has to be
   // measured again: a CSS-driven size change fires no resize event.
   const mpBar = document.getElementById('mpBar');
+  // Two tenants, one row. A room fills it with seats and a forfeit; a solo
+  // round fills it with the pause button. They take DIFFERENT classes on the
+  // wrap because a room hides the score block to give the seats the width
+  // and a solo round must not: the block is the only score it has. Compared
+  // as a signature so the DOM is touched on a change and never on a frame.
+  let mpBarSig = '';
   function syncMpBar() {
-    const open = !mpHud.hidden || !mpGiveBtn.hidden || !mpNotes.hidden;
-    if (mpBar.hidden !== !open) {
-      mpBar.hidden = !open;
-      document.querySelector('.wrap').classList.toggle('mp-open', open);
-      resizeQueued = true;
-    }
+    const room = !mpHud.hidden || !mpGiveBtn.hidden || !mpNotes.hidden;
+    const solo = !pauseBtn.hidden;
+    const sig = (room ? 'r' : '') + (solo ? 's' : '');
+    if (sig === mpBarSig) return;
+    mpBarSig = sig;
+    mpBar.hidden = !(room || solo);
+    const wrap = document.querySelector('.wrap');
+    wrap.classList.toggle('mp-open', room);
+    wrap.classList.toggle('solo-bar', solo);
+    resizeQueued = true;    // a CSS-driven size change fires no resize event
   }
+  // The button exists exactly while pausing is LEGAL, which is the honest
+  // rule and a narrower one than "classic or survival": a shared round has
+  // no half time, so wherever togglePause would refuse there is nothing to
+  // offer. Tournaments are solo rounds and keep it.
+  //
+  // The test is vsView and NOT vsInRound, deliberately. vsInRound also goes
+  // false the moment a room's round is settled, and `state` does not become
+  // 'dead' on that same tick, so the narrower test would flash the button on
+  // over a finished room for a frame or two and then hand it a togglePause
+  // that no longer refuses. Whether this g IS the room's round is the stable
+  // question, and it is the one that was actually being asked.
+  let pauseSig = '';
+  function syncSoloPause() {
+    const show = !vsView() && (state === 'playing' || state === 'paused');
+    const sig = show ? state : '';
+    if (sig === pauseSig) return;
+    pauseSig = sig;
+    pauseBtn.hidden = !show;
+    const held = state === 'paused';
+    pauseBtn.classList.toggle('paused', held);
+    pauseBtn.setAttribute('aria-label', held ? 'Resume' : 'Pause');
+    syncMpBar();
+  }
+  pauseBtn.addEventListener('click', () => {
+    togglePause();
+    pauseBtn.blur();        // else the next Space press re-clicks this button
+  });
 
   let mpHudHash = -1;
   function hudNote(t) {

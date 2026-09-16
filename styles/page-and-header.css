@@ -67,6 +67,11 @@
      wasting space. Being wrong by two pixels of margin is the safe side. */
   .wrap.mp-open { --mp-h: 14px; }
   html.touchless .wrap.mp-open { --mp-h: 0px; }
+  /* A solo round opens the same row for its pause button and so costs the
+     same height, by the same measurement: the desktop header already has
+     the room inside the logo's column, the phone header does not. */
+  .wrap.solo-bar { --mp-h: 14px; }
+  html.touchless .wrap.solo-bar { --mp-h: 0px; }
 
   header {
     width: 100%;
