@@ -34,7 +34,7 @@
 // colours, interpolation) live with the renderers; the engine reports what
 // happened through an events array the caller drains once per frame.
 
-export const ENGINE_VERSION = 35;  // 35: rain drags the SNAKES only, the ghosts keep their pace (a snake is still 1.28x faster than a ghost at its own worst); 34: the five hand-drawn shapes are withdrawn and WALL_MAX_CELLS caps any shape at eighty cells; 33: five hand-drawn wall shapes join the rotation (twelve in all), carried as ASCII art so the source shows the pitch; 32: the seven hand-drawn shapes are withdrawn (owner's call, the day after they landed); the rotation is the seven derived shapes again; 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
+export const ENGINE_VERSION = 36;  // 36: a ringed ball pays THREE and grows three (survival trims three), where all three were five; 35: rain drags the SNAKES only, the ghosts keep their pace (a snake is still 1.28x faster than a ghost at its own worst); 34: the five hand-drawn shapes are withdrawn and WALL_MAX_CELLS caps any shape at eighty cells; 33: five hand-drawn wall shapes join the rotation (twelve in all), carried as ASCII art so the source shows the pitch; 32: the seven hand-drawn shapes are withdrawn (owner's call, the day after they landed); the rotation is the seven derived shapes again; 30: a seventh wall pattern, the sealed ring, which closes the tunnels for one solid phase; 29: rain slows the whole pitch 25% while it pours, and the puddles are cut (owner's call, same day they shipped: one global state beats forty cells of terrain); 28: weather (seeded rain floods puddles that slow snakes and ghosts alike; water is terrain, never occupancy, and rides its own PRNG stream); 27: a seat can WITHDRAW from the reckoning (leave removes the snake, forfeit keeps the corpse); a withdrawn score cannot win and ranks below every seat still in it; 26: sudden death's breather is 15s, not 10; 25: a wall forming over the bolt moves it clear instead of burying it; 24: a room's last un-clinched survivor is hunted on the clock (sudden death); 23: survival's relief sleeps at the floor (no food or pairs while every alive snake sits at START_LEN; unused pairs refund); 22: classic/speedrun/rooms TNT feeds five and a teleport trip grows five (both were TNT -5 length, portal 0); 21: the bolt blocks ghosts, and a walled-on ghost walks OFF the shape; 20: levels, and goalScore with them; 19: ghosts hold at the line; 18: the hook opening and windows that trim; 15..17: survival scores the clock, full spawn
 
 export const GRID = 20;
 export const START_LEN = 3;    // initial snake length; TNT can't shrink below this
@@ -47,7 +47,11 @@ export const MAX_PLAYERS = 5;  // one board holds at most five snakes
 export const SPEEDS = { slow: 200, normal: 130, fast: 100 };
 
 export const FOOD_TTL = 5000;      // uneaten food relocates after this long
-export const BONUS_EVERY = 5;      // a ringed +5 appears after this many regular emojis
+export const BONUS_EVERY = 5;      // a ringed ball appears after this many regular ones
+// What a ringed ball pays, and what it grows (the growth is the classic
+// `bonusGrowth` default below, kept equal to this on purpose: the reward
+// reads as one number in the legend). Three since v36, five before it.
+export const BONUS_POINTS = 3;
 export const REGULAR_KINDS = 16;   // how many regular food looks the renderer offers
 export const BONUS_KINDS = 5;      // how many ringed looks
 
@@ -165,7 +169,7 @@ export const MODES = {
   classic: {},                              // endless: the run ends when you do
   speedrun: { durationMs: 60_000 },         // one minute on the clock, then the whistle
   // Survival proper: nothing scores but the clock. Seconds survived ARE the
-  // score; food trims the snake by one (the ringed one by five), a window
+  // score; food trims the snake by one (the ringed one by three), a window
   // trip trims five, TNT feeds it five, and the hazards ride the clock
   // instead of the points: one more ghost and one more block per wave every
   // ten seconds for ever, a bolt on the pitch every fifteen. The snake
@@ -175,7 +179,7 @@ export const MODES = {
   survival: {
     startGhosts: 5, startBombs: 9, bombFirstMs: SURVIVAL_TNT_FIRST,
     scoreByTime: true, startLen: 31,
-    eatGrowth: -1, bonusGrowth: -5, tntGrowth: 5, portalGrowth: -5,
+    eatGrowth: -1, bonusGrowth: -3, tntGrowth: 5, portalGrowth: -5,
     ghostEveryMs: 10_000, bombEveryMs: 10_000, boltEveryMs: 15_000,
   },
 };
@@ -427,7 +431,7 @@ export function createGame(cfg = {}) {
   const scoreByTime = cfg.scoreByTime ?? false;
   const startLen = cfg.startLen ?? START_LEN;
   const eatGrowth = cfg.eatGrowth ?? 1;
-  const bonusGrowth = cfg.bonusGrowth ?? 5;
+  const bonusGrowth = cfg.bonusGrowth ?? BONUS_POINTS;   // v36: three, matching what it pays
   const tntGrowth = cfg.tntGrowth ?? 5;         // classic/rooms: TNT feeds five (v22), a hazard in every sense
   const portalGrowth = cfg.portalGrowth ?? 5;   // classic/rooms: a trip grows five (v22); survival overrides to trim five
   const ghostEveryMs = cfg.ghostEveryMs ?? 0;
@@ -668,7 +672,7 @@ export function createGame(cfg = {}) {
     }
     const c = spawnCell(0);
     if (!c) { S.foodAge = 0; return; }        // board full: keep the current food
-    c.bonus = S.bonusStreak >= BONUS_EVERY;  // ringed +5 only after a full streak
+    c.bonus = S.bonusStreak >= BONUS_EVERY;  // a ringed ball only after a full streak
     c.kind = (random() * (c.bonus ? BONUS_KINDS : REGULAR_KINDS)) | 0;
     S.food = c;
     S.foodAge = 0;
@@ -1449,7 +1453,7 @@ export function createGame(cfg = {}) {
     if (ate) {
       const bonus = S.food.bonus;
       // a time-scored round pays nothing for food: eating is body management
-      if (!scoreByTime) p.score += bonus ? 5 : 1;
+      if (!scoreByTime) p.score += bonus ? BONUS_POINTS : 1;
       p.pendingGrowth += bonus ? bonusGrowth : eatGrowth;
       if (bonus) S.bonusStreak = 0;   // bonus taken: restart the board's streak
       else S.bonusStreak++;
@@ -2075,6 +2079,10 @@ export function replay(log) {
     durationMs: log.durationMs ?? 0, startGhosts: log.startGhosts ?? 0, startBombs: log.startBombs ?? 0,
     bombFirstMs: log.bombFirstMs ?? 0,
     scoreByTime: log.scoreByTime ?? false, startLen: log.startLen ?? START_LEN,
+    // bonusGrowth's fallback is FIVE and stays five, like tntGrowth's -5
+    // beside it: these are what a log written before the field existed was
+    // played under, and a replay owes that round its own rules. createGame's
+    // live default moved to three in v36; this one must not follow it.
     eatGrowth: log.eatGrowth ?? 1, bonusGrowth: log.bonusGrowth ?? 5, tntGrowth: log.tntGrowth ?? -5,
     portalGrowth: log.portalGrowth ?? 0,
     ghostEveryMs: log.ghostEveryMs ?? 0, bombEveryMs: log.bombEveryMs ?? 0, boltEveryMs: log.boltEveryMs ?? 0,

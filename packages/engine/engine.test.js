@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   createGame, replay, ghostRenderPos, ENGINE_VERSION, MODES,
-  GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY,
+  GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY, BONUS_POINTS,
   TNT_SCORES, GHOST_SCORES, GHOST_MS, GHOST_MAX, BOMB_MAX, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
@@ -490,7 +490,7 @@ test('doom: a press taken while the clock is stopped moves nothing', () => {
   assert.ok(cellEq(g.snake[0], 5, 5), 'nor the head');
   assert.equal(g.pendingGrowth, 0, 'nothing was eaten on a round that is not running');
   g.advanceQuanta(1);                          // the sim resumes and takes it
-  assert.equal(g.score, score + 5, 'the bonus counts once the round is running again');
+  assert.equal(g.score, score + BONUS_POINTS, 'the bonus counts once the round is running again');
 });
 
 test('doom: clearQueue un-records a held save, its log row included', () => {
@@ -2027,6 +2027,16 @@ test('a level round replays to the identical end', () => {
 // were withdrawn. The catalogue has now been widened and narrowed twice and
 // the pins have followed it exactly both ways, which is the contract
 // working rather than a fixture being fragile.
+// v36 moved SPEEDRUN alone, 20/ghost/1565 to 9/wall/1615, when a ringed ball
+// went from paying five to paying three. Classic never ate one (its five
+// points are five plain balls) and survival pays nothing for food at all, so
+// neither could move. Speedrun's new score is not its old one minus a flat
+// amount, and that is the point worth reading: the score GATES the hazard
+// ladders, so the first ringed ball paying two less puts every later ghost,
+// TNT wave and teleport mark on a different quantum, and the round forks
+// from there into a different death. Growth is untouched here, because these
+// logs predate the growth knobs and replay()'s fallback for bonusGrowth
+// stays at the five they were played under.
 test("v4 golden rounds replay to their pinned finals under today's rules", () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/v4.json', import.meta.url), 'utf8'));
   const names = Object.keys(fx);

@@ -96,17 +96,17 @@
   @keyframes bootPulse { 50% { transform: scale(1.12); } }
   @media (prefers-reduced-motion: reduce) { #boot span { animation: none; } }
 </style>
-<link rel="stylesheet" href="./styles/theme-colors.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/page-and-header.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/mode-chooser.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/result-and-legend.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=285187f68e">
-<link rel="stylesheet" href="./styles/modals-and-profile.css?v=285187f68e">
+<link rel="stylesheet" href="./styles/theme-colors.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/page-and-header.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/mode-chooser.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/pitch-and-room-bar.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/overlay-and-layouts.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/result-and-legend.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/buttons-and-inputs.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/standings-and-stickers.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/boards-and-shop-sheets.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/dpad-and-header-chrome.css?v=6c1d2738dd">
+<link rel="stylesheet" href="./styles/modals-and-profile.css?v=6c1d2738dd">
 </head>
 <body>
   <!-- Covered until the page is ready. Everything the shell needs is local
@@ -307,7 +307,7 @@
                the wide kickoff's name-plus-explanation pair. applyLegend
                fills both; only the container query decides which renders. -->
           <div class="lg-row"><span class="lg-ic">⚽</span><span class="lg-txt">Ball</span><span class="lg-two"><span class="lg-name">Ball</span><span class="lg-sub"></span></span><span class="lg-val pos">+1</span></div>
-          <div class="lg-row"><span class="lg-ic ring">⚽</span><span class="lg-txt">Ball with a ring</span><span class="lg-two"><span class="lg-name">Ringed ball</span><span class="lg-sub"></span></span><span class="lg-val pos">+5</span></div>
+          <div class="lg-row"><span class="lg-ic ring">⚽</span><span class="lg-txt">Ball with a ring</span><span class="lg-two"><span class="lg-name">Ringed ball</span><span class="lg-sub"></span></span><span class="lg-val pos">+3</span></div>
           <div class="lg-row"><span class="lg-ic tnt">TNT</span><span class="lg-txt">TNT block, 5 longer</span><span class="lg-two"><span class="lg-name">TNT</span><span class="lg-sub">+5 longer</span></span><span class="lg-val neg">-5</span></div>
           <div class="lg-row"><span class="lg-ic"><i class="tp pair"></i></span><span class="lg-txt">Teleport, five longer</span><span class="lg-two"><span class="lg-name">Teleport window</span><span class="lg-sub">+5 longer</span></span><span class="lg-val pos">+5</span></div>
           <!-- The two the pitch throws at everyone, in the order a player
@@ -635,48 +635,48 @@
 <script type="importmap">
 {
   "imports": {
-    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=285187f68e",
-    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=285187f68e",
-    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=285187f68e",
-    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=285187f68e",
-    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=285187f68e",
-    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=285187f68e",
-    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=285187f68e",
-    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=285187f68e",
-    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=285187f68e",
-    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=285187f68e",
-    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=285187f68e",
-    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=285187f68e",
-    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=285187f68e",
-    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=285187f68e",
-    "./packages/cosmetics/build/skin-art.js": "./packages/cosmetics/build/skin-art.js?v=285187f68e",
-    "@pitch-snake/cosmetics/skin-art": "./packages/cosmetics/build/skin-art.js?v=285187f68e",
-    "./packages/cosmetics/build/skin-texture.js": "./packages/cosmetics/build/skin-texture.js?v=285187f68e",
-    "@pitch-snake/cosmetics/skin-texture": "./packages/cosmetics/build/skin-texture.js?v=285187f68e",
-    "./packages/engine/engine.js": "./packages/engine/engine.js?v=285187f68e",
-    "@pitch-snake/engine": "./packages/engine/engine.js?v=285187f68e",
-    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=285187f68e",
-    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=285187f68e",
-    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=285187f68e",
-    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=285187f68e",
-    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=285187f68e",
-    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=285187f68e",
-    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=285187f68e",
-    "./packages/net/net.js": "./packages/net/net.js?v=285187f68e",
-    "@pitch-snake/net": "./packages/net/net.js?v=285187f68e",
-    "./page/build/country-flags.js": "./page/build/country-flags.js?v=285187f68e",
-    "./page/build/dom.js": "./page/build/dom.js?v=285187f68e",
-    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=285187f68e",
-    "./page/build/gamepad.js": "./page/build/gamepad.js?v=285187f68e",
-    "./page/build/menu-nav.js": "./page/build/menu-nav.js?v=285187f68e",
-    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=285187f68e",
-    "./page/build/room-notices.js": "./page/build/room-notices.js?v=285187f68e",
-    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=285187f68e",
-    "./page/build/shop.js": "./page/build/shop.js?v=285187f68e",
-    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=285187f68e",
-    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=285187f68e",
-    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=285187f68e",
-    "./page/build/tv-remote.js": "./page/build/tv-remote.js?v=285187f68e"
+    "./packages/cosmetics/build/hat-art.js": "./packages/cosmetics/build/hat-art.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/hat-art": "./packages/cosmetics/build/hat-art.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/hat-surface.js": "./packages/cosmetics/build/hat-surface.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/hat-surface": "./packages/cosmetics/build/hat-surface.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/hats-asia.js": "./packages/cosmetics/build/hats-asia.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/hats-asia": "./packages/cosmetics/build/hats-asia.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/hats-new-world.js": "./packages/cosmetics/build/hats-new-world.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/hats-new-world": "./packages/cosmetics/build/hats-new-world.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/hats-old-world.js": "./packages/cosmetics/build/hats-old-world.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/hats-old-world": "./packages/cosmetics/build/hats-old-world.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/jersey.js": "./packages/cosmetics/build/jersey.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/jersey": "./packages/cosmetics/build/jersey.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/kit.js": "./packages/cosmetics/build/kit.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/kit": "./packages/cosmetics/build/kit.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/skin-art.js": "./packages/cosmetics/build/skin-art.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/skin-art": "./packages/cosmetics/build/skin-art.js?v=6c1d2738dd",
+    "./packages/cosmetics/build/skin-texture.js": "./packages/cosmetics/build/skin-texture.js?v=6c1d2738dd",
+    "@pitch-snake/cosmetics/skin-texture": "./packages/cosmetics/build/skin-texture.js?v=6c1d2738dd",
+    "./packages/engine/engine.js": "./packages/engine/engine.js?v=6c1d2738dd",
+    "@pitch-snake/engine": "./packages/engine/engine.js?v=6c1d2738dd",
+    "./packages/flags/build/flags.js": "./packages/flags/build/flags.js?v=6c1d2738dd",
+    "@pitch-snake/flags/flags": "./packages/flags/build/flags.js?v=6c1d2738dd",
+    "@pitch-snake/flags": "./packages/flags/build/flags.js?v=6c1d2738dd",
+    "./packages/net/build/room-wire.js": "./packages/net/build/room-wire.js?v=6c1d2738dd",
+    "@pitch-snake/net/room-wire": "./packages/net/build/room-wire.js?v=6c1d2738dd",
+    "./packages/net/build/vs-smoothing.js": "./packages/net/build/vs-smoothing.js?v=6c1d2738dd",
+    "@pitch-snake/net/vs-smoothing": "./packages/net/build/vs-smoothing.js?v=6c1d2738dd",
+    "./packages/net/net.js": "./packages/net/net.js?v=6c1d2738dd",
+    "@pitch-snake/net": "./packages/net/net.js?v=6c1d2738dd",
+    "./page/build/country-flags.js": "./page/build/country-flags.js?v=6c1d2738dd",
+    "./page/build/dom.js": "./page/build/dom.js?v=6c1d2738dd",
+    "./page/build/error-reporting.js": "./page/build/error-reporting.js?v=6c1d2738dd",
+    "./page/build/gamepad.js": "./page/build/gamepad.js?v=6c1d2738dd",
+    "./page/build/menu-nav.js": "./page/build/menu-nav.js?v=6c1d2738dd",
+    "./page/build/pitch-art.js": "./page/build/pitch-art.js?v=6c1d2738dd",
+    "./page/build/room-notices.js": "./page/build/room-notices.js?v=6c1d2738dd",
+    "./page/build/rtc-mesh.js": "./page/build/rtc-mesh.js?v=6c1d2738dd",
+    "./page/build/shop.js": "./page/build/shop.js?v=6c1d2738dd",
+    "./page/build/snake-preview.js": "./page/build/snake-preview.js?v=6c1d2738dd",
+    "./page/build/sound-and-crowd.js": "./page/build/sound-and-crowd.js?v=6c1d2738dd",
+    "./page/build/supabase-client.js": "./page/build/supabase-client.js?v=6c1d2738dd",
+    "./page/build/tv-remote.js": "./page/build/tv-remote.js?v=6c1d2738dd"
   }
 }
 </script>
@@ -3448,12 +3448,12 @@
     // so a ball is +1 longer and the other three are +5.
     if (rm === 'survival') {
       set(0, 'Ball, one shorter', '-1', 'pos', 'Ball', '');
-      set(1, 'Ball with a ring, 5 shorter', '-5', 'pos', 'Ringed ball', '');
+      set(1, 'Ball with a ring, 3 shorter', '-3', 'pos', 'Ringed ball', '');
       set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', '');
       set(3, 'Teleport, 5 shorter', '-5', 'pos', 'Teleport window', '');
     } else {
       set(0, 'Ball', '+1', 'pos', 'Ball', '+1 longer', 'PTS');
-      set(1, 'Ball with a ring', '+5', 'pos', 'Ringed ball', '+5 longer', 'PTS');
+      set(1, 'Ball with a ring', '+3', 'pos', 'Ringed ball', '+3 longer', 'PTS');
       set(2, 'TNT block, 5 longer', '-5', 'neg', 'TNT', '+5 longer', 'PTS');
       set(3, 'Teleport, five longer', '+5', 'pos', 'Teleport window', '+5 longer', 'PTS');
     }
