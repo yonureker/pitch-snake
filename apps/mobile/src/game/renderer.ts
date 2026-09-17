@@ -334,6 +334,19 @@ let snakeSprites: (Baked | null)[] = [];
  * for them to sit under. The page carries the same number.
  */
 const GHOST_EYE_DY = -0.26;
+/**
+ * How tall the body is DRAWN, in units of r, against a box still reserving
+ * 1.16, and how high the bolt's slow ring rides above it. Both the page's.
+ *
+ * The flat top cost that ring its clearance: a dome only reached full height
+ * at its centre, so the orbiting dots passed either side of it, where a flat
+ * top meets them across the whole width. Measured at 27% of the ring hidden.
+ * Trimming the head recovers a third, so the ring rose too; together they
+ * clear by about a pixel. The box keeps 1.16 on purpose, so the origin and
+ * every render position keep their numbers for two pixels of art.
+ */
+const GHOST_TOP = 1.04;
+const GHOST_RING_Y = 1.5;
 let ghostSprites: (Baked | null)[] = [];
 let ghostSpriteOriginY = 0;
 let tntSprite: Baked | null = null;
@@ -572,7 +585,7 @@ function bakeGhosts(cell: number): void {
       // eased because a pure right angle reads as unfinished at a phone's
       // nineteen pixels rather than as deliberate. The box is untouched, so
       // ghostSpriteOriginY and the sprite size keep their numbers.
-      const top = gy - r * 1.16;
+      const top = gy - r * GHOST_TOP;
       const soft = r * 0.22;
       const u = (2 * r) / 7;
       const notch = r * 0.4;
@@ -893,7 +906,7 @@ function drawGhost(
   const r = cell * 0.4;
   if (ph !== null) {
     // the dizzy halo, riding clear above the head with two sparks going round
-    const ringY = gy - r * 1.35;
+    const ringY = gy - r * GHOST_RING_Y;
     const rx = r * 0.72;
     const ry = r * 0.26;
     strokePaint.setColor(C.haloRing);

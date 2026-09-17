@@ -552,7 +552,7 @@ export default function Index() {
   const showOverlay = loop.phase === 'ready' || loop.phase === 'paused' || dead;
   const deadLine =
     loop.deadReason === 'wall' ? 'The walls got you. '
-    : loop.deadReason === 'ghost' ? 'The ghost got you. '
+    : loop.deadReason === 'ghost' ? 'The referee got you. '
     : loop.deadReason === 'time' ? 'The final whistle. '
     : '';
   // a round can only enter a board when it was seeded by a server ticket
@@ -1125,7 +1125,7 @@ export default function Index() {
                       />
                       <LegendRow
                         icon={<Image source={skullIcon} style={styles.lgImage} />}
-                        text="Walls, ghosts or yourself"
+                        text="Walls, referees or yourself"
                         value="DIE"
                         valueTone="die"
                       />
