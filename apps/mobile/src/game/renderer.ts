@@ -325,6 +325,15 @@ let _kitKeyCached = '';
 const _tagWidths = new Map<string, number>();
 let arenaSprite: Baked | null = null;
 let snakeSprites: (Baked | null)[] = [];
+/**
+ * How far above the cell centre the eyes sit, in units of r.
+ *
+ * ONE constant because the number is needed twice, in the bake and again in
+ * the live pupil pass, and the two drifting apart would show as pupils
+ * floating off their own whites. It rose with the flat top, which has no dome
+ * for them to sit under. The page carries the same number.
+ */
+const GHOST_EYE_DY = -0.26;
 let ghostSprites: (Baked | null)[] = [];
 let ghostSpriteOriginY = 0;
 let tntSprite: Baked | null = null;
@@ -557,19 +566,32 @@ function bakeGhosts(cell: number): void {
     bake(w, h, (c) => {
       const gx = w / 2;
       const gy = ghostSpriteOriginY;
-      const domeY = -r * 0.16;
-      const n = 4;
-      const step = (2 * r) / n;
+      // A FLAT TOP WITH EASED CORNERS, AND SQUARE FEET, value for value with
+      // the page's buildGhostSprites. Both halves of the old outline are
+      // gone: the dome, and the wavy skirt that hung off it. The corners are
+      // eased because a pure right angle reads as unfinished at a phone's
+      // nineteen pixels rather than as deliberate. The box is untouched, so
+      // ghostSpriteOriginY and the sprite size keep their numbers.
+      const top = gy - r * 1.16;
+      const soft = r * 0.22;
+      const u = (2 * r) / 7;
+      const notch = r * 0.4;
       const path = buildPath((b) => {
-        b.addArc(Skia.XYWHRect(gx - r, gy + domeY - r, r * 2, r * 2), 180, 180);
+        b.moveTo(gx - r + soft, top);
+        b.lineTo(gx + r - soft, top);
+        b.quadTo(gx + r, top, gx + r, top + soft);
         b.lineTo(gx + r, gy + r);
-        let x = gx + r;
-        for (let i = 0; i < n; i++) {
-          b.lineTo(x - step / 2, gy + r - r * 0.42);
-          b.lineTo(x - step, gy + r);
-          x -= step;
+        // four square feet, three notches cut between them, right to left
+        for (let i = 0; i < 3; i++) {
+          const x0 = gx + r - (2 * i + 1) * u;
+          b.lineTo(x0, gy + r);
+          b.lineTo(x0, gy + r - notch);
+          b.lineTo(x0 - u, gy + r - notch);
+          b.lineTo(x0 - u, gy + r);
         }
-        b.lineTo(gx - r, gy + domeY);
+        b.lineTo(gx - r, gy + r);
+        b.lineTo(gx - r, top + soft);
+        b.quadTo(gx - r, top, gx - r + soft, top);
         b.close();
       });
       fillPaint.setColor(Skia.Color(col.body));
@@ -579,7 +601,7 @@ function bakeGhosts(cell: number): void {
       c.drawPath(path, strokePaint);
       // eye whites are direction-independent, so they bake in; pupils stay live
       const eyeDX = r * 0.42;
-      const eyeY = gy + domeY - r * 0.03;
+      const eyeY = gy + r * GHOST_EYE_DY;
       const ewx = r * 0.28;
       const ewy = r * 0.36;
       fillPaint.setColor(C.white);
@@ -890,7 +912,7 @@ function drawGhost(
   }
   drawBaked(canvas, sprite, gx - sprite.w / 2, gy - ghostSpriteOriginY);
   const eyeDX = r * 0.42;
-  const eyeY = gy - r * 0.16 - r * 0.03;
+  const eyeY = gy + r * GHOST_EYE_DY;
   const ewx = r * 0.28;
   const ewy = r * 0.36;
   fillPaint.setColor(C.ghostEye);

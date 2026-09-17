@@ -449,17 +449,27 @@
   .lg-ic.trio > * { display: block; flex: none; width: 5px; height: 9px; border-radius: 1px; }
   .lg-ic.trio .d-wall { background: #e6402a; box-shadow: inset 0 0 0 1px #8c2417; }
   .lg-ic.trio .d-self { background: rgb(244, 236, 216); }
-  /* The ghost is CUT to the silhouette the pitch actually draws (dome, straight
-     sides, a four-notch skirt, white eyes) rather than approximated with a
-     border-radius: a rounded pink rectangle beside a red one and a cream one
-     reads as three swatches, and the whole point of this mark is that the
-     player recognises the thing that killed them. Colour is the fourth ghost's
-     pink from GHOST_COLORS, because the first ghost's red is the wall's. */
+  /* The mark is CUT to the silhouette the pitch actually draws rather than
+     approximated with a border-radius: three rounded rectangles side by side
+     read as three swatches, and the whole point of this one is that a player
+     recognises the thing that killed them.
+     Re-cut on 2026-09-16 when the pack became a refereeing crew: a flat top
+     with eased corners over four square feet, the percentages read straight
+     off buildGhostSprites (the box is 2r by 2.16r, the corner ease is 0.22r,
+     a foot is 2r/7 wide and a notch 0.40r deep). The two top corners arrive
+     here as BEVELS, because clip-path has no curves; at nineteen pixels the
+     difference is not visible and the alternative is a second shape to keep
+     in step with the first.
+     Colour is the Chaser's referee black, which is both the most recognisable
+     official and the one that reads hardest against this sheet's cream. */
   .lg-ic.trio .d-ghost {
-    position: relative; background: #f57ec3; border-radius: 0;
+    position: relative; background: #2b2a27; border-radius: 0;
     clip-path: polygon(
-      0% 42%, 6% 20%, 20% 6%, 38% 0%, 62% 0%, 80% 6%, 94% 20%, 100% 42%,
-      100% 100%, 83% 80%, 67% 100%, 50% 80%, 33% 100%, 17% 80%, 0% 100%);
+      11% 0%, 89% 0%, 100% 10%, 100% 100%,
+      85.7% 100%, 85.7% 81.5%, 71.4% 81.5%, 71.4% 100%,
+      57.1% 100%, 57.1% 81.5%, 42.9% 81.5%, 42.9% 100%,
+      28.6% 100%, 28.6% 81.5%, 14.3% 81.5%, 14.3% 100%,
+      0% 100%, 0% 10%);
   }
   /* The eyes come off buildGhostSprites rather than being sized by eye, which
      is what they were: `ewx = r * 0.28, ewy = r * 0.36` against a body 2r wide
@@ -468,7 +478,7 @@
      that shipped first was smaller and closer than that, which is why a mark
      that DID have eyes still read as not having any. */
   .lg-ic.trio .d-ghost::before, .lg-ic.trio .d-ghost::after {
-    content: ''; position: absolute; top: 28%;
+    content: ''; position: absolute; top: 20%;
     width: 28%; height: 33%; border-radius: 50%; background: #fff;
   }
   .lg-ic.trio .d-ghost::before { left: 15%; }

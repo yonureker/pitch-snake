@@ -43,7 +43,8 @@ export const GameColors = {
   portalB: '#c561ff',
   portalBRim: '#e2a6ff',
   portalBDeep: '#1d0630',
-  ghostEye: '#12379e',
+  // the snake's own head ink, not the blue Pac-Man puts in its ghosts' eyes
+  ghostEye: '#211e1a',
   snakeOutline: 'rgba(194,162,90,0.65)',
 } as const;
 
@@ -113,12 +114,23 @@ export const DarkShell: ShellTheme = {
 };
 
 /** Ghost body/edge colors in spawn order, matching the web sprites. */
+/**
+ * The match officials' kit, value for value with the page's GHOST_COLORS.
+ *
+ * The pack used to wear Pac-Man's exact four over its dome-and-skirt
+ * silhouette, and the look was the exposure rather than the rules. Black
+ * leads because that is what a referee wears, and it takes red out of the
+ * pack so the deadliest hazard stops sitting beside the wall's own red; its
+ * LIGHT rim against everyone else's dark one marks the Chaser out. Pink went
+ * to plum and cyan to teal, which clears the teleport window at the same
+ * time. Index is the personality, not taste.
+ */
 export const GhostColors = [
-  { body: '#ec1f27', edge: '#a5121a' },
-  { body: '#2f8ef0', edge: '#1a57ab' },
-  { body: '#f5901e', edge: '#b3641a' },
-  { body: '#f57ec3', edge: '#c74e97' },
-  { body: '#25c7d9', edge: '#1592a0' },
+  { body: '#2b2a27', edge: '#efe6cf' }, // 0 the Chaser: referee black, light rim
+  { body: '#e8a317', edge: '#9c6c08' }, // 1 the Ambusher: amber
+  { body: '#2f8ef0', edge: '#1a57ab' }, // 2 the Flanker: royal blue
+  { body: '#c0397a', edge: '#7e2050' }, // 3 the Cutoff: plum
+  { body: '#1fa8a0', edge: '#10635e' }, // 4 the Warden: teal
 ] as const;
 
 // The skin table moved to the shared cosmetics package on 2026-09-16 (the
