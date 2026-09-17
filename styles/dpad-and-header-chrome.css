@@ -117,7 +117,22 @@
      were always going to suit a phone better than the fixed pixels it had. */
   header { display: flex; align-items: stretch; gap: 22px; }
   header h1 { margin-right: 2px; }
-  .scores { margin-left: auto; min-width: 178px; align-items: stretch; }
+  /* NO min-width here, and that is a fix rather than an omission.
+     It used to reserve 178px. The block's content is right-aligned against a
+     right-anchored box, so those pixels were invisible on a wide screen and
+     the tally only ever needed 84 of them; what they did instead was refuse
+     to give way when the header ran out of room, and the header runs out of
+     room more often than the window does. The board is sized off the HEIGHT
+     too, so a short wide window (1000x620, 1200x700) draws a 508px board and
+     hands the header 508px, while the media query that scales this row keys
+     on the WINDOW being under 900px and never fires. Logo 126 plus two 22px
+     gaps plus the chrome plus a rigid 178 is 526, so the score block hung 20px
+     past the pitch's right edge. Adding the question mark to the tray is what
+     pushed it over; the fragility predated it.
+     Below 900px this was already 0, which is the same admission in the other
+     direction. Now it is unreserved everywhere, the box hugs its digits, and
+     its right edge sits on the board's. */
+  .scores { margin-left: auto; align-items: stretch; }
   .scores .tally {
     display: flex; flex-direction: column; justify-content: space-between;
     height: 100%;
@@ -187,7 +202,9 @@
       font-size: min(52px, max(19px, 5.78vw));
       text-shadow: min(4px, max(2px, 0.44vw)) min(4px, max(2px, 0.44vw)) 0 var(--gold);
     }
-    .scores { min-width: 0; gap: min(12px, max(5px, 1.33vw)); }
+    /* the min-width: 0 that used to sit here is gone with the reservation it
+       was undoing; see the .scores rule above */
+    .scores { gap: min(12px, max(5px, 1.33vw)); }
     .scores .val { font-size: min(48px, max(21px, 5.33vw)); }
     .scores .clock {
       font-size: min(30px, max(15px, 3.33vw));
