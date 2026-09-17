@@ -1651,18 +1651,22 @@
   const GHOST_RING_Y = 1.50;
   // THE OFFICIALS' BADGES, top right, baked in with the body because a
   // ghost's index never changes: 0 whistles, 1 and 2 carry the flag, 3 the
-  // substitution board, 4 the VAR screen. Measured into the one corner that
-  // is free: clear of the head's right edge by 0.27r, of its top by 0.09r,
-  // and of the eye below by 0.07r. They stay inside the 2r box like every
-  // other mark, because contact is judged per cell and a badge reaching into
-  // the next square would lie about where the official is standing.
+  // substitution board, 4 the VAR screen.
   //
-  // Tiny is the brief and tiny is what this is: about 3.7px on a desktop
-  // board and 2.1px on a phone. They read as detail on a big screen and as
-  // the suggestion of one on a small, so the SILHOUETTE carries them, which
-  // is why the four are a disc, a triangle, a filled bar and a hollow one.
+  // They hang off the top right CORNER, half on the body and half beside it,
+  // and the limit that matters is not the body at all. r is 0.4 of a cell, so
+  // half a cell IS 1.25r while the body only reaches 1.0r: a badge may grow a
+  // quarter of an r past the shoulder and still be inside the official's own
+  // square, which is the only thing contact cares about. The badge stops at
+  // 1.12r, clearing its own cell edge by 0.13r, the slow ring overhead by
+  // 0.03r and the eye below by 0.04r. All three were measured; the ring is
+  // the tight one, because it is the thing this sprite has already had to
+  // make room for once.
+  //
+  // The SILHOUETTE carries them at this size, which is why the four are a
+  // disc, a triangle, a filled bar and a hollow one rather than drawings.
   // Cream, because it is the one ink that holds on all five kits.
-  const BADGE_X = 0.60, BADGE_Y = -0.82, BADGE_S = 0.28, BADGE_INK = '#f4ecd8';
+  const BADGE_X = 0.92, BADGE_Y = -0.86, BADGE_S = 0.44, BADGE_INK = '#f4ecd8';
   function drawGhostBadge(c, i, gx, gy, r) {
     const x = gx + r * BADGE_X, y = gy + r * BADGE_Y, s = r * BADGE_S;
     c.fillStyle = BADGE_INK;
@@ -1691,7 +1695,13 @@
   function buildGhostSprites() {
     const r = cell * 0.4;
     const lw = Math.max(1, cell * 0.045);
-    ghostSprW = Math.ceil(2 * r + lw + 4);
+    // 2.5r rather than 2r: the badge hangs past the body's shoulder, and the
+    // BITMAP has to hold what the cell allows. Widened symmetrically, so gx
+    // stays the middle and the draw offset below is unchanged; the extra is
+    // transparent. At 2r it happened to fit on a small cell and ran out of
+    // margin as the board grew, which is the kind of bug that only appears on
+    // somebody else's monitor.
+    ghostSprW = Math.ceil(2.5 * r + lw + 4);
     const h = Math.ceil(2.16 * r + lw + 4);
     ghostSprOY = 1.16 * r + lw / 2 + 2;        // sprite-space y of the body's cell center
     ghostSprites = GHOST_COLORS.map((col, gi) => {

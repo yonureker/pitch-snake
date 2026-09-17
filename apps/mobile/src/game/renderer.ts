@@ -355,18 +355,20 @@ const GHOST_RING_Y = 1.5;
  *
  * Baked in with the body because a ghost's index never changes: 0 whistles,
  * 1 and 2 carry the flag, 3 the substitution board, 4 the VAR screen. They sit
- * in the one free corner, clear of the head's right edge by 0.27r, of its top
- * by 0.09r and of the eye below by 0.07r, and they stay inside the 2r box like
- * every other mark, since contact is judged per cell.
+ * off the top right CORNER, half on the body and half beside it. The limit
+ * that matters is not the body: r is 0.4 of a cell, so half a cell IS 1.25r
+ * while the body reaches only 1.0r, and a badge may grow past the shoulder and
+ * still sit inside the official's own square, which is all contact cares
+ * about. It stops at 1.12r, clearing its cell edge by 0.13r, the slow ring
+ * overhead by 0.03r and the eye below by 0.04r.
  *
- * Tiny on purpose: about 3.7px on a desktop board, 2.1px on a phone. The
- * SILHOUETTE carries them at that size, which is why the four are a disc, a
- * triangle, a filled bar and a hollow one. Cream is the one ink that holds on
- * all five kits.
+ * The SILHOUETTE carries them at this size, which is why the four are a disc,
+ * a triangle, a filled bar and a hollow one rather than drawings. Cream is the
+ * one ink that holds on all five kits.
  */
-const BADGE_X = 0.6;
-const BADGE_Y = -0.82;
-const BADGE_S = 0.28;
+const BADGE_X = 0.92;
+const BADGE_Y = -0.86;
+const BADGE_S = 0.44;
 
 function drawGhostBadge(c: SkCanvas, i: number, gx: number, gy: number, r: number): void {
   const x = gx + r * BADGE_X;
@@ -627,7 +629,10 @@ export function prepareVersusSprites(
 function bakeGhosts(cell: number): void {
   const r = cell * 0.4;
   const lw = Math.max(1, cell * 0.045);
-  const w = 2 * r + lw + 4;
+  // 2.5r rather than 2r: the badge hangs past the body's shoulder and the
+  // bitmap has to hold what the cell allows. Widened symmetrically, so the
+  // middle is unmoved and the draw offset is unchanged.
+  const w = 2.5 * r + lw + 4;
   const h = 2.16 * r + lw + 4;
   ghostSpriteOriginY = 1.16 * r + lw / 2 + 2;
   for (const old of ghostSprites) retire(old?.image);
