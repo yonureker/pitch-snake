@@ -243,8 +243,6 @@ const C = {
   rainShade: Skia.Color('#101812'),
   rainStreak: Skia.Color('#cfe3ee'),
   ghostEye: Skia.Color(GameColors.ghostEye),
-  // the officials' badge ink: the one cream that holds on all five kits
-  badgeInk: Skia.Color('#f4ecd8'),
   // the bolt-slow dizzy halo, precomputed so the per-ghost per-frame draw
   // never builds a colour (rule 5)
   haloRing: Skia.Color('#eaf6ff'),
@@ -349,62 +347,6 @@ const GHOST_EYE_DY = -0.26;
  */
 const GHOST_TOP = 1.04;
 const GHOST_RING_Y = 1.5;
-
-/**
- * The officials' badges, top right, value for value with the page's.
- *
- * Baked in with the body because a ghost's index never changes: 0 whistles,
- * 1 and 2 carry the flag, 3 the substitution board, 4 the VAR screen. They sit
- * off the top right CORNER, half on the body and half beside it. The limit
- * that matters is not the body: r is 0.4 of a cell, so half a cell IS 1.25r
- * while the body reaches only 1.0r, and a badge may grow past the shoulder and
- * still sit inside the official's own square, which is all contact cares
- * about. It stops at 1.12r, clearing its cell edge by 0.13r, the slow ring
- * overhead by 0.03r and the eye below by 0.04r.
- *
- * The SILHOUETTE carries them at this size, which is why the four are a disc,
- * a triangle, a filled bar and a hollow one rather than drawings. Cream is the
- * one ink that holds on all five kits.
- */
-const BADGE_X = 0.92;
-const BADGE_Y = -0.86;
-const BADGE_S = 0.44;
-
-function drawGhostBadge(c: SkCanvas, i: number, gx: number, gy: number, r: number): void {
-  const x = gx + r * BADGE_X;
-  const y = gy + r * BADGE_Y;
-  const s = r * BADGE_S;
-  fillPaint.setColor(C.badgeInk);
-  if (i === 0) {
-    c.drawCircle(x + s * 0.1, y, s * 0.34, fillPaint);
-    c.drawRect(Skia.XYWHRect(x - s * 0.46, y - s * 0.16, s * 0.36, s * 0.32), fillPaint);
-    return;
-  }
-  if (i === 1 || i === 2) {
-    strokePaint.setColor(C.badgeInk);
-    strokePaint.setStrokeWidth(Math.max(0.8, s * 0.22));
-    const pole = buildPath((b) => {
-      b.moveTo(x - s * 0.3, y - s * 0.46);
-      b.lineTo(x - s * 0.3, y + s * 0.46);
-    });
-    c.drawPath(pole, strokePaint);
-    const pennant = buildPath((b) => {
-      b.moveTo(x - s * 0.3, y - s * 0.46);
-      b.lineTo(x + s * 0.46, y - s * 0.14);
-      b.lineTo(x - s * 0.3, y + s * 0.12);
-      b.close();
-    });
-    c.drawPath(pennant, fillPaint);
-    return;
-  }
-  if (i === 3) {
-    c.drawRect(Skia.XYWHRect(x - s * 0.5, y - s * 0.3, s, s * 0.6), fillPaint);
-    return;
-  }
-  strokePaint.setColor(C.badgeInk);
-  strokePaint.setStrokeWidth(Math.max(0.8, s * 0.22));
-  c.drawRect(Skia.XYWHRect(x - s * 0.42, y - s * 0.32, s * 0.84, s * 0.64), strokePaint);
-}
 let ghostSprites: (Baked | null)[] = [];
 let ghostSpriteOriginY = 0;
 let tntSprite: Baked | null = null;
@@ -629,14 +571,11 @@ export function prepareVersusSprites(
 function bakeGhosts(cell: number): void {
   const r = cell * 0.4;
   const lw = Math.max(1, cell * 0.045);
-  // 2.5r rather than 2r: the badge hangs past the body's shoulder and the
-  // bitmap has to hold what the cell allows. Widened symmetrically, so the
-  // middle is unmoved and the draw offset is unchanged.
-  const w = 2.5 * r + lw + 4;
+  const w = 2 * r + lw + 4;
   const h = 2.16 * r + lw + 4;
   ghostSpriteOriginY = 1.16 * r + lw / 2 + 2;
   for (const old of ghostSprites) retire(old?.image);
-  ghostSprites = GhostColors.map((col, gi) =>
+  ghostSprites = GhostColors.map((col) =>
     bake(w, h, (c) => {
       const gx = w / 2;
       const gy = ghostSpriteOriginY;
@@ -682,7 +621,6 @@ function bakeGhosts(cell: number): void {
       for (let sx = -1; sx <= 1; sx += 2) {
         c.drawOval(Skia.XYWHRect(gx + sx * eyeDX - ewx, eyeY - ewy, ewx * 2, ewy * 2), fillPaint);
       }
-      drawGhostBadge(c, gi, gx, gy, r);
     }),
   );
 }

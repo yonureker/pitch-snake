@@ -1649,62 +1649,14 @@
   // numbers rather than being re-derived for two pixels of art.
   const GHOST_TOP = 1.04;
   const GHOST_RING_Y = 1.50;
-  // THE OFFICIALS' BADGES, top right, baked in with the body because a
-  // ghost's index never changes: 0 whistles, 1 and 2 carry the flag, 3 the
-  // substitution board, 4 the VAR screen.
-  //
-  // They hang off the top right CORNER, half on the body and half beside it,
-  // and the limit that matters is not the body at all. r is 0.4 of a cell, so
-  // half a cell IS 1.25r while the body only reaches 1.0r: a badge may grow a
-  // quarter of an r past the shoulder and still be inside the official's own
-  // square, which is the only thing contact cares about. The badge stops at
-  // 1.12r, clearing its own cell edge by 0.13r, the slow ring overhead by
-  // 0.03r and the eye below by 0.04r. All three were measured; the ring is
-  // the tight one, because it is the thing this sprite has already had to
-  // make room for once.
-  //
-  // The SILHOUETTE carries them at this size, which is why the four are a
-  // disc, a triangle, a filled bar and a hollow one rather than drawings.
-  // Cream, because it is the one ink that holds on all five kits.
-  const BADGE_X = 0.92, BADGE_Y = -0.86, BADGE_S = 0.44, BADGE_INK = '#f4ecd8';
-  function drawGhostBadge(c, i, gx, gy, r) {
-    const x = gx + r * BADGE_X, y = gy + r * BADGE_Y, s = r * BADGE_S;
-    c.fillStyle = BADGE_INK;
-    c.strokeStyle = BADGE_INK;
-    c.lineWidth = Math.max(0.8, s * 0.22);
-    if (i === 0) {                                 // the whistle: body and mouthpiece
-      c.beginPath(); c.arc(x + s * 0.10, y, s * 0.34, 0, 2 * Math.PI); c.fill();
-      c.fillRect(x - s * 0.46, y - s * 0.16, s * 0.36, s * 0.32);
-    } else if (i === 1 || i === 2) {               // the offside flag, pole and pennant
-      c.beginPath();
-      c.moveTo(x - s * 0.30, y - s * 0.46);
-      c.lineTo(x - s * 0.30, y + s * 0.46);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(x - s * 0.30, y - s * 0.46);
-      c.lineTo(x + s * 0.46, y - s * 0.14);
-      c.lineTo(x - s * 0.30, y + s * 0.12);
-      c.closePath(); c.fill();
-    } else if (i === 3) {                          // the substitution board
-      c.fillRect(x - s * 0.50, y - s * 0.30, s, s * 0.60);
-    } else {                                       // VAR, the screen drawn in the air
-      c.strokeRect(x - s * 0.42, y - s * 0.32, s * 0.84, s * 0.64);
-    }
-  }
   let ghostSprites = [], ghostSprW = 0, ghostSprOY = 0;
   function buildGhostSprites() {
     const r = cell * 0.4;
     const lw = Math.max(1, cell * 0.045);
-    // 2.5r rather than 2r: the badge hangs past the body's shoulder, and the
-    // BITMAP has to hold what the cell allows. Widened symmetrically, so gx
-    // stays the middle and the draw offset below is unchanged; the extra is
-    // transparent. At 2r it happened to fit on a small cell and ran out of
-    // margin as the board grew, which is the kind of bug that only appears on
-    // somebody else's monitor.
-    ghostSprW = Math.ceil(2.5 * r + lw + 4);
+    ghostSprW = Math.ceil(2 * r + lw + 4);
     const h = Math.ceil(2.16 * r + lw + 4);
     ghostSprOY = 1.16 * r + lw / 2 + 2;        // sprite-space y of the body's cell center
-    ghostSprites = GHOST_COLORS.map((col, gi) => {
+    ghostSprites = GHOST_COLORS.map(col => {
       const cv = document.createElement('canvas');
       cv.width = ghostSprW; cv.height = h;
       const c = cv.getContext('2d');
@@ -1747,7 +1699,6 @@
       for (let sx = -1; sx <= 1; sx += 2) {
         c.beginPath(); c.ellipse(gx + sx * eyeDX, eyeY, ewx, ewy, 0, 0, 2 * Math.PI); c.fill();
       }
-      drawGhostBadge(c, gi, gx, gy, r);
       return cv;
     });
   }
