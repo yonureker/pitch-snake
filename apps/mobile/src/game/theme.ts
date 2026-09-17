@@ -113,20 +113,22 @@ export const DarkShell: ShellTheme = {
   sheetFieldInk: '#f6efde',
 };
 
-/** Ghost body/edge colors in spawn order, matching the web sprites. */
 /**
  * The match officials' kit, value for value with the page's GHOST_COLORS.
  *
  * The pack used to wear Pac-Man's exact four over its dome-and-skirt
- * silhouette, and the look was the exposure rather than the rules. Black
- * leads because that is what a referee wears, and it takes red out of the
- * pack so the deadliest hazard stops sitting beside the wall's own red; its
- * LIGHT rim against everyone else's dark one marks the Chaser out. Pink went
+ * silhouette, and the look was the exposure rather than the rules. Pink went
  * to plum and cyan to teal, which clears the teleport window at the same
  * time. Index is the personality, not taste.
+ *
+ * The Chaser was BLACK until 2026-09-17, when players said they could not
+ * see it: black measures 1.06:1 against this pitch, the same luminance as
+ * the turf, on the one official that comes straight at you. Fluoro lime is
+ * 10.35:1 and is a real referee kit worn for that exact reason. See the
+ * page's GHOST_COLORS for why it beat lavender and orange.
  */
 export const GhostColors = [
-  { body: '#2b2a27', edge: '#efe6cf' }, // 0 the Chaser: referee black, light rim
+  { body: '#c8f04a', edge: '#7a9a17' }, // 0 the Chaser: fluoro lime, the high-vis kit
   { body: '#e8a317', edge: '#9c6c08' }, // 1 the Ambusher: amber
   { body: '#2f8ef0', edge: '#1a57ab' }, // 2 the Flanker: royal blue
   { body: '#c0397a', edge: '#7e2050' }, // 3 the Cutoff: plum

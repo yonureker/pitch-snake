@@ -460,10 +460,15 @@
      here as BEVELS, because clip-path has no curves; at nineteen pixels the
      difference is not visible and the alternative is a second shape to keep
      in step with the first.
-     Colour is the Chaser's referee black, which is both the most recognisable
-     official and the one that reads hardest against this sheet's cream. */
+     Colour is the Chaser's, but NOT its pitch value. The kit is fluoro lime
+     because the pitch is dark; this mark sits on the sheet's cream, where
+     that same lime measures 1.13:1 and disappears just as thoroughly as the
+     black it replaced did on grass. So the mark wears the kit's own hue
+     taken down to #4e660c, which is 5.6:1 here and still reads as the lime
+     official beside the red wall and the cream head. One colour cannot serve
+     both grounds, and pretending otherwise is how the black got shipped. */
   .lg-ic.trio .d-ghost {
-    position: relative; background: #2b2a27; border-radius: 0;
+    position: relative; background: #4e660c; border-radius: 0;
     clip-path: polygon(
       11% 0%, 89% 0%, 100% 10%, 100% 100%,
       85.7% 100%, 85.7% 81.5%, 71.4% 81.5%, 71.4% 100%,
