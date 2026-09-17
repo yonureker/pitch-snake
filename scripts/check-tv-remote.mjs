@@ -89,6 +89,31 @@ await withPage({ path: '/index.html?tv=1' }, async ({ evaluate, send, sleep, got
   const moved = await focused(evaluate);
   lines.push(check('a direction moves the ring in a menu', moved !== home, true));
 
+  // ---- the header is part of the screen, which it was not ----
+  // The player chip, the purse, the boards, the gear and the help mark are
+  // siblings of the overlay, not children, so a scope that returned one root
+  // could not see them and a television could not reach a single one. Found by
+  // playing it on an actual C4.
+  let reachedHeader = 'NONE';
+  for (let i = 0; i < 8; i++) {
+    await up(send);
+    await sleep(100);
+    if (await evaluate(`document.getElementById('pageHeader').contains(document.activeElement)`)) {
+      reachedHeader = await focused(evaluate);
+      break;
+    }
+  }
+  lines.push(check('the ring can walk UP into the header', reachedHeader !== 'NONE', true));
+
+  // ---- and BACK brings it down again rather than quitting ----
+  // The header was briefly the one place in the page where the back key left
+  // the application, which is a trap laid exactly where a new player explores.
+  await back(evaluate);
+  await sleep(200);
+  lines.push(check('BACK out of the header returns to the panel, never the door',
+    await evaluate(`!document.getElementById('pageHeader').contains(document.activeElement)
+      && document.getElementById('overlay').contains(document.activeElement)`), true));
+
   // ---- every modal is reachable, which is the bug this found ----
   // scope() knew two of the five, so boards, how-to and shop handed the ring
   // to the overlay BEHIND them and walked buttons nobody could see.

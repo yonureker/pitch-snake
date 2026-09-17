@@ -40,6 +40,17 @@ export interface MenuNavPorts {
 let ports: MenuNavPorts | null = null;
 let overlay: HTMLElement | null = null;
 /**
+ * The page's own header: the player chip, the purse, the boards, the gear and
+ * the help mark.
+ *
+ * It is a SIBLING of the overlay, not a child, so a scope that returned one
+ * root could never see it, and on a television that meant the entire top row
+ * of the game was unreachable: no account, no settings, no boards, no shop,
+ * with a pointer the only way in. It joins the overlay's controls and never a
+ * modal's, because a modal is modal.
+ */
+let header: HTMLElement | null = null;
+/**
  * Every modal, and the order the ring prefers them in.
  *
  * Only one is ever open at a time, so this is a tiebreak rather than a stack.
@@ -101,13 +112,26 @@ function controls(): HTMLElement[] {
   const root = scope();
   if (root === null) return [];
   const out: HTMLElement[] = [];
-  // [tabindex] as well as the tags: focusable non-controls (list rows and
-  // their kin) must stay reachable, or the pointer-free work on a TV or a
-  // handheld quietly loses screens
-  for (const element of root.querySelectorAll('button, input, [tabindex]')) {
-    if (usable(element)) out.push(element);
-  }
+  const gather = (from: HTMLElement): void => {
+    // [tabindex] as well as the tags: focusable non-controls (list rows and
+    // their kin) must stay reachable, or the pointer-free work on a TV or a
+    // handheld quietly loses screens
+    for (const element of from.querySelectorAll('button, input, [tabindex]')) {
+      if (usable(element)) out.push(element);
+    }
+  };
+  // The header before the panel, so the list reads down the screen the way
+  // the screen does; moveFocus is geometric and does not care, but a caller
+  // taking controls()[0] as a last resort should land at the top.
+  if (root === overlay && header !== null) gather(header);
+  gather(root);
   return out;
+}
+
+/** Whether the ring is currently parked up in the header rather than on the panel. */
+function inHeader(): boolean {
+  const active = document.activeElement;
+  return header !== null && active instanceof HTMLElement && header.contains(active);
 }
 
 // The primary of whatever screen is up, so a press always has somewhere to
@@ -286,6 +310,13 @@ export function back(): boolean {
       return true;
     }
   }
+  // Coming back down out of the header is a step BACK, and a real one. Without
+  // this the top row of the page became the one place where the back key quit
+  // the application, which is a trap laid exactly where a new player explores.
+  if (inHeader()) {
+    primary()?.focus();
+    return true;
+  }
   for (const button of backButtons) {
     if (usable(button)) {
       button.click();
@@ -314,6 +345,7 @@ export function start(): void {
 export function initMenuNav(shellPorts: MenuNavPorts): void {
   ports = shellPorts;
   overlay = mustGetElement('overlay');
+  header = mustGetElement('pageHeader');
   modals = MODAL_IDS.map((id) => mustGetElement(id));
   modalCloses = MODAL_CLOSE_IDS.map((id) => mustGetElement(id));
   primaries = ['modeGoBtn', 'vsCreateBtn', 'settingsClose', 'startBtn'].map((id) => mustGetElement(id));
