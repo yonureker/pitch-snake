@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 import {
+  BONUS_POINTS,
   createGame,
   GRID,
   MODES,
@@ -24,6 +25,7 @@ import {
   type GameEvent,
   type RoundLog,
 } from '@pitch-snake/engine';
+
 import type { NetSession } from '@pitch-snake/net';
 
 import { type Kit, KIT_NONE } from '@pitch-snake/cosmetics/kit';
@@ -52,6 +54,12 @@ import {
 } from './renderer';
 import { resetVsSmoothing } from '@pitch-snake/net/vs-smoothing';
 import { playEat, playSfx } from './sfx';
+
+/** The float over a ringed ball, built once from the engine's own number
+ *  rather than typed again. It said +5 for as long as the pay was three,
+ *  because a float does not look like a legend when you are grepping. */
+const FLOAT_BONUS = `+${BONUS_POINTS}`;
+const FLOAT_PLAIN = '+1';
 
 /** The page-side round phases, mirroring the web version. */
 export type RoundPhase = 'ready' | 'countdown' | 'playing' | 'paused' | 'dead';
@@ -472,7 +480,7 @@ export function useGameLoop(boardPx: number, atlas: SkImage | null): GameLoop {
             const color = e.bonus ? GameColors.goldBright : GameColors.food;
             spawnBurst(e.x, e.y, cellPx, e.bonus ? 30 : 16, 0.5, cellPx / 14, (cellPx / 14) * 2, () => color);
             if (box.mode !== 'survival' && (box.vsIdx < 0 || e.player === box.vsIdx))
-              spawnFloat(e.x, e.y, cellPx, e.bonus ? '+5' : '+1', true);
+              spawnFloat(e.x, e.y, cellPx, e.bonus ? FLOAT_BONUS : FLOAT_PLAIN, true);
             break;
           }
           case 'hop': {

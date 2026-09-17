@@ -19,6 +19,8 @@ export declare const MAX_PLAYERS: number;
 export declare const SPEEDS: { slow: number; normal: number; fast: number };
 export declare const FOOD_TTL: number;
 export declare const BONUS_EVERY: number;
+/** What a ringed ball pays, and grows. The one place this number lives. */
+export declare const BONUS_POINTS: number;
 export declare const REGULAR_KINDS: number;
 export declare const BONUS_KINDS: number;
 export declare const WARN_MS: number;

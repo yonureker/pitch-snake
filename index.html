@@ -689,8 +689,18 @@
   import {
     createGame, ghostRenderPos, MODES,
     GRID, SPEEDS, FOOD_TTL, REDIRECT_MS, BOLT_LIFE_MS,
-    PORTAL_OPEN_MS, PORTAL_WARN_MS,
+    PORTAL_OPEN_MS, PORTAL_WARN_MS, BONUS_POINTS,
   } from './packages/engine/engine.js';
+  // ONE NUMBER, ONE PLACE. What a ringed ball is worth is the engine's, and
+  // every label the player reads is built from it rather than typed again.
+  // It was typed again in five places until 2026-09-17, and moving it from
+  // five to three caught four of them: the two floats that pop over the ball
+  // you just ate went on saying +5 in both clients, because a legend and a
+  // float do not look like the same fact when you are grepping.
+  // Built ONCE here, not per eat, because rule 5 bans string building in the
+  // paths the round actually runs through.
+  const FLOAT_BONUS = '+' + BONUS_POINTS;
+  const FLOAT_PLAIN = '+1';
   // versus rides the same deterministic engine: every client simulates the
   // whole room and only quantum-stamped turns cross the wire (rollback
   // netcode); the session logic is shared, transport-agnostic code
@@ -1104,7 +1114,7 @@
         spawnBurst(e.x, e.y, e.bonus ? 30 : 16, 0.5,
           () => (Math.random() * 2 + 1) * (cell / 14) * (e.bonus ? 1.5 : 1),
           () => burstColor);
-        if (mineVol === 1 && ruleMode() !== 'survival') spawnFloat(e.x, e.y, e.bonus ? '+5' : '+1', true);
+        if (mineVol === 1 && ruleMode() !== 'survival') spawnFloat(e.x, e.y, e.bonus ? FLOAT_BONUS : FLOAT_PLAIN, true);
       } else if (e.t === 'hop') {
         sfxHop(mineVol);
         crowdPulse(0.7);
@@ -3448,12 +3458,12 @@
     // so a ball is +1 longer and the other three are +5.
     if (rm === 'survival') {
       set(0, 'Ball, one shorter', '-1', 'pos', 'Ball', '');
-      set(1, 'Ball with a ring, 3 shorter', '-3', 'pos', 'Ringed ball', '');
+      set(1, `Ball with a ring, ${BONUS_POINTS} shorter`, `-${BONUS_POINTS}`, 'pos', 'Ringed ball', '');
       set(2, 'TNT block, 5 LONGER', '+5', 'neg', 'TNT', '');
       set(3, 'Teleport, 5 shorter', '-5', 'pos', 'Teleport window', '');
     } else {
       set(0, 'Ball', '+1', 'pos', 'Ball', '+1 longer', 'PTS');
-      set(1, 'Ball with a ring', '+3', 'pos', 'Ringed ball', '+3 longer', 'PTS');
+      set(1, 'Ball with a ring', `+${BONUS_POINTS}`, 'pos', 'Ringed ball', `+${BONUS_POINTS} longer`, 'PTS');
       set(2, 'TNT block, 5 longer', '-5', 'neg', 'TNT', '+5 longer', 'PTS');
       set(3, 'Teleport, five longer', '+5', 'pos', 'Teleport window', '+5 longer', 'PTS');
     }

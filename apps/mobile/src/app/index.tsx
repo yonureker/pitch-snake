@@ -15,6 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 
+import { BONUS_POINTS } from '@pitch-snake/engine';
+
 import atlasSource from '@/assets/food-atlas.png';
 import flagSheet from '@/assets/flags.png';
 import skullIcon from '@/assets/icon-skull.png';
@@ -133,13 +135,13 @@ const STRAPLINE: Record<RuleMode, string> = {
 const LEGEND: Record<RuleMode, { text: string; value: string; tone: 'pos' | 'neg' }[]> = {
   classic: [
     { text: 'Ball', value: '+1', tone: 'pos' },
-    { text: 'Ball with a ring', value: '+3', tone: 'pos' },
+    { text: 'Ball with a ring', value: `+${BONUS_POINTS}`, tone: 'pos' },
     { text: 'TNT block, 5 longer', value: '-5', tone: 'neg' },
     { text: 'Teleport, five longer', value: '+5', tone: 'pos' },
   ],
   survival: [
     { text: 'Ball, one shorter', value: '-1', tone: 'pos' },
-    { text: 'Ball with a ring, 3 shorter', value: '-3', tone: 'pos' },
+    { text: `Ball with a ring, ${BONUS_POINTS} shorter`, value: `-${BONUS_POINTS}`, tone: 'pos' },
     { text: 'TNT block, 5 LONGER', value: '+5', tone: 'neg' },
     { text: 'Teleport, 5 shorter', value: '-5', tone: 'pos' },
   ],
