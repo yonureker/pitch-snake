@@ -101,6 +101,19 @@ outage than a late deploy. Read the deployed source back afterwards and confirm
 it matches the local file. If somebody ever fixes that token, this becomes one
 command and this paragraph can go.
 
+**The KNOBS table used to be a second edit here, and is not any more.** The
+validator refuses a log whose knobs disagree with the claimed mode, and it
+used to keep a HANDWRITTEN copy of the engine's classic defaults to judge
+that against. So a bump that moved a default needed two edits in
+`validate-score/index.ts`, and doing only the pin left every round the new
+page wrote refused as `knobs do not match the mode`, on top of the version
+refusal, burning a single-use seed each time. `bonusGrowth` did exactly that
+going into v36 and was caught by reading the file, not by any check. Since
+then the function imports `KNOB_DEFAULTS` from the pinned engine, so moving
+the pin moves the defaults with it. **If you ever find that table retyped
+locally again, that is the bug**: the engine owns those numbers, and
+`engine.test.js` asserts the table is exactly what `createGame` resolves to.
+
 **The window between the push and the deploy is a live outage**, so close it
 in minutes and say out loud that you are mid-deploy if anyone else is working.
 Measured on 2026-09-07: Pages served the new engine 143 seconds before the
@@ -114,9 +127,18 @@ log that replays but has not ended, and submit it. The function checks
 `game.alive` immediately after `replay()`, so:
 
 - stale pin → `log does not replay`
-- correct pin → `round never ended`
+- stale knobs → `knobs do not match the mode`
+- correct pin and knobs → `round never ended`
 
 Either way nothing is inserted. Anything else means look closer.
+
+**Read that middle line carefully, because it is what makes this one test do
+two jobs.** The knob comparison runs BEFORE `replay()` is ever called, so a
+submission that reaches the replay at all has already passed the knob check.
+`round never ended` therefore proves the pin AND the defaults together, and
+`knobs do not match the mode` is the distinct answer that means the table and
+the engine disagree. A reader who does not know that cannot diagnose their
+own proof.
 
 ## What does NOT need this
 

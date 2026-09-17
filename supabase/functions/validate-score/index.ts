@@ -11,10 +11,17 @@
 // update the commit hash below and redeploy, or new-version logs will be
 // refused ('log does not replay') and pages fall back to their device
 // boards: degraded, never wrong.
+//
+// That hash is now the ONLY thing to update, and it was not always. This
+// file used to retype the engine's classic defaults as well, so a bump that
+// moved one of them needed two edits here and a stale second one refused
+// every round as 'knobs do not match the mode' while burning a seed per
+// refusal. The defaults come from the pinned engine now (KNOB_DEFAULTS), so
+// moving the pin moves them too and the pair cannot drift.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
-  replay, MODES, SPEEDS, START_LEN, RAIN_EVERY_MS,
-} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@dca9aad7974101432df6d719c429bfd520bcaf62/packages/engine/engine.js';
+  replay, MODES, SPEEDS, KNOB_DEFAULTS,
+} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@b1cf35e1602d44a1a753436d9d558f2aff5918a0/packages/engine/engine.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -31,35 +38,23 @@ const refuse = (error: string, status = 422) => reply({ error }, status);
 // board must not be able to write a row through the back door.
 const BOARD_MODES = ['classic', 'survival'];
 
-// every knob a log may carry, with the CURRENT classic default it means when
-// absent (since v22 a classic TNT and a teleport trip both grow five, so
-// tntGrowth and portalGrowth default 5 here; since v36 a ringed ball grows
-// THREE, so bonusGrowth is 3; pre-v15 logs that carried neither are museum
-// pieces only replay() ever sees, and it keeps its own backward-compat
-// defaults). A claimed mode must match exactly.
+// Every knob a log may carry, with the CURRENT classic default it means when
+// absent. A claimed mode must match exactly.
 //
-// THIS TABLE MOVES WITH THE PIN. A knob whose engine default changes and is
-// not changed here refuses every log the new page writes, as 'knobs do not
-// match the mode', on top of the version refusal the stale pin already
-// causes, and each refusal burns a player's single-use seed. Bumping the
-// engine is therefore two edits in this file, never one.
-const KNOBS: Record<string, unknown> = {
-  durationMs: 0, startGhosts: 0, startBombs: 0, bombFirstMs: 0,
-  scoreByTime: false, startLen: START_LEN,
-  eatGrowth: 1, bonusGrowth: 3, tntGrowth: 5, portalGrowth: 5,
-  ghostEveryMs: 0, bombEveryMs: 0, boltEveryMs: 0,
-  // levels are the only rounds with a goal and they never submit, so a
-  // submitted round claiming a board mode must carry none
-  goalScore: 0,
-  // weather (v28): the world's one cadence, and no other. Unchecked, this
-  // knob was the exact shopping hole KNOBS exists to close: a doctored
-  // rainEveryMs (0 for the old dry game, or a downpour tuned to drown the
-  // ghost pack in survival) would have validated and paid. A pre-v28 log
-  // carries no knob and passes via the default here, while replay() plays
-  // it dry under its own backward-compat default, which is the sky that
-  // round was actually played under.
-  rainEveryMs: RAIN_EVERY_MS,
-};
+// NOT RETYPED HERE ANY MORE. This used to be a handwritten copy of the
+// engine's defaults, and a copy is a trap rather than a duplication: a
+// default that moved in the engine while this list still said the old number
+// refused every round the new page wrote, as 'knobs do not match the mode',
+// and burned a player's single-use seed on each refusal. bonusGrowth did
+// exactly that going into v36 and was caught by reading this file rather
+// than by anything automatic. It now comes from the engine, pinned to the
+// same commit as replay() above, so moving the pin moves the defaults with
+// it and the two cannot disagree.
+//
+// Order still matters and is the engine's: logFingerprint below mixes these
+// in declaration order, so two peers agree on a round only while they walk
+// the same list the same way.
+const KNOBS: Record<string, unknown> = KNOB_DEFAULTS;
 
 // ---- the evidence trail ----
 // The validator closes fabricated scores, edited memory, sped-up clients,
