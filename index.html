@@ -1649,6 +1649,44 @@
   // numbers rather than being re-derived for two pixels of art.
   const GHOST_TOP = 1.04;
   const GHOST_RING_Y = 1.50;
+  // THE OFFICIALS' BADGES, top right, baked in with the body because a
+  // ghost's index never changes: 0 whistles, 1 and 2 carry the flag, 3 the
+  // substitution board, 4 the VAR screen. Measured into the one corner that
+  // is free: clear of the head's right edge by 0.27r, of its top by 0.09r,
+  // and of the eye below by 0.07r. They stay inside the 2r box like every
+  // other mark, because contact is judged per cell and a badge reaching into
+  // the next square would lie about where the official is standing.
+  //
+  // Tiny is the brief and tiny is what this is: about 3.7px on a desktop
+  // board and 2.1px on a phone. They read as detail on a big screen and as
+  // the suggestion of one on a small, so the SILHOUETTE carries them, which
+  // is why the four are a disc, a triangle, a filled bar and a hollow one.
+  // Cream, because it is the one ink that holds on all five kits.
+  const BADGE_X = 0.60, BADGE_Y = -0.82, BADGE_S = 0.28, BADGE_INK = '#f4ecd8';
+  function drawGhostBadge(c, i, gx, gy, r) {
+    const x = gx + r * BADGE_X, y = gy + r * BADGE_Y, s = r * BADGE_S;
+    c.fillStyle = BADGE_INK;
+    c.strokeStyle = BADGE_INK;
+    c.lineWidth = Math.max(0.8, s * 0.22);
+    if (i === 0) {                                 // the whistle: body and mouthpiece
+      c.beginPath(); c.arc(x + s * 0.10, y, s * 0.34, 0, 2 * Math.PI); c.fill();
+      c.fillRect(x - s * 0.46, y - s * 0.16, s * 0.36, s * 0.32);
+    } else if (i === 1 || i === 2) {               // the offside flag, pole and pennant
+      c.beginPath();
+      c.moveTo(x - s * 0.30, y - s * 0.46);
+      c.lineTo(x - s * 0.30, y + s * 0.46);
+      c.stroke();
+      c.beginPath();
+      c.moveTo(x - s * 0.30, y - s * 0.46);
+      c.lineTo(x + s * 0.46, y - s * 0.14);
+      c.lineTo(x - s * 0.30, y + s * 0.12);
+      c.closePath(); c.fill();
+    } else if (i === 3) {                          // the substitution board
+      c.fillRect(x - s * 0.50, y - s * 0.30, s, s * 0.60);
+    } else {                                       // VAR, the screen drawn in the air
+      c.strokeRect(x - s * 0.42, y - s * 0.32, s * 0.84, s * 0.64);
+    }
+  }
   let ghostSprites = [], ghostSprW = 0, ghostSprOY = 0;
   function buildGhostSprites() {
     const r = cell * 0.4;
@@ -1656,7 +1694,7 @@
     ghostSprW = Math.ceil(2 * r + lw + 4);
     const h = Math.ceil(2.16 * r + lw + 4);
     ghostSprOY = 1.16 * r + lw / 2 + 2;        // sprite-space y of the body's cell center
-    ghostSprites = GHOST_COLORS.map(col => {
+    ghostSprites = GHOST_COLORS.map((col, gi) => {
       const cv = document.createElement('canvas');
       cv.width = ghostSprW; cv.height = h;
       const c = cv.getContext('2d');
@@ -1699,6 +1737,7 @@
       for (let sx = -1; sx <= 1; sx += 2) {
         c.beginPath(); c.ellipse(gx + sx * eyeDX, eyeY, ewx, ewy, 0, 0, 2 * Math.PI); c.fill();
       }
+      drawGhostBadge(c, gi, gx, gy, r);
       return cv;
     });
   }
