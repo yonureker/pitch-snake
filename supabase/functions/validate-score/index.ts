@@ -14,7 +14,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   replay, MODES, SPEEDS, START_LEN, RAIN_EVERY_MS,
-} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@6726bb04ef22a48fce42ff3a87f9f4e9d97a81b5/packages/engine/engine.js';
+} from 'https://cdn.jsdelivr.net/gh/yonureker/pitch-snake@dca9aad7974101432df6d719c429bfd520bcaf62/packages/engine/engine.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -33,13 +33,20 @@ const BOARD_MODES = ['classic', 'survival'];
 
 // every knob a log may carry, with the CURRENT classic default it means when
 // absent (since v22 a classic TNT and a teleport trip both grow five, so
-// tntGrowth and portalGrowth default 5 here; pre-v15 logs that carried
-// neither are museum pieces only replay() ever sees, and it keeps its own
-// backward-compat defaults). A claimed mode must match exactly.
+// tntGrowth and portalGrowth default 5 here; since v36 a ringed ball grows
+// THREE, so bonusGrowth is 3; pre-v15 logs that carried neither are museum
+// pieces only replay() ever sees, and it keeps its own backward-compat
+// defaults). A claimed mode must match exactly.
+//
+// THIS TABLE MOVES WITH THE PIN. A knob whose engine default changes and is
+// not changed here refuses every log the new page writes, as 'knobs do not
+// match the mode', on top of the version refusal the stale pin already
+// causes, and each refusal burns a player's single-use seed. Bumping the
+// engine is therefore two edits in this file, never one.
 const KNOBS: Record<string, unknown> = {
   durationMs: 0, startGhosts: 0, startBombs: 0, bombFirstMs: 0,
   scoreByTime: false, startLen: START_LEN,
-  eatGrowth: 1, bonusGrowth: 5, tntGrowth: 5, portalGrowth: 5,
+  eatGrowth: 1, bonusGrowth: 3, tntGrowth: 5, portalGrowth: 5,
   ghostEveryMs: 0, bombEveryMs: 0, boltEveryMs: 0,
   // levels are the only rounds with a goal and they never submit, so a
   // submitted round claiming a board mode must carry none
