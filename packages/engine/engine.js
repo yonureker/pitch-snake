@@ -134,6 +134,39 @@ export const RAIN_WARN_MS = 2000;      // sky darkens, streaks start, full pace
 export const RAIN_MIN_MS = 8000;       // a downpour lasts between these two,
 export const RAIN_MAX_MS = 12000;      //   seeded per shower
 export const RAIN_EVERY_MS = 60_000;   // mean shower cadence; each gap is seeded
+
+/**
+ * What an ABSENT knob means. The classic ruleset, stated once.
+ *
+ * This is the table createGame resolves against, and it is exported because
+ * the replay validator needs the very same answers and used to keep its own
+ * handwritten copy of them. Two lists of the same numbers, in two repos'
+ * worth of distance from each other, is a trap rather than a duplication:
+ * changing a default here while that copy said something else refused every
+ * round the new page wrote, as 'knobs do not match the mode', and burned a
+ * single-use seed on each refusal. bonusGrowth did exactly that on the way
+ * to v36. The validator imports this now, pinned to a commit like everything
+ * else it trusts, so moving the pin moves the defaults with it and the two
+ * cannot disagree.
+ *
+ * Every key here is a knob a log may carry. ORDER IS PART OF THE CONTRACT:
+ * the validator's room fingerprint mixes these in declaration order, so two
+ * peers agree on a round only while they iterate the same list the same way.
+ * Add to the end; never reorder.
+ *
+ * NOT the same as replay()'s fallbacks, which are deliberately the OLD values
+ * for logs written before a knob existed: a replay owes a finished round the
+ * rules it was actually played under, where a new round gets today's.
+ */
+export const KNOB_DEFAULTS = {
+  durationMs: 0, startGhosts: 0, startBombs: 0, bombFirstMs: 0,
+  scoreByTime: false, startLen: START_LEN,
+  eatGrowth: 1, bonusGrowth: BONUS_POINTS, tntGrowth: 5, portalGrowth: 5,
+  ghostEveryMs: 0, bombEveryMs: 0, boltEveryMs: 0,
+  goalScore: 0,
+  rainEveryMs: RAIN_EVERY_MS,
+};
+
                                        //   in [0.75, 1.25] of the knob
 // The downpour's drag: 25% longer steps for the SNAKES, and since v35 for
 // the snakes alone. The pack keeps its pace, because weather that slowed
@@ -410,16 +443,16 @@ export function createGame(cfg = {}) {
   const seed = (cfg.seed ?? 1) >>> 0;
   const tickMs = cfg.tickMs ?? SPEEDS.normal;
   const wallsEnabled = cfg.wallsEnabled ?? true;
-  const durationMs = cfg.durationMs ?? 0;   // 0 = endless
+  const durationMs = cfg.durationMs ?? KNOB_DEFAULTS.durationMs;   // 0 = endless
   // A round that can be WON rather than merely survived. 0 means there is no
   // goal, which is every mode the game shipped with; a level sets it and the
   // round ends the moment the score reaches it. Levels are the only caller,
   // and 'survive N seconds' needs nothing new at all: durationMs already ends
   // a round, and for a level that whistle IS the win.
-  const goalScore = cfg.goalScore ?? 0;
-  const startGhosts = cfg.startGhosts ?? 0; // survival: personalities present at kickoff
-  const startBombs = cfg.startBombs ?? 0;   // survival: TNT wave size floored here for ever
-  const bombFirstMs = cfg.bombFirstMs ?? 0; // how long the board stays clear of that first wave
+  const goalScore = cfg.goalScore ?? KNOB_DEFAULTS.goalScore;
+  const startGhosts = cfg.startGhosts ?? KNOB_DEFAULTS.startGhosts; // survival: personalities present at kickoff
+  const startBombs = cfg.startBombs ?? KNOB_DEFAULTS.startBombs;   // survival: TNT wave size floored here for ever
+  const bombFirstMs = cfg.bombFirstMs ?? KNOB_DEFAULTS.bombFirstMs; // how long the board stays clear of that first wave
   const playerCount = cfg.players ?? 1;
   // ---- the survival knobs ----
   // scoreByTime makes seconds survived the score and the ONLY score: eating,
@@ -428,21 +461,21 @@ export function createGame(cfg = {}) {
   // startLen how long the snake stands at the first frame, in full, folded
   // when it outgrows the classic straight line (layoutSnake). The everyMs
   // knobs move a ladder off the score and onto the clock.
-  const scoreByTime = cfg.scoreByTime ?? false;
-  const startLen = cfg.startLen ?? START_LEN;
-  const eatGrowth = cfg.eatGrowth ?? 1;
-  const bonusGrowth = cfg.bonusGrowth ?? BONUS_POINTS;   // v36: three, matching what it pays
-  const tntGrowth = cfg.tntGrowth ?? 5;         // classic/rooms: TNT feeds five (v22), a hazard in every sense
-  const portalGrowth = cfg.portalGrowth ?? 5;   // classic/rooms: a trip grows five (v22); survival overrides to trim five
-  const ghostEveryMs = cfg.ghostEveryMs ?? 0;
-  const bombEveryMs = cfg.bombEveryMs ?? 0;
-  const boltEveryMs = cfg.boltEveryMs ?? 0;
+  const scoreByTime = cfg.scoreByTime ?? KNOB_DEFAULTS.scoreByTime;
+  const startLen = cfg.startLen ?? KNOB_DEFAULTS.startLen;
+  const eatGrowth = cfg.eatGrowth ?? KNOB_DEFAULTS.eatGrowth;
+  const bonusGrowth = cfg.bonusGrowth ?? KNOB_DEFAULTS.bonusGrowth;   // v36: three, matching what it pays
+  const tntGrowth = cfg.tntGrowth ?? KNOB_DEFAULTS.tntGrowth;         // classic/rooms: TNT feeds five (v22)
+  const portalGrowth = cfg.portalGrowth ?? KNOB_DEFAULTS.portalGrowth;   // classic/rooms: a trip grows five (v22)
+  const ghostEveryMs = cfg.ghostEveryMs ?? KNOB_DEFAULTS.ghostEveryMs;
+  const bombEveryMs = cfg.bombEveryMs ?? KNOB_DEFAULTS.bombEveryMs;
+  const boltEveryMs = cfg.boltEveryMs ?? KNOB_DEFAULTS.boltEveryMs;
   // Weather: the mean gap between showers, 0 for a dry round. ON by default
   // (the owner's call, 2026-09-14: rain enters classic AND survival, and
   // rooms inherit it through these same defaults), which is why replay()
   // defaults it to 0 instead: a log written before weather existed replays
   // under the exact rules it was played by.
-  const rainEveryMs = cfg.rainEveryMs ?? RAIN_EVERY_MS;
+  const rainEveryMs = cfg.rainEveryMs ?? KNOB_DEFAULTS.rainEveryMs;
   if (tickMs % SIM_DT !== 0) throw new Error('tickMs must be a multiple of SIM_DT');
   if (durationMs % SIM_DT !== 0 || durationMs < 0) throw new Error('durationMs must be a non-negative multiple of SIM_DT');
   if (!Number.isInteger(startGhosts) || startGhosts < 0 || startGhosts > (ghostEveryMs ? GHOST_MAX : GHOST_SCORES.length)) throw new Error('startGhosts out of range');

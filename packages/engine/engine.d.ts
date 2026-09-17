@@ -21,6 +21,13 @@ export declare const FOOD_TTL: number;
 export declare const BONUS_EVERY: number;
 /** What a ringed ball pays, and grows. The one place this number lives. */
 export declare const BONUS_POINTS: number;
+/**
+ * What an ABSENT knob means: the classic ruleset, stated once, and what
+ * createGame resolves against. The replay validator imports this rather than
+ * keeping its own copy. Order is part of the contract (the room fingerprint
+ * mixes these in declaration order): add to the end, never reorder.
+ */
+export declare const KNOB_DEFAULTS: Record<string, number | boolean>;
 export declare const REGULAR_KINDS: number;
 export declare const BONUS_KINDS: number;
 export declare const WARN_MS: number;

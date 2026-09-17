@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   createGame, replay, ghostRenderPos, ENGINE_VERSION, MODES,
-  GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY, BONUS_POINTS,
+  GRID, START_LEN, SIM_DT, SPEEDS, FOOD_TTL, BONUS_EVERY, BONUS_POINTS, KNOB_DEFAULTS,
   TNT_SCORES, GHOST_SCORES, GHOST_MS, GHOST_MAX, BOMB_MAX, MAX_PLAYERS,
   PORTAL_FIRST, PORTAL_EVERY, PORTAL_BONUS, PORTAL_MIN_GAP, portalMark,
   MIN_SPAWN_DIST, K, wrap, wrapDist, SURVIVAL_TNT_FIRST, REDIRECT_MS,
@@ -1246,6 +1246,33 @@ test('a hopping ghost renders in the window it left, then the far one', () => {
 });
 
 // ---------------------------------------------------------------- purity
+// The validator keeps no handwritten copy of the classic defaults any more;
+// it imports KNOB_DEFAULTS from the pinned engine. That only holds while the
+// table really is what createGame resolves to, so this is the guard: change a
+// default in one place and not the other and the suite says so here, rather
+// than the world board saying so by refusing every round.
+test('KNOB_DEFAULTS is exactly what a bare round resolves to', () => {
+  const log = createGame({ seed: 1 }).log;
+  const keys = Object.keys(KNOB_DEFAULTS);
+  assert.ok(keys.length > 0, 'the table is not empty');
+  for (const k of keys) {
+    assert.ok(k in log, `${k} rides in the log`);
+    assert.equal(log[k], KNOB_DEFAULTS[k], `${k} default matches what createGame resolved`);
+  }
+  // and the other direction: a knob createGame writes but the table forgets is
+  // a knob the validator would never check, which is the shopping hole KNOBS
+  // exists to close
+  // the log's non-knob fields: the round's identity, its inputs, and the
+  // score it finished on. finalScore is a RESULT the client carries for its
+  // own convenience and the validator drops on the floor (storableLog keeps
+  // only what it verified), so it is not a rule and has no default.
+  const known = new Set([
+    ...keys, 'v', 'seed', 'tickMs', 'wallsEnabled', 'end', 'players', 'inputs', 'finalScore',
+  ]);
+  const stray = Object.keys(log).filter((k) => !known.has(k));
+  assert.deepEqual(stray, [], 'every knob in the log is one the table names');
+});
+
 test('the engine source touches no host API', () => {
   // The engine must run identically in a browser module, a Reanimated
   // worklet, Node and Deno, and stay deterministic. Any of these tokens
