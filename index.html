@@ -2840,6 +2840,10 @@
       sbAuth.onAuthStateChange((_ev, session) => {
         setSessionToken(session ? session.access_token : null);
         sbUser = session ? session.user : null;
+        // the boot fetch runs behind `if (sessionToken())`, so a sign-in that
+        // lands after it leaves the purse with nothing to show. This is that
+        // second chance, and it costs nothing when a number is already up.
+        if (session) refreshWallet(false);
       });
       let { data: { session } } = await sbAuth.getSession();
       if (!session) session = (await sbAuth.signInAnonymously()).data.session;
@@ -2927,13 +2931,53 @@
   // takeTheirs: after signing into another account, its name outranks
   // whatever this device had typed; on a plain boot the device name only
   // fills gaps.
-  async function syncProfile(takeTheirs) {
-    // the outfit rides the wallet: fetched beside the profile on every boot
-    // and account switch, applied through applyWorn, the one door. Fire and
-    // forget: a dead network keeps the cached outfit, never blocks the game.
+  // THE PURSE'S NUMBER ARRIVED ONCE, AND ONLY ONCE, AND SOMETIMES NEVER.
+  //
+  // The pill stays hidden until a wallet has answered (purseIsKnown), which is
+  // right: an empty coin pill reads as a bug rather than as a balance of zero.
+  // What was wrong is that the ONE fetch that could lift it had two ordinary
+  // ways to not happen, and no way back from either.
+  //
+  //   1. It lived inside syncProfile, which boot only calls `if
+  //      (sessionToken())`. An anonymous sign-in that had not landed yet meant
+  //      the fetch was never made at all, not even once.
+  //   2. It was fire and forget behind a bare `.catch(() => {})`. One timed
+  //      out request (the RPC carries a 6s abort) and the coins were gone for
+  //      the whole session.
+  //
+  // Both are transient and both hid a real balance behind a chip that simply
+  // was not there, which is what "sometimes I don't see the coins" was. So the
+  // fetch is a function that RETRIES, and everything that can newly mean "a
+  // session exists" calls it again: the auth state change, and the tab coming
+  // back to the foreground. Still fire and forget, still never blocks play.
+  const WALLET_RETRIES = 4;
+  let walletTries = 0;
+  /** Ask for the wallet, resetting the retry budget. `force` refetches a purse
+   *  that is already known, which is what an account switch needs. */
+  function refreshWallet(force) {
+    walletTries = 0;
+    askWallet(!!force);
+  }
+  function askWallet(force) {
+    // A wallet read before the session lands answers for nobody and returns a
+    // confident 0. That is worse than the hidden pill, because a wrong balance
+    // is believed; so this waits for a token rather than showing a zero.
+    if (!sessionToken()) return;
+    if (!force && purseIsKnown()) return;      // a number is already on screen
     supabaseRpc('pitch_snake_my_wallet', {})
       .then(w => { if (w && typeof w.coins === 'number') applyWallet(w); })
-      .catch(() => {});
+      .catch(() => {
+        if (walletTries >= WALLET_RETRIES) return;
+        walletTries += 1;
+        setTimeout(() => askWallet(force), 600 * walletTries);
+      });
+  }
+
+  async function syncProfile(takeTheirs) {
+    // the outfit rides the wallet: fetched beside the profile on every boot
+    // and account switch, applied through applyWorn, the one door. Forced,
+    // because a switched account's balance must replace the last one's.
+    refreshWallet(true);
     try {
       const prof = await supabaseRpc('pitch_snake_get_profile', {});
       if (prof && prof.name) {
@@ -4328,7 +4372,13 @@
   function syncBuildNote() {
     buildNote.hidden = !buildStale;
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkBuild(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    void checkBuild();
+    // the last safety net for a purse whose every retry failed while the
+    // tab was away or offline; a no-op once a number is on screen
+    refreshWallet(false);
+  });
   buildReload.addEventListener('click', () => location.reload());
 
   // ---- giving up ----
