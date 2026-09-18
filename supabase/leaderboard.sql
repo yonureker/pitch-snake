@@ -195,27 +195,16 @@ as $$
   limit least(greatest(coalesce(limit_count, 10), 1), 100);
 $$;
 
--- The caller's own solo record for a mode, lifetime or one season. Derived
--- from the score rows we already keep (every validated round writes one), so
--- games/avg/best need no counter table; reads only auth.uid()'s own rows.
+-- RETIRED 2026-09-18: pitch_snake_my_stats(text, text) fed the account
+-- sheet's seven-row record (games / avg / best per mode). The owner rejected
+-- that block outright and the record went minimal: lifetime bests come from
+-- pitch_snake_my_bests (auth.sql) in one call, and nothing shows an average
+-- any more, because avg is an analyst's number that can barely move after
+-- three hundred games and punishes every throwaway round for ever. The score
+-- rows it read are untouched, so it can come back as a function alone if a
+-- stats screen ever earns one. The drop keeps any file-run order converging
+-- on gone.
 drop function if exists public.pitch_snake_my_stats(text, text);
-create or replace function public.pitch_snake_my_stats(
-  p_mode text default 'classic', p_season text default null)
-returns json
-language sql
-security definer
-set search_path = ''
-stable
-as $$
-  select json_build_object(
-    'games', count(*),
-    'avg',   coalesce(round(avg(s.score))::integer, 0),
-    'best',  coalesce(max(s.score), 0))
-  from public.pitch_snake_scores s
-  where s.user_id = auth.uid() and auth.uid() is not null
-    and s.mode = coalesce(p_mode, 'classic')
-    and (p_season is null or to_char(s.created_at at time zone 'utc', 'YYYY-MM') = p_season);
-$$;
 
 -- --------------------------------------------------------------- write ----
 -- RETIRED: the client-score submit lived here until validated scoring
@@ -343,12 +332,10 @@ drop function if exists public.pitch_snake_tournament_submit(text, text, integer
 -- out deliberately. EXECUTE is also all it takes to publish a function at
 -- /rest/v1/rpc/<name>; tables need far more, which is exactly why we use these.
 revoke all on function public.pitch_snake_top_scores(integer, text, text)                 from public;
-revoke all on function public.pitch_snake_my_stats(text, text)                            from public;
 revoke all on function public.pitch_snake_tournament_create(text, text, integer, integer) from public;
 revoke all on function public.pitch_snake_tournament_get(text)                            from public;
 revoke all on function public.pitch_snake_tournament_top(text, integer)                   from public;
 grant execute on function public.pitch_snake_top_scores(integer, text, text)                 to anon, authenticated;
-grant execute on function public.pitch_snake_my_stats(text, text)                            to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_create(text, text, integer, integer) to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_get(text)                            to anon, authenticated;
 grant execute on function public.pitch_snake_tournament_top(text, integer)                   to anon, authenticated;

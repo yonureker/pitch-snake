@@ -743,40 +743,15 @@ $$;
 
 -- My multiplayer record, lifetime or one season. Only RATED seats count
 -- (place is filled at sealing), so an unrated or unsealed round never does.
+-- RETIRED 2026-09-18: pitch_snake_my_mp_stats(text) fed the account sheet's
+-- MULTIPLAYER row, a W/L that booked every place but first as a loss, which
+-- is the wrong shape for five-seat rooms and a cruder retelling of the
+-- rating beside it (Elo already prices placings pairwise). The record went
+-- minimal and the ELO row speaks for multiplayer alone. The ratings row and
+-- the seats it read are untouched, so it can come back as a function alone
+-- if a season summary ever earns one. The drop keeps any file-run order
+-- converging on gone.
 drop function if exists public.pitch_snake_my_mp_stats(text);
-create or replace function public.pitch_snake_my_mp_stats(p_season text default null)
-returns json language sql security definer set search_path = '' stable
-as $$
-  select case when p_season is null then
-    -- LIFETIME comes from the ratings row, never from seats. Rounds are swept
-    -- at 90 days (the cron below) and seats CASCADE with them, so counting
-    -- seats would quietly turn a lifetime record into "the last 90 days" while
-    -- still calling itself lifetime. The ladder already keeps the lifetime
-    -- totals and they never expire; the net move is rating - base.
-    coalesce((
-      select json_build_object(
-        'played', rt.rounds,
-        'won',    rt.wins,
-        'lost',   greatest(rt.rounds - rt.wins, 0),
-        'delta',  rt.rating - 1000)
-      from public.pitch_snake_ratings rt
-      where rt.user_id = auth.uid() and auth.uid() is not null and rt.mode = 'classic'
-    ), json_build_object('played', 0, 'won', 0, 'lost', 0, 'delta', 0))
-  else
-    -- A SEASON is at most a month, comfortably inside the sweep, so the seats
-    -- ledger is the right (and only) source for a windowed record.
-    coalesce((
-      select json_build_object(
-        'played', count(*),
-        'won',    count(*) filter (where s.place = 1),
-        'lost',   count(*) filter (where s.place > 1),
-        'delta',  coalesce(sum(s.delta), 0))
-      from public.pitch_snake_seats s
-      where s.user_id = auth.uid() and auth.uid() is not null and s.place is not null
-        and to_char(s.claimed_at at time zone 'utc', 'YYYY-MM') = p_season
-    ), json_build_object('played', 0, 'won', 0, 'lost', 0, 'delta', 0))
-  end;
-$$;
 
 -- Head to head against one opponent: rated rounds you both played, and who
 -- finished ahead. Both sides come from seats, so it needs no new storage.
@@ -789,37 +764,16 @@ $$;
 -- it. The drop keeps any file-run order converging on gone.
 drop function if exists public.pitch_snake_h2h(uuid);
 
--- Who you have played, most recent first, with the record against each. This
--- is how a client offers an opponent to inspect, since names are display and
--- the identity is the user_id.
+-- RETIRED 2026-09-18 beside pitch_snake_h2h above, and for the same screen:
+-- pitch_snake_recent_opponents(integer) fed the account sheet's rivalry rows,
+-- and its one honest flaw was identity: it coalesced a profile-less rival to
+-- the shared un-name, so two anonymous strangers rendered as two identical
+-- "VS YOU" rows. A rivalry with someone who has no name is not a rivalry,
+-- and the owner dropped the rows from the sheet entirely. The seats it read
+-- are untouched; if a rival screen ever arrives, it comes back keyed by
+-- user_id with nameless opponents excluded. The drop keeps any file-run
+-- order converging on gone.
 drop function if exists public.pitch_snake_recent_opponents(integer);
-create or replace function public.pitch_snake_recent_opponents(p_limit integer default 20)
-returns table (opponent uuid, name text, country text, games bigint,
-               my_wins bigint, their_wins bigint, last_played timestamptz)
-language sql security definer set search_path = '' stable
-as $$
-  with mine as (
-    select round_id, place, claimed_at
-    from public.pitch_snake_seats
-    where user_id = auth.uid() and auth.uid() is not null and place is not null
-  ),
-  paired as (
-    select opp.user_id as opponent, m.place as my_place, opp.place as opp_place, m.claimed_at
-    from mine m
-    join public.pitch_snake_seats opp
-      on opp.round_id = m.round_id and opp.user_id <> auth.uid() and opp.place is not null
-  )
-  select pr.opponent, coalesce(p.name, 'YOU'), p.country,
-         count(*),
-         count(*) filter (where pr.my_place < pr.opp_place),
-         count(*) filter (where pr.my_place > pr.opp_place),
-         max(pr.claimed_at)
-  from paired pr
-  left join public.pitch_snake_profiles p on p.user_id = pr.opponent
-  group by pr.opponent, p.name, p.country
-  order by max(pr.claimed_at) desc
-  limit least(greatest(coalesce(p_limit, 20), 1), 100);
-$$;
 
 -- Postgres grants EXECUTE to PUBLIC on every new function; take it back, then
 -- hand it out deliberately. Note what is NOT handed out: record_round and
@@ -854,9 +808,5 @@ grant execute on function public.pitch_snake_round_ratings(text, integer)       
 -- season + stats reads: all caller-scoped or public game facts, so anon + auth
 revoke all on function public.pitch_snake_top_rated_season(text, text, integer)       from public;
 revoke all on function public.pitch_snake_my_rating_season(text)                      from public;
-revoke all on function public.pitch_snake_my_mp_stats(text)                           from public;
-revoke all on function public.pitch_snake_recent_opponents(integer)                   from public;
 grant execute on function public.pitch_snake_top_rated_season(text, text, integer)    to anon, authenticated;
 grant execute on function public.pitch_snake_my_rating_season(text)                   to anon, authenticated;
-grant execute on function public.pitch_snake_my_mp_stats(text)                        to anon, authenticated;
-grant execute on function public.pitch_snake_recent_opponents(integer)               to anon, authenticated;

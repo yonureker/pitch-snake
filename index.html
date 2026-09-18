@@ -449,10 +449,11 @@
         <button class="modal-x" id="profileClose" type="button" aria-label="Close" title="Close">&times;</button>
         <div class="modal-title" id="profTitle">Your account</div>
         <p class="lock-hint" id="profLock" hidden></p>
-        <!-- YOUR RECORD, derived server-side from the rounds already kept, so
-             it needs no account: a signed-out player has solo stats too. Read
-             fresh on open (a rating moves on other people's rounds) and left
-             out entirely when there is nothing to show yet, so a first-time
+        <!-- YOUR RECORD, minimal since 2026-09-18: the lifetime best per
+             mode (survival's as M:SS, its number is time) and the season
+             rating, three owned numbers and nothing derived. Read fresh on
+             open (a rating moves on other people's rounds) and left out
+             entirely when there is nothing to show yet, so a first-time
              player is not met with a wall of zeroes. -->
         <div class="prof-stats" id="profStats" hidden>
           <div class="flabel">Your record</div>
@@ -6515,10 +6516,15 @@
     return locked;
   }
 
-  // YOUR RECORD, fetched fresh on open (a rating moves on other people's
-  // rounds, and solo stats change every round). All server-derived from rows
-  // already kept; a signed-out player still has solo stats, and the block
-  // stays hidden until there is at least one row worth showing.
+  // YOUR RECORD, minimal since 2026-09-18: three owned numbers in one
+  // dialect, fetched fresh on open (a rating moves on other people's rounds).
+  // The seven-row block this replaces (games/avg per mode, a W/L that booked
+  // 2nd-of-5 as a loss, rivalry rows that showed anonymous strangers as "VS
+  // YOU") was rejected by the owner outright. What a record shows now: the
+  // lifetime best per mode, survival's in M:SS because its number is TIME,
+  // and the season rating with its net move. A provisional rating shows
+  // nothing at all, the ladder's own "hidden until ten rounds" contract worn
+  // here too. Stats are a bonus; their absence shows nothing.
   let statsGen = 0;
   async function renderProfileStats() {
     const box = document.getElementById('profStats');
@@ -6527,19 +6533,14 @@
     const gen = ++statsGen;
     box.hidden = true;
     list.innerHTML = '';
-    if (!supabaseConfigured()) return;
-    const season = currentSeason();
-    const signed = !!sessionToken();
-    let classic, survival, mp, rating, rivals;
+    if (!supabaseConfigured() || !sessionToken()) return;
+    let bests, rating;
     try {
-      [classic, survival, mp, rating, rivals] = await Promise.all([
-        supabaseRpc('pitch_snake_my_stats', { p_mode: 'classic' }),
-        supabaseRpc('pitch_snake_my_stats', { p_mode: 'survival' }),
-        signed ? supabaseRpc('pitch_snake_my_mp_stats', {}) : Promise.resolve(null),
-        signed ? supabaseRpc('pitch_snake_my_rating_season', { p_season: season }) : Promise.resolve(null),
-        signed ? supabaseRpc('pitch_snake_recent_opponents', { p_limit: 3 }) : Promise.resolve(null),
+      [bests, rating] = await Promise.all([
+        supabaseRpc('pitch_snake_my_bests', {}),
+        supabaseRpc('pitch_snake_my_rating_season', { p_season: currentSeason() }),
       ]);
-    } catch (e) { return; }        // stats are a bonus; their absence shows nothing
+    } catch (e) { return; }
     if (gen !== statsGen || profileModal.hidden) return;   // a newer open owns it
     const add = (k, html) => {
       const row = document.createElement('div'); row.className = 'stat-row';
@@ -6548,33 +6549,21 @@
       row.append(kk, vv); list.appendChild(row);
     };
     let any = false;
-    const solo = (label, s) => {
-      const games = s ? (+s.games || 0) : 0;
-      if (!games) return;
+    const classicBest = bests ? parseInt(bests.classic, 10) || 0 : 0;
+    const survivalBest = bests ? parseInt(bests.survival, 10) || 0 : 0;
+    if (classicBest > 0) { any = true; add('Classic', 'best <b>' + classicBest + '</b>'); }
+    if (survivalBest > 0) {
+      // seconds survived wear a clock face, not a score
+      const clock = Math.floor(survivalBest / 60) + ':' + String(survivalBest % 60).padStart(2, '0');
       any = true;
-      add(label, '<b>' + games + '</b> games <span class="dim">·</span> avg <b>' + (+s.avg || 0)
-        + '</b> <span class="dim">·</span> best <b>' + (+s.best || 0) + '</b>');
-    };
-    solo('Classic', classic);
-    solo('Survival', survival);
-    if (mp && (+mp.played)) {
-      any = true;
-      add('Multiplayer', '<b>' + (+mp.played) + '</b> played <span class="dim">·</span> <b>'
-        + (+mp.won) + '</b>W <span class="dim">/</span> <b>' + (+mp.lost) + '</b>L');
+      add('Survival', 'best <b>' + clock + '</b>');
     }
     const own = rating && rating[ROOM_RULES];
-    if (own) {
+    if (own && !own.provisional) {
       any = true;
       const gain = (+own.gain) || 0;
-      add('ELO this season', '<b>' + own.rating + '</b> <span class="dim">('
-        + (gain >= 0 ? '+' : '') + gain + ')</span>' + (own.provisional ? ' <span class="dim">P</span>' : ''));
-    }
-    const rivalRows = asList(rivals);
-    for (const r of rivalRows) {
-      if (!r || !r.games) continue;
-      any = true;
-      add('vs ' + (r.name || '?'), '<b>' + (+r.my_wins) + '</b><span class="dim">-</span><b>'
-        + (+r.their_wins) + '</b> <span class="dim">of ' + (+r.games) + '</span>');
+      add('ELO', '<b>' + own.rating + '</b> <span class="dim">('
+        + (gain >= 0 ? '+' : '') + gain + ')</span>');
     }
     if (any) box.hidden = false;
   }

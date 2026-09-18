@@ -212,71 +212,25 @@ export async function fetchMyRatingSeason(season: string): Promise<MyRatingSeaso
 }
 
 // ---- stats (all derive-on-read, caller-scoped) ----
+// The seven-row record retired on 2026-09-18 (games/avg, W/L and the rivalry
+// rows with it); what remains is the minimal record the owner chose: lifetime
+// bests plus the season rating, three owned numbers in one dialect.
 
-/** One mode's solo record, from pitch_snake_my_stats. */
-export interface SoloStats {
-  games: number;
-  avg: number;
-  best: number;
+/** Lifetime best per mode; a fresh or signed-out player reads zeroes. */
+export interface MyBests {
+  classic: number;
+  survival: number;
 }
 
-/** Your solo record for a mode, lifetime or one season. */
-export async function fetchMyStats(mode: RuleMode, season: string | null = null): Promise<SoloStats> {
-  const got = await rpc(
-    'pitch_snake_my_stats',
-    season === null ? { p_mode: mode } : { p_mode: mode, p_season: season },
-  );
-  const n = (v: unknown): number => (typeof v === 'number' ? v : 0);
-  if (!isRecord(got)) return { games: 0, avg: 0, best: 0 };
-  return { games: n(got['games']), avg: n(got['avg']), best: n(got['best']) };
-}
-
-/** Your multiplayer record, from pitch_snake_my_mp_stats. */
-export interface MpStats {
-  played: number;
-  won: number;
-  lost: number;
-  delta: number;
-}
-
-/** Your MP record, lifetime or one season. */
-export async function fetchMyMpStats(season: string | null = null): Promise<MpStats> {
-  const got = await rpc('pitch_snake_my_mp_stats', season === null ? {} : { p_season: season });
-  const n = (v: unknown): number => (typeof v === 'number' ? v : 0);
-  if (!isRecord(got)) return { played: 0, won: 0, lost: 0, delta: 0 };
-  return { played: n(got['played']), won: n(got['won']), lost: n(got['lost']), delta: n(got['delta']) };
-}
-
-/** One opponent you have played, with the head-to-head record. */
-export interface RivalRow {
-  name: string;
-  country: string | null;
-  games: number;
-  myWins: number;
-  theirWins: number;
-}
-
-/** Recent opponents, most recent first, with the record against each. */
-export async function fetchRecentOpponents(limit = 20): Promise<RivalRow[]> {
-  const rows = await rpc('pitch_snake_recent_opponents', { p_limit: limit });
-  if (!Array.isArray(rows)) return [];
-  const list: unknown[] = rows;
-  const out: RivalRow[] = [];
-  const n = (v: unknown): number => (typeof v === 'number' ? v : 0);
-  for (const r of list) {
-    if (!isRecord(r)) continue;
-    const { name, country, games, my_wins, their_wins } = r;
-    if (typeof name === 'string') {
-      out.push({
-        name,
-        country: isCountry(country) ? country.toUpperCase() : null,
-        games: n(games),
-        myWins: n(my_wins),
-        theirWins: n(their_wins),
-      });
-    }
-  }
-  return out;
+/** Your lifetime bests, both modes in one call (pitch_snake_my_bests). */
+export async function fetchMyBests(): Promise<MyBests> {
+  const got = await rpc('pitch_snake_my_bests', {});
+  const n = (v: unknown): number =>
+    typeof v === 'number' ? v
+    : typeof v === 'string' ? Number.parseInt(v, 10) || 0
+    : 0;
+  if (!isRecord(got)) return { classic: 0, survival: 0 };
+  return { classic: n(got['classic']), survival: n(got['survival']) };
 }
 
 // Submitting a score is no longer a thing any client can do: the server

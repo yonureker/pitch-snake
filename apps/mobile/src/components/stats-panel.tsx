@@ -1,13 +1,16 @@
 /**
- * YOUR RECORD: the player's own stats, the page's profile-sheet stats block
- * ported. All server-derived from rows already kept (every validated round
- * writes a score row, every rated seat carries place and delta), so it needs
- * no account and no new storage; a signed-out player still sees solo stats.
+ * YOUR RECORD, minimal since 2026-09-18: three owned numbers in one dialect.
+ * The seven-row block it replaces (games/avg per mode, a W/L that booked
+ * 2nd-of-5 as a loss, rivalry rows that showed anonymous strangers as "VS
+ * YOU") was rejected by the owner outright; what a record shows now is the
+ * lifetime best per mode, survival's in M:SS because its number is TIME, and
+ * the season rating with its net move. A provisional rating shows nothing at
+ * all, honouring the ladder's own "hidden until ten rounds" contract.
  *
  * Rendered inside the profile sheet, which only mounts while open, so its
- * queries fire on open and never in the background. Hidden entirely until
- * there is at least one row worth showing, so a first-time player is not met
- * with a wall of zeroes.
+ * two queries fire on open and never in the background. Hidden entirely
+ * until there is at least one row worth showing, so a first-time player is
+ * not met with a wall of zeroes.
  *
  * Must never: decide anything about a round. It reads and displays.
  *
@@ -16,14 +19,19 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { GameColors } from '@/game/theme';
-import { useMyMpStats } from '@/hooks/queries/use-my-mp-stats';
+import { useMyBests } from '@/hooks/queries/use-my-bests';
 import { useMyRatingSeason } from '@/hooks/queries/use-my-rating-season';
-import { useMyStats } from '@/hooks/queries/use-my-stats';
-import { useRecentOpponents } from '@/hooks/queries/use-recent-opponents';
 import { currentSeason } from '@/lib/season';
 
 const BARLOW = 'Barlow_600SemiBold';
 const BARLOW_BOLD = 'Barlow_700Bold';
+
+// survival's best is seconds survived; a time wears a clock face, not a score
+function mmss(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const ss = seconds % 60;
+  return `${String(m)}:${String(ss).padStart(2, '0')}`;
+}
 
 /** One label + value row. */
 function Row({ k, v }: { k: string; v: string }) {
@@ -36,45 +44,21 @@ function Row({ k, v }: { k: string; v: string }) {
 }
 
 /**
- * The stats block. Fetches on mount (open) and shows nothing until a row has
- * something to say.
+ * The record: lifetime bests and the season rating, nothing else. Fetches on
+ * mount (open) and shows nothing until a row has something to say.
  */
 export function StatsPanel() {
-  const season = currentSeason();
-  const classic = useMyStats(true, 'classic');
-  const survival = useMyStats(true, 'survival');
-  const mp = useMyMpStats(true);
-  const rating = useMyRatingSeason(true, season);
-  const rivals = useRecentOpponents(true, 3);
+  const bests = useMyBests(true);
+  const rating = useMyRatingSeason(true, currentSeason());
 
   const rows: { k: string; v: string }[] = [];
-  const solo = (label: string, s: { games: number; avg: number; best: number } | undefined) => {
-    if (!s || s.games === 0) return;
-    rows.push({ k: label, v: `${String(s.games)} games · avg ${String(s.avg)} · best ${String(s.best)}` });
-  };
-  solo('Classic', classic.data);
-  solo('Survival', survival.data);
-
-  const m = mp.data;
-  if (m && m.played > 0) {
-    rows.push({ k: 'Multiplayer', v: `${String(m.played)} played · ${String(m.won)}W / ${String(m.lost)}L` });
-  }
-
+  const b = bests.data;
+  if (b && b.classic > 0) rows.push({ k: 'Classic', v: `best ${String(b.classic)}` });
+  if (b && b.survival > 0) rows.push({ k: 'Survival', v: `best ${mmss(b.survival)}` });
   const r = rating.data;
-  if (r) {
+  if (r && !r.provisional) {
     const sign = r.gain >= 0 ? '+' : '';
-    rows.push({
-      k: 'ELO this season',
-      v: `${String(r.rating)} (${sign}${String(r.gain)})${r.provisional ? ' P' : ''}`,
-    });
-  }
-
-  for (const rv of rivals.data ?? []) {
-    if (rv.games === 0) continue;
-    rows.push({
-      k: `vs ${rv.name}`,
-      v: `${String(rv.myWins)}-${String(rv.theirWins)} of ${String(rv.games)}`,
-    });
+    rows.push({ k: 'ELO', v: `${String(r.rating)} (${sign}${String(r.gain)})` });
   }
 
   if (rows.length === 0) return null;
