@@ -36,27 +36,32 @@ const GAP = 2;
 // walking the full ramp, each cell clipped and textured exactly as the
 // pitch's own bake does it. Recorded at render (menu time, a handful of
 // rects); the frame loop never comes near this.
-function bodyPicture(skin: string | null, cells: 3 | 4): SkPicture {
+function bodyPicture(skin: string | null, cells: 3 | 4 | 5): SkPicture {
   const width = cells * CELL + (cells - 1) * GAP;
   const recorder = Skia.PictureRecorder();
   const c = recorder.beginRecording(Skia.XYWHRect(0, 0, width, CELL));
   const art = skinRamp(skin);
+  const classic = skinRamp(null);
   const texInfo = art.texture;
   const painter = texInfo === undefined ? null : textureFor(texInfo.id);
   const fill = Skia.Paint();
   const stroke = Skia.Paint();
   stroke.setStyle(PaintStyle.Stroke);
-  stroke.setColor(Skia.Color(art.line));
   stroke.setStrokeWidth(1.4);
   for (let col = 0; col < cells; col++) {
     // head on the right: column 0 is the tail-most cell, so its body
-    // fraction is the far end of the ramp (the web preview's own mapping)
-    const shadeIndex = Math.round(((cells - 1 - col) / (cells - 1)) * (SNAKE_SHADES - 1));
+    // fraction is the far end of the ramp (the web preview's own mapping).
+    // The FRONT TWO cells keep the classic coat (owner's rule, 2026-09-18),
+    // because that is exactly what the pitch will do with the money's skin.
+    const segIndex = cells - 1 - col;
+    const front = segIndex < 2;
+    const shadeIndex = Math.round((segIndex / (cells - 1)) * (SNAKE_SHADES - 1));
     const x = col * (CELL + GAP);
     const rect = Skia.RRectXY(Skia.XYWHRect(x + 1, 1, CELL - 2, CELL - 2), 6, 6);
-    fill.setColor(Skia.Color(snakeShadeFor(skin, shadeIndex)));
+    fill.setColor(Skia.Color(snakeShadeFor(front ? null : skin, shadeIndex)));
+    stroke.setColor(Skia.Color(front ? classic.line : art.line));
     c.drawRRect(rect, fill);
-    if (painter !== null && texInfo !== undefined) {
+    if (!front && painter !== null && texInfo !== undefined) {
       c.save();
       c.clipRRect(rect, ClipOp.Intersect, true);
       c.translate(x + 1, 1);
@@ -78,8 +83,9 @@ export interface SnakePreviewProps {
   left?: string;
   right?: string;
   num?: string;
-  /** three cells for a shop row, four for the account sheet (the default) */
-  cells?: 3 | 4;
+  /** five cells for a shop row (three of them the skin's own, since the
+   *  front two wear the classic coat), four for the account sheet */
+  cells?: 3 | 4 | 5;
   /** false leaves the shirt off: a shop row previews a SKIN, not your kit */
   dressed?: boolean;
 }

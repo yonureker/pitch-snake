@@ -93,7 +93,7 @@ export function ShopSheet({ open, onClose, onWorn }: ShopSheetProps) {
                 // shop row sells a skin and not your kit; the hat stays a
                 // mark, since its art lives in the Skia layer and a Views
                 // preview cannot borrow it.
-                <SnakePreview skin={item.id} cells={3} dressed={false} />
+                <SnakePreview skin={item.id} cells={5} dressed={false} />
               : <Text style={styles.hatMark}>{'▲'}</Text>}
               <Text style={styles.name}>{item.name}</Text>
               <Text style={[styles.price, isOwned && styles.priceOwned]}>

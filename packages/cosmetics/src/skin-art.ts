@@ -21,6 +21,12 @@
  *   it is more drawing per square: geometric motifs are the cheap tier,
  *   ornamental ones the prestige tier.
  *
+ * THE FRONT TWO SQUARES ARE NOT THE SKIN'S (owner's rule, 2026-09-18). The
+ * head is the face and the square behind it wears the shirt, so every shell
+ * dresses a skin from the THIRD square back and keeps the classic coat on
+ * the front two, previews included. Design motifs and ramps knowing their
+ * first visible square is the third one.
+ *
  * MUST NEVER paint anything itself: shade math and data only. Painting is
  * each client's own business (the page fills rounded rects and bakes sprites
  * for textured skins; the app bakes Skia sprites), and the texture painters

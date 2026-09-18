@@ -21,7 +21,7 @@
  */
 import type { Kit } from '@pitch-snake/cosmetics/kit';
 import {
-  buildLutFor, drawCrest, JERSEY_SOLO_NUM, paintJersey, roundRectOn, textureFor,
+  buildLutFor, drawCrest, JERSEY_SOLO_NUM, paintJersey, roundRectOn, SKINS, textureFor,
   type HatArt, type SkinArt, SNAKE_SHADES,
 } from './pitch-art.js';
 
@@ -66,7 +66,10 @@ export interface PreviewSize {
 }
 
 /** The shop's shelf: three squares in the width a priced row can spare. */
-export const SHOP_PREVIEW: PreviewSize = { cells: 3, cell: 17, width: 72, height: 44 };
+// Five cells since the front-coat rule (2026-09-18): the head and the shirt
+// square keep the classic coat on the pitch, so a three-cell preview would
+// leave ONE square to sell a skin with. Five gives it three.
+export const SHOP_PREVIEW: PreviewSize = { cells: 5, cell: 15, width: 92, height: 44 };
 
 /** The account sheet's jersey row: a longer snake, drawn bigger. */
 export const SHEET_PREVIEW: PreviewSize = { cells: 4, cell: 20, width: 88, height: 50 };
@@ -142,16 +145,21 @@ export function paintSnakePreview(
   // Tail first, so each cell sits over the one behind it exactly as on the
   // pitch, and the shade walks the ramp the same way the body does.
   // a textured skin previews its texture, through the same shared painters
-  // the pitch bakes with, so the shelf shows exactly what the money buys
+  // the pitch bakes with, so the shelf shows exactly what the money buys;
+  // and the FRONT TWO cells keep the classic coat (the owner's rule,
+  // 2026-09-18), because that is exactly what the pitch will do
   const texInfo = skin.texture;
   const painter = texInfo === undefined ? null : textureFor(texInfo.id);
+  const classicRamp = buildLutFor(SKINS.classic);
   for (let i = cells - 1; i >= 0; i--) {
+    const front = i < 2;
     const shade = Math.round((i / (cells - 1)) * (SNAKE_SHADES - 1));
-    context.fillStyle = ramp[shade] ?? '#f4ecd8';
+    context.fillStyle = (front ? classicRamp[shade] : ramp[shade]) ?? '#f4ecd8';
+    context.strokeStyle = front ? SKINS.classic.line : skin.line;
     const x = headX - step * i;
     roundRectOn(context, x - half, centreY - half, half * 2, half * 2, radius);
     context.fill();
-    if (painter !== null && texInfo !== undefined) {
+    if (!front && painter !== null && texInfo !== undefined) {
       // the path survives its fill, so the clip takes the cell just traced;
       // the painter opens paths of its own, so the stroke re-traces after
       context.save();

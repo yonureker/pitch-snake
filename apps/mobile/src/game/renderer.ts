@@ -468,9 +468,19 @@ function bakeBolt(cell: number): Baked | null {
   });
 }
 
+// THE FRONT TWO SQUARES ARE NOT THE SKIN'S (owner's rule, 2026-09-18): the
+// head is the face and the square behind it wears the shirt, so every skin
+// dresses the body from the THIRD square back and the front two keep the
+// classic coat. The classic set is baked alongside whatever is worn; its
+// sprites are what segments 0 and 1 always draw, mine and rivals' alike.
+const SKIN_FROM = 2;
+let classicSprites: (Baked | null)[] = [];
+
 function bakeSnakeCells(cell: number, skin: string | null): void {
   for (const old of snakeSprites) retire(old?.image);
   snakeSprites = bakeSkinSet(cell, skin);
+  for (const old of classicSprites) retire(old?.image);
+  classicSprites = bakeSkinSet(cell, null);
 }
 
 function bakeOutfit(cell: number, hatId: string | null, kit: Kit): void {
@@ -550,6 +560,9 @@ export function prepareVersusSprites(
     rivalSkinSprites.clear();
     rivalHatSprites.clear();
   }
+  // the classic set is every seat's front coat (see SKIN_FROM), so a room
+  // bakes it whether or not anyone wears it as a skin
+  if (!rivalSkinSprites.has('classic')) rivalSkinSprites.set('classic', bakeSkinSet(cell, null));
   for (const fit of fits) {
     const skinKey = fit.skin ?? 'classic';
     if (!rivalSkinSprites.has(skinKey)) rivalSkinSprites.set(skinKey, bakeSkinSet(cell, fit.skin));
@@ -1068,13 +1081,15 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
       const pl = game.players[pi];
       if (pl === undefined || pl.snake.length === 0) continue;
       const fit = rc.vs.fits[pi];
-      const sprites = rivalSkinSprites.get(fit?.skin ?? 'classic') ?? snakeSprites;
+      const sprites = rivalSkinSprites.get(fit?.skin ?? 'classic') ?? classicSprites;
+      const front = rivalSkinSprites.get('classic') ?? classicSprites;
       const prog = rc.playing ? game.renderProg(pi) : 1;
       const rDenom = Math.max(1, pl.snake.length - 1);
       fillPaint.setAlphaf(VS_BODY_ALPHA);
       for (let i = pl.snake.length - 1; i >= 0; i--) {
         const shade = ((i * (SNAKE_SHADES - 1)) / rDenom) | 0;
-        const sprite = sprites[shade];
+        // the front coat, classic like everyone's (see SKIN_FROM)
+        const sprite = i < SKIN_FROM ? front[shade] : sprites[shade];
         if (sprite === null || sprite === undefined) continue;
         // the smoothed position was resolved for this frame already; only
         // segments past the smoothed depth fall back to the raw glide
@@ -1127,7 +1142,8 @@ export function buildPicture(game: Game, rc: RenderContext): SkPicture {
   const myDepth = mySeat < 0 ? 0 : smoothDepth(mySeat);
   for (let i = me.snake.length - 1; i >= 0; i--) {
     const shade = ((i * (SNAKE_SHADES - 1)) / denom) | 0;
-    const sprite = snakeSprites[shade];
+    // the front coat (see SKIN_FROM): classic under the shirt and the face
+    const sprite = i < SKIN_FROM ? classicSprites[shade] : snakeSprites[shade];
     if (sprite === null || sprite === undefined) continue;
     let cx: number;
     let cy: number;
